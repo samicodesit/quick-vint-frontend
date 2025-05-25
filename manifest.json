@@ -1,0 +1,24 @@
+{
+  "manifest_version": 3,
+  "name": "QuickVint",
+  "version": "1.0.0",
+  "description": "🪄 One-click AI-generated title & description for Vinted listings",
+  "permissions": ["scripting", "activeTab"],
+  "host_permissions": [
+    "*://*.vinted.com/*",
+    "*://*.vinted.fr/*",
+    "*://*.vinted.nl/*"
+  ],
+  "content_scripts": [
+    {
+      "matches": [
+        "*://*.vinted.com/*",
+        "*://*.vinted.fr/*",
+        "*://*.vinted.nl/*",
+        "https://quick-vint.vercel.app/*"
+      ],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    }
+  ]
+}
