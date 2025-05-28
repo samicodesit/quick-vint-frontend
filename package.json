@@ -1,0 +1,25 @@
+{
+  "name": "quick-vint",
+  "version": "1.0.0",
+  "description": "",
+  "main": "content.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "build": "terser content.js -o content.min.js --compress --mangle",
+    "prepare": "npm run build"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/samicodesit/quick-vint-frontend.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/samicodesit/quick-vint-frontend/issues"
+  },
+  "homepage": "https://github.com/samicodesit/quick-vint-frontend#readme",
+  "devDependencies": {
+    "terser": "^5.39.2"
+  }
+}
