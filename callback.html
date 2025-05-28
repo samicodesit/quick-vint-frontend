@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AutoLister AI Authentication</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+            background-color: #f4f6f8;
+            color: #333;
+            text-align: center;
+            padding: 20px;
+        }
+
+        .container {
+            background-color: #fff;
+            padding: 30px 40px;
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+        }
+
+        h1 {
+            color: #4f46e5;
+            font-size: 1.5em;
+            margin-bottom: 15px;
+        }
+
+        p {
+            font-size: 1em;
+            line-height: 1.6;
+            margin-bottom: 20px;
+        }
+
+        .spinner {
+            border: 4px solid rgba(0, 0, 0, 0.1);
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            border-left-color: #4f46e5;
+            animation: spin 1s ease infinite;
+            margin-bottom: 20px;
+        }
+
+        @keyframes spin {
+            0% {
+                transform: rotate(0deg);
+            }
+
+            100% {
+                transform: rotate(360deg);
+            }
+        }
+
+        .hidden {
+            display: none;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <div id="loadingState">
+            <h1>Authenticating...</h1>
+            <div class="spinner"></div>
+            <p>Please wait while we verify your magic link.</p>
+        </div>
+        <div id="successState" class="hidden">
+            <h1>Authentication Successful!</h1>
+            <p>You are now signed in. You can close this tab and return to the AutoLister AI extension.</p>
+            <p style="font-size:0.9em; color:#555;">This tab may close automatically shortly.</p>
+        </div>
+        <div id="errorState" class="hidden">
+            <h1>Authentication Failed</h1>
+            <p id="errorMessage">An error occurred. Please try signing in again from the extension, or contact support
+                if the problem persists.</p>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="callback.js"></script>
+</body>
+
+</html>
