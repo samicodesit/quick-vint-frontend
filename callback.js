@@ -1,4 +1,10 @@
 // callback.js
+// PUT THIS LINE ABSOLUTELY FIRST:
+debugger; // This will pause execution as SOON as DevTools for this page are opened.
+
+console.log(
+  "Callback.js: Top of script reached. Execution paused by debugger (if DevTools are open for this page)."
+);
 
 const SUPABASE_URL = "https://jqloiovdwjaornnfvmyu.supabase.co";
 const SUPABASE_ANON_KEY =
@@ -9,78 +15,120 @@ const successStateDiv = document.getElementById("successState");
 const errorStateDiv = document.getElementById("errorState");
 const errorMessageParagraph = document.getElementById("errorMessage");
 
-let supabase;
+let supabaseClient;
 
-if (typeof supabaseJs !== "undefined" && SUPABASE_URL && SUPABASE_ANON_KEY) {
-  supabase = supabaseJs.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-
-  supabase.auth.onAuthStateChange(async (event, session) => {
-    console.log("Callback Auth Event:", event, session);
-
-    if (loadingStateDiv) loadingStateDiv.classList.add("hidden");
-
-    if (event === "SIGNED_IN" && session) {
-      console.log(
-        "Successfully signed in via magic link callback!",
-        session.user
-      );
-      // The Supabase client library has now stored the session.
-      // Your background.js script's onAuthStateChange listener will also pick this up
-      // and update the global authentication state for the extension.
-      // The user's profile should have been created by the Supabase trigger.
-
-      if (successStateDiv) successStateDiv.classList.remove("hidden");
-      if (errorStateDiv) errorStateDiv.classList.add("hidden");
-
-      // Optional: Attempt to close the tab after a delay
-      setTimeout(() => {
-        // Check if the tab is still focused or active before closing might be a good UX,
-        // but for simplicity, we'll just try to close.
-        // Note: Extensions can only close tabs they opened, or their own specific pages like this one.
-        window.close();
-      }, 3000); // Close after 3 seconds
-    } else if (
-      event === "SIGN_IN_ERROR" ||
-      (event === "INITIAL_SESSION" && !session)
-    ) {
-      // INITIAL_SESSION without a session can sometimes occur if the token is invalid/expired
-      // right from the start or already processed and cleared.
-      console.error(
-        "Magic link authentication error in callback. Event:",
-        event,
-        "Session:",
-        session
-      );
-      if (errorMessageParagraph) {
-        let msg =
-          "Authentication failed. The link may have expired or already been used. Please try signing in again from the extension.";
-        if (session && session.error && session.error.message) {
-          // 'session' might be error object here
-          msg = session.error.message;
-        }
-        errorMessageParagraph.textContent = msg;
-      }
-      if (successStateDiv) successStateDiv.classList.add("hidden");
-      if (errorStateDiv) errorStateDiv.classList.remove("hidden");
-    } else if (event === "INITIAL_SESSION" && session) {
-      // This can happen if the page reloads or if Supabase processes the hash very quickly
-      // and fires INITIAL_SESSION with a valid session before explicitly firing SIGNED_IN.
-      console.log("Initial session established in callback!", session.user);
-      if (successStateDiv) successStateDiv.classList.remove("hidden");
-      if (errorStateDiv) errorStateDiv.classList.add("hidden");
-      setTimeout(() => {
-        window.close();
-      }, 3000);
-    }
-  });
-} else {
-  console.error(
-    "Callback: Supabase client (supabaseJs) not found or configuration missing."
-  );
+// Function to update UI, ensures it's always callable
+function updateCallbackUI(state, message = "") {
   if (loadingStateDiv) loadingStateDiv.classList.add("hidden");
   if (successStateDiv) successStateDiv.classList.add("hidden");
-  if (errorStateDiv) errorStateDiv.classList.remove("hidden");
-  if (errorMessageParagraph)
-    errorMessageParagraph.textContent =
-      "Critical error: Could not initialize authentication service. Please contact support.";
+  if (errorStateDiv) errorStateDiv.classList.add("hidden");
+
+  if (state === "success") {
+    if (successStateDiv) successStateDiv.classList.remove("hidden");
+    const p = successStateDiv ? successStateDiv.querySelector("p") : null;
+    if (p)
+      p.innerHTML =
+        message +
+        "<br/><em>(DEBUG: Page deliberately kept open. Close manually.)</em>";
+  } else if (state === "error") {
+    if (errorStateDiv) errorStateDiv.classList.remove("hidden");
+    if (errorMessageParagraph) errorMessageParagraph.textContent = message;
+  } else if (state === "loading") {
+    if (loadingStateDiv) loadingStateDiv.classList.remove("hidden");
+  }
 }
+
+try {
+  if (
+    typeof supabase !== "undefined" &&
+    typeof supabase.createClient === "function" &&
+    SUPABASE_URL &&
+    SUPABASE_ANON_KEY
+  ) {
+    supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+    console.log(
+      "Callback: Supabase client initialized using global 'supabase' object."
+    );
+  } else if (
+    typeof supabaseJs !== "undefined" &&
+    typeof supabaseJs.createClient === "function" &&
+    SUPABASE_URL &&
+    SUPABASE_ANON_KEY
+  ) {
+    supabaseClient = supabaseJs.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+    console.log(
+      "Callback: Supabase client initialized using global 'supabaseJs' object."
+    );
+  } else {
+    throw new Error(
+      "Supabase client factory (global 'supabase' or 'supabaseJs') not found."
+    );
+  }
+
+  if (supabaseClient) {
+    console.log("Callback: Attaching onAuthStateChange listener.");
+    supabaseClient.auth.onAuthStateChange(async (event, session) => {
+      console.log("Callback Auth Event:", event, "Session:", session);
+      // debugger; // Pause here too
+
+      if (event === "SIGNED_IN" && session) {
+        console.log(
+          "Successfully signed in via magic link callback!",
+          session.user
+        );
+        updateCallbackUI("success", "Authentication Successful!");
+        // NO window.close() HERE FOR DEBUGGING
+        console.log("DEBUG: SIGNED_IN event - Page should stay open.");
+      } else if (
+        event === "SIGN_IN_ERROR" ||
+        (event === "INITIAL_SESSION" && !session)
+      ) {
+        console.error(
+          "Magic link authentication error/no session in callback. Event:",
+          event
+        );
+        let msg =
+          "Authentication failed. The link may have expired, been used, or no session was established.";
+        const errorDetail =
+          session?.error?.message ||
+          (session && typeof session.message === "string"
+            ? session.message
+            : null);
+        if (errorDetail) msg = `Authentication error: ${errorDetail}`;
+        updateCallbackUI("error", msg);
+        console.log(
+          "DEBUG: SIGN_IN_ERROR or INITIAL_SESSION (no session) - Page should stay open."
+        );
+      } else if (event === "INITIAL_SESSION" && session) {
+        console.log(
+          "Initial session established in callback (already logged in elsewhere perhaps)!",
+          session.user
+        );
+        updateCallbackUI("success", "Session already active or established!");
+        // NO window.close() HERE FOR DEBUGGING
+        console.log(
+          "DEBUG: INITIAL_SESSION (with session) event - Page should stay open."
+        );
+      }
+    });
+  } else {
+    throw new Error(
+      "Supabase client instance is null after initialization attempt."
+    );
+  }
+} catch (e) {
+  console.error(
+    "Callback: CRITICAL - Failed to initialize Supabase client or attach listener."
+  );
+  console.error("Error name:", e.name);
+  console.error("Error message:", e.message);
+  console.error("Error stack:", e.stack);
+  updateCallbackUI(
+    "error",
+    "Critical error: Auth service could not start. " + e.message
+  );
+}
+
+console.log(
+  "Callback.js: Script finished initial execution. Waiting for auth events."
+);

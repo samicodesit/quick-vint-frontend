@@ -18,6 +18,12 @@
       "128": "icons/icon128.png"
     }
   },
+  "web_accessible_resources": [
+    {
+      "resources": ["callback.html"],
+      "matches": ["<all_urls>"]
+    }
+  ],
   "permissions": ["storage", "scripting", "activeTab"],
   "host_permissions": [
     "https://quick-vint.vercel.app/*",
@@ -78,5 +84,8 @@
       "js": ["content.js"],
       "run_at": "document_idle"
     }
-  ]
+  ],
+  "content_security_policy": {
+    "extension_pages": "script-src 'self'; object-src 'self'"
+  }
 }
