@@ -18,13 +18,7 @@
       "128": "icons/icon128.png"
     }
   },
-  "web_accessible_resources": [
-    {
-      "resources": ["callback.html"],
-      "matches": ["<all_urls>"]
-    }
-  ],
-  "permissions": ["storage", "scripting", "activeTab"],
+  "permissions": ["storage", "scripting", "activeTab", "identity"],
   "host_permissions": [
     "https://quick-vint.vercel.app/*",
     "*://*.vinted.at/*",
@@ -83,6 +77,12 @@
       ],
       "js": ["content.js"],
       "run_at": "document_idle"
+    }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": ["callback.html"],
+      "matches": ["<all_urls>"]
     }
   ],
   "content_security_policy": {

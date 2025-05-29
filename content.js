@@ -1,198 +1,144 @@
-// content.js
-(function quickVintExtension() {
-  const TITLE_SELECTOR = 'input[data-testid="title--input"]';
-  const DESC_SELECTOR = 'textarea[data-testid="description--input"]';
+(() => {
+  const SELECTORS = {
+    title: 'input[data-testid="title--input"]',
+    description: 'textarea[data-testid="description--input"]',
+    images: '[data-testid="media-select-grid"] img',
+  };
   const BTN_ID = "quickvint-gen-btn";
-  const API_BASE_URL = "https://quick-vint.vercel.app";
-  let IS_USER_AUTHENTICATED = false;
-  let generateBtnElement = null;
+  const API_BASE = "https://quick-vint.vercel.app";
+  let isAuthenticated = false;
+  let accessToken = null;
+  let generateBtn = null;
 
-  function updateButtonState() {
-    if (!generateBtnElement) return;
-    if (IS_USER_AUTHENTICATED) {
-      generateBtnElement.disabled = false;
-      generateBtnElement.textContent = "🪄 Generate";
-      generateBtnElement.style.background = "#4f46e5";
-      generateBtnElement.style.cursor = "pointer";
+  // debounce helper
+  const debounce = (fn, ms) => {
+    let timer;
+    return (...args) => {
+      clearTimeout(timer);
+      timer = setTimeout(() => fn(...args), ms);
+    };
+  };
+
+  // read auth + token from storage
+  function updateAuthFromStorage() {
+    chrome.storage.local.get("supabaseSession", ({ supabaseSession }) => {
+      isAuthenticated = !!(supabaseSession && supabaseSession.access_token);
+      accessToken = supabaseSession?.access_token ?? null;
+      updateButton();
+    });
+  }
+  chrome.storage.onChanged.addListener((changes) => {
+    if (changes.supabaseSession) updateAuthFromStorage();
+  });
+
+  function createButton() {
+    const btn = document.createElement("button");
+    btn.id = BTN_ID;
+    btn.textContent = "🪄 Generate";
+    Object.assign(btn.style, {
+      margin: "8px 0",
+      padding: "8px 14px",
+      color: "#fff",
+      backgroundColor: "#aaa",
+      border: "none",
+      borderRadius: "6px",
+      fontSize: "14px",
+      cursor: "not-allowed",
+      transition: "background-color 0.2s",
+    });
+    btn.disabled = true;
+    btn.addEventListener("click", onGenerate);
+    return btn;
+  }
+
+  function updateButton() {
+    if (!generateBtn) return;
+    if (isAuthenticated) {
+      generateBtn.disabled = false;
+      generateBtn.textContent = "🪄 Generate";
+      generateBtn.style.backgroundColor = "#4f46e5";
+      generateBtn.style.cursor = "pointer";
     } else {
-      generateBtnElement.disabled = true;
-      generateBtnElement.textContent = "Sign in via Extension";
-      generateBtnElement.style.background = "#aaa";
-      generateBtnElement.style.cursor = "not-allowed";
+      generateBtn.disabled = true;
+      generateBtn.textContent = "Sign in via Extension";
+      generateBtn.style.backgroundColor = "#aaa";
+      generateBtn.style.cursor = "not-allowed";
     }
   }
 
-  async function handleGenerateClick() {
-    if (!IS_USER_AUTHENTICATED) {
-      alert("Please sign in via the AutoLister AI extension popup first!");
+  async function onGenerate() {
+    if (!isAuthenticated) {
+      alert("Please sign in via the extension popup.");
       return;
     }
-
-    generateBtnElement.disabled = true;
-    generateBtnElement.textContent = "⏳ Generating…";
-
-    const images = document.querySelectorAll(
-      '[data-testid="media-select-grid"] img'
-    );
-    const urls = Array.from(images)
+    const imgs = Array.from(document.querySelectorAll(SELECTORS.images))
       .map((i) => i.src)
       .filter(Boolean);
-    if (!urls.length) {
-      alert("No photos found. Upload at least one image first.");
-      updateButtonState();
+    if (!imgs.length) {
+      alert("Upload at least one image.");
       return;
     }
-
+    generateBtn.disabled = true;
+    generateBtn.textContent = "⏳ Generating…";
     try {
-      const authResponse = await chrome.runtime.sendMessage({
-        type: "GET_AUTH_TOKEN",
-      });
-      if (!authResponse || !authResponse.token) {
-        IS_USER_AUTHENTICATED = false;
-        updateButtonState();
-        alert(
-          "Authentication failed. Please sign in via the extension popup and refresh the page."
-        );
-        return;
-      }
-      const authToken = authResponse.token;
-
-      const res = await fetch(`${API_BASE_URL}/api/generate`, {
+      const res = await fetch(`${API_BASE}/api/generate`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${authToken}`,
+          Authorization: `Bearer ${accessToken}`,
         },
-        body: JSON.stringify({ imageUrls: urls }),
+        body: JSON.stringify({ imageUrls: imgs }),
       });
-
       if (res.status === 401) {
-        IS_USER_AUTHENTICATED = false;
-        updateButtonState();
-        alert(
-          "Your session may have expired. Please sign in again via the extension popup and refresh the page."
-        );
+        isAuthenticated = false;
+        updateButton();
+        alert("Session expired. Please sign in again.");
         return;
       }
       if (res.status === 429) {
-        const errorData = await res.json();
-        alert(
-          errorData.error ||
-            "API limit reached. Please check your subscription or try again later."
-        );
-        updateButtonState();
+        const err = (await res.json()).error || "Rate limit exceeded";
+        alert(err);
         return;
       }
       if (!res.ok) {
-        let errorText = `HTTP error ${res.status}`;
-        try {
-          const errorData = await res.json();
-          errorText = errorData.error || errorText;
-        } catch (e) {
-          /* ignore */
-        }
-        throw new Error(errorText);
+        const { error } = await res.json().catch(() => ({}));
+        throw new Error(error || `HTTP ${res.status}`);
       }
-
       const { title, description } = await res.json();
-      const titleInput = document.querySelector(TITLE_SELECTOR);
-      const descTextarea = document.querySelector(DESC_SELECTOR);
-
+      const titleInput = document.querySelector(SELECTORS.title);
+      const descInput = document.querySelector(SELECTORS.description);
       if (titleInput) {
         titleInput.value = title;
         titleInput.dispatchEvent(new Event("input", { bubbles: true }));
       }
-      if (descTextarea) {
-        descTextarea.value = description;
-        descTextarea.dispatchEvent(new Event("input", { bubbles: true }));
+      if (descInput) {
+        descInput.value = description;
+        descInput.dispatchEvent(new Event("input", { bubbles: true }));
       }
-
-      generateBtnElement.textContent = "✅ Done";
-      setTimeout(() => updateButtonState(), 2000);
+      generateBtn.textContent = "✅ Done";
+      setTimeout(updateButton, 2000);
     } catch (err) {
-      console.error("Generation failed:", err);
-      alert(`Generation failed: ${err.message}. See console for more details.`);
-      updateButtonState();
+      console.error(err);
+      alert(`Error: ${err.message}`);
+      updateButton();
     }
   }
 
-  function injectGenerateButton() {
-    const titleInput = document.querySelector(TITLE_SELECTOR);
-    if (!titleInput) return; // Form not ready
-
+  function injectButton() {
+    const titleEl = document.querySelector(SELECTORS.title);
+    if (!titleEl) return;
     if (!document.getElementById(BTN_ID)) {
-      // Inject only if not present
-      const descTextarea = document.querySelector(DESC_SELECTOR);
-      if (!descTextarea) return;
-
-      generateBtnElement = document.createElement("button");
-      generateBtnElement.id = BTN_ID;
-      Object.assign(generateBtnElement.style, {
-        marginTop: "8px",
-        padding: "8px 14px",
-        color: "#fff",
-        border: "none",
-        borderRadius: "6px",
-        fontSize: "14px",
-        transition: "background-color 0.2s, opacity 0.2s",
-      });
-
-      // Insert after the parent of the title input for better layout consistency
-      if (titleInput.parentElement && titleInput.parentElement.parentElement) {
-        titleInput.parentElement.parentElement.insertBefore(
-          generateBtnElement,
-          titleInput.parentElement.nextSibling
-        );
-      } else {
-        // Fallback, less ideal
-        titleInput.parentElement.appendChild(generateBtnElement);
-      }
-      generateBtnElement.addEventListener("click", handleGenerateClick);
-    } else {
-      generateBtnElement = document.getElementById(BTN_ID); // Get existing button
+      const container = titleEl.closest("div");
+      if (!container) return;
+      container.parentNode.insertBefore(createButton(), container.nextSibling);
     }
-    updateButtonState(); // Always update state (e.g. if auth changed while page was open)
+    if (!generateBtn) generateBtn = document.getElementById(BTN_ID);
+    updateButton();
   }
 
-  const observer = new MutationObserver(debounce(injectGenerateButton, 300));
+  const observer = new MutationObserver(debounce(injectButton, 300));
   observer.observe(document.body, { childList: true, subtree: true });
 
-  function debounce(fn, delay) {
-    let timer;
-    return (...args) => {
-      clearTimeout(timer);
-      timer = setTimeout(() => fn(...args), delay);
-    };
-  }
-
-  chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
-    if (request.type === "AUTH_STATE_CHANGED") {
-      IS_USER_AUTHENTICATED = request.authenticated;
-      updateButtonState();
-    }
-    // Content scripts typically don't send responses for these notifications
-  });
-
-  async function initialAuthCheck() {
-    try {
-      const authResponse = await chrome.runtime.sendMessage({
-        type: "GET_AUTH_TOKEN",
-      });
-      IS_USER_AUTHENTICATED = !!(authResponse && authResponse.token);
-    } catch (e) {
-      console.warn(
-        "Content.js: Could not get initial auth state. Background script might not be ready.",
-        e.message
-      );
-      IS_USER_AUTHENTICATED = false;
-    }
-    injectGenerateButton();
-  }
-
-  // Run initial checks
-  if (document.readyState === "loading") {
-    document.addEventListener("DOMContentLoaded", initialAuthCheck);
-  } else {
-    initialAuthCheck();
-  }
+  // init
+  updateAuthFromStorage();
 })();
