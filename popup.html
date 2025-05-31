@@ -1,148 +1,162 @@
 <!DOCTYPE html>
 <html lang="en">
-
-<head>
-    <meta charset="UTF-8">
+  <head>
+    <meta charset="UTF-8" />
     <title>AutoLister AI</title>
     <style>
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-            width: 280px;
-            padding: 15px;
-            margin: 0;
-            color: #333;
-            font-size: 14px;
-        }
+      body {
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+          Helvetica, Arial, sans-serif;
+        width: 280px;
+        padding: 15px;
+        margin: 0;
+        color: #333;
+        font-size: 14px;
+      }
 
-        .hidden {
-            display: none !important;
-        }
+      .hidden {
+        display: none !important;
+      }
 
-        h3 {
-            margin-top: 0;
-            color: #4f46e5;
-            text-align: center;
-            font-size: 1.2em;
-            margin-bottom: 15px;
-        }
+      h3 {
+        margin-top: 0;
+        color: #4f46e5;
+        text-align: center;
+        font-size: 1.2em;
+        margin-bottom: 15px;
+      }
 
-        label {
-            display: block;
-            margin-bottom: 5px;
-            font-size: 0.9em;
-            color: #555;
-        }
+      label {
+        display: block;
+        margin-bottom: 5px;
+        font-size: 0.9em;
+        color: #555;
+      }
 
-        input[type="email"] {
-            width: calc(100% - 18px);
-            padding: 8px;
-            margin-bottom: 12px;
-            border: 1px solid #ccc;
-            border-radius: 4px;
-            font-size: 0.95em;
-        }
+      input[type="email"] {
+        width: calc(100% - 18px);
+        padding: 8px;
+        margin-bottom: 12px;
+        border: 1px solid #ccc;
+        border-radius: 4px;
+        font-size: 0.95em;
+      }
 
-        button {
-            padding: 10px 15px;
-            background-color: #4f46e5;
-            color: white;
-            border: none;
-            border-radius: 4px;
-            cursor: pointer;
-            width: 100%;
-            font-size: 0.95em;
-            margin-bottom: 10px;
-            transition: background-color 0.2s;
-        }
+      button {
+        padding: 10px 15px;
+        background-color: #4f46e5;
+        color: white;
+        border: none;
+        border-radius: 4px;
+        cursor: pointer;
+        width: 100%;
+        font-size: 0.95em;
+        margin-bottom: 10px;
+        transition: background-color 0.2s;
+      }
 
-        button:hover {
-            background-color: #4338ca;
-        }
+      button:hover {
+        background-color: #4338ca;
+      }
 
-        button:disabled {
-            background-color: #aaa;
-            cursor: not-allowed;
-        }
+      button:disabled {
+        background-color: #aaa;
+        cursor: not-allowed;
+      }
 
-        button.secondary {
-            background-color: #6c757d;
-        }
+      button.secondary {
+        background-color: #6c757d;
+      }
 
-        button.secondary:hover {
-            background-color: #5a6268;
-        }
+      button.secondary:hover {
+        background-color: #5a6268;
+      }
 
-        #messages {
-            padding: 10px;
-            margin-bottom: 10px;
-            border-radius: 4px;
-            text-align: center;
-            font-size: 0.9em;
-            line-height: 1.4;
-            border-width: 1px;
-            border-style: solid;
-        }
+      #messages {
+        padding: 10px;
+        margin-bottom: 10px;
+        border-radius: 4px;
+        text-align: center;
+        font-size: 0.9em;
+        line-height: 1.4;
+        border-width: 1px;
+        border-style: solid;
+      }
 
-        #messages.success {
-            background-color: #d1fae5;
-            color: #065f46;
-            border-color: #a7f3d0;
-        }
+      #messages.success {
+        background-color: #d1fae5;
+        color: #065f46;
+        border-color: #a7f3d0;
+      }
 
-        #messages.error {
-            background-color: #fee2e2;
-            color: #991b1b;
-            border-color: #fecaca;
-        }
+      #messages.error {
+        background-color: #fee2e2;
+        color: #991b1b;
+        border-color: #fecaca;
+      }
 
-        #messages.info {
-            background-color: #e0e7ff;
-            color: #3730a3;
-            border-color: #c7d2fe;
-        }
+      #messages.info {
+        background-color: #e0e7ff;
+        color: #3730a3;
+        border-color: #c7d2fe;
+      }
 
-        #userInfo p {
-            margin: 5px 0;
-            font-size: 0.9em;
-        }
+      #userInfo p {
+        margin: 5px 0;
+        font-size: 0.9em;
+      }
 
-        #userInfo strong {
-            color: #4f46e5;
-        }
+      #userInfo strong {
+        color: #4f46e5;
+      }
 
-        .small-text {
-            font-size: 0.8em;
-            text-align: center;
-            margin-top: 15px;
-            color: #666;
-        }
+      .small-text {
+        font-size: 0.8em;
+        text-align: center;
+        margin-top: 15px;
+        color: #666;
+      }
+
+      body.fade-in #signedInView,
+      body.fade-in #signedOutView {
+        opacity: 1;
+        transform: translateY(0px);
+      }
+
+      #signedInView,
+      #signedOutView {
+        opacity: 0;
+        transform: translateY(4px);
+        transition: opacity 0.2s ease, transform 0.2s ease;
+      }
     </style>
-</head>
+  </head>
 
-<body>
+  <body>
     <h3>AutoLister AI</h3>
     <div id="messages" class="hidden"></div>
 
     <div id="signedOutView">
-        <p class="small-text" style="margin-bottom:15px;">Sign in or create an account:</p>
-        <label for="emailInput">Your Email:</label>
-        <input type="email" id="emailInput" placeholder="you@example.com">
-        <button id="sendMagicLinkBtn">Send Magic Link</button>
+      <p class="small-text" style="margin-bottom: 15px">
+        Sign in or create an account:
+      </p>
+      <label for="emailInput">Your Email:</label>
+      <input type="email" id="emailInput" placeholder="you@example.com" />
+      <button id="sendMagicLinkBtn">Send Magic Link</button>
     </div>
 
     <div id="signedInView" class="hidden">
-        <div id="userInfo">
-            <p>Signed in as: <strong id="userEmail"></strong></p>
-            <p id="subscriptionStatus">Status: Loading...</p>
-        </div>
-        <button id="signOutBtn" class="secondary">Sign Out</button>
-        <p class="small-text">
-            The "Generate" button appears on Vinted item listing pages.
-        </p>
+      <div id="userInfo">
+        <p>Signed in as: <strong id="userEmail"></strong></p>
+        <p id="subscriptionStatus">Status: Loading...</p>
+      </div>
+      <button id="signOutBtn" class="secondary">Sign Out</button>
+      <p class="small-text">
+        The "Generate" button appears on Vinted item listing pages.
+      </p>
     </div>
 
     <script src="lib/supabase.js"></script>
     <script src="popup.js"></script>
-</body>
-
+  </body>
 </html>

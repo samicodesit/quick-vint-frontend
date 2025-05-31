@@ -6,25 +6,89 @@ const SUPABASE_ANON_KEY =
 
 const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-supabaseClient.auth.onAuthStateChange(async (_event, session) => {
-  if (session) {
-    // fetch profile (so popup can read it)
-    const { data: profile, error } = await supabaseClient
-      .from("profiles")
-      .select("subscription_status, api_calls_this_month")
-      .eq("id", session.user.id)
-      .single();
-    // store both session + profile
-    chrome.storage.local.set({
-      supabaseSession: session,
-      supabaseProfile: error ? null : profile,
+async function getStoredSession() {
+  return new Promise((resolve) => {
+    chrome.storage.local.get(["supabaseSession"], (result) => {
+      resolve(result.supabaseSession || null);
     });
-  } else {
-    chrome.storage.local.remove(["supabaseSession", "supabaseProfile"]);
+  });
+}
+
+async function fetchUserAndProfile() {
+  const session = await getStoredSession();
+  if (!session?.access_token) return;
+
+  const _supabase = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+    global: {
+      headers: {
+        Authorization: `Bearer ${session.access_token}`,
+      },
+    },
+  });
+
+  const { data: userData, error: userError } = await _supabase.auth.getUser(
+    session.access_token
+  );
+  if (userError || !userData?.user) {
+    console.error("User fetch failed:", userError);
+    return;
   }
-});
+
+  const { data: profile, error: profileError } = await _supabase
+    .from("profiles")
+    .select("subscription_status, api_calls_this_month")
+    .eq("id", userData.user.id)
+    .single();
+
+  if (profileError) {
+    console.error("Profile fetch failed:", profileError);
+    return;
+  }
+
+  // ✅ optionally store or broadcast to popup
+  chrome.storage.local.set({ userProfile: profile });
+
+  chrome.runtime.sendMessage({
+    type: "PROFILE_CHANGED",
+    profile,
+  });
+
+  console.log("Fetched user + profile:", userData.user, profile);
+}
 
 chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
+  if (msg.type === "GET_USER_PROFILE") {
+    getStoredSession().then(async (session) => {
+      if (!session?.access_token) return sendResponse(null);
+
+      const _supabase = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+        global: {
+          headers: {
+            Authorization: `Bearer ${session.access_token}`,
+          },
+        },
+      });
+
+      const { data: userData } = await _supabase.auth.getUser(
+        session.access_token
+      );
+
+      const { data: profile } = await _supabase
+        .from("profiles")
+        .select("subscription_status, api_calls_this_month")
+        .eq("id", userData?.user?.id)
+        .single();
+
+      sendResponse({ user: userData.user, profile });
+    });
+
+    return true; // keep message channel open for async sendResponse
+  }
+
+  if (msg.type === "AUTH_UPDATED") {
+    fetchUserAndProfile(); // 🔁 refetch both
+  }
+
   if (msg.type === "SIGN_OUT") {
     supabaseClient.auth
       .signOut()

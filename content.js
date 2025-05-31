@@ -1,3 +1,4 @@
+// content.js
 (() => {
   const SELECTORS = {
     title: 'input[data-testid="title--input"]',
@@ -6,30 +7,35 @@
   };
   const BTN_ID = "quickvint-gen-btn";
   const API_BASE = "https://quick-vint.vercel.app";
+
   let isAuthenticated = false;
   let accessToken = null;
-  let generateBtn = null;
 
-  // debounce helper
+  let generateBtn = null;
+  let isBusy = false; // ← NEW: prevents premature reset
+
+  /* ---------- helpers ---------- */
+
   const debounce = (fn, ms) => {
-    let timer;
-    return (...args) => {
-      clearTimeout(timer);
-      timer = setTimeout(() => fn(...args), ms);
+    let t;
+    return (...a) => {
+      clearTimeout(t);
+      t = setTimeout(() => fn(...a), ms);
     };
   };
 
-  // read auth + token from storage
-  function updateAuthFromStorage() {
+  function readAuth() {
     chrome.storage.local.get("supabaseSession", ({ supabaseSession }) => {
       isAuthenticated = !!(supabaseSession && supabaseSession.access_token);
       accessToken = supabaseSession?.access_token ?? null;
       updateButton();
     });
   }
-  chrome.storage.onChanged.addListener((changes) => {
-    if (changes.supabaseSession) updateAuthFromStorage();
+  chrome.storage.onChanged.addListener((c) => {
+    if (c.supabaseSession) readAuth();
   });
+
+  /* ---------- UI ---------- */
 
   function createButton() {
     const btn = document.createElement("button");
@@ -52,7 +58,7 @@
   }
 
   function updateButton() {
-    if (!generateBtn) return;
+    if (!generateBtn || isBusy) return; // ← keep label while busy
     if (isAuthenticated) {
       generateBtn.disabled = false;
       generateBtn.textContent = "🪄 Generate";
@@ -66,11 +72,14 @@
     }
   }
 
+  /* ---------- main action ---------- */
+
   async function onGenerate() {
     if (!isAuthenticated) {
       alert("Please sign in via the extension popup.");
       return;
     }
+
     const imgs = Array.from(document.querySelectorAll(SELECTORS.images))
       .map((i) => i.src)
       .filter(Boolean);
@@ -78,8 +87,13 @@
       alert("Upload at least one image.");
       return;
     }
+
+    // mark busy
+    isBusy = true;
     generateBtn.disabled = true;
     generateBtn.textContent = "⏳ Generating…";
+    generateBtn.style.cursor = "progress";
+
     try {
       const res = await fetch(`${API_BASE}/api/generate`, {
         method: "POST",
@@ -89,9 +103,9 @@
         },
         body: JSON.stringify({ imageUrls: imgs }),
       });
+
       if (res.status === 401) {
         isAuthenticated = false;
-        updateButton();
         alert("Session expired. Please sign in again.");
         return;
       }
@@ -104,6 +118,7 @@
         const { error } = await res.json().catch(() => ({}));
         throw new Error(error || `HTTP ${res.status}`);
       }
+
       const { title, description } = await res.json();
       const titleInput = document.querySelector(SELECTORS.title);
       const descInput = document.querySelector(SELECTORS.description);
@@ -115,18 +130,26 @@
         descInput.value = description;
         descInput.dispatchEvent(new Event("input", { bubbles: true }));
       }
+
       generateBtn.textContent = "✅ Done";
-      setTimeout(updateButton, 2000);
+      setTimeout(() => {
+        isBusy = false;
+        updateButton();
+      }, 2000);
     } catch (err) {
       console.error(err);
       alert(`Error: ${err.message}`);
+      isBusy = false;
       updateButton();
     }
   }
 
+  /* ---------- inject / observe ---------- */
+
   function injectButton() {
     const titleEl = document.querySelector(SELECTORS.title);
     if (!titleEl) return;
+
     if (!document.getElementById(BTN_ID)) {
       const container = titleEl.closest("div");
       if (!container) return;
@@ -139,6 +162,6 @@
   const observer = new MutationObserver(debounce(injectButton, 300));
   observer.observe(document.body, { childList: true, subtree: true });
 
-  // init
-  updateAuthFromStorage();
+  /* ---------- init ---------- */
+  readAuth();
 })();

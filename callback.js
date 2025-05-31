@@ -35,6 +35,7 @@
   supabaseClient.auth.onAuthStateChange((event, session) => {
     if ((event === "SIGNED_IN" || event === "INITIAL_SESSION") && session) {
       chrome.storage.local.set({ supabaseSession: session }, () => {
+        chrome.runtime.sendMessage({ type: "AUTH_UPDATED" }); // ✅ notify background
         show("success", "Authentication successful!");
       });
     } else {
