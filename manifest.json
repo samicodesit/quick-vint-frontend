@@ -18,7 +18,7 @@
       "128": "icons/icon128.png"
     }
   },
-  "permissions": ["storage", "scripting", "activeTab", "identity"],
+  "permissions": ["storage"],
   "host_permissions": [
     "https://quick-vint.vercel.app/*",
     "*://*.vinted.at/*",
