@@ -4,12 +4,9 @@ document.addEventListener("DOMContentLoaded", () => {
   const SUPABASE_ANON_KEY =
     "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImpxbG9pb3Zkd2phb3JubmZ2bXl1Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc0ODIwODMzMiwiZXhwIjoyMDYzNzg0MzMyfQ.Urz77RMqsJs8gJmA3yia_HhxaaeDrHURrF-fPeExRNQ";
 
-  // Initialize Supabase client (local-only, for managing session fetches)
   const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
   // DOM elements
-  const signedOutView = document.getElementById("signedOutView");
-  const signedInView = document.getElementById("signedInView");
   const emailInput = document.getElementById("emailInput");
   const sendMagicLinkBtn = document.getElementById("sendMagicLinkBtn");
   const userEmailSpan = document.getElementById("userEmail");
@@ -25,42 +22,15 @@ document.addEventListener("DOMContentLoaded", () => {
   const upgradeBtn = document.getElementById("upgradeBtn");
   const manageBtn = document.getElementById("manageBtn");
 
-  // Utility functions
-  function showMessage(msg, type = "info") {
-    if (!msg) {
-      messagesDiv.classList.add("hidden");
-      return;
-    }
-    messagesDiv.textContent = msg;
-    messagesDiv.className = type;
-    messagesDiv.classList.remove("hidden");
-    if (type === "info" || type === "success") {
-      setTimeout(() => messagesDiv.classList.add("hidden"), 4000);
-    }
-  }
-
-  function setLoading(button, isLoading, defaultText) {
-    button.disabled = isLoading;
-    button.textContent = isLoading ? "Processing…" : defaultText;
-  }
-
-  function bodyFadeOut() {
-    document.body.classList.remove("fade-in");
-    void document.body.offsetWidth; // trigger reflow
-    document.body.classList.add("fade-in");
-  }
-
   // Render user + subscription state
   function render(user, profile) {
-    bodyFadeOut();
-
     if (user && profile) {
+      // Populate the signed-in view's content
       userEmailSpan.textContent = user.email;
       subscriptionStatus.textContent = `Status: ${
         profile.subscription_status || "free"
       } | Calls: ${profile.api_calls_this_month || 0}`;
 
-      // Toggle subscription views based on profile.subscription_tier / status
       const status = profile.subscription_status || "free";
       const tier = profile.subscription_tier || "free";
       const used = profile.api_calls_this_month || 0;
@@ -71,7 +41,6 @@ document.addEventListener("DOMContentLoaded", () => {
       ) {
         freePlanView.classList.add("hidden");
         paidPlanView.classList.remove("hidden");
-
         const rawEnd = profile.current_period_end;
         if (rawEnd) {
           const dt = new Date(rawEnd);
@@ -88,12 +57,11 @@ document.addEventListener("DOMContentLoaded", () => {
         freeCallsUsed.textContent = `Calls this month: ${used} / 50`;
       }
 
-      signedOutView.classList.add("hidden");
-      signedInView.classList.remove("hidden");
+      // Set the final view state on the body
+      document.body.dataset.view = "signed-in";
     } else {
-      subscriptionStatus.textContent = "Status: Not signed in";
-      signedInView.classList.add("hidden");
-      signedOutView.classList.remove("hidden");
+      // Set the final view state on the body
+      document.body.dataset.view = "signed-out";
     }
   }
 
@@ -104,19 +72,38 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   }
 
+  // Initial View Kickoff
+  updateFromStorage();
+
+  // Listen for changes from other parts of the extension
   chrome.storage.onChanged.addListener((changes) => {
-    if (changes.supabaseSession || changes.supabaseProfile) {
+    if (changes.supabaseSession || changes.userProfile) {
       updateFromStorage();
     }
   });
 
-  // INITIAL VIEW (hide both until we know auth state)
-  signedInView.classList.add("hidden");
-  signedOutView.classList.add("hidden");
-  document.body.classList.remove("fade-in");
-  updateFromStorage();
+  window.addEventListener("focus", updateFromStorage);
 
-  // ========== AUTH HANDLERS (UNCHANGED) ==========
+  // Utility functions
+  function showMessage(msg, type = "info") {
+    if (!msg) {
+      messagesDiv.classList.add("hidden");
+      return;
+    }
+    messagesDiv.textContent = msg;
+    messagesDiv.className = type; // Resets class list
+    messagesDiv.classList.remove("hidden");
+    if (type === "info" || type === "success") {
+      setTimeout(() => messagesDiv.classList.add("hidden"), 4000);
+    }
+  }
+
+  function setLoading(button, isLoading, defaultText) {
+    button.disabled = isLoading;
+    button.textContent = isLoading ? "Processing…" : defaultText;
+  }
+
+  // Auth Handlers
   sendMagicLinkBtn.addEventListener("click", async () => {
     const email = emailInput.value.trim();
     if (!email.includes("@")) {
@@ -154,14 +141,12 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   });
 
-  window.addEventListener("focus", updateFromStorage);
   emailInput.addEventListener("keydown", (e) => {
     if (e.key === "Enter") sendMagicLinkBtn.click();
   });
 
-  // ========== SUBSCRIPTION HANDLERS ==========
+  // Subscription Handlers
   upgradeBtn.addEventListener("click", async () => {
-    // Get current user from Supabase (session stored locally by background.js)
     const {
       data: { session },
     } = await supabaseClient.auth.getSession();
@@ -178,7 +163,7 @@ document.addEventListener("DOMContentLoaded", () => {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           email: user.email,
-          interval: "monthly", // or "annual" if you later add a toggle
+          interval: "monthly",
         }),
       });
       const { url } = await res.json();
@@ -196,7 +181,6 @@ document.addEventListener("DOMContentLoaded", () => {
   });
 
   manageBtn.addEventListener("click", async () => {
-    // 1) Get the logged-in user’s email from Supabase session:
     const {
       data: { session },
     } = await supabaseClient.auth.getSession();
@@ -206,7 +190,6 @@ document.addEventListener("DOMContentLoaded", () => {
       return;
     }
 
-    // 2) Hit our new create-portal endpoint:
     setLoading(manageBtn, true, "Loading…");
     try {
       const res = await fetch(`${API_BASE}/api/stripe/create-portal`, {

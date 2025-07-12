@@ -14,6 +14,40 @@ async function getStoredSession() {
   });
 }
 
+async function setStoredSession(session) {
+  chrome.storage.local.set({ supabaseSession: session });
+}
+
+setInterval(async () => {
+  const session = await getStoredSession();
+  if (!session?.refresh_token) return;
+  await supabaseClient.auth.setSession({
+    access_token: session.access_token,
+    refresh_token: session.refresh_token,
+  });
+  const { data, error } = await supabaseClient.auth.refreshSession({
+    refresh_token: session.refresh_token,
+  });
+  if (data?.session) setStoredSession(data.session);
+  // If refresh fails, you may want to sign out
+}, 5 * 60 * 1000);
+
+// Restore session to Supabase client on startup
+(async () => {
+  const session = await getStoredSession();
+  if (session) {
+    await supabaseClient.auth.setSession({
+      access_token: session.access_token,
+      refresh_token: session.refresh_token,
+    });
+  }
+})();
+
+supabaseClient.auth.onAuthStateChange((_event, session) => {
+  if (session) setStoredSession(session);
+  else chrome.storage.local.remove(["supabaseSession"]);
+});
+
 async function fetchUserAndProfile() {
   const session = await getStoredSession();
   if (!session?.access_token) return;
