@@ -54,7 +54,7 @@ document.addEventListener("DOMContentLoaded", () => {
       } else {
         paidPlanView.classList.add("hidden");
         freePlanView.classList.remove("hidden");
-        freeCallsUsed.textContent = `Calls this month: ${used} / 50`;
+        freeCallsUsed.textContent = `Calls this month: ${used} / 10`;
       }
 
       // Set the final view state on the body
