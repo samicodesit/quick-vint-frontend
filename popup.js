@@ -27,9 +27,6 @@ document.addEventListener("DOMContentLoaded", () => {
     if (user && profile) {
       // Populate the signed-in view's content
       userEmailSpan.textContent = user.email;
-      subscriptionStatus.textContent = `Status: ${
-        profile.subscription_status || "free"
-      } | Calls: ${profile.api_calls_this_month || 0}`;
 
       const status = profile.subscription_status || "free";
       const tier = profile.subscription_tier || "free";

@@ -157,6 +157,17 @@
       margin: 5px 0;
       font-size: 0.95em;
     }
+
+    .upgradeBtn {
+      margin-bottom: 0;
+      margin-top: 8px;
+    }
+
+    .poweredByText {
+      text-align: center;
+      font-size: 11px;
+      display: block;
+    }
   </style>
 </head>
 
@@ -180,14 +191,14 @@
   <div id="signedInView">
     <div id="userInfo">
       <p>Signed in as: <strong id="userEmail"></strong></p>
-      <p id="subscriptionStatus">Status: Loading...</p>
     </div>
 
     <div id="subscriptionArea">
       <div id="freePlanView">
         <p>Plan: <strong>Free</strong></p>
         <p id="freeCallsUsed">Calls this month: 0 / 10</p>
-        <button id="upgradeBtn">Upgrade to Unlimited</button>
+        <button class="upgradeBtn" id="upgradeBtn">Upgrade to Unlimited (€3,99)</button>
+        <span class="poweredByText">Powered by <strong>Stripe</strong></span>
       </div>
       <div id="paidPlanView" class="hidden">
         <p>Plan: <strong>Unlimited</strong></p>
