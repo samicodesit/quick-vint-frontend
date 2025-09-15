@@ -10,7 +10,6 @@ document.addEventListener("DOMContentLoaded", () => {
   const emailInput = document.getElementById("emailInput");
   const sendMagicLinkBtn = document.getElementById("sendMagicLinkBtn");
   const userEmailSpan = document.getElementById("userEmail");
-  const subscriptionStatus = document.getElementById("subscriptionStatus");
   const signOutBtn = document.getElementById("signOutBtn");
   const messagesDiv = document.getElementById("messages");
 
@@ -51,7 +50,7 @@ document.addEventListener("DOMContentLoaded", () => {
       } else {
         paidPlanView.classList.add("hidden");
         freePlanView.classList.remove("hidden");
-        freeCallsUsed.textContent = `Calls this month: ${used} / 10`;
+        freeCallsUsed.textContent = `Calls this month: ${used} / 5`;
       }
 
       // Set the final view state on the body
