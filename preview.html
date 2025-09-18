@@ -1,0 +1,404 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AutoLister AI Extension Preview</title>
+  <style>
+    body {
+      margin: 0;
+      padding: 40px;
+      background: #f3f4f6;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      display: flex;
+      gap: 30px;
+      flex-wrap: wrap;
+    }
+    
+    .preview-container {
+      background: white;
+      padding: 20px;
+      border-radius: 12px;
+      box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+    }
+    
+    .preview-title {
+      margin: 0 0 15px 0;
+      color: #1f2937;
+      font-size: 16px;
+      font-weight: 600;
+    }
+    
+    /* Extension popup styles */
+    .popup-mock {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Inter", sans-serif;
+      width: 320px;
+      color: #1f2937;
+      font-size: 14px;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      line-height: 1.5;
+      border-radius: 8px;
+      overflow: hidden;
+      box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+    }
+
+    .popup-container {
+      background: #ffffff;
+      margin: 0;
+      border-radius: 0;
+      overflow: hidden;
+    }
+
+    .popup-header {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      padding: 20px;
+      text-align: center;
+      color: white;
+    }
+
+    .popup-content {
+      padding: 24px;
+    }
+
+    .hidden {
+      display: none !important;
+    }
+
+    h3 {
+      margin: 0;
+      font-size: 18px;
+      font-weight: 600;
+      letter-spacing: -0.025em;
+    }
+
+    .subtitle {
+      margin-top: 4px;
+      font-size: 12px;
+      opacity: 0.9;
+      font-weight: 400;
+    }
+
+    label {
+      display: block;
+      margin-bottom: 6px;
+      font-size: 13px;
+      font-weight: 500;
+      color: #374151;
+    }
+
+    input[type="email"] {
+      width: 100%;
+      padding: 12px 16px;
+      margin-bottom: 16px;
+      border: 2px solid #e5e7eb;
+      border-radius: 8px;
+      font-size: 14px;
+      transition: all 0.2s ease;
+      box-sizing: border-box;
+      background: #f9fafb;
+    }
+
+    input[type="email"]:focus {
+      outline: none;
+      border-color: #667eea;
+      background: #ffffff;
+      box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+    }
+
+    button {
+      padding: 12px 20px;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+      width: 100%;
+      font-size: 14px;
+      font-weight: 500;
+      margin-bottom: 12px;
+      transition: all 0.2s ease;
+      letter-spacing: -0.025em;
+      box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+    }
+
+    button:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 8px 15px -3px rgba(0, 0, 0, 0.2);
+    }
+
+    button.secondary {
+      background: #6b7280;
+      box-shadow: 0 2px 4px -1px rgba(0, 0, 0, 0.1);
+    }
+
+    button.secondary:hover {
+      background: #5b6471;
+      transform: translateY(-1px);
+      box-shadow: 0 6px 12px -2px rgba(0, 0, 0, 0.15);
+    }
+
+    .small-text {
+      font-size: 12px;
+      text-align: center;
+      margin-top: 16px;
+      color: #6b7280;
+      line-height: 1.4;
+    }
+
+    #subscriptionArea {
+      margin: 16px 0;
+      background: #f8fafc;
+      border-radius: 12px;
+      padding: 20px;
+      border: 1px solid #e2e8f0;
+    }
+
+    #freePlanView p,
+    #paidPlanView p {
+      margin: 8px 0;
+      font-size: 14px;
+      color: #4b5563;
+    }
+
+    #freePlanView p:first-child,
+    #paidPlanView p:first-child {
+      color: #1f2937;
+      font-weight: 600;
+      font-size: 15px;
+    }
+
+    .upgradeBtn {
+      margin-bottom: 8px;
+      margin-top: 12px;
+      background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+      font-weight: 600;
+    }
+
+    .upgradeBtn:hover {
+      background: linear-gradient(135deg, #059669 0%, #047857 100%);
+    }
+
+    .view-plans-link {
+      display: block;
+      text-align: center;
+      color: #667eea;
+      text-decoration: none;
+      font-size: 13px;
+      font-weight: 500;
+      margin: 12px 0 8px 0;
+      transition: all 0.2s ease;
+      padding: 4px 0;
+    }
+
+    .view-plans-link:hover {
+      color: #5a67d8;
+      text-decoration: underline;
+    }
+
+    .poweredByText {
+      text-align: center;
+      font-size: 11px;
+      color: #9ca3af;
+      margin-top: 8px;
+    }
+
+    .user-email {
+      background: #f3f4f6;
+      padding: 8px 12px;
+      border-radius: 6px;
+      font-size: 13px;
+      color: #4b5563;
+      margin-bottom: 16px;
+      text-align: center;
+      border: 1px solid #e5e7eb;
+    }
+
+    #messages {
+      padding: 12px 16px;
+      margin-bottom: 16px;
+      border-radius: 8px;
+      text-align: center;
+      font-size: 13px;
+      font-weight: 500;
+      line-height: 1.4;
+      border: none;
+    }
+
+    #messages.success {
+      background: #ecfdf5;
+      color: #065f46;
+      border-left: 4px solid #10b981;
+    }
+  </style>
+</head>
+<body>
+  <div class="preview-container">
+    <h2 class="preview-title">🔐 Sign In View</h2>
+    <div class="popup-mock">
+      <div class="popup-container">
+        <div class="popup-header">
+          <h3>AutoLister AI</h3>
+          <div class="subtitle">Smart Vinted listings with AI</div>
+        </div>
+        
+        <div class="popup-content">
+          <p class="small-text" style="margin-bottom:20px;">
+            Sign in or create an account to get started
+          </p>
+          <label for="emailInput">Email Address</label>
+          <input type="email" id="emailInput" placeholder="Enter your email" value="user@example.com" />
+          <button>Send Magic Link</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="preview-container">
+    <h2 class="preview-title">🆓 Free Plan View</h2>
+    <div class="popup-mock">
+      <div class="popup-container">
+        <div class="popup-header">
+          <h3>AutoLister AI</h3>
+          <div class="subtitle">Smart Vinted listings with AI</div>
+        </div>
+        
+        <div class="popup-content">
+          <div class="user-email">
+            user@example.com
+          </div>
+
+          <div id="subscriptionArea">
+            <div id="freePlanView">
+              <p>Plan: <strong>Free</strong></p>
+              <p>Calls today: 1 / 2</p>
+              <button class="upgradeBtn">Upgrade to Starter (€3.99)</button>
+              <a href="#" class="view-plans-link">Compare All Plans</a>
+              <div class="poweredByText">Powered by <strong>Stripe</strong></div>
+            </div>
+          </div>
+
+          <button class="secondary">Sign Out</button>
+          <p class="small-text">
+            The "Generate" button appears on Vinted item listing pages.
+          </p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="preview-container">
+    <h2 class="preview-title">✨ Starter Plan View</h2>
+    <div class="popup-mock">
+      <div class="popup-container">
+        <div class="popup-header">
+          <h3>AutoLister AI</h3>
+          <div class="subtitle">Smart Vinted listings with AI</div>
+        </div>
+        
+        <div class="popup-content">
+          <div class="user-email">
+            premium@example.com
+          </div>
+
+          <div id="subscriptionArea">
+            <div id="paidPlanView">
+              <p>Plan: <strong>Starter</strong></p>
+              <p>Active until: <strong>Oct 18, 2025</strong></p>
+              <button>Manage Subscription</button>
+              <a href="#" class="view-plans-link">Compare All Plans</a>
+            </div>
+          </div>
+
+          <button class="secondary">Sign Out</button>
+          <p class="small-text">
+            The "Generate" button appears on Vinted item listing pages.
+          </p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="preview-container">
+    <h2 class="preview-title">💼 Business Plan with Overage</h2>
+    <div class="popup-mock">
+      <div class="popup-container">
+        <div class="popup-header">
+          <h3>AutoLister AI</h3>
+          <div class="subtitle">Smart Vinted listings with AI</div>
+        </div>
+        
+        <div class="popup-content">
+          <div class="user-email">
+            business@example.com
+          </div>
+
+          <div id="subscriptionArea">
+            <div id="paidPlanView">
+              <p>Plan: <strong>Business</strong></p>
+              <p>Active until: <strong>Oct 18, 2025</strong></p>
+              <p>Extra calls today: <strong>12</strong></p>
+              <button>Manage Subscription</button>
+              <a href="#" class="view-plans-link">Compare All Plans</a>
+            </div>
+          </div>
+
+          <button class="secondary">Sign Out</button>
+          <p class="small-text">
+            The "Generate" button appears on Vinted item listing pages.
+          </p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="preview-container">
+    <h2 class="preview-title">✅ Success Message Example</h2>
+    <div class="popup-mock">
+      <div class="popup-container">
+        <div class="popup-header">
+          <h3>AutoLister AI</h3>
+          <div class="subtitle">Smart Vinted listings with AI</div>
+        </div>
+        
+        <div class="popup-content">
+          <div id="messages" class="success">
+            Check your email for the sign-in link
+          </div>
+          
+          <p class="small-text" style="margin-bottom:20px;">
+            Sign in or create an account to get started
+          </p>
+          <label for="emailInput">Email Address</label>
+          <input type="email" placeholder="Enter your email" value="user@example.com" />
+          <button>Send Magic Link</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // Add some interactive hover effects for demo
+    document.querySelectorAll('button').forEach(btn => {
+      btn.addEventListener('mouseenter', function() {
+        this.style.transform = 'translateY(-1px)';
+      });
+      btn.addEventListener('mouseleave', function() {
+        this.style.transform = 'translateY(0)';
+      });
+    });
+
+    document.querySelectorAll('input').forEach(input => {
+      input.addEventListener('focus', function() {
+        this.style.borderColor = '#667eea';
+        this.style.background = '#ffffff';
+        this.style.boxShadow = '0 0 0 3px rgba(102, 126, 234, 0.1)';
+      });
+      input.addEventListener('blur', function() {
+        this.style.borderColor = '#e5e7eb';
+        this.style.background = '#f9fafb';
+        this.style.boxShadow = 'none';
+      });
+    });
+  </script>
+</body>
+</html>

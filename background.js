@@ -71,7 +71,7 @@ async function fetchUserAndProfile() {
   const { data: profile, error: profileError } = await _supabase
     .from("profiles")
     .select(
-      "subscription_status, api_calls_this_month, subscription_tier, current_period_end"
+      "subscription_status, api_calls_this_month, subscription_tier, current_period_end, overage_used_today"
     )
     .eq("id", userData.user.id)
     .single();
@@ -112,7 +112,7 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
       const { data: profile } = await _supabase
         .from("profiles")
         .select(
-          "subscription_status, api_calls_this_month, subscription_tier, current_period_end"
+          "subscription_status, api_calls_this_month, subscription_tier, current_period_end, overage_used_today"
         )
         .eq("id", userData?.user?.id)
         .single();
