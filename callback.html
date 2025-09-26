@@ -4,84 +4,498 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AutoLister AI Authentication</title>
+    <title>AutoLister AI - Sign In</title>
     <style>
         body {
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-            display: flex;
-            flex-direction: column;
-            justify-content: center;
-            align-items: center;
-            height: 100vh;
             margin: 0;
-            background-color: #f4f6f8;
-            color: #333;
+            padding: 40px;
             text-align: center;
-            padding: 20px;
+            color: #333;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
         }
 
-        .container {
-            background-color: #fff;
-            padding: 30px 40px;
-            border-radius: 8px;
-            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+        .auth-container {
+            background: white;
+            border-radius: 24px;
+            padding: 3rem 2.5rem;
+            box-shadow: 0 25px 50px rgba(0, 0, 0, 0.15);
+            max-width: 600px;
+            width: 100%;
+            margin: 0 auto;
         }
 
-        h1 {
-            color: #4f46e5;
-            font-size: 1.5em;
-            margin-bottom: 15px;
-        }
-
-        p {
-            font-size: 1em;
-            line-height: 1.6;
-            margin-bottom: 20px;
+        .loading-container {
+            text-align: center;
+            padding: 2rem;
         }
 
         .spinner {
-            border: 4px solid rgba(0, 0, 0, 0.1);
-            width: 36px;
-            height: 36px;
+            width: 40px;
+            height: 40px;
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #4f46e5;
             border-radius: 50%;
-            border-left-color: #4f46e5;
-            animation: spin 1s ease infinite;
-            margin-bottom: 20px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 2rem auto;
         }
 
         @keyframes spin {
-            0% {
-                transform: rotate(0deg);
-            }
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
 
-            100% {
-                transform: rotate(360deg);
-            }
+        .success-container {
+            text-align: center;
+            padding: 2rem;
+        }
+
+        .error-container {
+            text-align: center;
+            padding: 2rem;
+            border: 2px solid #ef4444;
+            border-radius: 24px;
+        }
+
+        .success-icon {
+            font-size: 4rem;
+            margin-bottom: 1rem;
+            animation: bounce 2s infinite;
+        }
+
+        .error-icon {
+            font-size: 4rem;
+            margin-bottom: 1.5rem;
+            color: #ef4444;
+        }
+
+        @keyframes bounce {
+            0%, 20%, 50%, 80%, 100% { transform: translateY(0); }
+            40% { transform: translateY(-10px); }
+            60% { transform: translateY(-5px); }
+        }
+
+        h1 {
+            font-size: 2.2rem;
+            margin-bottom: 1rem;
+            font-weight: 700;
+        }
+
+        h1.loading {
+            color: #4f46e5;
+            font-size: 1.8rem;
+        }
+
+        h1.success {
+            color: #10b981;
+        }
+
+        h1.error {
+            color: #ef4444;
+        }
+
+        .subtitle {
+            font-size: 1.1rem;
+            color: #6b7280;
+            margin-bottom: 2rem;
+            line-height: 1.6;
+        }
+
+        .welcome-message {
+            background: #f0fdf4;
+            border: 2px solid #10b981;
+            border-radius: 16px;
+            padding: 1.5rem;
+            margin: 2rem 0;
+            color: #065f46;
+        }
+
+        .inline-btn {
+            display: inline-block;
+            background: #4f46e5;
+            color: white;
+            padding: 4px 8px;
+            border-radius: 6px;
+            font-size: 0.85em;
+            font-weight: 600;
+            margin: 0 2px;
+            white-space: nowrap;
+        }
+
+        .features-preview {
+            background: #f8fafc;
+            border-radius: 16px;
+            padding: 2rem;
+            margin: 2rem 0;
+            text-align: left;
+        }
+
+        .features-preview h3 {
+            color: #4f46e5;
+            margin-bottom: 1rem;
+            font-size: 1.2rem;
+            text-align: center;
+        }
+
+        .feature-item {
+            display: flex;
+            align-items: center;
+            margin-bottom: 0.8rem;
+            font-size: 1rem;
+            color: #374151;
+        }
+
+        .feature-item::before {
+            content: "✨";
+            margin-right: 0.8rem;
+            font-size: 1.2rem;
+        }
+
+        .upgrade-section {
+            background: #fef3c7;
+            border: 2px solid #f59e0b;
+            border-radius: 16px;
+            padding: 1.5rem;
+            margin: 2rem 0;
+            color: #92400e;
+        }
+
+        .upgrade-section h3 {
+            margin-bottom: 1rem;
+            font-size: 1.1rem;
+        }
+
+        .upgrade-section p {
+            margin: 0 0 1rem 0;
+            font-size: 0.95rem;
+        }
+
+        .cta-buttons {
+            display: flex;
+            gap: 1rem;
+            justify-content: center;
+            flex-wrap: wrap;
+            margin-top: 2rem;
+        }
+
+        .btn {
+            display: inline-block;
+            padding: 0.8rem 2rem;
+            text-decoration: none;
+            border-radius: 12px;
+            font-weight: 600;
+            font-size: 1rem;
+            transition: all 0.3s ease;
+            cursor: pointer;
+            border: none;
+        }
+
+        .btn-primary {
+            background: #4f46e5;
+            color: white;
+            box-shadow: 0 4px 15px rgba(79, 70, 229, 0.3);
+        }
+
+        .btn-primary:hover {
+            background: #3730a3;
+            transform: translateY(-2px);
+            box-shadow: 0 8px 25px rgba(79, 70, 229, 0.4);
+        }
+
+        .btn-success {
+            background: #10b981;
+            color: white;
+            box-shadow: 0 4px 15px rgba(16, 185, 129, 0.3);
+        }
+
+        .btn-success:hover {
+            background: #059669;
+            transform: translateY(-2px);
+            box-shadow: 0 8px 25px rgba(16, 185, 129, 0.4);
+        }
+
+        .btn-secondary {
+            background: #f3f4f6;
+            color: #374151;
+            border: 2px solid #e5e7eb;
+        }
+
+        .btn-secondary:hover {
+            background: #e5e7eb;
+            transform: translateY(-2px);
+        }
+
+        .pricing-preview {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 1rem;
+            margin: 2rem 0;
+        }
+
+        .plan-card {
+            background: white;
+            border: 2px solid #e5e7eb;
+            border-radius: 12px;
+            padding: 1.5rem;
+            text-align: center;
+            transition: all 0.3s ease;
+        }
+
+        .plan-card:hover {
+            border-color: #4f46e5;
+            transform: translateY(-2px);
+            box-shadow: 0 8px 25px rgba(79, 70, 229, 0.15);
+        }
+
+        .plan-card.recommended {
+            border-color: #10b981;
+            background: linear-gradient(135deg, #ffffff 0%, #f0fdf4 100%);
+        }
+
+        .plan-name {
+            font-size: 1.1rem;
+            font-weight: bold;
+            color: #1f2937;
+            margin-bottom: 0.5rem;
+        }
+
+        .plan-price {
+            font-size: 1.8rem;
+            font-weight: bold;
+            color: #4f46e5;
+            margin-bottom: 0.5rem;
+        }
+
+        .plan-features {
+            font-size: 0.85rem;
+            color: #6b7280;
+            line-height: 1.4;
+        }
+
+        footer {
+            margin-top: 2rem;
+            font-size: 0.9rem;
+            color: #6b7280;
+            border-top: 1px solid #e5e7eb;
+            padding-top: 1.5rem;
+        }
+
+        footer a {
+            color: #4f46e5;
+            text-decoration: none;
+        }
+
+        footer a:hover {
+            text-decoration: underline;
         }
 
         .hidden {
             display: none;
         }
+
+        .lang-toggle {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            border: 2px solid #e5e7eb;
+            border-radius: 12px;
+            padding: 6px 8px;
+            font-size: 0.8rem;
+            font-weight: 600;
+            color: #4f46e5;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            z-index: 1000;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .lang-toggle:hover {
+            background: rgba(255, 255, 255, 1);
+            border-color: #4f46e5;
+            transform: translateY(-1px);
+            box-shadow: 0 6px 20px rgba(79, 70, 229, 0.2);
+        }
+
+        .lang-current {
+            color: #4f46e5;
+            font-weight: 700;
+            transition: all 0.2s ease;
+        }
+
+        .lang-separator {
+            color: #9ca3af;
+            font-weight: 400;
+        }
+
+        .lang-alternative {
+            color: #6b7280;
+            font-weight: 500;
+            transition: all 0.2s ease;
+        }
+
+        .lang-toggle:hover .lang-current {
+            color: #3730a3;
+        }
+
+        .lang-toggle:hover .lang-alternative {
+            color: #374151;
+        }
+
+        .plan-card {
+            background: white;
+            border: 2px solid #e5e7eb;
+            border-radius: 12px;
+            padding: 1.5rem;
+            text-align: center;
+            transition: all 0.3s ease;
+            cursor: pointer;
+        }
+
+        .plan-card:hover {
+            border-color: #4f46e5;
+            transform: translateY(-2px);
+            box-shadow: 0 8px 25px rgba(79, 70, 229, 0.15);
+        }
+
+        .plan-card.recommended:hover {
+            border-color: #10b981;
+            box-shadow: 0 8px 25px rgba(16, 185, 129, 0.15);
+        }
+
+        @media (max-width: 640px) {
+            .auth-container {
+                padding: 2rem 1.5rem;
+                margin: 0 1rem;
+            }
+            
+            h1 {
+                font-size: 1.8rem;
+            }
+            
+            .cta-buttons {
+                flex-direction: column;
+            }
+            
+            .btn {
+                width: 100%;
+                box-sizing: border-box;
+            }
+
+            .pricing-preview {
+                grid-template-columns: 1fr;
+            }
+        }
     </style>
 </head>
 
 <body>
-    <div class="container">
-        <div id="loadingState">
-            <h1>Authenticating...</h1>
-            <div class="spinner"></div>
-            <p>Please wait while we verify your magic link.</p>
+    <!-- Language Toggle Button -->
+    <button id="lang-toggle" class="lang-toggle">
+        <span id="lang-current" class="lang-current">EN</span>
+        <span class="lang-separator">|</span>
+        <span id="lang-alternative" class="lang-alternative">EN</span>
+    </button>
+
+    <!-- Loading State -->
+    <div id="loadingState" class="auth-container loading-container">
+        <div class="spinner"></div>
+        <h1 class="loading">Authenticating...</h1>
+        <p class="subtitle">Please wait while we verify your magic link and set up your account.</p>
+    </div>
+
+    <!-- Success State -->
+    <div id="successState" class="auth-container success-container hidden">
+        <div class="success-icon">🎉</div>
+        <h1 class="success" id="success-title">Welcome to AutoLister AI!</h1>
+        <p class="subtitle" id="success-subtitle">You're signed in and ready to create amazing listings with AI.</p>
+        
+        <div class="welcome-message" id="welcome-message">
+            <strong>🚀 You're all set!</strong> Close this tab and return to the extension to generate your first AI-powered listing.
         </div>
-        <div id="successState" class="hidden">
-            <h1>Authentication Successful!</h1>
-            <p>You are now signed in. You can close this tab and return to the AutoLister AI extension.</p>
-            <p style="font-size:0.9em; color:#555;">This tab may close automatically shortly.</p>
+
+        <div class="cta-buttons" style="margin: 2rem 0;">
+            <button class="btn btn-success" id="vinted-redirect">
+                Start Creating on Vinted
+            </button>
+            <button class="btn btn-primary" id="view-plans">
+                View All Plans
+            </button>
         </div>
-        <div id="errorState" class="hidden">
-            <h1>Authentication Failed</h1>
-            <p id="errorMessage">An error occurred. Please try signing in again from the extension, or contact support
-                if the problem persists.</p>
+
+        <div class="features-preview">
+            <h3 id="features-title">✨ What You Can Do Now</h3>
+            <div class="feature-item" id="feature-1">Generate compelling titles and descriptions instantly</div>
+            <div class="feature-item" id="feature-2">Upload photos and get AI-powered listings</div>
+            <div class="feature-item" id="feature-3">Save hours of manual writing</div>
+            <div class="feature-item" id="feature-4">Start with 2 free listings daily</div>
         </div>
+
+        <div class="upgrade-section">
+            <h3 id="upgrade-title">💡 Want More Power?</h3>
+            <p id="upgrade-description">Free users get 2 listings per day. Upgrade to get up to 75 daily listings, priority support, and more features!</p>
+            
+            <div class="pricing-preview">
+                <div class="plan-card" data-plan="starter" id="starter-card">
+                    <div class="plan-name">Starter</div>
+                    <div class="plan-price">€3.99<span style="font-size:0.6em;color:#6b7280;">/mo</span></div>
+                    <div class="plan-features" id="starter-features">15 listings/day<br>Perfect for casual sellers</div>
+                </div>
+                <div class="plan-card recommended" data-plan="pro" id="pro-card">
+                    <div class="plan-name">Pro</div>
+                    <div class="plan-price">€9.99<span style="font-size:0.6em;color:#6b7280;">/mo</span></div>
+                    <div class="plan-features" id="pro-features">40 listings/day<br>For active sellers</div>
+                </div>
+                <div class="plan-card" data-plan="business" id="business-card">
+                    <div class="plan-name">Business</div>
+                    <div class="plan-price">€19.99<span style="font-size:0.6em;color:#6b7280;">/mo</span></div>
+                    <div class="plan-features" id="business-features">75 listings/day<br>For power sellers</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="cta-buttons">
+            <button class="btn btn-secondary" onclick="window.close()" id="close-tab">
+                Close Tab
+            </button>
+        </div>
+
+        <footer>
+            &copy; 2025 AutoLister AI · All rights reserved
+            <br />
+            <a href="https://quick-vint.vercel.app/privacy.html" id="privacy-link">Privacy Policy</a> · 
+            <a href="https://quick-vint.vercel.app/terms.html" id="terms-link">Terms of Service</a>
+        </footer>
+    </div>
+
+    <!-- Error State -->
+    <div id="errorState" class="auth-container error-container hidden">
+        <div class="error-icon">⚠️</div>
+        <h1 class="error">Authentication Failed</h1>
+        <p class="subtitle" id="errorMessage">
+            The magic link may have expired or already been used. Please try signing in again from the extension.
+        </p>
+        
+        <div class="cta-buttons">
+            <button class="btn btn-primary" onclick="window.close()">
+                Return to Extension
+            </button>
+            <a href="https://quick-vint.vercel.app/pricing.html" class="btn btn-secondary">
+                Learn More
+            </a>
+        </div>
+
+        <footer>
+            Need help? <a href="mailto:support@autolister.ai">Contact Support</a>
+        </footer>
     </div>
 
     <script src="lib/supabase.js"></script>

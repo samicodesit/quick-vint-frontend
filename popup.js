@@ -33,31 +33,38 @@ document.addEventListener("DOMContentLoaded", () => {
       const status = profile.subscription_status || "free";
       const tier = profile.subscription_tier || "free";
       const used = profile.api_calls_this_month || 0;
-      
-      // Define tier display names (simplified)
+
+      // Updated tier display names for new system + legacy
       const tierDisplayNames = {
         free: "Free",
-        unlimited_monthly: "Starter",
-        unlimited_annual: "Starter", 
+        unlimited_monthly: "Starter", // Legacy user support
+        unlimited_annual: "Starter", // Legacy user support (just in case)
         starter: "Starter",
         pro: "Pro",
-        business: "Business"
+        business: "Business",
       };
 
+      // Check for new tier names + legacy
       if (
         status === "active" &&
-        ["unlimited_monthly", "unlimited_annual", "starter", "pro", "business"].includes(tier)
+        [
+          "unlimited_monthly",
+          "unlimited_annual",
+          "starter",
+          "pro",
+          "business",
+        ].includes(tier)
       ) {
         // Show paid plan view
         freePlanView.classList.add("hidden");
         paidPlanView.classList.remove("hidden");
-        
+
         // Update plan name in paid view
         const planNameElement = paidPlanView.querySelector("p strong");
         if (planNameElement) {
           planNameElement.textContent = tierDisplayNames[tier] || "Starter";
         }
-        
+
         // Only show overage if Business tier AND there's actual overage usage
         if (tier === "business" && profile.overage_used_today > 0) {
           overageUsage.classList.remove("hidden");
@@ -66,7 +73,7 @@ document.addEventListener("DOMContentLoaded", () => {
         } else {
           overageUsage.classList.add("hidden");
         }
-        
+
         // Simplified renewal info - only show if date exists
         const rawEnd = profile.current_period_end;
         if (rawEnd) {
@@ -82,13 +89,13 @@ document.addEventListener("DOMContentLoaded", () => {
         // Show free plan view
         paidPlanView.classList.add("hidden");
         freePlanView.classList.remove("hidden");
-        
+
         // Update plan name in free view
         const freePlanNameElement = freePlanView.querySelector("p strong");
         if (freePlanNameElement) {
           freePlanNameElement.textContent = "Free";
         }
-        
+
         // Only show usage for free tier to encourage upgrades
         if (tier === "free") {
           const dailyLimit = 2;
@@ -127,6 +134,18 @@ document.addEventListener("DOMContentLoaded", () => {
   window.addEventListener("focus", updateFromStorage);
 
   // Utility functions
+
+  // Utility function for encoding user data
+  function encodeUserData(data) {
+    try {
+      const jsonString = JSON.stringify(data);
+      return btoa(jsonString); // Base64 encode
+    } catch (e) {
+      console.error("Failed to encode user data:", e);
+      return null;
+    }
+  }
+
   function showMessage(msg, type = "info") {
     if (!msg) {
       messagesDiv.classList.add("hidden");
@@ -187,7 +206,6 @@ document.addEventListener("DOMContentLoaded", () => {
     if (e.key === "Enter") sendMagicLinkBtn.click();
   });
 
-  // Subscription Handlers
   upgradeBtn.addEventListener("click", async () => {
     const {
       data: { session },
@@ -205,8 +223,7 @@ document.addEventListener("DOMContentLoaded", () => {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           email: user.email,
-          interval: "monthly",
-          priceId: "price_starter", // Use Starter tier as default upgrade
+          tier: "starter", // ✅ Fixed: use 'tier' instead of 'interval' and 'priceId'
         }),
       });
       const { url } = await res.json();
@@ -244,7 +261,10 @@ document.addEventListener("DOMContentLoaded", () => {
       if (res.ok && json.url) {
         window.open(json.url, "_blank");
       } else {
-        showMessage("Unable to open subscription page. Please try again.", "error");
+        showMessage(
+          "Unable to open subscription page. Please try again.",
+          "error"
+        );
       }
     } catch (err) {
       console.error("Portal error:", err);
@@ -255,13 +275,42 @@ document.addEventListener("DOMContentLoaded", () => {
   });
 
   // View All Plans handlers
-  viewAllPlansLink?.addEventListener("click", (e) => {
+  // Single View All Plans handler (replaces both previous handlers)
+  function handleViewAllPlansClick(e) {
     e.preventDefault();
-    window.open("https://quick-vint.vercel.app/pricing.html", "_blank");
-  });
+    chrome.runtime.sendMessage({ type: "GET_USER_PROFILE" }, (resp) => {
+      const userData = {
+        source: "extension",
+        signed_in: !!resp?.user?.email,
+        plan: resp?.profile?.subscription_tier || "free",
+        email: resp?.user?.email || "",
+        timestamp: Date.now(), // For freshness validation
+      };
 
-  viewAllPlansLinkPaid?.addEventListener("click", (e) => {
-    e.preventDefault();
-    window.open("https://quick-vint.vercel.app/pricing.html", "_blank");
-  });
+      const token = encodeUserData(userData);
+      if (token) {
+        // Use new token-based approach
+        window.open(
+          `https://quick-vint.vercel.app/pricing.html?token=${token}`,
+          "_blank"
+        );
+      } else {
+        // Fallback to old method if encoding fails
+        const params = new URLSearchParams({
+          source: "extension",
+          signed_in: userData.signed_in ? "true" : "false",
+          plan: userData.plan,
+          email: userData.email,
+        });
+        window.open(
+          `https://quick-vint.vercel.app/pricing.html?${params.toString()}`,
+          "_blank"
+        );
+      }
+    });
+  }
+
+  // Apply the single handler to both links
+  viewAllPlansLink?.addEventListener("click", handleViewAllPlansClick);
+  viewAllPlansLinkPaid?.addEventListener("click", handleViewAllPlansClick);
 });

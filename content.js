@@ -51,7 +51,31 @@
       fontSize: "14px",
       cursor: "not-allowed",
       transition: "background-color 0.2s",
+      maxWidth: "130px",
+      fontWeight: "400",
+      boxShadow: "rgba(0, 0, 0, 0.1) 0px 4px 6px",
+      minWidth: "130px",
+      textAlign: "center",
+      whiteSpace: "nowrap",
+      overflow: "hidden",
+      textOverflow: "ellipsis",
+      fontFamily: "'Segoe UI', Tahoma, Geneva, Verdana, sans-serif",
     });
+
+    // add hover effect, to distinguish from normal state, just add some visual feedback
+    btn.addEventListener("mouseover", () => {
+      if (btn.disabled) return;
+      btn.style.backgroundColor = "#4338ca";
+      btn.style.boxShadow = "0 4px 8px rgba(0, 0, 0, 0.2)";
+      btn.style.transform = "translateY(-1px)";
+    });
+    btn.addEventListener("mouseout", () => {
+      if (btn.disabled) return;
+      btn.style.backgroundColor = "#4f46e5";
+      btn.style.boxShadow = "0 2px 4px rgba(0, 0, 0, 0.1)";
+      btn.style.transform = "translateY(0)";
+    });
+
     btn.disabled = true;
     btn.addEventListener("click", onGenerate);
     return btn;
