@@ -119,14 +119,31 @@
     generateBtn.style.cursor = "progress";
 
     try {
-      const res = await fetch(`${API_BASE}/api/generate`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${accessToken}`,
-        },
-        body: JSON.stringify({ imageUrls: imgs }),
-      });
+      // Ensure we have a fresh token from the background
+      const tokenResp = await new Promise((resolve) =>
+        chrome.runtime.sendMessage({ type: "GET_ACCESS_TOKEN" }, resolve)
+      );
+      accessToken = tokenResp?.access_token ?? accessToken;
+
+      const doRequest = async (token) =>
+        fetch(`${API_BASE}/api/generate`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({ imageUrls: imgs }),
+        });
+
+      let res = await doRequest(accessToken);
+      // If unauthorized, try to refresh token once and retry
+      if (res.status === 401) {
+        const retryTokenResp = await new Promise((resolve) =>
+          chrome.runtime.sendMessage({ type: "GET_ACCESS_TOKEN" }, resolve)
+        );
+        accessToken = retryTokenResp?.access_token ?? null;
+        res = await doRequest(accessToken);
+      }
 
       if (res.status === 401) {
         isAuthenticated = false;

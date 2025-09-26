@@ -1,13 +1,10 @@
 <!DOCTYPE html>
 <html lang="en">
-
 <head>
   <meta charset="UTF-8" />
   <title>AutoLister AI</title>
   <style>
     /* --- CSS View Controller --- */
-
-    /* By default, hide the main views and only show the loading spinner */
     #signedInView,
     #signedOutView {
       display: none;
@@ -20,12 +17,10 @@
       color: #666;
     }
 
-    /* When the body has a data-view, hide the loading spinner */
     body[data-view] #loadingView {
       display: none;
     }
 
-    /* Show the correct view based on the body's data-view attribute */
     body[data-view="signed-in"] #signedInView {
       display: block;
     }
@@ -42,27 +37,24 @@
       margin: 0;
       color: #1f2937;
       font-size: 14px;
-      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      background: #f9fafb;
       line-height: 1.5;
     }
 
     .popup-container {
       background: #ffffff;
       margin: 0;
-      border-radius: 0;
-      box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
-      overflow: hidden;
     }
 
     .popup-header {
       background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-      padding: 20px;
+      padding: 18px 20px;
       text-align: center;
       color: white;
     }
 
     .popup-content {
-      padding: 24px;
+      padding: 16px 22px 20px;
     }
 
     .hidden {
@@ -95,12 +87,13 @@
       width: 100%;
       padding: 12px 16px;
       margin-bottom: 16px;
-      border: 2px solid #e5e7eb;
+      border: 1px solid #d1d5db;
       border-radius: 8px;
       font-size: 14px;
-      transition: all 0.2s ease;
       box-sizing: border-box;
       background: #f9fafb;
+      /* PERFORMANCE: Transition specific properties instead of 'all' */
+      transition: border-color 0.2s ease, box-shadow 0.2s ease;
     }
 
     input[type="email"]:focus {
@@ -119,16 +112,14 @@
       cursor: pointer;
       width: 100%;
       font-size: 14px;
-      font-weight: 500;
+      font-weight: 600;
       margin-bottom: 12px;
-      transition: all 0.2s ease;
-      letter-spacing: -0.025em;
-      box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+      /* PERFORMANCE: Simpler, more targeted transitions */
+      transition: transform 0.15s ease, background-color 0.15s ease;
     }
 
     button:hover {
       transform: translateY(-1px);
-      box-shadow: 0 8px 15px -3px rgba(0, 0, 0, 0.2);
     }
 
     button:active {
@@ -139,18 +130,14 @@
       background: #9ca3af;
       cursor: not-allowed;
       transform: none;
-      box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
     }
 
     button.secondary {
       background: #6b7280;
-      box-shadow: 0 2px 4px -1px rgba(0, 0, 0, 0.1);
     }
 
     button.secondary:hover {
       background: #5b6471;
-      transform: translateY(-1px);
-      box-shadow: 0 6px 12px -2px rgba(0, 0, 0, 0.15);
     }
 
     #messages {
@@ -161,73 +148,34 @@
       font-size: 13px;
       font-weight: 500;
       line-height: 1.4;
-      border: none;
+      border-left: 4px solid transparent;
     }
 
     #messages.success {
       background: #ecfdf5;
       color: #065f46;
-      border-left: 4px solid #10b981;
+      border-left-color: #10b981;
     }
 
     #messages.error {
       background: #fef2f2;
       color: #dc2626;
-      border-left: 4px solid #ef4444;
-    }
-
-    #messages.info {
-      background: #eff6ff;
-      color: #1d4ed8;
-      border-left: 4px solid #3b82f6;
-    }
-
-    #userInfo p {
-      margin: 8px 0;
-      font-size: 14px;
-      color: #4b5563;
-    }
-
-    #userInfo strong {
-      color: #1f2937;
-      font-weight: 600;
+      border-left-color: #ef4444;
     }
 
     .small-text {
       font-size: 12px;
       text-align: center;
-      margin-top: 16px;
+      margin-top: 12px;
       color: #6b7280;
       line-height: 1.4;
-    }
-
-    #subscriptionArea {
-      margin: 16px 0;
-      background: #f8fafc;
-      border-radius: 12px;
-      padding: 20px;
-      border: 1px solid #e2e8f0;
-    }
-
-    #freePlanView p,
-    #paidPlanView p {
-      margin: 8px 0;
-      font-size: 14px;
-      color: #4b5563;
-    }
-
-    #freePlanView p:first-child,
-    #paidPlanView p:first-child {
-      color: #1f2937;
-      font-weight: 600;
-      font-size: 15px;
     }
 
     .upgradeBtn {
       margin-bottom: 8px;
       margin-top: 12px;
       background: linear-gradient(135deg, #10b981 0%, #059669 100%);
-      font-weight: 600;
+      font-weight: 700;
     }
 
     .upgradeBtn:hover {
@@ -240,10 +188,10 @@
       color: #667eea;
       text-decoration: none;
       font-size: 13px;
-      font-weight: 500;
-      margin: 12px 0 8px 0;
-      transition: all 0.2s ease;
-      padding: 4px 0;
+      font-weight: 600;
+      margin: 10px 0 6px 0;
+      transition: color 0.18s ease;
+      padding: 6px 0;
     }
 
     .view-plans-link:hover {
@@ -258,26 +206,76 @@
       margin-top: 8px;
     }
 
-    #loadingView {
-      text-align: center;
-      padding: 40px 0;
-      color: #6b7280;
-      font-weight: 500;
-    }
-
     .user-email {
       background: #f3f4f6;
       padding: 8px 12px;
-      border-radius: 6px;
+      border-radius: 8px;
       font-size: 13px;
       color: #4b5563;
       margin-bottom: 16px;
       text-align: center;
       border: 1px solid #e5e7eb;
+      word-break: break-all;
+    }
+
+    /* --- Plan & Usage Card Styles --- */
+    .plan-card {
+      background: #ffffff;
+      border-radius: 12px;
+      padding: 16px;
+      border: 1px solid #f3f4f6;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.04);
+      margin: 14px 0 8px;
+    }
+
+    .plan-header {
+      font-size: 16px;
+      font-weight: 600;
+      color: #1f2937;
+      text-align: center;
+      margin-bottom: 16px;
+    }
+
+    .usage-meters {
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+      margin-bottom: 16px;
+    }
+
+    .usage-meter .meter-label {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 6px;
+      font-size: 12px;
+      color: #4b5563;
+    }
+
+    .usage-meter .meter-label span:last-child {
+      font-weight: 600;
+      font-size: 13px;
+      color: #1f2937;
+    }
+
+    .progress-bar-bg {
+      width: 100%;
+      height: 8px;
+      background-color: #e5e7eb;
+      border-radius: 4px;
+      overflow: hidden;
+    }
+
+    .progress-bar-fill {
+      height: 100%;
+      width: 0%;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      border-radius: 4px;
+      /* PERFORMANCE: Faster, simpler transition for a snappy feel */
+      transition: width 0.2s ease;
     }
   </style>
 </head>
-
 <body>
   <div class="popup-container">
     <div class="popup-header">
@@ -309,6 +307,11 @@
           required
         />
         <button id="sendMagicLinkBtn">Send Magic Link</button>
+        <p class="small-text" style="margin-top: 12px;">
+          Having trouble? Contact us at
+          <br />
+          <a href="mailto:samicodesit@gmail.com" style="color:#667eea;word-break:break-all;">samicodesit@gmail.com</a>
+        </p>
       </div>
 
       <div id="signedInView">
@@ -316,18 +319,39 @@
           <span id="userEmail"></span>
         </div>
 
-        <div id="subscriptionArea">
+        <div id="subscriptionArea" class="plan-card">
+          <div class="plan-header">
+            <span id="planName">Free Plan</span>
+          </div>
+
+          <div class="usage-meters">
+            <div class="usage-meter">
+              <div class="meter-label">
+                <span>Daily Usage</span>
+                <span id="dailyCallsUsed">0 / 2</span>
+              </div>
+              <div class="progress-bar-bg">
+                <div id="dailyProgressBar" class="progress-bar-fill"></div>
+              </div>
+            </div>
+            <div class="usage-meter">
+              <div class="meter-label">
+                <span>Monthly Usage</span>
+                <span id="monthlyCallsUsed">0 / 10</span>
+              </div>
+              <div class="progress-bar-bg">
+                <div id="monthlyProgressBar" class="progress-bar-fill"></div>
+              </div>
+            </div>
+          </div>
+
           <div id="freePlanView">
-            <p>Plan: <strong>Free</strong></p>
-            <p id="freeCallsUsed">Calls today: 0 / 2</p>
             <button class="upgradeBtn" id="upgradeBtn">Upgrade to Starter (€3.99)</button>
             <a href="#" id="viewAllPlansLink" class="view-plans-link">Compare All Plans</a>
             <div class="poweredByText">Powered by <strong>Stripe</strong></div>
           </div>
           <div id="paidPlanView" class="hidden">
-            <p>Plan: <strong>Starter</strong></p>
-            <p id="renewalDate">Active until: <strong>—</strong></p>
-            <p id="overageUsage" class="hidden">Extra calls today: <strong>0</strong></p>
+            <p id="renewalDate" style="text-align: center; margin-bottom: 12px; font-size: 13px;">Active until: <strong>—</strong></p>
             <button id="manageBtn">Manage Subscription</button>
             <a href="#" id="viewAllPlansLinkPaid" class="view-plans-link">Compare All Plans</a>
           </div>
@@ -344,5 +368,5 @@
   <script src="lib/supabase.js"></script>
   <script src="popup.js"></script>
 </body>
-
 </html>
+

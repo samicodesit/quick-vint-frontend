@@ -16,65 +16,105 @@ document.addEventListener("DOMContentLoaded", () => {
   // Subscription-area elements
   const freePlanView = document.getElementById("freePlanView");
   const paidPlanView = document.getElementById("paidPlanView");
-  const freeCallsUsed = document.getElementById("freeCallsUsed");
   const renewalDate = document.getElementById("renewalDate");
-  const overageUsage = document.getElementById("overageUsage");
   const upgradeBtn = document.getElementById("upgradeBtn");
   const manageBtn = document.getElementById("manageBtn");
   const viewAllPlansLink = document.getElementById("viewAllPlansLink");
   const viewAllPlansLinkPaid = document.getElementById("viewAllPlansLinkPaid");
 
+  // Tier limits mapping
+  const TIER_LIMITS = {
+    free: { daily: 2, monthly: 10 },
+    starter: { daily: 15, monthly: 300 },
+    pro: { daily: 40, monthly: 800 },
+    business: { daily: 75, monthly: 1500 },
+  };
+
+  // Helper to normalize tier names
+  function normalizeTier(tier) {
+    if (!tier) return "free";
+    const map = {
+      unlimited_monthly: "starter",
+      unlimited_annual: "starter",
+      starter: "starter",
+      pro: "pro",
+      business: "business",
+      free: "free",
+    };
+    return map[tier] || "free";
+  }
+
   // Render user + subscription state
   function render(user, profile) {
     if (user && profile) {
-      // Populate the signed-in view's content
+      // Get new UI elements
+      const planName = document.getElementById("planName");
+      const dailyProgressBar = document.getElementById("dailyProgressBar");
+      const monthlyProgressBar = document.getElementById("monthlyProgressBar");
+      const dailyCallsUsed = document.getElementById("dailyCallsUsed");
+      const monthlyCallsUsed = document.getElementById("monthlyCallsUsed");
+
       userEmailSpan.textContent = user.email;
 
       const status = profile.subscription_status || "free";
-      const tier = profile.subscription_tier || "free";
-      const used = profile.api_calls_this_month || 0;
+      const rawTier = profile.subscription_tier || "free";
+      const tier = normalizeTier(rawTier);
 
-      // Updated tier display names for new system + legacy
+      const monthlyUsed = profile.api_calls_this_month || 0;
+
+      const totals = TIER_LIMITS[tier] || TIER_LIMITS["free"];
+      const dailyTotal = totals.daily;
+      const monthlyTotal = totals.monthly;
+
       const tierDisplayNames = {
-        free: "Free",
-        unlimited_monthly: "Starter", // Legacy user support
-        unlimited_annual: "Starter", // Legacy user support (just in case)
-        starter: "Starter",
-        pro: "Pro",
-        business: "Business",
+        free: "Free Plan",
+        starter: "Starter Plan",
+        pro: "Pro Plan",
+        business: "Business Plan",
       };
 
-      // Check for new tier names + legacy
-      if (
-        status === "active" &&
-        [
-          "unlimited_monthly",
-          "unlimited_annual",
-          "starter",
-          "pro",
-          "business",
-        ].includes(tier)
-      ) {
-        // Show paid plan view
+      planName.textContent = tierDisplayNames[tier] || "Starter Plan";
+
+      const updateUsageUI = (dailyUsed) => {
+        // TODO: The backend sometimes reports usage exceeding the tier limit.
+        // This is a visual clamp to prevent showing numbers like "18 / 15".
+        // The root cause should be investigated and fixed in the backend logic.
+        const displayDailyUsed = Math.min(dailyUsed, dailyTotal);
+        const displayMonthlyUsed = Math.min(monthlyUsed, monthlyTotal);
+
+        const dailyPercent =
+          dailyTotal > 0 ? Math.min((dailyUsed / dailyTotal) * 100, 100) : 0;
+        const monthlyPercent =
+          monthlyTotal > 0
+            ? Math.min((monthlyUsed / monthlyTotal) * 100, 100)
+            : 0;
+
+        // Set the text content, using the clamped values for display
+        dailyCallsUsed.textContent = `${displayDailyUsed} / ${dailyTotal}`;
+        monthlyCallsUsed.textContent = `${displayMonthlyUsed} / ${monthlyTotal}`;
+
+        // Update progress bar widths. Using original values is fine here as Math.min caps it.
+        if (dailyProgressBar) dailyProgressBar.style.width = `${dailyPercent}%`;
+        if (monthlyProgressBar)
+          monthlyProgressBar.style.width = `${monthlyPercent}%`;
+
+        // Override for Business plan's unlimited daily usage display
+        if (tier === "business") {
+          dailyCallsUsed.textContent = `${dailyUsed} / Unlimited`;
+          if (dailyProgressBar) dailyProgressBar.style.width = "100%";
+        }
+      };
+
+      // Always fetch daily count from background script as it's the single source of truth.
+      chrome.runtime.sendMessage({ type: "GET_USER_DAY_COUNT" }, (resp) => {
+        const dailyUsed =
+          resp && typeof resp.daily === "number" ? resp.daily : 0;
+        updateUsageUI(dailyUsed);
+      });
+
+      if (status === "active" && tier !== "free") {
         freePlanView.classList.add("hidden");
         paidPlanView.classList.remove("hidden");
-
-        // Update plan name in paid view
-        const planNameElement = paidPlanView.querySelector("p strong");
-        if (planNameElement) {
-          planNameElement.textContent = tierDisplayNames[tier] || "Starter";
-        }
-
-        // Only show overage if Business tier AND there's actual overage usage
-        if (tier === "business" && profile.overage_used_today > 0) {
-          overageUsage.classList.remove("hidden");
-          const overageCount = profile.overage_used_today;
-          overageUsage.innerHTML = `Extra calls today: <strong>${overageCount}</strong>`;
-        } else {
-          overageUsage.classList.add("hidden");
-        }
-
-        // Simplified renewal info - only show if date exists
         const rawEnd = profile.current_period_end;
         if (rawEnd) {
           const dt = new Date(rawEnd);
@@ -86,35 +126,16 @@ document.addEventListener("DOMContentLoaded", () => {
           renewalDate.innerHTML = `<strong>Active subscription</strong>`;
         }
       } else {
-        // Show free plan view
         paidPlanView.classList.add("hidden");
         freePlanView.classList.remove("hidden");
-
-        // Update plan name in free view
-        const freePlanNameElement = freePlanView.querySelector("p strong");
-        if (freePlanNameElement) {
-          freePlanNameElement.textContent = "Free";
-        }
-
-        // Only show usage for free tier to encourage upgrades
-        if (tier === "free") {
-          const dailyLimit = 2;
-          freeCallsUsed.textContent = `Calls today: ${used} / ${dailyLimit}`;
-        } else {
-          // For other tiers in free view, just show they have access
-          freeCallsUsed.textContent = `Calls available today`;
-        }
       }
 
-      // Set the final view state on the body
       document.body.dataset.view = "signed-in";
     } else {
-      // Set the final view state on the body
       document.body.dataset.view = "signed-out";
     }
   }
 
-  // Ask background for current user + profile
   async function updateFromStorage() {
     chrome.runtime.sendMessage({ type: "GET_USER_PROFILE" }, (resp) => {
       render(resp?.user || null, resp?.profile || null);
@@ -124,7 +145,6 @@ document.addEventListener("DOMContentLoaded", () => {
   // Initial View Kickoff
   updateFromStorage();
 
-  // Listen for changes from other parts of the extension
   chrome.storage.onChanged.addListener((changes) => {
     if (changes.supabaseSession || changes.userProfile) {
       updateFromStorage();
@@ -133,13 +153,10 @@ document.addEventListener("DOMContentLoaded", () => {
 
   window.addEventListener("focus", updateFromStorage);
 
-  // Utility functions
-
-  // Utility function for encoding user data
   function encodeUserData(data) {
     try {
       const jsonString = JSON.stringify(data);
-      return btoa(jsonString); // Base64 encode
+      return btoa(jsonString);
     } catch (e) {
       console.error("Failed to encode user data:", e);
       return null;
@@ -152,7 +169,7 @@ document.addEventListener("DOMContentLoaded", () => {
       return;
     }
     messagesDiv.textContent = msg;
-    messagesDiv.className = type; // Resets class list
+    messagesDiv.className = type;
     messagesDiv.classList.remove("hidden");
     if (type === "info" || type === "success") {
       setTimeout(() => messagesDiv.classList.add("hidden"), 4000);
@@ -164,7 +181,6 @@ document.addEventListener("DOMContentLoaded", () => {
     button.textContent = isLoading ? "Processing…" : defaultText;
   }
 
-  // Auth Handlers
   sendMagicLinkBtn.addEventListener("click", async () => {
     const email = emailInput.value.trim();
     if (!email.includes("@")) {
@@ -176,18 +192,13 @@ document.addEventListener("DOMContentLoaded", () => {
     showMessage(null);
 
     try {
-      const res = await fetch(`${API_BASE}/api/auth/magic-link`, {
+      await fetch(`${API_BASE}/api/auth/magic-link`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email }),
       });
-      const json = await res.json();
-      if (res.ok) {
-        showMessage("Check your email for the sign-in link", "success");
-        emailInput.value = "";
-      } else {
-        showMessage("Unable to send sign-in link. Please try again.", "error");
-      }
+      showMessage("Check your email for the sign-in link", "success");
+      emailInput.value = "";
     } catch {
       showMessage("Connection issue. Please check your internet.", "error");
     } finally {
@@ -221,17 +232,11 @@ document.addEventListener("DOMContentLoaded", () => {
       const res = await fetch(`${API_BASE}/api/stripe/create-checkout`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          email: user.email,
-          tier: "starter", // ✅ Fixed: use 'tier' instead of 'interval' and 'priceId'
-        }),
+        body: JSON.stringify({ email: user.email, tier: "starter" }),
       });
       const { url } = await res.json();
-      if (url) {
-        window.open(url, "_blank");
-      } else {
-        showMessage("Unable to open payment page. Please try again.", "error");
-      }
+      if (url) window.open(url, "_blank");
+      else showMessage("Unable to open payment page.", "error");
     } catch (err) {
       console.error("Checkout error:", err);
       showMessage("Connection issue. Please try again.", "error");
@@ -257,15 +262,9 @@ document.addEventListener("DOMContentLoaded", () => {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email: user.email }),
       });
-      const json = await res.json();
-      if (res.ok && json.url) {
-        window.open(json.url, "_blank");
-      } else {
-        showMessage(
-          "Unable to open subscription page. Please try again.",
-          "error"
-        );
-      }
+      const { url } = await res.json();
+      if (res.ok && url) window.open(url, "_blank");
+      else showMessage("Unable to open subscription page.", "error");
     } catch (err) {
       console.error("Portal error:", err);
       showMessage("Connection issue. Please try again.", "error");
@@ -274,8 +273,6 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   });
 
-  // View All Plans handlers
-  // Single View All Plans handler (replaces both previous handlers)
   function handleViewAllPlansClick(e) {
     e.preventDefault();
     chrome.runtime.sendMessage({ type: "GET_USER_PROFILE" }, (resp) => {
@@ -284,33 +281,14 @@ document.addEventListener("DOMContentLoaded", () => {
         signed_in: !!resp?.user?.email,
         plan: resp?.profile?.subscription_tier || "free",
         email: resp?.user?.email || "",
-        timestamp: Date.now(), // For freshness validation
+        timestamp: Date.now(),
       };
-
       const token = encodeUserData(userData);
-      if (token) {
-        // Use new token-based approach
-        window.open(
-          `https://quick-vint.vercel.app/pricing.html?token=${token}`,
-          "_blank"
-        );
-      } else {
-        // Fallback to old method if encoding fails
-        const params = new URLSearchParams({
-          source: "extension",
-          signed_in: userData.signed_in ? "true" : "false",
-          plan: userData.plan,
-          email: userData.email,
-        });
-        window.open(
-          `https://quick-vint.vercel.app/pricing.html?${params.toString()}`,
-          "_blank"
-        );
-      }
+      const url = `https://quick-vint.vercel.app/pricing.html?token=${token}`;
+      window.open(url, "_blank");
     });
   }
 
-  // Apply the single handler to both links
   viewAllPlansLink?.addEventListener("click", handleViewAllPlansClick);
   viewAllPlansLinkPaid?.addEventListener("click", handleViewAllPlansClick);
 });
