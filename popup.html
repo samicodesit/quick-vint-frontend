@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
   <meta charset="UTF-8" />
   <title>AutoLister AI</title>
@@ -44,6 +45,9 @@
     .popup-container {
       background: #ffffff;
       margin: 0;
+      max-height: 600px;
+      overflow: hidden;
+      box-sizing: border-box;
     }
 
     .popup-header {
@@ -54,7 +58,7 @@
     }
 
     .popup-content {
-      padding: 16px 22px 20px;
+      padding: 8px 22px 20px;
     }
 
     .hidden {
@@ -113,8 +117,7 @@
       width: 100%;
       font-size: 14px;
       font-weight: 600;
-      margin-bottom: 12px;
-      /* PERFORMANCE: Simpler, more targeted transitions */
+      margin-bottom: 8px;
       transition: transform 0.15s ease, background-color 0.15s ease;
     }
 
@@ -166,7 +169,7 @@
     .small-text {
       font-size: 12px;
       text-align: center;
-      margin-top: 12px;
+      margin-top: 0;
       color: #6b7280;
       line-height: 1.4;
     }
@@ -189,7 +192,7 @@
       text-decoration: none;
       font-size: 13px;
       font-weight: 600;
-      margin: 10px 0 6px 0;
+      margin: 0;
       transition: color 0.18s ease;
       padding: 6px 0;
     }
@@ -212,7 +215,6 @@
       border-radius: 8px;
       font-size: 13px;
       color: #4b5563;
-      margin-bottom: 16px;
       text-align: center;
       border: 1px solid #e5e7eb;
       word-break: break-all;
@@ -225,7 +227,7 @@
       padding: 16px;
       border: 1px solid #f3f4f6;
       box-shadow: 0 4px 12px rgba(0, 0, 0, 0.04);
-      margin: 14px 0 8px;
+      margin: 5px 0 8px;
     }
 
     .plan-header {
@@ -274,15 +276,105 @@
       /* PERFORMANCE: Faster, simpler transition for a snappy feel */
       transition: width 0.2s ease;
     }
+
+    .language-dropdown {
+      margin-bottom: 20px;
+      padding: 0 4px;
+      position: relative;
+      z-index: 10;
+    }
+
+    .dropdown-toggle {
+      background: #ffffff;
+      color: #1f2937;
+      border: 1px solid #d1d5db;
+      text-align: left;
+      padding: 10px 14px 10px 14px;
+      margin: 0;
+      width: 100%;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-weight: 500;
+      font-size: 14px;
+      line-height: 1.5;
+      background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="%23667eea" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>');
+      background-repeat: no-repeat;
+      background-position: right 10px center;
+      background-size: 18px;
+      transition: border-color 0.2s ease;
+      padding-right: 38px;
+    }
+
+    .dropdown-toggle:hover {
+      transform: none;
+      /* Disable button hover effect */
+    }
+
+    .dropdown-toggle.active {
+      border-color: #667eea;
+      border-bottom-left-radius: 0;
+      border-bottom-right-radius: 0;
+    }
+
+    .dropdown-menu {
+      position: absolute;
+      bottom: 100%;
+      left: 2px;
+      right: 2px;
+      list-style: none;
+      padding: 0;
+      margin: 0;
+      background: #ffffff;
+      border: 1px solid #667eea;
+      border-bottom: none;
+      border-top-left-radius: 8px;
+      border-top-right-radius: 8px;
+      box-shadow: 0 -4px 12px rgba(0, 0, 0, 0.1);
+      max-height: 300px;
+      overflow-y: auto;
+      z-index: 10;
+      display: none;
+      /* Start hidden */
+    }
+
+    .dropdown-menu.visible {
+      display: block;
+    }
+
+    .dropdown-menu li {
+      padding: 10px 14px;
+      cursor: pointer;
+      font-size: 14px;
+      color: #1f2937;
+      border-bottom: 1px solid #f3f4f6;
+      transition: background-color 0.15s ease;
+    }
+
+    .dropdown-menu li:last-child {
+      border-bottom: none;
+    }
+
+    .dropdown-menu li:hover {
+      background: #eef2ff;
+      color: #4f46e5;
+    }
+
+    .dropdown-menu li.selected {
+      background: #eef2ff;
+      font-weight: 600;
+      color: #4f46e5;
+    }
   </style>
 </head>
+
 <body>
   <div class="popup-container">
     <div class="popup-header">
       <h3>AutoLister AI</h3>
       <div class="subtitle">Smart Vinted listings with AI</div>
     </div>
-    
+
     <div class="popup-content">
       <div id="messages" class="hidden"></div>
 
@@ -295,17 +387,8 @@
           Sign in or create an account to get started
         </p>
         <label for="emailInput">Email Address</label>
-        <input 
-          type="email" 
-          id="emailInput" 
-          name="email"
-          autocomplete="email"
-          autocorrect="off"
-          autocapitalize="off"
-          spellcheck="false"
-          placeholder="Enter your email"
-          required
-        />
+        <input type="email" id="emailInput" name="email" autocomplete="email" autocorrect="off" autocapitalize="off"
+          spellcheck="false" placeholder="Enter your email" required />
         <button id="sendMagicLinkBtn">Send Magic Link</button>
         <p class="small-text" style="margin-top: 12px;">
           Having trouble? Contact us at
@@ -351,10 +434,45 @@
             <div class="poweredByText">Powered by <strong>Stripe</strong></div>
           </div>
           <div id="paidPlanView" class="hidden">
-            <p id="renewalDate" style="text-align: center; margin-bottom: 12px; font-size: 13px;">Active until: <strong>—</strong></p>
+            <p id="renewalDate" style="text-align: center; margin-bottom: 12px; font-size: 13px;">Active until:
+              <strong>—</strong>
+            </p>
             <button id="manageBtn">Manage Subscription</button>
             <a href="#" id="viewAllPlansLinkPaid" class="view-plans-link">Compare All Plans</a>
           </div>
+        </div>
+
+        <div class="language-dropdown">
+          <div style="font-size:12px;color:#6b7280;margin-bottom:4px;font-weight:500;">Generated content language</div>
+          <button class="dropdown-toggle">Select Language</button>
+          <ul class="dropdown-menu">
+            <li data-value="en"><img src="https://flagcdn.com/w40/gb.png" alt="UK Flag"
+                style="width:20px;vertical-align:middle;margin-right:5px;"> English</li>
+            <li data-value="cz"><img src="https://flagcdn.com/w40/cz.png" alt="Czech Flag"
+                style="width:20px;vertical-align:middle;margin-right:5px;"> Čeština</li>
+            <li data-value="de"><img src="https://flagcdn.com/w40/de.png" alt="German Flag"
+                style="width:20px;vertical-align:middle;margin-right:5px;"> Deutsch</li>
+            <li data-value="es"><img src="https://flagcdn.com/w40/es.png" alt="Spanish Flag"
+                style="width:20px;vertical-align:middle;margin-right:5px;"> Español</li>
+            <li data-value="fr"><img src="https://flagcdn.com/w40/fr.png" alt="French Flag"
+                style="width:20px;vertical-align:middle;margin-right:5px;"> Français</li>
+            <li data-value="hu"><img src="https://flagcdn.com/w40/hu.png" alt="Hungarian Flag"
+                style="width:20px;vertical-align:middle;margin-right:5px;"> Magyar</li>
+            <li data-value="it"><img src="https://flagcdn.com/w40/it.png" alt="Italian Flag"
+                style="width:20px;vertical-align:middle;margin-right:5px;"> Italiano</li>
+            <li data-value="lt"><img src="https://flagcdn.com/w40/lt.png" alt="Lithuanian Flag"
+                style="width:20px;vertical-align:middle;margin-right:5px;"> Lietuvių</li>
+            <li data-value="nl"><img src="https://flagcdn.com/w40/nl.png" alt="Dutch Flag"
+                style="width:20px;vertical-align:middle;margin-right:5px;"> Nederlands</li>
+            <li data-value="pl"><img src="https://flagcdn.com/w40/pl.png" alt="Polish Flag"
+                style="width:20px;vertical-align:middle;margin-right:5px;"> Polski</li>
+            <li data-value="pt"><img src="https://flagcdn.com/w40/pt.png" alt="Portuguese Flag"
+                style="width:20px;vertical-align:middle;margin-right:5px;"> Português</li>
+            <li data-value="ro"><img src="https://flagcdn.com/w40/ro.png" alt="Romanian Flag"
+                style="width:20px;vertical-align:middle;margin-right:5px;"> Română</li>
+            <li data-value="sk"><img src="https://flagcdn.com/w40/sk.png" alt="Slovak Flag"
+                style="width:20px;vertical-align:middle;margin-right:5px;"> Slovenčina</li>
+          </ul>
         </div>
 
         <button id="signOutBtn" class="secondary">Sign Out</button>
@@ -368,5 +486,5 @@
   <script src="lib/supabase.js"></script>
   <script src="popup.js"></script>
 </body>
-</html>
 
+</html>

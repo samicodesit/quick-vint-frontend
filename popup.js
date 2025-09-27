@@ -100,7 +100,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
         // Override for Business plan's unlimited daily usage display
         if (tier === "business") {
-          dailyCallsUsed.textContent = `${dailyUsed} / Unlimited`;
+          dailyCallsUsed.textContent = `Unlimited`;
           if (dailyProgressBar) dailyProgressBar.style.width = "100%";
         }
       };
@@ -288,6 +288,67 @@ document.addEventListener("DOMContentLoaded", () => {
       window.open(url, "_blank");
     });
   }
+
+  // Language Dropdown Logic with chrome.storage.local
+  const languageDropdown = document.querySelector(".language-dropdown");
+  const dropdownToggle = document.querySelector(".dropdown-toggle");
+  const dropdownMenu = document.querySelector(".dropdown-menu");
+  const languageOptions = document.querySelectorAll(".dropdown-menu li");
+
+  // Restore selection from chrome.storage.local
+  if (chrome && chrome.storage && chrome.storage.local) {
+    chrome.storage.local.get(["selectedLanguage"], function (result) {
+      if (result.selectedLanguage) {
+        const selectedItem = Array.from(languageOptions).find(
+          (item) => item.getAttribute("data-value") === result.selectedLanguage
+        );
+        if (selectedItem) {
+          dropdownToggle.innerHTML = selectedItem.innerHTML;
+          languageOptions.forEach((opt) => opt.classList.remove("selected"));
+          selectedItem.classList.add("selected");
+        }
+      }
+    });
+  }
+
+  function toggleDropdown(show) {
+    if (show) {
+      dropdownMenu.classList.add("visible");
+      dropdownToggle.classList.add("active");
+    } else {
+      dropdownMenu.classList.remove("visible");
+      dropdownToggle.classList.remove("active");
+    }
+  }
+
+  dropdownToggle.addEventListener("click", (e) => {
+    e.stopPropagation();
+    const isVisible = dropdownMenu.classList.contains("visible");
+    toggleDropdown(!isVisible);
+  });
+
+  languageOptions.forEach((li) => {
+    li.addEventListener("click", () => {
+      const selectedLanguage = li.textContent.trim();
+      const selectedValue = li.dataset.value;
+      dropdownToggle.innerHTML = li.innerHTML;
+      languageOptions.forEach((opt) => opt.classList.remove("selected"));
+      li.classList.add("selected");
+      toggleDropdown(false);
+      if (chrome && chrome.storage && chrome.storage.local) {
+        chrome.storage.local.set({ selectedLanguage: selectedValue });
+      }
+      console.log(
+        `Selected Language: ${selectedLanguage}, Value: ${selectedValue}`
+      );
+    });
+  });
+
+  document.addEventListener("click", (e) => {
+    if (!languageDropdown.contains(e.target)) {
+      toggleDropdown(false);
+    }
+  });
 
   viewAllPlansLink?.addEventListener("click", handleViewAllPlansClick);
   viewAllPlansLinkPaid?.addEventListener("click", handleViewAllPlansClick);

@@ -125,6 +125,17 @@
       );
       accessToken = tokenResp?.access_token ?? accessToken;
 
+      // Get selected language from chrome.storage.local
+      const selectedLanguage = await new Promise((resolve) => {
+        if (chrome && chrome.storage && chrome.storage.local) {
+          chrome.storage.local.get(["selectedLanguage"], function (result) {
+            resolve(result.selectedLanguage || "en");
+          });
+        } else {
+          resolve("en");
+        }
+      });
+
       const doRequest = async (token) =>
         fetch(`${API_BASE}/api/generate`, {
           method: "POST",
@@ -132,7 +143,10 @@
             "Content-Type": "application/json",
             Authorization: `Bearer ${token}`,
           },
-          body: JSON.stringify({ imageUrls: imgs }),
+          body: JSON.stringify({
+            imageUrls: imgs,
+            languageCode: selectedLanguage,
+          }),
         });
 
       let res = await doRequest(accessToken);
