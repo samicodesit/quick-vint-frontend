@@ -44,6 +44,94 @@ document.addEventListener("DOMContentLoaded", () => {
     return map[tier] || "free";
   }
 
+  // =================================================================
+  // VIEW NAVIGATION
+  // =================================================================
+  const settingsBtn = document.getElementById("settingsBtn");
+  const backBtn = document.getElementById("backBtn");
+
+  settingsBtn.addEventListener("click", () => {
+    document.body.dataset.view = "settings";
+  });
+
+  backBtn.addEventListener("click", () => {
+    document.body.dataset.view = "signed-in";
+  });
+
+  // =================================================================
+  // SETTINGS LOGIC
+  // =================================================================
+  const settings = {
+    tone: "neutral",
+    length: "long",
+    emojis: "yes",
+  };
+  const toneButtons = document.querySelectorAll("#tone-setting button");
+  const lengthButtons = document.querySelectorAll("#length-setting button");
+  const emojiButtons = document.querySelectorAll("#emoji-setting button");
+
+  async function saveSettings() {
+    if (chrome && chrome.storage && chrome.storage.local) {
+      await chrome.storage.local.set({ generationSettings: settings });
+      console.log("Settings saved:", settings);
+    }
+  }
+
+  async function loadSettings() {
+    if (chrome && chrome.storage && chrome.storage.local) {
+      const result = await chrome.storage.local.get("generationSettings");
+      if (result.generationSettings) {
+        Object.assign(settings, result.generationSettings);
+        console.log("Settings loaded:", settings);
+      }
+      updateSettingsUI();
+    }
+  }
+
+  function updateSettingsUI() {
+    // Tone
+    toneButtons.forEach((btn) => {
+      btn.classList.toggle("active", btn.dataset.value === settings.tone);
+    });
+    // Length
+    lengthButtons.forEach((btn) => {
+      btn.classList.toggle("active", btn.dataset.value === settings.length);
+    });
+    // Emojis
+    emojiButtons.forEach((btn) => {
+      btn.classList.toggle("active", btn.dataset.value === settings.emojis);
+    });
+  }
+
+  function handleSettingClick(event, settingKey, buttons) {
+    const clickedButton = event.target.closest("button");
+    if (!clickedButton) return;
+
+    const value = clickedButton.dataset.value;
+    settings[settingKey] = value;
+
+    buttons.forEach((btn) => btn.classList.remove("active"));
+    clickedButton.classList.add("active");
+
+    saveSettings();
+  }
+
+  document
+    .getElementById("tone-setting")
+    .addEventListener("click", (e) =>
+      handleSettingClick(e, "tone", toneButtons)
+    );
+  document
+    .getElementById("length-setting")
+    .addEventListener("click", (e) =>
+      handleSettingClick(e, "length", lengthButtons)
+    );
+  document
+    .getElementById("emoji-setting")
+    .addEventListener("click", (e) =>
+      handleSettingClick(e, "emojis", emojiButtons)
+    );
+
   // Render user + subscription state
   function render(user, profile) {
     if (user && profile) {
@@ -133,6 +221,7 @@ document.addEventListener("DOMContentLoaded", () => {
       document.body.dataset.view = "signed-in";
     } else {
       document.body.dataset.view = "signed-out";
+      settingsBtn.classList.add("hidden");
     }
   }
 
@@ -144,6 +233,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
   // Initial View Kickoff
   updateFromStorage();
+  loadSettings();
 
   chrome.storage.onChanged.addListener((changes) => {
     if (changes.supabaseSession || changes.userProfile) {

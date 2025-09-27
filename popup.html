@@ -5,29 +5,77 @@
   <meta charset="UTF-8" />
   <title>AutoLister AI</title>
   <style>
-    /* --- CSS View Controller --- */
-    #signedInView,
-    #signedOutView {
-      display: none;
+    .view-container {
+      position: relative;
+      overflow: hidden;
+      min-height: 500px;
     }
 
+    /* Views that have a slide animation */
+    #signedInView,
+    #signedOutView,
+    #settingsView {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      background: #ffffff;
+      transition: transform 0.25s ease-in-out;
+      transform: translateX(100%);
+      /* Start off-screen */
+    }
+
+    /* The loading view is STATIC and has NO transition */
     #loadingView {
-      display: block;
+      width: 100%;
       text-align: center;
       padding: 30px 0;
       color: #666;
     }
 
-    body[data-view] #loadingView {
+    /* --- View States --- */
+
+    /* State 1: Loading (Initial State) */
+    /* By default, signed-in/out/settings are hidden off-screen.
+       Loading view is visible by default. This is our starting state. */
+    body[data-view="loading"] #loadingView {
+      position: static;
+    }
+
+    /* When we switch AWAY from loading, the loading view is INSTANTLY hidden */
+    body:not([data-view="loading"]) #loadingView {
       display: none;
     }
 
-    body[data-view="signed-in"] #signedInView {
-      display: block;
+    /* State 2: Signed Out */
+    body[data-view="signed-out"] #signedOutView {
+      transform: translateX(0);
+      /* Slide sign out in from the right */
+      position: static;
     }
 
-    body[data-view="signed-out"] #signedOutView {
-      display: block;
+    /* State 3: Signed In */
+    body[data-view="signed-in"] #settingsView {
+      transform: translateX(100%);
+      /* Ensure settings is out */
+    }
+
+    body[data-view="signed-in"] #signedInView {
+      transform: translateX(0);
+      /* Slide sign in in */
+      position: static;
+    }
+
+    /* State 4: Settings */
+    body[data-view="settings"] #signedInView {
+      transform: translateX(-100%);
+      /* Slide sign in away */
+    }
+
+    body[data-view="settings"] #settingsView {
+      transform: translateX(0);
+      /* Slide settings in */
+      position: static;
     }
 
     /* --- General Styles --- */
@@ -365,6 +413,114 @@
       font-weight: 600;
       color: #4f46e5;
     }
+
+    /* SETTINGS */
+    .settings-btn {
+      position: absolute;
+      width: auto;
+      margin-bottom: 0;
+      top: 12px;
+      right: 12px;
+      background: transparent;
+      border: none;
+      cursor: pointer;
+      padding: 4px;
+      border-radius: 6px;
+      transition: background-color 0.2s ease;
+      opacity: 0.8;
+    }
+
+    .settings-btn:hover {
+      opacity: 1;
+      transform: rotate(20deg);
+      transition: transform 0.3s ease, opacity 0.2s ease;
+    }
+
+    .settings-header {
+      display: flex;
+      align-items: center;
+      margin-bottom: 24px;
+      position: relative;
+      text-align: center;
+    }
+
+    .back-button {
+      width: auto;
+      background: none;
+      border: none;
+      cursor: pointer;
+      padding: 0;
+      position: absolute;
+      left: 0;
+      top: 50%;
+      transform: translateY(-50%);
+      margin-bottom: 0;
+    }
+
+    .back-button:hover svg {
+      stroke: #4338ca;
+    }
+
+    .back-button:hover {
+      transform: translateY(-50%) translateX(-1px);
+    }
+
+    .settings-header h4 {
+      flex-grow: 1;
+      margin: 0;
+      font-size: 16px;
+      font-weight: 600;
+      color: #1f2937;
+    }
+
+    .setting-group {
+      margin-bottom: 20px;
+    }
+
+    .setting-group label {
+      font-size: 13px;
+      font-weight: 500;
+      color: #374151;
+      margin-bottom: 8px;
+      display: block;
+    }
+
+    .segmented-control {
+      display: flex;
+      width: 100%;
+      border: 1px solid #d1d5db;
+      border-radius: 8px;
+      overflow: hidden;
+    }
+
+    .segmented-control button {
+      flex: 1;
+      padding: 8px 10px;
+      background: #fff;
+      color: #374151;
+      border: none;
+      border-right: 1px solid #d1d5db;
+      cursor: pointer;
+      font-size: 13px;
+      font-weight: 500;
+      transition: background-color 0.2s ease, color 0.2s ease;
+      margin: 0;
+      border-radius: 0;
+    }
+
+    .segmented-control button:last-child {
+      border-right: none;
+    }
+
+    .segmented-control button.active {
+      background: #eef2ff;
+      color: #4338ca;
+      font-weight: 600;
+    }
+
+    .segmented-control button:hover:not(.active) {
+      background-color: #f9fafb;
+    }
   </style>
 </head>
 
@@ -373,112 +529,162 @@
     <div class="popup-header">
       <h3>AutoLister AI</h3>
       <div class="subtitle">Smart Vinted listings with AI</div>
+      <button id="settingsBtn" class="settings-btn">
+        <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none"
+          stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: white;">
+          <path
+            d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 0 2l-.15.08a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.38a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1 0-2l.15-.08a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z" />
+          <circle cx="12" cy="12" r="3" />
+        </svg>
+      </button>
     </div>
 
     <div class="popup-content">
       <div id="messages" class="hidden"></div>
 
-      <div id="loadingView">
-        <p>Loading...</p>
-      </div>
-
-      <div id="signedOutView">
-        <p class="small-text" style="margin-bottom:20px;">
-          Sign in or create an account to get started
-        </p>
-        <label for="emailInput">Email Address</label>
-        <input type="email" id="emailInput" name="email" autocomplete="email" autocorrect="off" autocapitalize="off"
-          spellcheck="false" placeholder="Enter your email" required />
-        <button id="sendMagicLinkBtn">Send Magic Link</button>
-        <p class="small-text" style="margin-top: 12px;">
-          Having trouble? Contact us at
-          <br />
-          <a href="mailto:samicodesit@gmail.com" style="color:#667eea;word-break:break-all;">samicodesit@gmail.com</a>
-        </p>
-      </div>
-
-      <div id="signedInView">
-        <div class="user-email">
-          <span id="userEmail"></span>
+      <div class="view-container">
+        <div id="loadingView">
+          <p>Loading...</p>
         </div>
 
-        <div id="subscriptionArea" class="plan-card">
-          <div class="plan-header">
-            <span id="planName">Free Plan</span>
+        <div id="signedOutView">
+          <p class="small-text" style="margin-bottom:20px;">
+            Sign in or create an account to get started
+          </p>
+          <label for="emailInput">Email Address</label>
+          <input type="email" id="emailInput" name="email" autocomplete="email" autocorrect="off" autocapitalize="off"
+            spellcheck="false" placeholder="Enter your email" required />
+          <button id="sendMagicLinkBtn">Send Magic Link</button>
+          <p class="small-text" style="margin-top: 12px;">
+            Having trouble? Contact us at
+            <br />
+            <a href="mailto:samicodesit@gmail.com" style="color:#667eea;word-break:break-all;">samicodesit@gmail.com</a>
+          </p>
+        </div>
+
+        <div id="signedInView">
+          <div class="user-email">
+            <span id="userEmail"></span>
           </div>
 
-          <div class="usage-meters">
-            <div class="usage-meter">
-              <div class="meter-label">
-                <span>Daily Usage</span>
-                <span id="dailyCallsUsed">0 / 2</span>
+          <div id="subscriptionArea" class="plan-card">
+            <div class="plan-header">
+              <span id="planName">Free Plan</span>
+            </div>
+
+            <div class="usage-meters">
+              <div class="usage-meter">
+                <div class="meter-label">
+                  <span>Daily Usage</span>
+                  <span id="dailyCallsUsed">0 / 2</span>
+                </div>
+                <div class="progress-bar-bg">
+                  <div id="dailyProgressBar" class="progress-bar-fill"></div>
+                </div>
               </div>
-              <div class="progress-bar-bg">
-                <div id="dailyProgressBar" class="progress-bar-fill"></div>
+              <div class="usage-meter">
+                <div class="meter-label">
+                  <span>Monthly Usage</span>
+                  <span id="monthlyCallsUsed">0 / 10</span>
+                </div>
+                <div class="progress-bar-bg">
+                  <div id="monthlyProgressBar" class="progress-bar-fill"></div>
+                </div>
               </div>
             </div>
-            <div class="usage-meter">
-              <div class="meter-label">
-                <span>Monthly Usage</span>
-                <span id="monthlyCallsUsed">0 / 10</span>
-              </div>
-              <div class="progress-bar-bg">
-                <div id="monthlyProgressBar" class="progress-bar-fill"></div>
-              </div>
+
+            <div id="freePlanView">
+              <button class="upgradeBtn" id="upgradeBtn">Upgrade to Starter (€3.99)</button>
+              <a href="#" id="viewAllPlansLink" class="view-plans-link">Compare All Plans</a>
+              <div class="poweredByText">Powered by <strong>Stripe</strong></div>
+            </div>
+            <div id="paidPlanView" class="hidden">
+              <p id="renewalDate" style="text-align: center; margin-bottom: 12px; font-size: 13px;">Active until:
+                <strong>—</strong>
+              </p>
+              <button id="manageBtn">Manage Subscription</button>
+              <a href="#" id="viewAllPlansLinkPaid" class="view-plans-link">Compare All Plans</a>
             </div>
           </div>
 
-          <div id="freePlanView">
-            <button class="upgradeBtn" id="upgradeBtn">Upgrade to Starter (€3.99)</button>
-            <a href="#" id="viewAllPlansLink" class="view-plans-link">Compare All Plans</a>
-            <div class="poweredByText">Powered by <strong>Stripe</strong></div>
+          <div class="language-dropdown">
+            <div style="font-size:12px;color:#6b7280;margin-bottom:4px;font-weight:500;">Generated content language
+            </div>
+            <button class="dropdown-toggle">Select Language</button>
+            <ul class="dropdown-menu">
+              <li data-value="en"><img src="https://flagcdn.com/w40/gb.png" alt="UK Flag"
+                  style="width:20px;vertical-align:middle;margin-right:5px;"> English</li>
+              <li data-value="cz"><img src="https://flagcdn.com/w40/cz.png" alt="Czech Flag"
+                  style="width:20px;vertical-align:middle;margin-right:5px;"> Čeština</li>
+              <li data-value="de"><img src="https://flagcdn.com/w40/de.png" alt="German Flag"
+                  style="width:20px;vertical-align:middle;margin-right:5px;"> Deutsch</li>
+              <li data-value="es"><img src="https://flagcdn.com/w40/es.png" alt="Spanish Flag"
+                  style="width:20px;vertical-align:middle;margin-right:5px;"> Español</li>
+              <li data-value="fr"><img src="https://flagcdn.com/w40/fr.png" alt="French Flag"
+                  style="width:20px;vertical-align:middle;margin-right:5px;"> Français</li>
+              <li data-value="hu"><img src="https://flagcdn.com/w40/hu.png" alt="Hungarian Flag"
+                  style="width:20px;vertical-align:middle;margin-right:5px;"> Magyar</li>
+              <li data-value="it"><img src="https://flagcdn.com/w40/it.png" alt="Italian Flag"
+                  style="width:20px;vertical-align:middle;margin-right:5px;"> Italiano</li>
+              <li data-value="lt"><img src="https://flagcdn.com/w40/lt.png" alt="Lithuanian Flag"
+                  style="width:20px;vertical-align:middle;margin-right:5px;"> Lietuvių</li>
+              <li data-value="nl"><img src="https://flagcdn.com/w40/nl.png" alt="Dutch Flag"
+                  style="width:20px;vertical-align:middle;margin-right:5px;"> Nederlands</li>
+              <li data-value="pl"><img src="https://flagcdn.com/w40/pl.png" alt="Polish Flag"
+                  style="width:20px;vertical-align:middle;margin-right:5px;"> Polski</li>
+              <li data-value="pt"><img src="https://flagcdn.com/w40/pt.png" alt="Portuguese Flag"
+                  style="width:20px;vertical-align:middle;margin-right:5px;"> Português</li>
+              <li data-value="ro"><img src="https://flagcdn.com/w40/ro.png" alt="Romanian Flag"
+                  style="width:20px;vertical-align:middle;margin-right:5px;"> Română</li>
+              <li data-value="sk"><img src="https://flagcdn.com/w40/sk.png" alt="Slovak Flag"
+                  style="width:20px;vertical-align:middle;margin-right:5px;"> Slovenčina</li>
+            </ul>
           </div>
-          <div id="paidPlanView" class="hidden">
-            <p id="renewalDate" style="text-align: center; margin-bottom: 12px; font-size: 13px;">Active until:
-              <strong>—</strong>
-            </p>
-            <button id="manageBtn">Manage Subscription</button>
-            <a href="#" id="viewAllPlansLinkPaid" class="view-plans-link">Compare All Plans</a>
-          </div>
+
+          <button id="signOutBtn" class="secondary">Sign Out</button>
+          <p class="small-text">
+            The "Generate" button appears on Vinted item listing pages.
+          </p>
         </div>
 
-        <div class="language-dropdown">
-          <div style="font-size:12px;color:#6b7280;margin-bottom:4px;font-weight:500;">Generated content language</div>
-          <button class="dropdown-toggle">Select Language</button>
-          <ul class="dropdown-menu">
-            <li data-value="en"><img src="https://flagcdn.com/w40/gb.png" alt="UK Flag"
-                style="width:20px;vertical-align:middle;margin-right:5px;"> English</li>
-            <li data-value="cz"><img src="https://flagcdn.com/w40/cz.png" alt="Czech Flag"
-                style="width:20px;vertical-align:middle;margin-right:5px;"> Čeština</li>
-            <li data-value="de"><img src="https://flagcdn.com/w40/de.png" alt="German Flag"
-                style="width:20px;vertical-align:middle;margin-right:5px;"> Deutsch</li>
-            <li data-value="es"><img src="https://flagcdn.com/w40/es.png" alt="Spanish Flag"
-                style="width:20px;vertical-align:middle;margin-right:5px;"> Español</li>
-            <li data-value="fr"><img src="https://flagcdn.com/w40/fr.png" alt="French Flag"
-                style="width:20px;vertical-align:middle;margin-right:5px;"> Français</li>
-            <li data-value="hu"><img src="https://flagcdn.com/w40/hu.png" alt="Hungarian Flag"
-                style="width:20px;vertical-align:middle;margin-right:5px;"> Magyar</li>
-            <li data-value="it"><img src="https://flagcdn.com/w40/it.png" alt="Italian Flag"
-                style="width:20px;vertical-align:middle;margin-right:5px;"> Italiano</li>
-            <li data-value="lt"><img src="https://flagcdn.com/w40/lt.png" alt="Lithuanian Flag"
-                style="width:20px;vertical-align:middle;margin-right:5px;"> Lietuvių</li>
-            <li data-value="nl"><img src="https://flagcdn.com/w40/nl.png" alt="Dutch Flag"
-                style="width:20px;vertical-align:middle;margin-right:5px;"> Nederlands</li>
-            <li data-value="pl"><img src="https://flagcdn.com/w40/pl.png" alt="Polish Flag"
-                style="width:20px;vertical-align:middle;margin-right:5px;"> Polski</li>
-            <li data-value="pt"><img src="https://flagcdn.com/w40/pt.png" alt="Portuguese Flag"
-                style="width:20px;vertical-align:middle;margin-right:5px;"> Português</li>
-            <li data-value="ro"><img src="https://flagcdn.com/w40/ro.png" alt="Romanian Flag"
-                style="width:20px;vertical-align:middle;margin-right:5px;"> Română</li>
-            <li data-value="sk"><img src="https://flagcdn.com/w40/sk.png" alt="Slovak Flag"
-                style="width:20px;vertical-align:middle;margin-right:5px;"> Slovenčina</li>
-          </ul>
-        </div>
+        <!-- SETTINGS -->
+        <div id="settingsView">
+          <div class="settings-header">
+            <button id="backBtn" class="back-button">
+              <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none"
+                stroke="#4b5563" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                <line x1="19" y1="12" x2="5" y2="12"></line>
+                <polyline points="12 19 5 12 12 5"></polyline>
+              </svg>
+            </button>
+            <h4>Generation Settings</h4>
+          </div>
 
-        <button id="signOutBtn" class="secondary">Sign Out</button>
-        <p class="small-text">
-          The "Generate" button appears on Vinted item listing pages.
-        </p>
+          <div class="setting-group">
+            <label for="tone-setting">Tone</label>
+            <div id="tone-setting" class="segmented-control">
+              <button data-value="formal">Formal</button>
+              <button data-value="friendly">Friendly</button>
+              <button data-value="neutral" class="active">Neutral</button>
+            </div>
+          </div>
+
+          <div class="setting-group">
+            <label for="length-setting">Length</label>
+            <div id="length-setting" class="segmented-control">
+              <button data-value="short">Short</button>
+              <button data-value="long" class="active">Long</button>
+            </div>
+          </div>
+
+          <div class="setting-group">
+            <label for="emoji-setting">Include Emojis</label>
+            <div id="emoji-setting" class="segmented-control">
+              <button data-value="yes" class="active">Yes</button>
+              <button data-value="no">No</button>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   </div>
