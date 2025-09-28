@@ -5,7 +5,32 @@
   <meta charset="UTF-8" />
   <title>AutoLister AI</title>
   <style>
-    /* --- CSS View Controller --- */
+    /* --- Base & General Styles --- */
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+        "Inter", sans-serif;
+      width: 320px;
+      padding: 0;
+      margin: 0;
+      color: #1f2937;
+      font-size: 14px;
+      background: #f9fafb;
+      line-height: 1.5;
+    }
+
+    .popup-container {
+      background: #ffffff;
+      margin: 0;
+      max-height: 600px;
+      overflow: hidden;
+      box-sizing: border-box;
+    }
+
+    .hidden {
+      display: none !important;
+    }
+
+    /* --- View Controller --- */
     #signedInView,
     #signedOutView {
       display: none;
@@ -30,26 +55,7 @@
       display: block;
     }
 
-    /* --- General Styles --- */
-    body {
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Inter", sans-serif;
-      width: 320px;
-      padding: 0;
-      margin: 0;
-      color: #1f2937;
-      font-size: 14px;
-      background: #f9fafb;
-      line-height: 1.5;
-    }
-
-    .popup-container {
-      background: #ffffff;
-      margin: 0;
-      max-height: 600px;
-      overflow: hidden;
-      box-sizing: border-box;
-    }
-
+    /* --- Layout & Sections --- */
     .popup-header {
       background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
       padding: 18px 20px;
@@ -61,11 +67,8 @@
       padding: 8px 22px 20px;
     }
 
-    .hidden {
-      display: none !important;
-    }
-
-    h3 {
+    /* --- Typography --- */
+    .popup-title {
       margin: 0;
       font-size: 18px;
       font-weight: 600;
@@ -79,7 +82,7 @@
       font-weight: 400;
     }
 
-    label {
+    .form-label {
       display: block;
       margin-bottom: 6px;
       font-size: 13px;
@@ -87,7 +90,42 @@
       color: #374151;
     }
 
-    input[type="email"] {
+    .small-text {
+      font-size: 12px;
+      text-align: center;
+      margin-top: 0;
+      color: #6b7280;
+      line-height: 1.4;
+    }
+
+    .signout-intro-text {
+      margin-bottom: 20px;
+    }
+
+    .contact-text {
+      margin-top: 12px;
+    }
+
+    .contact-link {
+      color: #667eea;
+      word-break: break-all;
+    }
+
+    .poweredByText {
+      text-align: center;
+      font-size: 11px;
+      color: #9ca3af;
+      margin-top: 8px;
+    }
+
+    .renewal-text {
+      text-align: center;
+      margin-bottom: 12px;
+      font-size: 13px;
+    }
+
+    /* --- Form Elements & Buttons --- */
+    .form-input {
       width: 100%;
       padding: 12px 16px;
       margin-bottom: 16px;
@@ -96,18 +134,17 @@
       font-size: 14px;
       box-sizing: border-box;
       background: #f9fafb;
-      /* PERFORMANCE: Transition specific properties instead of 'all' */
       transition: border-color 0.2s ease, box-shadow 0.2s ease;
     }
 
-    input[type="email"]:focus {
+    .form-input:focus {
       outline: none;
       border-color: #667eea;
       background: #ffffff;
       box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
     }
 
-    button {
+    .btn {
       padding: 12px 20px;
       background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
       color: white;
@@ -121,28 +158,40 @@
       transition: transform 0.15s ease, background-color 0.15s ease;
     }
 
-    button:hover {
+    .btn:hover {
       transform: translateY(-1px);
     }
 
-    button:active {
+    .btn:active {
       transform: translateY(0);
     }
 
-    button:disabled {
+    .btn:disabled {
       background: #9ca3af;
       cursor: not-allowed;
       transform: none;
     }
 
-    button.secondary {
+    .btn-secondary {
       background: #6b7280;
     }
 
-    button.secondary:hover {
+    .btn-secondary:hover {
       background: #5b6471;
     }
 
+    .upgradeBtn {
+      margin-bottom: 8px;
+      margin-top: 12px;
+      background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+      font-weight: 700;
+    }
+
+    .upgradeBtn:hover {
+      background: linear-gradient(135deg, #059669 0%, #047857 100%);
+    }
+
+    /* --- Message/Notification Component --- */
     #messages {
       padding: 12px 16px;
       margin-bottom: 16px;
@@ -166,49 +215,7 @@
       border-left-color: #ef4444;
     }
 
-    .small-text {
-      font-size: 12px;
-      text-align: center;
-      margin-top: 0;
-      color: #6b7280;
-      line-height: 1.4;
-    }
-
-    .upgradeBtn {
-      margin-bottom: 8px;
-      margin-top: 12px;
-      background: linear-gradient(135deg, #10b981 0%, #059669 100%);
-      font-weight: 700;
-    }
-
-    .upgradeBtn:hover {
-      background: linear-gradient(135deg, #059669 0%, #047857 100%);
-    }
-
-    .view-plans-link {
-      display: block;
-      text-align: center;
-      color: #667eea;
-      text-decoration: none;
-      font-size: 13px;
-      font-weight: 600;
-      margin: 0;
-      transition: color 0.18s ease;
-      padding: 6px 0;
-    }
-
-    .view-plans-link:hover {
-      color: #5a67d8;
-      text-decoration: underline;
-    }
-
-    .poweredByText {
-      text-align: center;
-      font-size: 11px;
-      color: #9ca3af;
-      margin-top: 8px;
-    }
-
+    /* --- User & Plan Components --- */
     .user-email {
       background: #f3f4f6;
       padding: 8px 12px;
@@ -220,7 +227,6 @@
       word-break: break-all;
     }
 
-    /* --- Plan & Usage Card Styles --- */
     .plan-card {
       background: #ffffff;
       border-radius: 12px;
@@ -273,10 +279,27 @@
       width: 0%;
       background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
       border-radius: 4px;
-      /* PERFORMANCE: Faster, simpler transition for a snappy feel */
       transition: width 0.2s ease;
     }
 
+    .view-plans-link {
+      display: block;
+      text-align: center;
+      color: #667eea;
+      text-decoration: none;
+      font-size: 13px;
+      font-weight: 600;
+      margin: 0;
+      transition: color 0.18s ease;
+      padding: 6px 0;
+    }
+
+    .view-plans-link:hover {
+      color: #5a67d8;
+      text-decoration: underline;
+    }
+
+    /* --- Language Dropdown Component --- */
     .language-dropdown {
       margin-bottom: 20px;
       padding: 0 4px;
@@ -284,12 +307,22 @@
       z-index: 10;
     }
 
+    .language-label {
+      font-size: 12px;
+      color: #6b7280;
+      margin-bottom: 4px;
+      font-weight: 500;
+    }
+
     .dropdown-toggle {
+      /* This is a button, but styled differently from .btn */
+      cursor: pointer;
       background: #ffffff;
       color: #1f2937;
       border: 1px solid #d1d5db;
+      border-radius: 8px;
       text-align: left;
-      padding: 10px 14px 10px 14px;
+      padding: 10px 38px 10px 14px;
       margin: 0;
       width: 100%;
       display: flex;
@@ -302,13 +335,11 @@
       background-repeat: no-repeat;
       background-position: right 10px center;
       background-size: 18px;
-      transition: border-color 0.2s ease;
-      padding-right: 38px;
+      transition: border-color 0.3s ease;
     }
 
     .dropdown-toggle:hover {
-      transform: none;
-      /* Disable button hover effect */
+      border-color: #667eea;
     }
 
     .dropdown-toggle.active {
@@ -335,7 +366,6 @@
       overflow-y: auto;
       z-index: 10;
       display: none;
-      /* Start hidden */
     }
 
     .dropdown-menu.visible {
@@ -365,17 +395,23 @@
       font-weight: 600;
       color: #4f46e5;
     }
+
+    .flag-icon {
+      width: 20px;
+      vertical-align: middle;
+      margin-right: 5px;
+    }
   </style>
 </head>
 
 <body>
   <div class="popup-container">
-    <div class="popup-header">
-      <h3>AutoLister AI</h3>
+    <header class="popup-header">
+      <h3 class="popup-title">AutoLister AI</h3>
       <div class="subtitle">Smart Vinted listings with AI</div>
-    </div>
+    </header>
 
-    <div class="popup-content">
+    <main class="popup-content">
       <div id="messages" class="hidden"></div>
 
       <div id="loadingView">
@@ -383,17 +419,16 @@
       </div>
 
       <div id="signedOutView">
-        <p class="small-text" style="margin-bottom:20px;">
+        <p class="small-text signout-intro-text">
           Sign in or create an account to get started
         </p>
-        <label for="emailInput">Email Address</label>
-        <input type="email" id="emailInput" name="email" autocomplete="email" autocorrect="off" autocapitalize="off"
-          spellcheck="false" placeholder="Enter your email" required />
-        <button id="sendMagicLinkBtn">Send Magic Link</button>
-        <p class="small-text" style="margin-top: 12px;">
-          Having trouble? Contact us at
-          <br />
-          <a href="mailto:samicodesit@gmail.com" style="color:#667eea;word-break:break-all;">samicodesit@gmail.com</a>
+        <label for="emailInput" class="form-label">Email Address</label>
+        <input type="email" id="emailInput" name="email" class="form-input" autocomplete="email" autocorrect="off"
+          autocapitalize="off" spellcheck="false" placeholder="Enter your email" required />
+        <button id="sendMagicLinkBtn" class="btn">Send Magic Link</button>
+        <p class="small-text contact-text">
+          Having trouble? Contact us at <br />
+          <a href="mailto:samicodesit@gmail.com" class="contact-link">samicodesit@gmail.com</a>
         </p>
       </div>
 
@@ -429,58 +464,87 @@
           </div>
 
           <div id="freePlanView">
-            <button class="upgradeBtn" id="upgradeBtn">Upgrade to Starter (€3.99)</button>
+            <button class="btn upgradeBtn" id="upgradeBtn">
+              Upgrade to Starter (€3.99)
+            </button>
             <a href="#" id="viewAllPlansLink" class="view-plans-link">Compare All Plans</a>
             <div class="poweredByText">Powered by <strong>Stripe</strong></div>
           </div>
           <div id="paidPlanView" class="hidden">
-            <p id="renewalDate" style="text-align: center; margin-bottom: 12px; font-size: 13px;">Active until:
+            <p id="renewalDate" class="renewal-text">
+              Active until:
               <strong>—</strong>
             </p>
-            <button id="manageBtn">Manage Subscription</button>
+            <button id="manageBtn" class="btn">Manage Subscription</button>
             <a href="#" id="viewAllPlansLinkPaid" class="view-plans-link">Compare All Plans</a>
           </div>
         </div>
 
         <div class="language-dropdown">
-          <div style="font-size:12px;color:#6b7280;margin-bottom:4px;font-weight:500;">Generated content language</div>
+          <div class="language-label">Generated content language</div>
           <button class="dropdown-toggle">Select Language</button>
           <ul class="dropdown-menu">
-            <li data-value="en"><img src="https://flagcdn.com/w40/gb.png" alt="UK Flag"
-                style="width:20px;vertical-align:middle;margin-right:5px;"> English</li>
-            <li data-value="cz"><img src="https://flagcdn.com/w40/cz.png" alt="Czech Flag"
-                style="width:20px;vertical-align:middle;margin-right:5px;"> Čeština</li>
-            <li data-value="de"><img src="https://flagcdn.com/w40/de.png" alt="German Flag"
-                style="width:20px;vertical-align:middle;margin-right:5px;"> Deutsch</li>
-            <li data-value="es"><img src="https://flagcdn.com/w40/es.png" alt="Spanish Flag"
-                style="width:20px;vertical-align:middle;margin-right:5px;"> Español</li>
-            <li data-value="fr"><img src="https://flagcdn.com/w40/fr.png" alt="French Flag"
-                style="width:20px;vertical-align:middle;margin-right:5px;"> Français</li>
-            <li data-value="hu"><img src="https://flagcdn.com/w40/hu.png" alt="Hungarian Flag"
-                style="width:20px;vertical-align:middle;margin-right:5px;"> Magyar</li>
-            <li data-value="it"><img src="https://flagcdn.com/w40/it.png" alt="Italian Flag"
-                style="width:20px;vertical-align:middle;margin-right:5px;"> Italiano</li>
-            <li data-value="lt"><img src="https://flagcdn.com/w40/lt.png" alt="Lithuanian Flag"
-                style="width:20px;vertical-align:middle;margin-right:5px;"> Lietuvių</li>
-            <li data-value="nl"><img src="https://flagcdn.com/w40/nl.png" alt="Dutch Flag"
-                style="width:20px;vertical-align:middle;margin-right:5px;"> Nederlands</li>
-            <li data-value="pl"><img src="https://flagcdn.com/w40/pl.png" alt="Polish Flag"
-                style="width:20px;vertical-align:middle;margin-right:5px;"> Polski</li>
-            <li data-value="pt"><img src="https://flagcdn.com/w40/pt.png" alt="Portuguese Flag"
-                style="width:20px;vertical-align:middle;margin-right:5px;"> Português</li>
-            <li data-value="ro"><img src="https://flagcdn.com/w40/ro.png" alt="Romanian Flag"
-                style="width:20px;vertical-align:middle;margin-right:5px;"> Română</li>
-            <li data-value="sk"><img src="https://flagcdn.com/w40/sk.png" alt="Slovak Flag"
-                style="width:20px;vertical-align:middle;margin-right:5px;"> Slovenčina</li>
+            <li data-value="en">
+              <img src="https://flagcdn.com/w40/gb.png" alt="UK Flag" class="flag-icon" />
+              English
+            </li>
+            <li data-value="cz">
+              <img src="https://flagcdn.com/w40/cz.png" alt="Czech Flag" class="flag-icon" />
+              Čeština
+            </li>
+            <li data-value="de">
+              <img src="https://flagcdn.com/w40/de.png" alt="German Flag" class="flag-icon" />
+              Deutsch
+            </li>
+            <li data-value="es">
+              <img src="https://flagcdn.com/w40/es.png" alt="Spanish Flag" class="flag-icon" />
+              Español
+            </li>
+            <li data-value="fr">
+              <img src="https://flagcdn.com/w40/fr.png" alt="French Flag" class="flag-icon" />
+              Français
+            </li>
+            <li data-value="hu">
+              <img src="https://flagcdn.com/w40/hu.png" alt="Hungarian Flag" class="flag-icon" />
+              Magyar
+            </li>
+            <li data-value="it">
+              <img src="https://flagcdn.com/w40/it.png" alt="Italian Flag" class="flag-icon" />
+              Italiano
+            </li>
+            <li data-value="lt">
+              <img src="https://flagcdn.com/w40/lt.png" alt="Lithuanian Flag" class="flag-icon" />
+              Lietuvių
+            </li>
+            <li data-value="nl">
+              <img src="https://flagcdn.com/w40/nl.png" alt="Dutch Flag" class="flag-icon" />
+              Nederlands
+            </li>
+            <li data-value="pl">
+              <img src="https://flagcdn.com/w40/pl.png" alt="Polish Flag" class="flag-icon" />
+              Polski
+            </li>
+            <li data-value="pt">
+              <img src="https://flagcdn.com/w40/pt.png" alt="Portuguese Flag" class="flag-icon" />
+              Português
+            </li>
+            <li data-value="ro">
+              <img src="https://flagcdn.com/w40/ro.png" alt="Romanian Flag" class="flag-icon" />
+              Română
+            </li>
+            <li data-value="sk">
+              <img src="https://flagcdn.com/w40/sk.png" alt="Slovak Flag" class="flag-icon" />
+              Slovenčina
+            </li>
           </ul>
         </div>
 
-        <button id="signOutBtn" class="secondary">Sign Out</button>
+        <button id="signOutBtn" class="btn btn-secondary">Sign Out</button>
         <p class="small-text">
           The "Generate" button appears on Vinted item listing pages.
         </p>
       </div>
-    </div>
+    </main>
   </div>
 
   <script src="lib/supabase.js"></script>
