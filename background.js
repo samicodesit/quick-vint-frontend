@@ -4,7 +4,7 @@ importScripts("lib/supabase.js");
 // --- CONSTANTS ---
 const SUPABASE_URL = "https://jqloiovdwjaornnfvmyu.supabase.co";
 const SUPABASE_ANON_KEY =
-  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImpxbG9pb3Zkd2phb3JubmZ2bXl1Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc0ODIwODMzMiwiZXhwIjoyMDYzNzg0MzMyfQ.Urz77RMqsJs8gJmA3yia_HhxaaeDrHURrF-fPeExRNQ";
+  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImpxbG9pb3Zkd2phb3JubmZ2bXl1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDgyMDgzMzIsImV4cCI6MjA2Mzc4NDMzMn0.iFtkUorY1UqK8zamnwgjB-yhsXe0bJAA8YFm22bzc3A";
 const TOKEN_REFRESH_MARGIN_MS = 5 * 60 * 1000; // 5 minutes
 const MIN_REFRESH_DELAY_MS = 60 * 1000; // 1 minute
 
@@ -59,9 +59,7 @@ function scheduleTokenRefresh(session) {
   const now = Date.now();
   const refreshIn = expiresAt - now - TOKEN_REFRESH_MARGIN_MS;
 
-  // Ensure the refresh is scheduled for the future, with a minimum delay.
   const timeout = Math.max(refreshIn, MIN_REFRESH_DELAY_MS);
-
   tokenRefreshTimeout = setTimeout(refreshTokenWithRetry, timeout);
 }
 
@@ -77,7 +75,6 @@ async function refreshTokenWithRetry(maxRetries = 3) {
     const session = await getStoredSession();
     if (!session?.refresh_token) return null;
 
-    // Temporarily set the session for the refresh call.
     await supabaseClient.auth.setSession({
       access_token: session.access_token,
       refresh_token: session.refresh_token,
@@ -98,7 +95,6 @@ async function refreshTokenWithRetry(maxRetries = 3) {
         error?.message?.includes("Invalid Refresh Token") ||
         error?.message?.includes("refresh_token_not_found")
       ) {
-        // Unrecoverable auth error, sign out.
         await handleSignOut();
         return null;
       }
@@ -126,36 +122,34 @@ async function ensureValidToken() {
   if (!session) return null;
 
   if (isTokenNearExpiry(session)) {
-    return await refreshTokenWithRetry();
+    return (await refreshTokenWithRetry()) || (await getStoredSession());
   }
   return session;
 }
 
 /**
- * Creates a Supabase client instance with the user's access token for authenticated requests.
+ * Creates a Supabase client instance with the user's access token.
  * @param {string} accessToken
  * @returns {object} A Supabase client instance.
  */
 function createAuthenticatedClient(accessToken) {
   if (!accessToken) {
-    throw new Error(
-      "Access token is required to create an authenticated client."
-    );
+    throw new Error("Access token is required.");
   }
   return supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
     global: { headers: { Authorization: `Bearer ${accessToken}` } },
   });
 }
 
-// --- DATA FETCHING & API HANDLERS ---
+// --- DATA FETCHING & STATE SYNCHRONIZATION ---
 
 /**
- * Fetches the user object and their profile from Supabase.
- * @returns {Promise<{user: object, profile: object}|null>}
+ * Fetches the user's profile and stores it in chrome.storage.local.
+ * This is the single source of truth for the user's profile data.
  */
-async function fetchUserAndProfile() {
+async function updateAndStoreUserProfile() {
   const session = await ensureValidToken();
-  if (!session?.access_token) return null;
+  if (!session?.access_token) return;
 
   try {
     const authClient = createAuthenticatedClient(session.access_token);
@@ -163,8 +157,7 @@ async function fetchUserAndProfile() {
       data: { user },
       error: userError,
     } = await authClient.auth.getUser();
-    if (userError) throw userError;
-    if (!user) return null;
+    if (userError || !user) throw userError || new Error("User not found.");
 
     const { data: profile, error: profileError } = await authClient
       .from("profiles")
@@ -176,10 +169,9 @@ async function fetchUserAndProfile() {
 
     if (profileError) throw profileError;
 
-    return { user, profile };
+    await chrome.storage.local.set({ userProfile: profile });
   } catch (error) {
-    console.error("Failed to fetch user and profile:", error);
-    return null;
+    console.error("Failed to update and store user profile:", error);
   }
 }
 
@@ -216,7 +208,7 @@ async function fetchUserDayCount() {
       .gte("expires_at", new Date().toISOString())
       .order("count", { ascending: false })
       .limit(1)
-      .maybeSingle(); // Returns single object or null
+      .maybeSingle();
 
     if (limitError) throw limitError;
 
@@ -236,7 +228,6 @@ async function handleSignOut() {
   try {
     const { error } = await supabaseClient.auth.signOut();
     if (error) throw error;
-    await chrome.storage.local.remove(["supabaseSession", "userProfile"]);
     return { ok: true };
   } catch (err) {
     return { error: err.message };
@@ -252,9 +243,13 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   (async () => {
     switch (message.type) {
       case "GET_USER_PROFILE":
-        const data = await fetchUserAndProfile();
-        if (data) await chrome.storage.local.set({ userProfile: data.profile });
-        sendResponse(data);
+        const { supabaseSession, userProfile } = await chrome.storage.local.get(
+          ["supabaseSession", "userProfile"]
+        );
+        sendResponse({
+          user: supabaseSession?.user || null,
+          profile: userProfile || null,
+        });
         break;
 
       case "GET_ACCESS_TOKEN":
@@ -274,11 +269,9 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         sendResponse(dayCount);
         break;
 
+      // THIS IS THE FIX: Restore the handler for the signal from the callback page.
       case "AUTH_UPDATED":
-        const updatedData = await fetchUserAndProfile();
-        if (updatedData)
-          await chrome.storage.local.set({ userProfile: updatedData.profile });
-        // Optionally notify other parts of the extension if needed
+        await updateAndStoreUserProfile();
         sendResponse({ ok: true });
         break;
 
@@ -296,15 +289,24 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 });
 
 /**
- * Listens for Supabase auth state changes to keep storage in sync.
+ * Listens for Supabase auth state changes to keep storage and profile in sync.
  */
 supabaseClient.auth.onAuthStateChange((event, session) => {
-  if (event === "SIGNED_OUT" || event === "USER_DELETED") {
-    if (tokenRefreshTimeout) clearTimeout(tokenRefreshTimeout);
-    chrome.storage.local.remove(["supabaseSession", "userProfile"]);
-  } else if (session) {
-    setStoredSession(session);
-  }
+  (async () => {
+    try {
+      if (event === "SIGNED_OUT" || event === "USER_DELETED") {
+        if (tokenRefreshTimeout) clearTimeout(tokenRefreshTimeout);
+        await chrome.storage.local.remove(["supabaseSession", "userProfile"]);
+      } else if (event === "SIGNED_IN" || event === "TOKEN_REFRESHED") {
+        await setStoredSession(session);
+        await updateAndStoreUserProfile();
+      } else if (session) {
+        await setStoredSession(session);
+      }
+    } catch (e) {
+      console.error("Error in onAuthStateChange handler:", e);
+    }
+  })();
 });
 
 /**
@@ -328,6 +330,8 @@ async function init() {
       access_token: session.access_token,
       refresh_token: session.refresh_token,
     });
+
+    updateAndStoreUserProfile();
 
     if (isTokenNearExpiry(session)) {
       await refreshTokenWithRetry();

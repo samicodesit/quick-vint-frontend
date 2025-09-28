@@ -3,8 +3,7 @@ document.addEventListener("DOMContentLoaded", () => {
   const API_BASE = "https://quick-vint.vercel.app";
   const SUPABASE_URL = "https://jqloiovdwjaornnfvmyu.supabase.co";
   const SUPABASE_ANON_KEY =
-    "eyJhbGciOiJIJTIyNiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImpxbG9pb3Zkd2phb3JubmZ2bXl1Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc0ODIwODMzMiwiZXhwIjoyMDYzNzg0MzMyfQ.Urz77RMqsJs8gJmA3yia_HhxaaeDrHURrF-fPeExRNQ";
-
+    "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImpxbG9pb3Zkd2phb3JubmZ2bXl1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDgyMDgzMzIsImV4cCI6MjA2Mzc4NDMzMn0.iFtkUorY1UqK8zamnwgjB-yhsXe0bJAA8YFm22bzc3A";
   const TIER_LIMITS = {
     free: { daily: 2, monthly: 10 },
     starter: { daily: 15, monthly: 300 },
@@ -23,18 +22,11 @@ document.addEventListener("DOMContentLoaded", () => {
   const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
   // --- DOM ELEMENT REFERENCES ---
-  // General
   const messagesDiv = document.getElementById("messages");
-
-  // Signed Out View
   const emailInput = document.getElementById("emailInput");
   const sendMagicLinkBtn = document.getElementById("sendMagicLinkBtn");
-
-  // Signed In View
   const userEmailSpan = document.getElementById("userEmail");
   const signOutBtn = document.getElementById("signOutBtn");
-
-  // Subscription & Usage
   const freePlanView = document.getElementById("freePlanView");
   const paidPlanView = document.getElementById("paidPlanView");
   const renewalDate = document.getElementById("renewalDate");
@@ -47,8 +39,6 @@ document.addEventListener("DOMContentLoaded", () => {
   const monthlyProgressBar = document.getElementById("monthlyProgressBar");
   const dailyCallsUsed = document.getElementById("dailyCallsUsed");
   const monthlyCallsUsed = document.getElementById("monthlyCallsUsed");
-
-  // Language Dropdown
   const languageDropdown = document.querySelector(".language-dropdown");
   const dropdownToggle = document.querySelector(".dropdown-toggle");
   const dropdownMenu = document.querySelector(".dropdown-menu");
@@ -56,7 +46,6 @@ document.addEventListener("DOMContentLoaded", () => {
 
   // --- HELPER & UTILITY FUNCTIONS ---
 
-  /** Normalizes various subscription tier names to a consistent key. */
   function normalizeTier(tier) {
     if (!tier) return "free";
     const map = {
@@ -70,31 +59,27 @@ document.addEventListener("DOMContentLoaded", () => {
     return map[tier] || "free";
   }
 
-  /** Displays a message to the user. */
   function showMessage(msg, type = "info") {
     if (!msg) {
       messagesDiv.classList.add("hidden");
       return;
     }
     messagesDiv.textContent = msg;
-    messagesDiv.className = type; // Resets class list to just the type
+    messagesDiv.className = type;
     messagesDiv.classList.remove("hidden");
     if (type === "info" || type === "success") {
       setTimeout(() => messagesDiv.classList.add("hidden"), 4000);
     }
   }
 
-  /** Sets the loading state for a button. */
   function setLoading(button, isLoading, defaultText) {
     button.disabled = isLoading;
     button.textContent = isLoading ? "Processing…" : defaultText;
   }
 
-  /** Encodes user data into a Base64 string for URL transport. */
   function encodeUserData(data) {
     try {
-      const jsonString = JSON.stringify(data);
-      return btoa(jsonString);
+      return btoa(JSON.stringify(data));
     } catch (e) {
       console.error("Failed to encode user data:", e);
       return null;
@@ -103,26 +88,21 @@ document.addEventListener("DOMContentLoaded", () => {
 
   // --- UI RENDERING ---
 
-  /** Renders the main view based on user authentication and profile state. */
   function render(user, profile) {
     if (user && profile) {
       userEmailSpan.textContent = user.email;
-
       const status = profile.subscription_status || "free";
       const rawTier = profile.subscription_tier || "free";
       const tier = normalizeTier(rawTier);
       const monthlyUsed = profile.api_calls_this_month || 0;
-
       planName.textContent = TIER_DISPLAY_NAMES[tier] || "Starter Plan";
 
-      // Fetch daily count from the background script (single source of truth).
       chrome.runtime.sendMessage({ type: "GET_USER_DAY_COUNT" }, (resp) => {
         const dailyUsed =
           resp && typeof resp.daily === "number" ? resp.daily : 0;
         updateUsageUI(dailyUsed, monthlyUsed, tier);
       });
 
-      // Show correct subscription view (free vs. paid).
       if (status === "active" && tier !== "free") {
         freePlanView.classList.add("hidden");
         paidPlanView.classList.remove("hidden");
@@ -140,23 +120,18 @@ document.addEventListener("DOMContentLoaded", () => {
         paidPlanView.classList.add("hidden");
         freePlanView.classList.remove("hidden");
       }
-
       document.body.dataset.view = "signed-in";
     } else {
       document.body.dataset.view = "signed-out";
     }
   }
 
-  /** Updates the usage meters and progress bars. */
   function updateUsageUI(dailyUsed, monthlyUsed, tier) {
     const totals = TIER_LIMITS[tier] || TIER_LIMITS["free"];
     const dailyTotal = totals.daily;
     const monthlyTotal = totals.monthly;
-
-    // Clamp displayed usage to prevent visual overflow (e.g., "18 / 15").
     const displayDailyUsed = Math.min(dailyUsed, dailyTotal);
     const displayMonthlyUsed = Math.min(monthlyUsed, monthlyTotal);
-
     const dailyPercent =
       dailyTotal > 0 ? Math.min((dailyUsed / dailyTotal) * 100, 100) : 0;
     const monthlyPercent =
@@ -164,12 +139,9 @@ document.addEventListener("DOMContentLoaded", () => {
 
     dailyCallsUsed.textContent = `${displayDailyUsed} / ${dailyTotal}`;
     monthlyCallsUsed.textContent = `${displayMonthlyUsed} / ${monthlyTotal}`;
-
     if (dailyProgressBar) dailyProgressBar.style.width = `${dailyPercent}%`;
     if (monthlyProgressBar)
       monthlyProgressBar.style.width = `${monthlyPercent}%`;
-
-    // Handle special case for "unlimited" daily usage display.
     if (tier === "business") {
       dailyCallsUsed.textContent = `Unlimited`;
       if (dailyProgressBar) dailyProgressBar.style.width = "100%";
@@ -178,10 +150,15 @@ document.addEventListener("DOMContentLoaded", () => {
 
   // --- DATA & STATE MANAGEMENT ---
 
-  /** Fetches user and profile data from the background script and triggers a re-render. */
+  /**
+   * Reads user state from chrome.storage.local and triggers a render.
+   * This is the primary way the popup gets its initial state.
+   */
   function updateFromStorage() {
-    chrome.runtime.sendMessage({ type: "GET_USER_PROFILE" }, (resp) => {
-      render(resp?.user || null, resp?.profile || null);
+    chrome.storage.local.get(["supabaseSession", "userProfile"], (data) => {
+      const user = data.supabaseSession?.user || null;
+      const profile = data.userProfile || null;
+      render(user, profile);
     });
   }
 
@@ -193,10 +170,8 @@ document.addEventListener("DOMContentLoaded", () => {
       showMessage("Please enter a valid email address.", "error");
       return;
     }
-
     setLoading(sendMagicLinkBtn, true, "Send Magic Link");
     showMessage(null);
-
     try {
       await fetch(`${API_BASE}/api/auth/magic-link`, {
         method: "POST",
@@ -215,7 +190,6 @@ document.addEventListener("DOMContentLoaded", () => {
   function handleSignOut() {
     setLoading(signOutBtn, true, "Sign Out");
     chrome.runtime.sendMessage({ type: "SIGN_OUT" }, () => {
-      // The state change listener will handle the UI update.
       setLoading(signOutBtn, false, "Sign Out");
     });
   }
@@ -228,7 +202,6 @@ document.addEventListener("DOMContentLoaded", () => {
       showMessage("Please sign in to upgrade.", "error");
       return;
     }
-
     setLoading(upgradeBtn, true, "Loading…");
     try {
       const res = await fetch(`${API_BASE}/api/stripe/create-checkout`, {
@@ -258,7 +231,6 @@ document.addEventListener("DOMContentLoaded", () => {
       showMessage("Please sign in to manage your subscription.", "error");
       return;
     }
-
     setLoading(manageBtn, true, "Loading…");
     try {
       const res = await fetch(`${API_BASE}/api/stripe/create-portal`, {
@@ -285,21 +257,21 @@ document.addEventListener("DOMContentLoaded", () => {
     chrome.runtime.sendMessage({ type: "GET_USER_PROFILE" }, (resp) => {
       const userData = {
         source: "extension",
-        signed_in: !!resp?.user?.email,
+        signed_in: !!resp?.user,
         plan: resp?.profile?.subscription_tier || "free",
         email: resp?.user?.email || "",
         timestamp: Date.now(),
       };
       const token = encodeUserData(userData);
-      const url = `https://quick-vint.vercel.app/pricing.html?token=${token}`;
-      window.open(url, "_blank");
+      if (token) {
+        const url = `https://quick-vint.vercel.app/pricing.html?token=${token}`;
+        window.open(url, "_blank");
+      }
     });
   }
 
   // --- LANGUAGE DROPDOWN LOGIC ---
-
   function setupLanguageDropdown() {
-    // Restore selection from storage
     chrome.storage.local.get(["selectedLanguage"], (result) => {
       if (result.selectedLanguage) {
         const selectedItem = [...languageOptions].find(
@@ -312,17 +284,14 @@ document.addEventListener("DOMContentLoaded", () => {
         }
       }
     });
-
     const toggleDropdown = (show) => {
       dropdownMenu.classList.toggle("visible", show);
       dropdownToggle.classList.toggle("active", show);
     };
-
     dropdownToggle.addEventListener("click", (e) => {
       e.stopPropagation();
       toggleDropdown(!dropdownMenu.classList.contains("visible"));
     });
-
     languageOptions.forEach((li) => {
       li.addEventListener("click", () => {
         dropdownToggle.innerHTML = li.innerHTML;
@@ -332,8 +301,6 @@ document.addEventListener("DOMContentLoaded", () => {
         chrome.storage.local.set({ selectedLanguage: li.dataset.value });
       });
     });
-
-    // Close dropdown when clicking outside
     document.addEventListener("click", (e) => {
       if (!languageDropdown.contains(e.target)) {
         toggleDropdown(false);
@@ -342,9 +309,7 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   // --- INITIALIZATION ---
-
   function init() {
-    // Set up event listeners
     sendMagicLinkBtn.addEventListener("click", handleSendMagicLink);
     signOutBtn.addEventListener("click", handleSignOut);
     upgradeBtn.addEventListener("click", handleUpgrade);
@@ -355,15 +320,17 @@ document.addEventListener("DOMContentLoaded", () => {
       if (e.key === "Enter") handleSendMagicLink();
     });
 
-    // Set up dynamic components
     setupLanguageDropdown();
 
-    // Listen for state changes from background script or other tabs
+    // Listen for state changes from the background script. This is now the
+    // primary way the UI stays in sync with auth and profile changes.
     chrome.storage.onChanged.addListener((changes) => {
       if (changes.supabaseSession || changes.userProfile) {
         updateFromStorage();
       }
     });
+
+    // Also update when the popup gains focus, to catch changes from other tabs.
     window.addEventListener("focus", updateFromStorage);
 
     // Initial load

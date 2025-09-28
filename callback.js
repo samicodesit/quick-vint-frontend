@@ -28,7 +28,7 @@
           "Vous êtes connecté et prêt à créer des annonces incroyables avec l'IA.",
         welcomeMessage:
           "🎯 Prêt à vendre ? Le bouton <span class='inline-btn'>🪄 Generate</span> apparaîtra lors de la création d'annonces !",
-        vintedButton: "Créer sur Vinted",
+        vintedButton: "Créer sur Vinted.fr",
         viewPlansButton: "Voir tous les plans",
         closeTabButton: "Fermer l'onglet",
         featuresTitle: "✨ Ce que vous pouvez faire maintenant",
@@ -44,7 +44,8 @@
         starterFeatures:
           "15 annonces/jour<br>Parfait pour vendeurs occasionnels",
         proFeatures: "40 annonces/jour<br>Pour vendeurs actifs",
-        businessFeatures: "75 annonces/jour<br>Pour vendeurs professionnels",
+        businessFeatures:
+          "Aucune limite quotidienne<br>Pour vendeurs professionnels",
         privacyLink: "Politique de confidentialité",
         termsLink: "Conditions d'utilisation",
       },
@@ -58,7 +59,7 @@
           "Sie sind angemeldet und bereit, fantastische Anzeigen mit KI zu erstellen.",
         welcomeMessage:
           "🎯 Bereit zu verkaufen? Der <span class='inline-btn'>🪄 Generate</span> Button erscheint beim Erstellen neuer Anzeigen!",
-        vintedButton: "Auf Vinted erstellen",
+        vintedButton: "Auf Vinted.de erstellen",
         viewPlansButton: "Alle Pläne anzeigen",
         closeTabButton: "Tab schließen",
         featuresTitle: "✨ Was Sie jetzt tun können",
@@ -71,9 +72,38 @@
           "Kostenlose Nutzer erhalten 2 Anzeigen pro Tag. Upgraden Sie, um bis zu 75 tägliche Anzeigen, Priority-Support und mehr Features zu erhalten!",
         starterFeatures: "15 Anzeigen/Tag<br>Perfekt für Gelegenheitsverkäufer",
         proFeatures: "40 Anzeigen/Tag<br>Für aktive Verkäufer",
-        businessFeatures: "75 Anzeigen/Tag<br>Für professionelle Verkäufer",
+        businessFeatures: "Keine Tageslimits<br>Für professionelle Verkäufer",
         privacyLink: "Datenschutzerklärung",
         termsLink: "Nutzungsbedingungen",
+      },
+    },
+    PL: {
+      domain: "vinted.pl",
+      currency: "zł",
+      texts: {
+        welcomeTitle: "Witamy w AutoLister AI!",
+        welcomeSubtitle:
+          "Jesteś zalogowany i gotowy do tworzenia niesamowitych ogłoszeń z pomocą AI.",
+        welcomeMessage:
+          "🎯 Gotowy do sprzedaży? Przycisk <span class='inline-btn'>🪄 Generate</span> pojawi się podczas tworzenia nowych ogłoszeń!",
+        vintedButton: "Twórz na Vinted.pl",
+        viewPlansButton: "Zobacz wszystkie plany",
+        closeTabButton: "Zamknij kartę",
+        featuresTitle: "✨ Co możesz teraz zrobić",
+        feature1: "Natychmiast generuj przekonujące tytuły i opisy",
+        feature2: "Przesyłaj zdjęcia i otrzymuj ogłoszenia wspierane przez AI",
+        feature3: "Oszczędzaj godziny ręcznego pisania",
+        feature4: "Zacznij od 2 darmowych ogłoszeń dziennie",
+        upgradeTitle: "💡 Chcesz więcej mocy?",
+        upgradeDescription:
+          "Darmowi użytkownicy otrzymują 2 ogłoszenia dziennie. Ulepsz, aby uzyskać do 75 ogłoszeń dziennie, priorytetowe wsparcie i więcej funkcji!",
+        starterFeatures:
+          "15 ogłoszeń/dzień<br>Idealne dla okazjonalnych sprzedawców",
+        proFeatures: "40 ogłoszeń/dzień<br>Dla aktywnych sprzedawców",
+        businessFeatures:
+          "Brak limitu dziennego<br>Dla profesjonalnych sprzedawców",
+        privacyLink: "Polityka prywatności",
+        termsLink: "Warunki świadczenia usług",
       },
     },
     ES: {
@@ -85,7 +115,7 @@
           "Has iniciado sesión y estás listo para crear increíbles anuncios con IA.",
         welcomeMessage:
           "🎯 ¿Listo para vender? ¡El botón <span class='inline-btn'>🪄 Generate</span> aparecerá al crear nuevos anuncios!",
-        vintedButton: "Crear en Vinted",
+        vintedButton: "Crear en Vinted.es",
         viewPlansButton: "Ver todos los planes",
         closeTabButton: "Cerrar pestaña",
         featuresTitle: "✨ Lo que puedes hacer ahora",
@@ -99,7 +129,7 @@
         starterFeatures:
           "15 anuncios/día<br>Perfecto para vendedores ocasionales",
         proFeatures: "40 anuncios/día<br>Para vendedores activos",
-        businessFeatures: "75 anuncios/día<br>Para vendedores profesionales",
+        businessFeatures: "Sin límite diario<br>Para vendedores profesionales",
         privacyLink: "Política de privacidad",
         termsLink: "Términos de servicio",
       },
@@ -113,7 +143,7 @@
           "Hai effettuato l'accesso e sei pronto per creare annunci fantastici con l'IA.",
         welcomeMessage:
           "🎯 Pronto a vendere? Il pulsante <span class='inline-btn'>🪄 Generate</span> apparirà quando crei nuovi annunci!",
-        vintedButton: "Crea su Vinted",
+        vintedButton: "Crea su Vinted.it",
         viewPlansButton: "Visualizza tutti i piani",
         closeTabButton: "Chiudi scheda",
         featuresTitle: "✨ Cosa puoi fare ora",
@@ -127,7 +157,8 @@
         starterFeatures:
           "15 annunci/giorno<br>Perfetto per venditori occasionali",
         proFeatures: "40 annunci/giorno<br>Per venditori attivi",
-        businessFeatures: "75 annunci/giorno<br>Per venditori professionali",
+        businessFeatures:
+          "Nessun limite giornaliero<br>Per venditori professionali",
         privacyLink: "Informativa sulla privacy",
         termsLink: "Termini di servizio",
       },
@@ -141,7 +172,7 @@
           "Je bent ingelogd en klaar om geweldige advertenties te maken met AI.",
         welcomeMessage:
           "🎯 Klaar om te verkopen? De <span class='inline-btn'>🪄 Generate</span> knop verschijnt bij het maken van advertenties!",
-        vintedButton: "Maak op Vinted",
+        vintedButton: "Maak op Vinted.nl",
         viewPlansButton: "Bekijk alle plannen",
         closeTabButton: "Tabblad sluiten",
         featuresTitle: "✨ Wat je nu kunt doen",
@@ -155,7 +186,8 @@
         starterFeatures:
           "15 advertenties/dag<br>Perfect voor occasionele verkopers",
         proFeatures: "40 advertenties/dag<br>Voor actieve verkopers",
-        businessFeatures: "75 advertenties/dag<br>Voor professionele verkopers",
+        businessFeatures:
+          "Geen dagelijkse limiet<br>Voor professionele verkopers",
         privacyLink: "Privacybeleid",
         termsLink: "Servicevoorwaarden",
       },
@@ -169,7 +201,7 @@
           "You're signed in and ready to create amazing listings with AI.",
         welcomeMessage:
           "🎯 Ready to list? The <span class='inline-btn'>🪄 Generate</span> button will appear when you create new listings!",
-        vintedButton: "Start Creating on Vinted",
+        vintedButton: "Start Creating on Vinted.com",
         viewPlansButton: "View All Plans",
         closeTabButton: "Close Tab",
         featuresTitle: "✨ What You Can Do Now",
@@ -182,7 +214,7 @@
           "Free users get 2 listings per day. Upgrade to get up to 75 daily listings, priority support, and more features!",
         starterFeatures: "15 listings/day<br>Perfect for casual sellers",
         proFeatures: "40 listings/day<br>For active sellers",
-        businessFeatures: "75 listings/day<br>For power sellers",
+        businessFeatures: "No daily limit<br>For power sellers",
         privacyLink: "Privacy Policy",
         termsLink: "Terms of Service",
       },
@@ -645,43 +677,6 @@
 
     // Check if user already has a subscription and customize UI
     checkAndCustomizeForExistingSubscriber();
-
-    // Smooth auto-close notification (below the fold)
-    setTimeout(() => {
-      const notice = document.createElement("div");
-      notice.style.cssText = `
-        position: fixed;
-        bottom: 20px;
-        right: 20px;
-        background: rgba(79, 70, 229, 0.95);
-        backdrop-filter: blur(10px);
-        color: white;
-        padding: 12px 20px;
-        border-radius: 12px;
-        font-size: 0.9rem;
-        box-shadow: 0 8px 32px rgba(79, 70, 229, 0.3);
-        z-index: 1000;
-        animation: slideInNotice 0.4s ease-out;
-        cursor: pointer;
-      `;
-
-      const autoCloseText = localization.texts.closeTabButton || "Close Tab";
-      notice.innerHTML = `${autoCloseText} in <span id="countdown">25</span>s`;
-      notice.onclick = () => window.close();
-      document.body.appendChild(notice);
-
-      // Countdown
-      let countdown = 25;
-      const interval = setInterval(() => {
-        countdown--;
-        const countdownEl = document.getElementById("countdown");
-        if (countdownEl) countdownEl.textContent = countdown;
-        if (countdown <= 0) {
-          clearInterval(interval);
-          window.close();
-        }
-      }, 1000);
-    }, 4000);
   }
 
   show("loading");
