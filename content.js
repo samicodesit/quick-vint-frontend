@@ -22,6 +22,76 @@
     });
   }
 
+  /**
+   * Compresses and resizes an image to reduce token usage for AI processing.
+   * @param {string} imageUrl - The original image URL
+   * @param {number} maxDimension - Maximum width or height (default: 1024)
+   * @param {number} quality - JPEG quality 0-1 (default: 0.8)
+   * @returns {Promise<string>} Base64 encoded compressed image
+   */
+  async function compressImage(imageUrl, maxDimension = 1024, quality = 0.8) {
+    return new Promise((resolve, reject) => {
+      const img = new Image();
+      img.crossOrigin = "anonymous";
+
+      img.onload = () => {
+        try {
+          // Calculate new dimensions while maintaining aspect ratio
+          let width = img.width;
+          let height = img.height;
+
+          if (width > maxDimension || height > maxDimension) {
+            if (width > height) {
+              height = Math.round((height * maxDimension) / width);
+              width = maxDimension;
+            } else {
+              width = Math.round((width * maxDimension) / height);
+              height = maxDimension;
+            }
+          }
+
+          // Create canvas and draw resized image
+          const canvas = document.createElement("canvas");
+          canvas.width = width;
+          canvas.height = height;
+          const ctx = canvas.getContext("2d");
+          ctx.drawImage(img, 0, 0, width, height);
+
+          // Convert to base64 with compression
+          const base64 = canvas.toDataURL("image/jpeg", quality);
+          resolve(base64);
+        } catch (error) {
+          reject(error);
+        }
+      };
+
+      img.onerror = () => {
+        reject(new Error(`Failed to load image: ${imageUrl}`));
+      };
+
+      img.src = imageUrl;
+    });
+  }
+
+  /**
+   * Compresses multiple images in parallel with error handling.
+   * @param {string[]} imageUrls - Array of image URLs
+   * @returns {Promise<string[]>} Array of compressed base64 images
+   */
+  async function compressImages(imageUrls) {
+    const compressionPromises = imageUrls.map(async (url) => {
+      try {
+        return await compressImage(url);
+      } catch (error) {
+        console.warn(`Failed to compress image ${url}:`, error);
+        // Return original URL as fallback if compression fails
+        return url;
+      }
+    });
+
+    return Promise.all(compressionPromises);
+  }
+
   // --- AUTHENTICATION & STATE SYNC ---
 
   function initializeAuthState() {
@@ -169,13 +239,19 @@
         );
       }
 
+      // Compress images before sending to API to reduce token usage
+      const compressedImages = await compressImages(imageUrls);
+
       const response = await fetch(`${API_BASE}/api/generate`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${access_token}`,
         },
-        body: JSON.stringify({ imageUrls, languageCode: selectedLanguage }),
+        body: JSON.stringify({
+          imageUrls: compressedImages,
+          languageCode: selectedLanguage,
+        }),
       });
 
       if (response.status === 401) {
