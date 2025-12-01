@@ -27,6 +27,7 @@ document.addEventListener("DOMContentLoaded", () => {
   const sendMagicLinkBtn = document.getElementById("sendMagicLinkBtn");
   const userEmailSpan = document.getElementById("userEmail");
   const signOutBtn = document.getElementById("signOutBtn");
+  const signOutBtnSettings = document.getElementById("signOutBtnSettings");
   const freePlanView = document.getElementById("freePlanView");
   const paidPlanView = document.getElementById("paidPlanView");
   const renewalDate = document.getElementById("renewalDate");
@@ -43,8 +44,26 @@ document.addEventListener("DOMContentLoaded", () => {
   const dropdownToggle = document.querySelector(".dropdown-toggle");
   const dropdownMenu = document.querySelector(".dropdown-menu");
   const languageOptions = document.querySelectorAll(".dropdown-menu li");
+  const settingsToggleBtn = document.getElementById("settingsToggleBtn");
+  const gearIcon = document.querySelector(".gear-icon");
+  const backIcon = document.querySelector(".back-icon");
+  const toneOptions = document.querySelectorAll('input[name="tone"]');
+  const emojiToggle = document.getElementById("emojiToggle");
 
   // --- HELPER & UTILITY FUNCTIONS ---
+
+  function toggleSettingsView() {
+    const isSettingsActive = document.body.classList.toggle("settings-active");
+    if (gearIcon && backIcon) {
+      if (isSettingsActive) {
+        gearIcon.classList.add("hidden");
+        backIcon.classList.remove("hidden");
+      } else {
+        gearIcon.classList.remove("hidden");
+        backIcon.classList.add("hidden");
+      }
+    }
+  }
 
   function normalizeTier(tier) {
     if (!tier) return "free";
@@ -60,6 +79,7 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   function showMessage(msg, type = "info") {
+    if (!messagesDiv) return;
     if (!msg) {
       messagesDiv.classList.add("hidden");
       return;
@@ -73,6 +93,7 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   function setLoading(button, isLoading, defaultText) {
+    if (!button) return;
     button.disabled = isLoading;
     button.textContent = isLoading ? "Processing…" : defaultText;
   }
@@ -90,12 +111,13 @@ document.addEventListener("DOMContentLoaded", () => {
 
   function render(user, profile) {
     if (user && profile) {
-      userEmailSpan.textContent = user.email;
+      if (userEmailSpan) userEmailSpan.textContent = user.email;
       const status = profile.subscription_status || "free";
       const rawTier = profile.subscription_tier || "free";
       const tier = normalizeTier(rawTier);
       const monthlyUsed = profile.api_calls_this_month || 0;
-      planName.textContent = TIER_DISPLAY_NAMES[tier] || "Starter Plan";
+      if (planName)
+        planName.textContent = TIER_DISPLAY_NAMES[tier] || "Starter Plan";
 
       chrome.runtime.sendMessage({ type: "GET_USER_DAY_COUNT" }, (resp) => {
         const dailyUsed =
@@ -104,21 +126,23 @@ document.addEventListener("DOMContentLoaded", () => {
       });
 
       if (status === "active" && tier !== "free") {
-        freePlanView.classList.add("hidden");
-        paidPlanView.classList.remove("hidden");
+        if (freePlanView) freePlanView.classList.add("hidden");
+        if (paidPlanView) paidPlanView.classList.remove("hidden");
         const rawEnd = profile.current_period_end;
-        if (rawEnd) {
-          const dt = new Date(rawEnd);
-          renewalDate.innerHTML = `Active until: <strong>${dt.toLocaleDateString(
-            undefined,
-            { year: "numeric", month: "short", day: "numeric" }
-          )}</strong>`;
-        } else {
-          renewalDate.innerHTML = `<strong>Active subscription</strong>`;
+        if (renewalDate) {
+          if (rawEnd) {
+            const dt = new Date(rawEnd);
+            renewalDate.innerHTML = `Active until: <strong>${dt.toLocaleDateString(
+              undefined,
+              { year: "numeric", month: "short", day: "numeric" }
+            )}</strong>`;
+          } else {
+            renewalDate.innerHTML = `<strong>Active subscription</strong>`;
+          }
         }
       } else {
-        paidPlanView.classList.add("hidden");
-        freePlanView.classList.remove("hidden");
+        if (paidPlanView) paidPlanView.classList.add("hidden");
+        if (freePlanView) freePlanView.classList.remove("hidden");
       }
       document.body.dataset.view = "signed-in";
     } else {
@@ -137,13 +161,15 @@ document.addEventListener("DOMContentLoaded", () => {
     const monthlyPercent =
       monthlyTotal > 0 ? Math.min((monthlyUsed / monthlyTotal) * 100, 100) : 0;
 
-    dailyCallsUsed.textContent = `${displayDailyUsed} / ${dailyTotal}`;
-    monthlyCallsUsed.textContent = `${displayMonthlyUsed} / ${monthlyTotal}`;
+    if (dailyCallsUsed)
+      dailyCallsUsed.textContent = `${displayDailyUsed} / ${dailyTotal}`;
+    if (monthlyCallsUsed)
+      monthlyCallsUsed.textContent = `${displayMonthlyUsed} / ${monthlyTotal}`;
     if (dailyProgressBar) dailyProgressBar.style.width = `${dailyPercent}%`;
     if (monthlyProgressBar)
       monthlyProgressBar.style.width = `${monthlyPercent}%`;
     if (tier === "business") {
-      dailyCallsUsed.textContent = `Unlimited`;
+      if (dailyCallsUsed) dailyCallsUsed.textContent = `Unlimited`;
       if (dailyProgressBar) dailyProgressBar.style.width = "100%";
     }
   }
@@ -165,6 +191,7 @@ document.addEventListener("DOMContentLoaded", () => {
   // --- API & EVENT HANDLERS ---
 
   async function handleSendMagicLink() {
+    if (!emailInput) return;
     const email = emailInput.value.trim();
     if (!email.includes("@")) {
       showMessage("Please enter a valid email address.", "error");
@@ -277,7 +304,7 @@ document.addEventListener("DOMContentLoaded", () => {
         const selectedItem = [...languageOptions].find(
           (item) => item.dataset.value === result.selectedLanguage
         );
-        if (selectedItem) {
+        if (selectedItem && dropdownToggle) {
           dropdownToggle.innerHTML = selectedItem.innerHTML;
           languageOptions.forEach((opt) => opt.classList.remove("selected"));
           selectedItem.classList.add("selected");
@@ -285,16 +312,24 @@ document.addEventListener("DOMContentLoaded", () => {
       }
     });
     const toggleDropdown = (show) => {
-      dropdownMenu.classList.toggle("visible", show);
-      dropdownToggle.classList.toggle("active", show);
+      if (dropdownMenu && dropdownToggle) {
+        dropdownMenu.classList.toggle("visible", show);
+        dropdownToggle.classList.toggle("active", show);
+      }
     };
-    dropdownToggle.addEventListener("click", (e) => {
-      e.stopPropagation();
-      toggleDropdown(!dropdownMenu.classList.contains("visible"));
-    });
+    if (dropdownToggle) {
+      dropdownToggle.addEventListener("click", (e) => {
+        e.stopPropagation();
+        if (dropdownMenu) {
+          toggleDropdown(!dropdownMenu.classList.contains("visible"));
+        }
+      });
+    }
     languageOptions.forEach((li) => {
       li.addEventListener("click", () => {
-        dropdownToggle.innerHTML = li.innerHTML;
+        if (dropdownToggle) {
+          dropdownToggle.innerHTML = li.innerHTML;
+        }
         languageOptions.forEach((opt) => opt.classList.remove("selected"));
         li.classList.add("selected");
         toggleDropdown(false);
@@ -302,25 +337,82 @@ document.addEventListener("DOMContentLoaded", () => {
       });
     });
     document.addEventListener("click", (e) => {
-      if (!languageDropdown.contains(e.target)) {
+      if (languageDropdown && !languageDropdown.contains(e.target)) {
         toggleDropdown(false);
       }
     });
   }
 
-  // --- INITIALIZATION ---
-  function init() {
-    sendMagicLinkBtn.addEventListener("click", handleSendMagicLink);
-    signOutBtn.addEventListener("click", handleSignOut);
-    upgradeBtn.addEventListener("click", handleUpgrade);
-    manageBtn.addEventListener("click", handleManageSubscription);
-    viewAllPlansLink?.addEventListener("click", handleViewAllPlans);
-    viewAllPlansLinkPaid?.addEventListener("click", handleViewAllPlans);
-    emailInput.addEventListener("keydown", (e) => {
-      if (e.key === "Enter") handleSendMagicLink();
+  // --- SETTINGS LOGIC ---
+  function setupSettings() {
+    // Load saved settings
+    chrome.storage.local.get(["tone", "useEmojis"], (result) => {
+      // Set Tone
+      const savedTone = result.tone || "standard";
+      const toneInput = document.querySelector(
+        `input[name="tone"][value="${savedTone}"]`
+      );
+      if (toneInput) toneInput.checked = true;
+
+      // Set Emojis
+      if (emojiToggle) {
+        // Default to true if not set
+        emojiToggle.checked = result.useEmojis !== false;
+      }
     });
 
+    // Save Tone on change
+    toneOptions.forEach((radio) => {
+      radio.addEventListener("change", (e) => {
+        if (e.target.checked) {
+          chrome.storage.local.set({ tone: e.target.value });
+        }
+      });
+    });
+
+    // Save Emojis on change
+    if (emojiToggle) {
+      emojiToggle.addEventListener("change", (e) => {
+        chrome.storage.local.set({ useEmojis: e.target.checked });
+      });
+    }
+  }
+
+  // --- INITIALIZATION ---
+  function init() {
+    if (sendMagicLinkBtn) {
+      sendMagicLinkBtn.addEventListener("click", handleSendMagicLink);
+    }
+    if (signOutBtn) {
+      signOutBtn.addEventListener("click", handleSignOut);
+    }
+    if (signOutBtnSettings) {
+      signOutBtnSettings.addEventListener("click", handleSignOut);
+    }
+    if (upgradeBtn) {
+      upgradeBtn.addEventListener("click", handleUpgrade);
+    }
+    if (manageBtn) {
+      manageBtn.addEventListener("click", handleManageSubscription);
+    }
+    if (viewAllPlansLink) {
+      viewAllPlansLink.addEventListener("click", handleViewAllPlans);
+    }
+    if (viewAllPlansLinkPaid) {
+      viewAllPlansLinkPaid.addEventListener("click", handleViewAllPlans);
+    }
+    if (emailInput) {
+      emailInput.addEventListener("keydown", (e) => {
+        if (e.key === "Enter") handleSendMagicLink();
+      });
+    }
+
     setupLanguageDropdown();
+    setupSettings();
+
+    if (settingsToggleBtn) {
+      settingsToggleBtn.addEventListener("click", toggleSettingsView);
+    }
 
     // Listen for state changes from the background script. This is now the
     // primary way the UI stays in sync with auth and profile changes.

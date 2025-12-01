@@ -228,9 +228,15 @@
     updateButtonUI();
 
     try {
-      const { selectedLanguage = "en" } = await chrome.storage.local.get(
-        "selectedLanguage"
-      );
+      const {
+        selectedLanguage = "en",
+        tone = "standard",
+        useEmojis = true,
+      } = await chrome.storage.local.get([
+        "selectedLanguage",
+        "tone",
+        "useEmojis",
+      ]);
       const { access_token } = await sendMessage({ type: "GET_ACCESS_TOKEN" });
 
       if (!access_token) {
@@ -251,6 +257,8 @@
         body: JSON.stringify({
           imageUrls: compressedImages,
           languageCode: selectedLanguage,
+          tone,
+          useEmojis,
         }),
       });
 
