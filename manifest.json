@@ -2,7 +2,7 @@
   "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA4cXW+DOzK/s0O0YAzI8xxdj9XTkp9Qes4xJQJnamFaYhjm1GixwasTX7mnBR1pI6qO7vjVc6l1B+pP+4X/JskNpXPLqQhquk0cJjNpSRtkVueaV0nW0g0aUFee57vcO/ZYxc5R2YQg2UBvKDAqEB2gcwSsi1EFbX1fk3wL3m0z9bhQseBCmFiPEwQL9c/uudmh7TjRSNs5iZeHBVl/ulN51RILt89uy/h9641JxtuIMVgJwjhOdv5ryPn166tMXBuGUjvxtDoeswoUHIHqrddSfDmTSNDZzjcMoI0Xb4YvRByf6ngnKAp5I5uhZAHp0maha6ItInt3Lpf07+9L56VwIDAQAB",
   "manifest_version": 3,
   "name": "AutoLister AI",
-  "version": "1.1.10",
+  "version": "1.1.11",
   "description": "🪄 One-click AI-generated title & description for Vinted listings",
   "icons": {
     "16": "icons/icon16.png",
