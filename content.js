@@ -231,7 +231,7 @@
       const {
         selectedLanguage = "en",
         tone = "standard",
-        useEmojis = true,
+        useEmojis,
       } = await chrome.storage.local.get([
         "selectedLanguage",
         "tone",

@@ -356,8 +356,8 @@ document.addEventListener("DOMContentLoaded", () => {
 
       // Set Emojis
       if (emojiToggle) {
-        // Default to true if not set
-        emojiToggle.checked = result.useEmojis !== false;
+        // Default to false if not set
+        emojiToggle.checked = result.useEmojis === true;
       }
     });
 
