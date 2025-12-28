@@ -280,6 +280,56 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         sendResponse(result);
         break;
 
+      case "PROXY_FETCH":
+        try {
+          const response = await fetch(message.url, message.options);
+
+          if (!response.ok) {
+            sendResponse({
+              ok: false,
+              status: response.status,
+              error: `HTTP ${response.status}`,
+            });
+            return;
+          }
+
+          if (message.isBlob) {
+            const blob = await response.blob();
+
+            if (blob.size === 0) {
+              sendResponse({ ok: false, error: "Empty blob received" });
+              return;
+            }
+
+            const reader = new FileReader();
+            reader.onloadend = () => {
+              sendResponse({
+                ok: true,
+                status: response.status,
+                data: reader.result,
+              });
+            };
+            reader.onerror = () => {
+              sendResponse({ ok: false, error: "Failed to read blob" });
+            };
+            reader.readAsDataURL(blob);
+            return;
+          }
+
+          let data;
+          const contentType = response.headers.get("content-type");
+          if (contentType && contentType.includes("application/json")) {
+            data = await response.json();
+          } else {
+            data = await response.text();
+          }
+          sendResponse({ ok: true, status: response.status, data });
+        } catch (err) {
+          console.error("[Background] Fetch exception:", err);
+          sendResponse({ ok: false, error: err.toString() });
+        }
+        break;
+
       default:
         sendResponse({ error: "Unknown message type" });
         break;

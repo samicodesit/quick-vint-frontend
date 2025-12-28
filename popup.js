@@ -280,7 +280,7 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   function handleViewAllPlans(e) {
-    e.preventDefault();
+    if (e) e.preventDefault();
     chrome.runtime.sendMessage({ type: "GET_USER_PROFILE" }, (resp) => {
       const userData = {
         source: "extension",
@@ -345,8 +345,12 @@ document.addEventListener("DOMContentLoaded", () => {
 
   // --- SETTINGS LOGIC ---
   function setupSettings() {
-    // Load saved settings
-    chrome.storage.local.get(["tone", "useEmojis"], (result) => {
+    // Load saved settings and user profile for tier check
+    chrome.storage.local.get(["tone", "useEmojis", "userProfile"], (result) => {
+      const profile = result.userProfile || {};
+      const tier = normalizeTier(profile.tier);
+      const hasProAccess = tier === "pro" || tier === "business";
+
       // Set Tone
       const savedTone = result.tone || "standard";
       const toneInput = document.querySelector(
@@ -359,12 +363,15 @@ document.addEventListener("DOMContentLoaded", () => {
         // Default to false if not set
         emojiToggle.checked = result.useEmojis === true;
       }
+
+      // Apply tier gating
+      updateSettingsAccess(hasProAccess);
     });
 
     // Save Tone on change
     toneOptions.forEach((radio) => {
       radio.addEventListener("change", (e) => {
-        if (e.target.checked) {
+        if (e.target.checked && !e.target.disabled) {
           chrome.storage.local.set({ tone: e.target.value });
         }
       });
@@ -373,8 +380,47 @@ document.addEventListener("DOMContentLoaded", () => {
     // Save Emojis on change
     if (emojiToggle) {
       emojiToggle.addEventListener("change", (e) => {
-        chrome.storage.local.set({ useEmojis: e.target.checked });
+        if (!e.target.disabled) {
+          chrome.storage.local.set({ useEmojis: e.target.checked });
+        }
       });
+    }
+  }
+
+  function updateSettingsAccess(hasProAccess) {
+    const toneContainer = document.querySelector(".tone-grid");
+    const emojiContainer = document.querySelector(".toggle-container");
+    const infoNote = document.querySelector(".info-note");
+    const upgradeNote = document.querySelector(".upgrade-note");
+
+    if (hasProAccess) {
+      // Full access - enable everything
+      toneOptions.forEach((radio) => {
+        radio.disabled = false;
+        const chip = radio.nextElementSibling;
+        if (chip) chip.classList.remove("locked");
+      });
+      if (emojiToggle) {
+        emojiToggle.disabled = false;
+        if (emojiContainer) emojiContainer.classList.remove("locked");
+      }
+      if (infoNote) infoNote.style.display = "none";
+      if (upgradeNote) upgradeNote.style.display = "none";
+    } else {
+      // Free tier - lock premium features
+      toneOptions.forEach((radio) => {
+        if (radio.value !== "standard") {
+          radio.disabled = true;
+          const chip = radio.nextElementSibling;
+          if (chip) chip.classList.add("locked");
+        }
+      });
+      if (emojiToggle) {
+        emojiToggle.disabled = true;
+        if (emojiContainer) emojiContainer.classList.add("locked");
+      }
+      if (infoNote) infoNote.style.display = "none";
+      if (upgradeNote) upgradeNote.style.display = "flex";
     }
   }
 
@@ -400,6 +446,10 @@ document.addEventListener("DOMContentLoaded", () => {
     }
     if (viewAllPlansLinkPaid) {
       viewAllPlansLinkPaid.addEventListener("click", handleViewAllPlans);
+    }
+    const settingsUpgradeLink = document.getElementById("settingsUpgradeLink");
+    if (settingsUpgradeLink) {
+      settingsUpgradeLink.addEventListener("click", handleViewAllPlans);
     }
     if (emailInput) {
       emailInput.addEventListener("keydown", (e) => {
