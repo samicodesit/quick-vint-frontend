@@ -25,6 +25,83 @@
 
   // --- HELPER FUNCTIONS ---
 
+  function showToast(message, type = "error", action = null) {
+    let toast = document.getElementById("quickvint-toast");
+    if (!toast) {
+      toast = document.createElement("div");
+      toast.id = "quickvint-toast";
+      document.body.appendChild(toast);
+    }
+
+    const icon = type === "success" ? "✅" : type === "info" ? "ℹ️" : "⚠️";
+    let messageHtml = `<span>${message}</span>`;
+
+    if (action && action.text && action.url) {
+      messageHtml += `<a href="${action.url}" target="_blank" style="margin-left: 12px; color: inherit; text-decoration: underline; font-weight: 700; white-space: nowrap;">${action.text} &rarr;</a>`;
+    }
+
+    // Updated HTML structure with close button
+    toast.innerHTML = `
+      <span class="toast-icon">${icon}</span>
+      <div class="toast-content">${messageHtml}</div>
+      <button class="toast-close" aria-label="Close">×</button>
+    `;
+
+    toast.className = type;
+    toast.style.visibility = "visible"; // Ensure it's visible for the transition
+
+    // Add close handler
+    const closeBtn = toast.querySelector(".toast-close");
+    if (closeBtn) {
+      closeBtn.onclick = () => {
+        toast.classList.remove("visible");
+        if (window.quickvintToastTimeout)
+          clearTimeout(window.quickvintToastTimeout);
+      };
+    }
+
+    // Force reflow
+    toast.offsetHeight;
+
+    toast.classList.add("visible");
+
+    if (window.quickvintToastTimeout)
+      clearTimeout(window.quickvintToastTimeout);
+
+    // Only auto-hide if there is NO action (e.g. limit reached).
+    // If there IS an action, it stays until manually closed.
+    if (!action) {
+      window.quickvintToastTimeout = setTimeout(() => {
+        toast.classList.remove("visible");
+      }, 4000);
+    }
+  }
+
+  async function getPricingUrl() {
+    return new Promise((resolve) => {
+      chrome.storage.local.get(["supabaseSession", "userProfile"], (data) => {
+        const user = data.supabaseSession?.user;
+        const profile = data.userProfile;
+
+        try {
+          const userData = {
+            source: "extension",
+            signed_in: !!user,
+            plan: profile?.subscription_tier || "free",
+            email: user?.email || "",
+            timestamp: Date.now(),
+          };
+          // Simple base64 encode
+          const token = btoa(JSON.stringify(userData));
+          resolve(`https://quick-vint.vercel.app/pricing.html?token=${token}`);
+        } catch (e) {
+          console.error("Error building pricing URL:", e);
+          resolve("https://quick-vint.vercel.app/pricing.html");
+        }
+      });
+    });
+  }
+
   async function sendMessage(message) {
     return new Promise((resolve) => {
       chrome.runtime.sendMessage(message, resolve);
@@ -414,9 +491,84 @@
         margin-top: 24px;
         font-size: 11px;
         color: #9ca3af;
-      }
         text-align: center;
       }
+
+      /* TOAST NOTIFICATION */
+      #quickvint-toast {
+        position: fixed;
+        top: 120px;
+        right: 24px;
+        transform: translateY(-20px);
+        background: #4f46e5; /* Brand Purple */
+        color: #ffffff;
+        padding: 14px 18px; /* Slightly tighter horizontal padding */
+        border-radius: 12px; /* Fixed radius instead of pill */
+        z-index: 2147483647;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        font-size: 14px;
+        font-weight: 500;
+        line-height: 1.4;
+        box-shadow: 0 10px 25px -5px rgba(79, 70, 229, 0.4), 0 8px 10px -6px rgba(79, 70, 229, 0.2);
+        display: flex;
+        align-items: flex-start; /* Align to top in case of multiline */
+        gap: 12px;
+        opacity: 0;
+        visibility: hidden;
+        transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+        pointer-events: auto;
+        min-width: 320px; /* Force minimum width */
+        max-width: 450px; /* Don't get too wide */
+      }
+      
+      #quickvint-toast.error {
+        background: #dc2626; /* Red for errors */
+        box-shadow: 0 10px 25px -5px rgba(220, 38, 38, 0.4), 0 8px 10px -6px rgba(220, 38, 38, 0.2);
+      }
+
+      #quickvint-toast.visible {
+        opacity: 1;
+        visibility: visible;
+        transform: translateY(0);
+      }
+
+      #quickvint-toast .toast-icon {
+        flex-shrink: 0; /* Don't squash icon */
+        margin-top: 1px; /* Align slightly with text */
+      }
+
+      #quickvint-toast .toast-content {
+        flex: 1;
+        /* Allow wrapping normally */
+      }
+
+      #quickvint-toast .toast-close {
+        background: transparent;
+        border: none;
+        color: rgba(255,255,255,0.7);
+        cursor: pointer;
+        font-size: 20px;
+        line-height: .8;
+        padding: 4px;
+        margin: -2px -4px 0 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        transition: all 0.2s;
+        flex-shrink: 0;
+        border-radius: 4px;
+        width: 24px;
+        height: 24px;
+      }
+      
+      #quickvint-toast .toast-close:hover {
+        background: rgba(255,255,255,0.15);
+        color: #ffffff;
+      }
+
+      /* Icons are emojis, but if we use text/svg later, ensure they pop */
+      #quickvint-toast.error .toast-icon { text-shadow: 0 0 10px rgba(220, 38, 38, 0.5); }
+      #quickvint-toast.success .toast-icon { text-shadow: 0 0 10px rgba(5, 150, 105, 0.5); }
     `;
     document.head.appendChild(style);
   }
@@ -517,9 +669,8 @@
     const uploadUrl = `${PHONE_UPLOAD_PAGE}?s=${sessionId}`;
 
     // Get saved language preference
-    const { selectedLanguage = "en" } = await chrome.storage.local.get(
-      "selectedLanguage"
-    );
+    const { selectedLanguage = "en" } =
+      await chrome.storage.local.get("selectedLanguage");
 
     const languageOptions = [
       { code: "en", name: "English" },
@@ -547,7 +698,7 @@
         (lang) =>
           `<option value="${lang.code}" ${
             lang.code === selectedLanguage ? "selected" : ""
-          }>${lang.name}</option>`
+          }>${lang.name}</option>`,
       )
       .join("");
 
@@ -561,7 +712,7 @@
         <p class="subtitle">Scan with your camera app</p>
         <div class="qr-container">
           <img id="qr-code" src="https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(
-            uploadUrl
+            uploadUrl,
           )}" alt="QR Code" />
         </div>
         <p class="instruction">Photos will appear in this listing automatically</p>
@@ -645,7 +796,7 @@
 
   async function onPhoneUploadClick() {
     if (!isAuthenticated) {
-      alert("Please sign in via the extension popup first.");
+      showToast("Please sign in via the extension popup first.", "error");
       return;
     }
 
@@ -714,11 +865,14 @@
     }, 3000);
 
     // Auto-close after 5 minutes of inactivity (silent, no alert)
-    setTimeout(() => {
-      if (pollInterval) {
-        closeModal();
-      }
-    }, 5 * 60 * 1000);
+    setTimeout(
+      () => {
+        if (pollInterval) {
+          closeModal();
+        }
+      },
+      5 * 60 * 1000,
+    );
   }
 
   async function downloadAndInjectImage(url, filename) {
@@ -732,7 +886,7 @@
 
       if (!response || !response.ok) {
         throw new Error(
-          response ? response.error : "Failed to download image via proxy"
+          response ? response.error : "Failed to download image via proxy",
         );
       }
 
@@ -767,7 +921,7 @@
 
   async function onGenerateClick() {
     if (!isAuthenticated) {
-      alert("Please sign in via the extension popup first.");
+      showToast("Please sign in via the extension popup first.", "error");
       return;
     }
 
@@ -776,7 +930,7 @@
       .filter(Boolean);
 
     if (!imageUrls.length) {
-      alert("Upload at least one image.");
+      showToast("Please upload at least one image.", "error");
       return;
     }
 
@@ -797,7 +951,7 @@
 
       if (!access_token) {
         throw new Error(
-          "Your session has expired. Please sign in again via the extension."
+          "Your session has expired. Please sign in again via the extension.",
         );
       }
 
@@ -820,15 +974,18 @@
 
       if (response.status === 401) {
         isAuthenticated = false;
-        alert("Session expired. Please sign in again.");
+        showToast("Session expired. Please sign in again.", "error");
         isBusy = false;
         updateButtonUI();
         return;
       }
       if (response.status === 429) {
         const errData = await response.json();
-        alert(
-          errData.error || "You have exceeded your daily/monthly usage limit."
+        const pricingUrl = await getPricingUrl();
+        showToast(
+          errData.error || "You have exceeded your daily/monthly usage limit.",
+          "error",
+          { text: "Upgrade Plan", url: pricingUrl },
         );
         isBusy = false;
         updateButtonUI();
@@ -855,7 +1012,7 @@
       setButtonSuccessState();
     } catch (err) {
       console.error("AutoLister AI Error:", err);
-      alert(`Error: ${err.message}`);
+      showToast(err.message || "An unexpected error occurred.", "error");
       isBusy = false;
       updateButtonUI();
     }

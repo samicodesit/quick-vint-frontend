@@ -134,7 +134,7 @@ document.addEventListener("DOMContentLoaded", () => {
             const dt = new Date(rawEnd);
             renewalDate.innerHTML = `Active until: <strong>${dt.toLocaleDateString(
               undefined,
-              { year: "numeric", month: "short", day: "numeric" }
+              { year: "numeric", month: "short", day: "numeric" },
             )}</strong>`;
           } else {
             renewalDate.innerHTML = `<strong>Active subscription</strong>`;
@@ -200,15 +200,40 @@ document.addEventListener("DOMContentLoaded", () => {
     setLoading(sendMagicLinkBtn, true, "Send Magic Link");
     showMessage(null);
     try {
-      await fetch(`${API_BASE}/api/auth/magic-link`, {
+      const res = await fetch(`${API_BASE}/api/auth/magic-link`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email }),
       });
-      showMessage("Check your email for the sign-in link.", "success");
+
+      let data;
+      try {
+        data = await res.json();
+      } catch (parseError) {
+        // Fallback if the server returns non-JSON (e.g. 504 Gateway Timeout HTML)
+        throw new Error(
+          res.ok
+            ? "Invalid server response."
+            : `Server error (${res.status}). Please try again later.`,
+        );
+      }
+
+      if (!res.ok) {
+        // Backend returns { error: "..." } for all known errors (disposable email, invalid email, etc.)
+        throw new Error(data.error || "Failed to send magic link.");
+      }
+
+      // Backend returns { message: "..." } for success
+      showMessage(
+        data.message || "Check your email for the sign-in link.",
+        "success",
+      );
       emailInput.value = "";
-    } catch {
-      showMessage("Connection issue. Please check your internet.", "error");
+    } catch (err) {
+      showMessage(
+        err.message || "Connection issue. Please check your internet.",
+        "error",
+      );
     } finally {
       setLoading(sendMagicLinkBtn, false, "Send Magic Link");
     }
@@ -302,7 +327,7 @@ document.addEventListener("DOMContentLoaded", () => {
     chrome.storage.local.get(["selectedLanguage"], (result) => {
       if (result.selectedLanguage) {
         const selectedItem = [...languageOptions].find(
-          (item) => item.dataset.value === result.selectedLanguage
+          (item) => item.dataset.value === result.selectedLanguage,
         );
         if (selectedItem && dropdownToggle) {
           dropdownToggle.innerHTML = selectedItem.innerHTML;
@@ -354,7 +379,7 @@ document.addEventListener("DOMContentLoaded", () => {
       // Set Tone
       const savedTone = result.tone || "standard";
       const toneInput = document.querySelector(
-        `input[name="tone"][value="${savedTone}"]`
+        `input[name="tone"][value="${savedTone}"]`,
       );
       if (toneInput) toneInput.checked = true;
 
