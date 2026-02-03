@@ -6,7 +6,9 @@
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
     "build": "terser content.js -o content.min.js --compress --mangle",
-    "prepare": "npm run build"
+    "prepare": "npm run build",
+    "package": "node build.js",
+    "package:bash": "./build.sh"
   },
   "repository": {
     "type": "git",
