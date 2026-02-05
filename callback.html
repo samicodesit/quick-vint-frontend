@@ -132,6 +132,41 @@
             color: #065f46;
         }
 
+        /* Subscriber Theme */
+        .welcome-message.subscriber-active,
+        .upgrade-section.subscriber-active {
+            background: #e0f2fe !important;
+            border-color: #0284c7 !important;
+            color: #0c4a6e !important;
+        }
+
+        .onboarding-section {
+            margin: 25px 0;
+        }
+
+        .onboarding-title {
+            margin-top: 0;
+            font-size: 1.25rem;
+        }
+
+        .onboarding-text {
+            margin-bottom: 15px;
+            font-size: 16px;
+        }
+
+        .onboarding-image-container {
+            border-radius: 12px;
+            overflow: hidden;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+            border: 1px solid #e5e7eb;
+        }
+
+        .onboarding-image {
+            width: 100%;
+            height: auto;
+            display: block;
+        }
+
         .inline-btn {
             display: inline-block;
             background: #4f46e5;
@@ -198,6 +233,39 @@
             justify-content: center;
             flex-wrap: wrap;
             margin-top: 2rem;
+        }
+
+        .cta-buttons.mt-1-5 {
+            margin-top: 1.5rem;
+        }
+
+        .checkout-loading-container {
+            padding: 20px;
+        }
+
+        .checkout-spinner {
+            width: 24px;
+            height: 24px;
+            border: 3px solid #f3f3f3;
+            border-top: 3px solid #4f46e5;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 10px;
+        }
+
+        .checkout-loading-text {
+            color: #4f46e5;
+            font-weight: 600;
+        }
+
+        .lang-active {
+            font-weight: 700;
+            opacity: 1;
+        }
+
+        .lang-inactive {
+            opacity: 0.5;
+            font-weight: 400;
         }
 
         .btn {
@@ -488,7 +556,7 @@
         </div>
 
         <footer>
-            &copy; 2025 AutoLister AI · All rights reserved
+            &copy; 2026 AutoLister AI · All rights reserved
             <br />
             <a href="https://quick-vint.vercel.app/privacy.html" id="privacy-link">Privacy Policy</a> ·
             <a href="https://quick-vint.vercel.app/terms.html" id="terms-link">Terms of Service</a>
@@ -518,6 +586,7 @@
     </div>
 
     <script src="lib/supabase.js"></script>
+    <script src="lib/localization.js"></script>
     <script src="callback.js"></script>
 </body>
 

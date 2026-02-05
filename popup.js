@@ -451,6 +451,40 @@ document.addEventListener("DOMContentLoaded", () => {
 
   // --- INITIALIZATION ---
   function init() {
+    document
+      .getElementById("googleSignIn")
+      ?.addEventListener("click", async () => {
+        const { data, error } = await supabaseClient.auth.signInWithOAuth({
+          provider: "google",
+          options: {
+            redirectTo: `chrome-extension://${chrome.runtime.id}/callback.html`,
+            queryParams: { prompt: "select_account" },
+          },
+        });
+
+        if (error || !data?.url) {
+          console.error(
+            error || new Error("Missing OAuth redirect URL from provider"),
+          );
+          alert("Google sign-in failed. Please try again in a moment.");
+          return;
+        }
+
+        const popup = window.open(data.url, "_blank");
+        if (!popup || popup.closed || typeof popup.closed === "undefined") {
+          console.warn("OAuth popup was likely blocked by the browser.");
+          alert(
+            "We tried to open a Google sign-in window, but it may have been blocked by your browser. Please allow pop-ups for this extension and try again.",
+          );
+          return;
+        }
+        try {
+          popup.focus();
+        } catch (e) {
+          console.debug("Unable to focus OAuth popup window.", e);
+        }
+      });
+
     if (sendMagicLinkBtn) {
       sendMagicLinkBtn.addEventListener("click", handleSendMagicLink);
     }

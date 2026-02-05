@@ -162,7 +162,7 @@ async function updateAndStoreUserProfile() {
     const { data: profile, error: profileError } = await authClient
       .from("profiles")
       .select(
-        "subscription_status, api_calls_this_month, subscription_tier, current_period_end"
+        "subscription_status, api_calls_this_month, subscription_tier, current_period_end",
       )
       .eq("id", user.id)
       .single();
@@ -244,7 +244,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     switch (message.type) {
       case "GET_USER_PROFILE":
         const { supabaseSession, userProfile } = await chrome.storage.local.get(
-          ["supabaseSession", "userProfile"]
+          ["supabaseSession", "userProfile"],
         );
         sendResponse({
           user: supabaseSession?.user || null,
@@ -260,7 +260,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
                 access_token: session.access_token,
                 expires_at: session.expires_at,
               }
-            : null
+            : null,
         );
         break;
 
@@ -278,6 +278,11 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       case "SIGN_OUT":
         const result = await handleSignOut();
         sendResponse(result);
+        break;
+
+      case "OPEN_POPUP":
+        chrome.action.openPopup();
+        sendResponse({ ok: true });
         break;
 
       case "PROXY_FETCH":
