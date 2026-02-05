@@ -8,6 +8,22 @@
     console.error(
       "Supabase client not found on window. Check lib/supabase.js load order.",
     );
+
+    // Provide user-facing feedback if Supabase failed to load.
+    const loadingDivFallback = document.getElementById("loadingState");
+    const errorDivFallback = document.getElementById("errorState");
+    const errorMsgFallback = document.getElementById("errorMessage");
+    if (loadingDivFallback) {
+      loadingDivFallback.classList.add("hidden");
+    }
+    if (errorDivFallback) {
+      errorDivFallback.classList.remove("hidden");
+    }
+    if (errorMsgFallback) {
+      errorMsgFallback.textContent =
+        "We’re having trouble connecting to our service. Please check your internet connection and try reloading the page.";
+    }
+
     return;
   }
 
@@ -68,14 +84,14 @@
     const welcomeMsgEl = document.getElementById("welcome-message");
     if (welcomeMsgEl) {
       welcomeMsgEl.innerHTML = `
-        <div style="margin-top: 25px; margin-bottom: 25px;">
-            <h3 style="margin-top: 0; font-size: 1.25rem;">${localization.texts.onboardingTitle}</h3>
-            <p style="margin-bottom: 15px; font-size: 16px;">${localization.texts.welcomeMessage}</p>
-            <div style="border-radius: 12px; overflow: hidden; box-shadow: 0 4px 15px rgba(0,0,0,0.1); border: 1px solid #e5e7eb;">
+        <div class="onboarding-section">
+            <h3 class="onboarding-title">${localization.texts.onboardingTitle}</h3>
+            <p class="onboarding-text">${localization.texts.welcomeMessage}</p>
+            <div class="onboarding-image-container">
                 <img 
                     src="images/onboard.png" 
                     alt="${localization.texts.onboardingImageAlt}" 
-                    style="width: 100%; height: auto; display: block;"
+                    class="onboarding-image"
                 />
             </div>
         </div>
@@ -104,20 +120,18 @@
       langAlternative.textContent = "EN";
 
       // Reset styles first
-      langCurrent.style.opacity = "";
-      langAlternative.style.opacity = "";
-      langCurrent.style.fontWeight = "";
-      langAlternative.style.fontWeight = "";
+      langCurrent.classList.remove("lang-active", "lang-inactive");
+      langAlternative.classList.remove("lang-active", "lang-inactive");
 
       if (currentLang === "DEFAULT") {
         // Currently showing English - EN is active (right side)
-        langCurrent.style.opacity = "0.5";
-        langAlternative.style.fontWeight = "700";
+        langCurrent.classList.add("lang-inactive");
+        langAlternative.classList.add("lang-active");
         langToggle.onclick = () => switchLanguage("auto");
       } else {
         // Currently showing local language - local lang is active (left side)
-        langCurrent.style.fontWeight = "700";
-        langAlternative.style.opacity = "0.5";
+        langCurrent.classList.add("lang-active");
+        langAlternative.classList.add("lang-inactive");
         langToggle.onclick = () => switchLanguage("DEFAULT");
       }
     }
@@ -164,9 +178,9 @@
 
     // Show loading state
     planCard.innerHTML = `
-      <div style="padding: 20px;">
-        <div style="width: 24px; height: 24px; border: 3px solid #f3f3f3; border-top: 3px solid #4f46e5; border-radius: 50%; animation: spin 1s linear infinite; margin: 0 auto 10px;"></div>
-        <div style="color: #4f46e5; font-weight: 600;">Opening checkout...</div>
+      <div class="checkout-loading-container">
+        <div class="checkout-spinner"></div>
+        <div class="checkout-loading-text">Opening checkout...</div>
       </div>
     `;
 
@@ -255,9 +269,7 @@
       };
 
       welcomeMessage.innerHTML = messages[currentLang] || messages.DEFAULT;
-      welcomeMessage.style.background = "#e0f2fe";
-      welcomeMessage.style.borderColor = "#0284c7";
-      welcomeMessage.style.color = "#0c4a6e";
+      welcomeMessage.classList.add("subscriber-active");
     }
 
     // Update the upgrade section to show "Manage Subscription" instead
@@ -288,7 +300,7 @@
       upgradeSection.innerHTML = `
         <h3>${titles[currentLang] || titles.DEFAULT}</h3>
         <p>${descriptions[currentLang] || descriptions.DEFAULT}</p>
-        <div class="cta-buttons" style="margin-top: 1.5rem;">
+        <div class="cta-buttons mt-1-5">
           <button class="btn btn-primary" onclick="window.open('https://billing.stripe.com/p/login', '_blank')">
             ${
               currentLang === "DEFAULT"
@@ -308,9 +320,7 @@
           </button>
         </div>
       `;
-      upgradeSection.style.background = "#f0f9ff";
-      upgradeSection.style.borderColor = "#0284c7";
-      upgradeSection.style.color = "#0c4a6e";
+      upgradeSection.classList.add("subscriber-active");
     }
 
     // Update the View Plans button text

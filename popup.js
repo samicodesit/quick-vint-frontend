@@ -462,7 +462,13 @@ document.addEventListener("DOMContentLoaded", () => {
           },
         });
 
-        if (error || !data?.url) return console.error(error);
+        if (error || !data?.url) {
+          console.error(
+            error || new Error("Missing OAuth redirect URL from provider"),
+          );
+          alert("Google sign-in failed. Please try again in a moment.");
+          return;
+        }
 
         window.open(data.url, "_blank");
       });

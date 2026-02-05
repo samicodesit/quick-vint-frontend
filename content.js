@@ -654,7 +654,6 @@
   function createButton() {
     const btn = document.createElement("button");
     btn.id = BTN_ID;
-    // btn.disabled = true;
     btn.innerHTML = `
         <span class="icon">${WAND_ICON_SVG}</span>
         <span class="label">Generate</span>
@@ -681,7 +680,7 @@
     btn.innerHTML = `
         ${WAND_ICON_SVG}
         <span>Sign in to enable AI Tools</span>
-        <span class="subtext">(Click here)</span>
+        <span>(Click here)</span>
     `;
 
     btn.addEventListener("click", (e) => {
@@ -1131,10 +1130,7 @@
     const container = titleEl.closest("div");
     if (container && container.parentNode) {
       const btnContainer = document.createElement("div");
-      // Use block or flex-col to stack the sign-in button if it's full width,
-      // but the original was flex row.
-      // Since sign-in button is width: 100%, we might want to wrap things or just append.
-      // Let's keep the container relative to position them.
+      // Container for tool buttons and the sign-in component, spaced below the title.
       btnContainer.style.marginTop = "20px";
 
       // Wrapper for tools (Generate + Phone)
