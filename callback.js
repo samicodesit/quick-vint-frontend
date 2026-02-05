@@ -2,10 +2,18 @@
   const SUPABASE_URL = "https://jqloiovdwjaornnfvmyu.supabase.co";
   const SUPABASE_ANON_KEY =
     "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImpxbG9pb3Zkd2phb3JubmZ2bXl1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDgyMDgzMzIsImV4cCI6MjA2Mzc4NDMzMn0.iFtkUorY1UqK8zamnwgjB-yhsXe0bJAA8YFm22bzc3A";
+
   const supabaseFactory = window.supabase || window.supabaseJs;
+  if (!supabaseFactory?.createClient) {
+    console.error(
+      "Supabase client not found on window. Check lib/supabase.js load order.",
+    );
+    return;
+  }
+
   const supabaseClient = supabaseFactory.createClient(
     SUPABASE_URL,
-    SUPABASE_ANON_KEY
+    SUPABASE_ANON_KEY,
   );
 
   const loadingDiv = document.getElementById("loadingState");
@@ -17,252 +25,12 @@
   let currentLocalization = null;
   let userSession = null;
 
-  // Vinted domains and localization
-  const LOCALIZATION = {
-    FR: {
-      domain: "vinted.fr",
-      currency: "€",
-      texts: {
-        welcomeTitle: "Bienvenue sur AutoLister AI !",
-        welcomeSubtitle:
-          "Vous êtes connecté et prêt à créer des annonces incroyables avec l'IA.",
-        welcomeMessage:
-          "🎯 Prêt à vendre ? Le bouton <span class='inline-btn'>🪄 Generate</span> apparaîtra lors de la création d'annonces !",
-        vintedButton: "Créer sur Vinted.fr",
-        viewPlansButton: "Voir tous les plans",
-        closeTabButton: "Fermer l'onglet",
-        featuresTitle: "✨ Ce que vous pouvez faire maintenant",
-        feature1:
-          "Générer des titres et descriptions convaincants instantanément",
-        feature2:
-          "Télécharger des photos et obtenir des annonces alimentées par l'IA",
-        feature3: "Économiser des heures de rédaction manuelle",
-        feature4: "Commencer avec 2 annonces gratuites par jour",
-        upgradeTitle: "💡 Vous voulez plus de puissance ?",
-        upgradeDescription:
-          "Les utilisateurs gratuits obtiennent 2 annonces par jour. Passez à la version supérieure pour obtenir jusqu'à 75 annonces quotidiennes, un support prioritaire et plus de fonctionnalités !",
-        starterFeatures:
-          "15 annonces/jour<br>Parfait pour vendeurs occasionnels",
-        proFeatures: "40 annonces/jour<br>Pour vendeurs actifs",
-        businessFeatures:
-          "Aucune limite quotidienne<br>Pour vendeurs professionnels",
-        privacyLink: "Politique de confidentialité",
-        termsLink: "Conditions d'utilisation",
-      },
-    },
-    DE: {
-      domain: "vinted.de",
-      currency: "€",
-      texts: {
-        welcomeTitle: "Willkommen bei AutoLister AI!",
-        welcomeSubtitle:
-          "Sie sind angemeldet und bereit, fantastische Anzeigen mit KI zu erstellen.",
-        welcomeMessage:
-          "🎯 Bereit zu verkaufen? Der <span class='inline-btn'>🪄 Generate</span> Button erscheint beim Erstellen neuer Anzeigen!",
-        vintedButton: "Auf Vinted.de erstellen",
-        viewPlansButton: "Alle Pläne anzeigen",
-        closeTabButton: "Tab schließen",
-        featuresTitle: "✨ Was Sie jetzt tun können",
-        feature1: "Überzeugende Titel und Beschreibungen sofort generieren",
-        feature2: "Fotos hochladen und KI-gestützte Anzeigen erhalten",
-        feature3: "Stunden manueller Schreibarbeit sparen",
-        feature4: "Mit 2 kostenlosen Anzeigen täglich beginnen",
-        upgradeTitle: "💡 Möchten Sie mehr Power?",
-        upgradeDescription:
-          "Kostenlose Nutzer erhalten 2 Anzeigen pro Tag. Upgraden Sie, um bis zu 75 tägliche Anzeigen, Priority-Support und mehr Features zu erhalten!",
-        starterFeatures: "15 Anzeigen/Tag<br>Perfekt für Gelegenheitsverkäufer",
-        proFeatures: "40 Anzeigen/Tag<br>Für aktive Verkäufer",
-        businessFeatures: "Keine Tageslimits<br>Für professionelle Verkäufer",
-        privacyLink: "Datenschutzerklärung",
-        termsLink: "Nutzungsbedingungen",
-      },
-    },
-    PL: {
-      domain: "vinted.pl",
-      currency: "zł",
-      texts: {
-        welcomeTitle: "Witamy w AutoLister AI!",
-        welcomeSubtitle:
-          "Jesteś zalogowany i gotowy do tworzenia niesamowitych ogłoszeń z pomocą AI.",
-        welcomeMessage:
-          "🎯 Gotowy do sprzedaży? Przycisk <span class='inline-btn'>🪄 Generate</span> pojawi się podczas tworzenia nowych ogłoszeń!",
-        vintedButton: "Twórz na Vinted.pl",
-        viewPlansButton: "Zobacz wszystkie plany",
-        closeTabButton: "Zamknij kartę",
-        featuresTitle: "✨ Co możesz teraz zrobić",
-        feature1: "Natychmiast generuj przekonujące tytuły i opisy",
-        feature2: "Przesyłaj zdjęcia i otrzymuj ogłoszenia wspierane przez AI",
-        feature3: "Oszczędzaj godziny ręcznego pisania",
-        feature4: "Zacznij od 2 darmowych ogłoszeń dziennie",
-        upgradeTitle: "💡 Chcesz więcej mocy?",
-        upgradeDescription:
-          "Darmowi użytkownicy otrzymują 2 ogłoszenia dziennie. Ulepsz, aby uzyskać do 75 ogłoszeń dziennie, priorytetowe wsparcie i więcej funkcji!",
-        starterFeatures:
-          "15 ogłoszeń/dzień<br>Idealne dla okazjonalnych sprzedawców",
-        proFeatures: "40 ogłoszeń/dzień<br>Dla aktywnych sprzedawców",
-        businessFeatures:
-          "Brak limitu dziennego<br>Dla profesjonalnych sprzedawców",
-        privacyLink: "Polityka prywatności",
-        termsLink: "Warunki świadczenia usług",
-      },
-    },
-    ES: {
-      domain: "vinted.es",
-      currency: "€",
-      texts: {
-        welcomeTitle: "¡Bienvenido a AutoLister AI!",
-        welcomeSubtitle:
-          "Has iniciado sesión y estás listo para crear increíbles anuncios con IA.",
-        welcomeMessage:
-          "🎯 ¿Listo para vender? ¡El botón <span class='inline-btn'>🪄 Generate</span> aparecerá al crear nuevos anuncios!",
-        vintedButton: "Crear en Vinted.es",
-        viewPlansButton: "Ver todos los planes",
-        closeTabButton: "Cerrar pestaña",
-        featuresTitle: "✨ Lo que puedes hacer ahora",
-        feature1: "Generar títulos y descripciones convincentes al instante",
-        feature2: "Subir fotos y obtener anuncios potenciados por IA",
-        feature3: "Ahorrar horas de escritura manual",
-        feature4: "Comenzar con 2 anuncios gratuitos diarios",
-        upgradeTitle: "💡 ¿Quieres más potencia?",
-        upgradeDescription:
-          "Los usuarios gratuitos obtienen 2 anuncios por día. ¡Actualiza para obtener hasta 75 anuncios diarios, soporte prioritario y más características!",
-        starterFeatures:
-          "15 anuncios/día<br>Perfecto para vendedores ocasionales",
-        proFeatures: "40 anuncios/día<br>Para vendedores activos",
-        businessFeatures: "Sin límite diario<br>Para vendedores profesionales",
-        privacyLink: "Política de privacidad",
-        termsLink: "Términos de servicio",
-      },
-    },
-    IT: {
-      domain: "vinted.it",
-      currency: "€",
-      texts: {
-        welcomeTitle: "Benvenuto su AutoLister AI!",
-        welcomeSubtitle:
-          "Hai effettuato l'accesso e sei pronto per creare annunci fantastici con l'IA.",
-        welcomeMessage:
-          "🎯 Pronto a vendere? Il pulsante <span class='inline-btn'>🪄 Generate</span> apparirà quando crei nuovi annunci!",
-        vintedButton: "Crea su Vinted.it",
-        viewPlansButton: "Visualizza tutti i piani",
-        closeTabButton: "Chiudi scheda",
-        featuresTitle: "✨ Cosa puoi fare ora",
-        feature1: "Generare titoli e descrizioni convincenti istantaneamente",
-        feature2: "Caricare foto e ottenere annunci potenziati dall'IA",
-        feature3: "Risparmiare ore di scrittura manuale",
-        feature4: "Iniziare con 2 annunci gratuiti al giorno",
-        upgradeTitle: "💡 Vuoi più potenza?",
-        upgradeDescription:
-          "Gli utenti gratuiti ottengono 2 annunci al giorno. Aggiorna per ottenere fino a 75 annunci giornalieri, supporto prioritario e più funzionalità!",
-        starterFeatures:
-          "15 annunci/giorno<br>Perfetto per venditori occasionali",
-        proFeatures: "40 annunci/giorno<br>Per venditori attivi",
-        businessFeatures:
-          "Nessun limite giornaliero<br>Per venditori professionali",
-        privacyLink: "Informativa sulla privacy",
-        termsLink: "Termini di servizio",
-      },
-    },
-    NL: {
-      domain: "vinted.nl",
-      currency: "€",
-      texts: {
-        welcomeTitle: "Welkom bij AutoLister AI!",
-        welcomeSubtitle:
-          "Je bent ingelogd en klaar om geweldige advertenties te maken met AI.",
-        welcomeMessage:
-          "🎯 Klaar om te verkopen? De <span class='inline-btn'>🪄 Generate</span> knop verschijnt bij het maken van advertenties!",
-        vintedButton: "Maak op Vinted.nl",
-        viewPlansButton: "Bekijk alle plannen",
-        closeTabButton: "Tabblad sluiten",
-        featuresTitle: "✨ Wat je nu kunt doen",
-        feature1: "Overtuigende titels en beschrijvingen direct genereren",
-        feature2: "Foto's uploaden en AI-aangedreven advertenties krijgen",
-        feature3: "Uren handmatig schrijven besparen",
-        feature4: "Begin met 2 gratis advertenties per dag",
-        upgradeTitle: "💡 Wil je meer kracht?",
-        upgradeDescription:
-          "Gratis gebruikers krijgen 2 advertenties per dag. Upgrade om tot 75 dagelijkse advertenties, prioriteitsondersteuning en meer functies te krijgen!",
-        starterFeatures:
-          "15 advertenties/dag<br>Perfect voor occasionele verkopers",
-        proFeatures: "40 advertenties/dag<br>Voor actieve verkopers",
-        businessFeatures:
-          "Geen dagelijkse limiet<br>Voor professionele verkopers",
-        privacyLink: "Privacybeleid",
-        termsLink: "Servicevoorwaarden",
-      },
-    },
-    DEFAULT: {
-      domain: "vinted.com",
-      currency: "€",
-      texts: {
-        welcomeTitle: "Welcome to AutoLister AI!",
-        welcomeSubtitle:
-          "You're signed in and ready to create amazing listings with AI.",
-        welcomeMessage:
-          "🎯 Ready to list? The <span class='inline-btn'>🪄 Generate</span> button will appear when you create new listings!",
-        vintedButton: "Start Creating on Vinted.com",
-        viewPlansButton: "View All Plans",
-        closeTabButton: "Close Tab",
-        featuresTitle: "✨ What You Can Do Now",
-        feature1: "Generate compelling titles and descriptions instantly",
-        feature2: "Upload photos and get AI-powered listings",
-        feature3: "Save hours of manual writing",
-        feature4: "Start with 2 free listings daily",
-        upgradeTitle: "💡 Want More Power?",
-        upgradeDescription:
-          "Free users get 2 listings per day. Upgrade to get up to 75 daily listings, priority support, and more features!",
-        starterFeatures: "15 listings/day<br>Perfect for casual sellers",
-        proFeatures: "40 listings/day<br>For active sellers",
-        businessFeatures: "No daily limit<br>For power sellers",
-        privacyLink: "Privacy Policy",
-        termsLink: "Terms of Service",
-      },
-    },
-  };
-
-  function detectCountryAndLocalization() {
-    let countryCode = "DEFAULT";
-
-    // Primary detection via timezone (most reliable)
-    if (typeof Intl !== "undefined") {
-      try {
-        const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
-        const timezoneMap = {
-          "Europe/Paris": "FR",
-          "Europe/Berlin": "DE",
-          "Europe/Madrid": "ES",
-          "Europe/Rome": "IT",
-          "Europe/Amsterdam": "NL",
-          "Europe/Brussels": "NL", // Belgium often uses Dutch for Vinted
-        };
-
-        if (timezoneMap[timezone]) {
-          countryCode = timezoneMap[timezone];
-        }
-      } catch (e) {
-        console.warn("Timezone detection failed:", e);
-      }
-    }
-
-    // Fallback to language detection
-    if (countryCode === "DEFAULT" && navigator.language) {
-      const lang = navigator.language.toLowerCase();
-      if (lang.startsWith("fr")) countryCode = "FR";
-      else if (lang.startsWith("de")) countryCode = "DE";
-      else if (lang.startsWith("es")) countryCode = "ES";
-      else if (lang.startsWith("it")) countryCode = "IT";
-      else if (lang.startsWith("nl")) countryCode = "NL";
-    }
-
-    return LOCALIZATION[countryCode] || LOCALIZATION.DEFAULT;
-  }
+  // Localization methods are now loaded from lib/localization.js
 
   function localizeContent(localization) {
     const elements = {
       "success-title": "welcomeTitle",
       "success-subtitle": "welcomeSubtitle",
-      "welcome-message": "welcomeMessage",
       "vinted-redirect": "vintedButton",
       "view-plans": "viewPlansButton",
       "close-tab": "closeTabButton",
@@ -283,9 +51,7 @@
     Object.entries(elements).forEach(([elementId, textKey]) => {
       const element = document.getElementById(elementId);
       if (element && localization.texts[textKey]) {
-        if (elementId === "welcome-message") {
-          element.innerHTML = `<strong>${localization.texts[textKey]}</strong>`;
-        } else if (
+        if (
           elementId.includes("features") ||
           elementId === "starter-features" ||
           elementId === "pro-features" ||
@@ -298,6 +64,24 @@
       }
     });
 
+    // Update welcome message to include the image and new text structure
+    const welcomeMsgEl = document.getElementById("welcome-message");
+    if (welcomeMsgEl) {
+      welcomeMsgEl.innerHTML = `
+        <div style="margin-top: 25px; margin-bottom: 25px;">
+            <h3 style="margin-top: 0; font-size: 1.25rem;">${localization.texts.onboardingTitle}</h3>
+            <p style="margin-bottom: 15px; font-size: 16px;">${localization.texts.welcomeMessage}</p>
+            <div style="border-radius: 12px; overflow: hidden; box-shadow: 0 4px 15px rgba(0,0,0,0.1); border: 1px solid #e5e7eb;">
+                <img 
+                    src="images/onboard.png" 
+                    alt="${localization.texts.onboardingImageAlt}" 
+                    style="width: 100%; height: auto; display: block;"
+                />
+            </div>
+        </div>
+      `;
+    }
+
     // Update language toggle button
     updateLanguageToggle();
   }
@@ -309,10 +93,10 @@
 
     if (langToggle && langCurrent && langAlternative) {
       const currentLang = Object.keys(LOCALIZATION).find(
-        (key) => LOCALIZATION[key] === currentLocalization
+        (key) => LOCALIZATION[key] === currentLocalization,
       );
       const detectedLang = Object.keys(LOCALIZATION).find(
-        (key) => LOCALIZATION[key] === detectCountryAndLocalization()
+        (key) => LOCALIZATION[key] === detectCountryAndLocalization(),
       );
 
       // Always show: [DetectedLang] | [EN] - positions never change
@@ -398,7 +182,7 @@
             email: userSession.user.email,
             tier: planTier,
           }),
-        }
+        },
       );
 
       const data = await response.json();
@@ -415,7 +199,7 @@
     } catch (error) {
       console.error("Checkout error:", error);
       alert(
-        "Unable to open checkout. Please try upgrading through the extension or contact support."
+        "Unable to open checkout. Please try upgrading through the extension or contact support.",
       );
       planCard.innerHTML = originalContent;
     }
@@ -436,7 +220,7 @@
           body: JSON.stringify({
             email: userSession.user.email,
           }),
-        }
+        },
       );
 
       if (response.ok) {
@@ -458,9 +242,8 @@
     const welcomeMessage = document.getElementById("welcome-message");
     if (welcomeMessage) {
       const currentLang = Object.keys(LOCALIZATION).find(
-        (key) => LOCALIZATION[key] === currentLocalization
+        (key) => LOCALIZATION[key] === currentLocalization,
       );
-      const isEnglish = currentLang === "DEFAULT";
 
       const messages = {
         DEFAULT: `<strong>🎉 Welcome back!</strong> You're on the <strong>${planName}</strong> plan. Ready to create more amazing listings?`,
@@ -481,7 +264,7 @@
     const upgradeSection = document.querySelector(".upgrade-section");
     if (upgradeSection) {
       const currentLang = Object.keys(LOCALIZATION).find(
-        (key) => LOCALIZATION[key] === currentLocalization
+        (key) => LOCALIZATION[key] === currentLocalization,
       );
 
       const titles = {
@@ -511,16 +294,16 @@
               currentLang === "DEFAULT"
                 ? "Manage Billing"
                 : currentLang === "FR"
-                ? "Gérer la facturation"
-                : currentLang === "DE"
-                ? "Abrechnung verwalten"
-                : currentLang === "ES"
-                ? "Gestionar facturación"
-                : currentLang === "IT"
-                ? "Gestisci fatturazione"
-                : currentLang === "NL"
-                ? "Beheer facturering"
-                : "Manage Billing"
+                  ? "Gérer la facturation"
+                  : currentLang === "DE"
+                    ? "Abrechnung verwalten"
+                    : currentLang === "ES"
+                      ? "Gestionar facturación"
+                      : currentLang === "IT"
+                        ? "Gestisci fatturazione"
+                        : currentLang === "NL"
+                          ? "Beheer facturering"
+                          : "Manage Billing"
             }
           </button>
         </div>
@@ -534,7 +317,7 @@
     const viewPlansBtn = document.getElementById("view-plans");
     if (viewPlansBtn) {
       const currentLang = Object.keys(LOCALIZATION).find(
-        (key) => LOCALIZATION[key] === currentLocalization
+        (key) => LOCALIZATION[key] === currentLocalization,
       );
       const buttonTexts = {
         DEFAULT: "Compare Plans",
@@ -551,23 +334,22 @@
       viewPlansBtn.onclick = () => {
         const userData = {
           source: "extension",
-          signed_in: !!userSession?.user?.email, // Boolean like popup.js
+          signed_in: !!userSession?.user?.email,
           plan: planTier.toLowerCase(),
           email: userSession?.user?.email || "",
-          timestamp: Date.now(), // For freshness validation
+          timestamp: Date.now(),
         };
 
         try {
           const token = btoa(JSON.stringify(userData));
           window.open(
             `https://quick-vint.vercel.app/pricing.html?token=${encodeURIComponent(
-              token
+              token,
             )}`,
-            "_blank"
+            "_blank",
           );
         } catch (error) {
           console.error("Failed to create token:", error);
-          // Fallback for existing subscribers
           const params = new URLSearchParams({
             source: "extension",
             signed_in: "true",
@@ -577,7 +359,7 @@
           });
           window.open(
             `https://quick-vint.vercel.app/pricing.html?${params.toString()}`,
-            "_blank"
+            "_blank",
           );
         }
       };
@@ -586,7 +368,7 @@
 
   function show(state, msg = "") {
     [loadingDiv, successDiv, errorDiv].forEach(
-      (el) => el && el.classList.add("hidden")
+      (el) => el && el.classList.add("hidden"),
     );
 
     if (state === "loading") {
@@ -623,26 +405,24 @@
     const plansBtn = document.getElementById("view-plans");
     if (plansBtn) {
       plansBtn.onclick = () => {
-        // Create encoded token exactly like popup.js
         const userData = {
           source: "extension",
-          signed_in: !!userSession?.user?.email, // Boolean like popup.js
-          plan: "free", // We know they're free since they're seeing upgrade options
+          signed_in: !!userSession?.user?.email,
+          plan: "free",
           email: userSession?.user?.email || "",
-          timestamp: Date.now(), // For freshness validation
+          timestamp: Date.now(),
         };
 
         try {
           const token = btoa(JSON.stringify(userData));
           window.open(
             `https://quick-vint.vercel.app/pricing.html?token=${encodeURIComponent(
-              token
+              token,
             )}`,
-            "_blank"
+            "_blank",
           );
         } catch (error) {
           console.error("Failed to create token:", error);
-          // Fallback to legacy params if token creation fails
           const params = new URLSearchParams({
             source: "extension",
             signed_in: "true",
@@ -652,7 +432,7 @@
           });
           window.open(
             `https://quick-vint.vercel.app/pricing.html?${params.toString()}`,
-            "_blank"
+            "_blank",
           );
         }
       };
@@ -663,20 +443,45 @@
     const proCard = document.getElementById("pro-card");
     const businessCard = document.getElementById("business-card");
 
-    if (starterCard) {
-      starterCard.onclick = () => handlePlanSelection("starter");
-    }
-
-    if (proCard) {
-      proCard.onclick = () => handlePlanSelection("pro");
-    }
-
-    if (businessCard) {
+    if (starterCard) starterCard.onclick = () => handlePlanSelection("starter");
+    if (proCard) proCard.onclick = () => handlePlanSelection("pro");
+    if (businessCard)
       businessCard.onclick = () => handlePlanSelection("business");
-    }
 
-    // Check if user already has a subscription and customize UI
-    checkAndCustomizeForExistingSubscriber();
+    // Initialize close tab button
+    const closeTabBtn = document.getElementById("close-tab");
+    if (closeTabBtn) {
+      closeTabBtn.onclick = () => window.close();
+    }
+  }
+
+  // ---- IMPORTANT: supports BOTH magic-link + Google OAuth return ----
+  async function bootstrapAuthReturn() {
+    try {
+      const url = window.location.href;
+      const searchParams = new URLSearchParams(window.location.search);
+      const hasOAuthCode = !!searchParams.get("code");
+
+      // Google OAuth returns ?code=... and MUST be exchanged for a session
+      if (hasOAuthCode) {
+        const { error } = await supabaseClient.auth.exchangeCodeForSession(url);
+        if (error) {
+          console.error("exchangeCodeForSession error:", error);
+          show("error", error.message);
+          return;
+        }
+      }
+
+      // For magic links / already-established sessions, this nudges session init
+      await supabaseClient.auth.getSession();
+      // onAuthStateChange will handle the UI + storage
+    } catch (e) {
+      console.error("bootstrapAuthReturn failed:", e);
+      show(
+        "error",
+        "Authentication failed. Please try again from the extension.",
+      );
+    }
   }
 
   show("loading");
@@ -693,29 +498,23 @@
       userSession = null;
       show(
         "error",
-        "You have been signed out. Please try signing in again from the extension."
+        "You have been signed out. Please try signing in again from the extension.",
       );
     } else {
-      userSession = null;
-      show(
-        "error",
-        "Authentication failed or expired. Please try signing in again from the extension."
-      );
+      // Don't instantly fail here; some flows briefly emit non-session events.
+      // We'll fail only if bootstrap can't produce a session.
     }
   });
+
+  // Kick off auth handling for BOTH flows
+  bootstrapAuthReturn();
 
   // Add animation styles
   const style = document.createElement("style");
   style.textContent = `
     @keyframes slideInNotice {
-      from {
-        transform: translateX(100%) scale(0.8);
-        opacity: 0;
-      }
-      to {
-        transform: translateX(0) scale(1);
-        opacity: 1;
-      }
+      from { transform: translateX(100%) scale(0.8); opacity: 0; }
+      to { transform: translateX(0) scale(1); opacity: 1; }
     }
   `;
   document.head.appendChild(style);

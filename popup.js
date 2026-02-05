@@ -451,6 +451,22 @@ document.addEventListener("DOMContentLoaded", () => {
 
   // --- INITIALIZATION ---
   function init() {
+    document
+      .getElementById("googleSignIn")
+      ?.addEventListener("click", async () => {
+        const { data, error } = await supabaseClient.auth.signInWithOAuth({
+          provider: "google",
+          options: {
+            redirectTo: `chrome-extension://${chrome.runtime.id}/callback.html`,
+            queryParams: { prompt: "select_account" },
+          },
+        });
+
+        if (error || !data?.url) return console.error(error);
+
+        window.open(data.url, "_blank");
+      });
+
     if (sendMagicLinkBtn) {
       sendMagicLinkBtn.addEventListener("click", handleSendMagicLink);
     }

@@ -2,6 +2,7 @@
   // --- CONSTANTS & CONFIGURATION ---
   const BTN_ID = "quickvint-gen-btn";
   const PHONE_BTN_ID = "quickvint-phone-btn";
+  const SIGN_IN_BTN_ID = "quickvint-signin-btn";
   const MODAL_ID = "quickvint-phone-modal";
   const API_BASE = "https://quick-vint.vercel.app";
   const PHONE_API_BASE = "https://quick-vint.vercel.app";
@@ -18,6 +19,7 @@
   // --- STATE ---
   let generateBtn = null;
   let phoneBtn = null;
+  let signInBtn = null;
   let isBusy = false;
   let isAuthenticated = false;
   let pollInterval = null;
@@ -200,7 +202,7 @@
     const style = document.createElement("style");
     style.textContent = `
       #${BTN_ID}, #${PHONE_BTN_ID} {
-        display: flex;
+        display: none;
         align-items: center;
         justify-content: center;
         padding: 8px 16px;
@@ -216,6 +218,82 @@
         box-shadow: rgba(0, 0, 0, 0.1) 0px 2px 4px;
         text-align: center;
         white-space: nowrap;
+      }
+
+      #${SIGN_IN_BTN_ID} {
+        display: none;
+        width: 100%;
+        margin-top: 10px;
+        padding: 14px 24px;
+        background: linear-gradient(135deg, rgb(79, 70, 229) 0%, rgb(67, 56, 202) 100%);
+        color: white;
+        border: none;
+        border-radius: 12px;
+        font-size: 15px;
+        font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        font-weight: 600;
+        cursor: pointer;
+        box-shadow: 0 4px 12px rgba(79, 70, 229, 0.25);
+        transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        align-items: center;
+        justify-content: center;
+        gap: 10px;
+        text-decoration: none;
+        position: relative;
+        overflow: hidden;
+      }
+
+      #${SIGN_IN_BTN_ID}::after {
+        content: "";
+        position: absolute;
+        top: 0;
+        left: -150%;
+        width: 100%;
+        height: 100%;
+        background: linear-gradient(
+          to right,
+          rgba(255, 255, 255, 0) 0%,
+          rgba(255, 255, 255, 0.03) 15%,
+          rgba(255, 255, 255, 0.35) 50%, 
+          rgba(255, 255, 255, 0.03) 85%,
+          rgba(255, 255, 255, 0) 100%
+        );
+        transform: skewX(-20deg);
+        animation: slow-glide-fast-restart 3s cubic-bezier(0.45, 0.05, 0.55, 0.95) infinite;
+        pointer-events: none;
+      }
+
+      @keyframes slow-glide-fast-restart {
+        0% {
+          left: -150%;
+        }
+        /* The shimmer takes 80% of the time (3.2s) to cross. 
+          This makes the movement very slow and deliberate. */
+        80% { 
+          left: 150%; 
+        }
+        /* It only pauses for the remaining 20% (0.8s).
+          This makes the "restart" feel much faster. */
+        100% {
+          left: 150%; 
+        }
+      }
+
+      #${SIGN_IN_BTN_ID}:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 8px 24px rgba(79, 70, 229, 0.4);
+        /* Brighter gradient on hover for better feedback */
+        background: linear-gradient(135deg, rgb(90, 82, 245) 0%, rgb(79, 70, 229) 100%);
+      }
+
+      #${SIGN_IN_BTN_ID}:active {
+        transform: translateY(0);
+      }
+
+      #${SIGN_IN_BTN_ID} svg {
+        width: 18px;
+        height: 18px;
+        fill: currentColor;
       }
       
       #${PHONE_BTN_ID} {
@@ -576,7 +654,7 @@
   function createButton() {
     const btn = document.createElement("button");
     btn.id = BTN_ID;
-    btn.disabled = true;
+    // btn.disabled = true;
     btn.innerHTML = `
         <span class="icon">${WAND_ICON_SVG}</span>
         <span class="label">Generate</span>
@@ -597,22 +675,45 @@
     return btn;
   }
 
+  function createSignInComponent() {
+    const btn = document.createElement("button");
+    btn.id = SIGN_IN_BTN_ID;
+    btn.innerHTML = `
+        ${WAND_ICON_SVG}
+        <span>Sign in to enable AI Tools</span>
+        <span class="subtext">(Click here)</span>
+    `;
+
+    btn.addEventListener("click", (e) => {
+      e.preventDefault();
+      chrome.runtime.sendMessage({ type: "OPEN_POPUP" });
+    });
+
+    return btn;
+  }
+
   function updateButtonUI() {
+    // If not authenticated, show premium sign-in button and hide others
+    if (!isAuthenticated) {
+      if (signInBtn) signInBtn.style.display = "flex";
+      if (generateBtn) generateBtn.style.display = "none";
+      if (phoneBtn) phoneBtn.style.display = "none";
+      return;
+    }
+
+    // Authenticated state
+    if (signInBtn) signInBtn.style.display = "none";
+    if (generateBtn) generateBtn.style.display = "flex";
+    if (phoneBtn) phoneBtn.style.display = "flex";
+
     if (!generateBtn) return;
     const label = generateBtn.querySelector(".label");
     const icon = generateBtn.querySelector(".icon");
 
-    // Update Phone Button as well
     if (phoneBtn) {
-      if (isAuthenticated) {
-        phoneBtn.disabled = false;
-        phoneBtn.style.backgroundColor = "#4f46e5";
-        phoneBtn.style.cursor = "pointer";
-      } else {
-        phoneBtn.disabled = true;
-        phoneBtn.style.backgroundColor = "#aaa";
-        phoneBtn.style.cursor = "not-allowed";
-      }
+      phoneBtn.disabled = false;
+      phoneBtn.style.backgroundColor = "#4f46e5";
+      phoneBtn.style.cursor = "pointer";
     }
 
     if (!label || !icon) return;
@@ -623,18 +724,12 @@
       label.textContent = "⏳ Generating…";
       generateBtn.style.cursor = "progress";
       generateBtn.style.backgroundColor = "#6b7280";
-    } else if (isAuthenticated) {
+    } else {
       generateBtn.disabled = false;
       icon.style.display = "inline-block";
       label.textContent = "Generate";
       generateBtn.style.backgroundColor = "#4f46e5";
       generateBtn.style.cursor = "pointer";
-    } else {
-      generateBtn.disabled = true;
-      icon.style.display = "none";
-      label.textContent = "Sign in via Extension";
-      generateBtn.style.backgroundColor = "#aaa";
-      generateBtn.style.cursor = "not-allowed";
     }
   }
 
@@ -921,7 +1016,7 @@
 
   async function onGenerateClick() {
     if (!isAuthenticated) {
-      showToast("Please sign in via the extension popup first.", "error");
+      chrome.runtime.sendMessage({ type: "OPEN_POPUP" });
       return;
     }
 
@@ -1021,7 +1116,14 @@
   // --- INJECTION & OBSERVATION LOGIC ---
 
   function injectButton() {
-    if (document.getElementById(BTN_ID)) return true;
+    const existingBtn = document.getElementById(BTN_ID);
+    if (existingBtn) {
+      generateBtn = existingBtn;
+      phoneBtn = document.getElementById(PHONE_BTN_ID);
+      signInBtn = document.getElementById(SIGN_IN_BTN_ID);
+      updateButtonUI();
+      return true;
+    }
 
     const titleEl = document.querySelector(SELECTORS.title);
     if (!titleEl) return false;
@@ -1029,15 +1131,26 @@
     const container = titleEl.closest("div");
     if (container && container.parentNode) {
       const btnContainer = document.createElement("div");
-      btnContainer.style.display = "flex";
-      btnContainer.style.alignItems = "center";
+      // Use block or flex-col to stack the sign-in button if it's full width,
+      // but the original was flex row.
+      // Since sign-in button is width: 100%, we might want to wrap things or just append.
+      // Let's keep the container relative to position them.
       btnContainer.style.marginTop = "20px";
+
+      // Wrapper for tools (Generate + Phone)
+      const toolsWrapper = document.createElement("div");
+      toolsWrapper.style.display = "flex";
+      toolsWrapper.style.alignItems = "center";
 
       generateBtn = createButton();
       phoneBtn = createPhoneButton();
+      signInBtn = createSignInComponent();
 
-      btnContainer.appendChild(generateBtn);
-      btnContainer.appendChild(phoneBtn);
+      toolsWrapper.appendChild(generateBtn);
+      toolsWrapper.appendChild(phoneBtn);
+
+      btnContainer.appendChild(toolsWrapper);
+      btnContainer.appendChild(signInBtn);
 
       container.parentNode.insertBefore(btnContainer, container.nextSibling);
       updateButtonUI();
