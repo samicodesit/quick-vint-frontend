@@ -27,6 +27,7 @@ INCLUDE_LIST=(
     "preview.html"
     "lib/"
     "icons/"
+    "images/"
     "_locales/"
 )
 

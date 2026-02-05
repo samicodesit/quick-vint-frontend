@@ -470,7 +470,19 @@ document.addEventListener("DOMContentLoaded", () => {
           return;
         }
 
-        window.open(data.url, "_blank");
+        const popup = window.open(data.url, "_blank");
+        if (!popup || popup.closed || typeof popup.closed === "undefined") {
+          console.warn("OAuth popup was likely blocked by the browser.");
+          alert(
+            "We tried to open a Google sign-in window, but it may have been blocked by your browser. Please allow pop-ups for this extension and try again.",
+          );
+          return;
+        }
+        try {
+          popup.focus();
+        } catch (e) {
+          console.debug("Unable to focus OAuth popup window.", e);
+        }
       });
 
     if (sendMagicLinkBtn) {
