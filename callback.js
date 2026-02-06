@@ -353,7 +353,7 @@
         try {
           const token = btoa(JSON.stringify(userData));
           window.open(
-            `https://quick-vint.vercel.app/pricing.html?token=${encodeURIComponent(
+            `https://quick-vint.vercel.app/pricing?token=${encodeURIComponent(
               token,
             )}`,
             "_blank",
@@ -368,7 +368,7 @@
             lang: userData.lang,
           });
           window.open(
-            `https://quick-vint.vercel.app/pricing.html?${params.toString()}`,
+            `https://quick-vint.vercel.app/pricing?${params.toString()}`,
             "_blank",
           );
         }
@@ -426,7 +426,7 @@
         try {
           const token = btoa(JSON.stringify(userData));
           window.open(
-            `https://quick-vint.vercel.app/pricing.html?token=${encodeURIComponent(
+            `https://quick-vint.vercel.app/pricing?token=${encodeURIComponent(
               token,
             )}`,
             "_blank",
@@ -441,7 +441,7 @@
             lang: userData.lang,
           });
           window.open(
-            `https://quick-vint.vercel.app/pricing.html?${params.toString()}`,
+            `https://quick-vint.vercel.app/pricing?${params.toString()}`,
             "_blank",
           );
         }

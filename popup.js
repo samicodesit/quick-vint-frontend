@@ -316,7 +316,7 @@ document.addEventListener("DOMContentLoaded", () => {
       };
       const token = encodeUserData(userData);
       if (token) {
-        const url = `https://quick-vint.vercel.app/pricing.html?token=${token}`;
+        const url = `https://quick-vint.vercel.app/pricing?token=${token}`;
         window.open(url, "_blank");
       }
     });
