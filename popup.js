@@ -115,13 +115,14 @@ document.addEventListener("DOMContentLoaded", () => {
       const status = profile.subscription_status || "free";
       const rawTier = profile.subscription_tier || "free";
       const tier = normalizeTier(rawTier);
-      const monthlyUsed = profile.api_calls_this_month || 0;
-      if (planName)
-        planName.textContent = TIER_DISPLAY_NAMES[tier] || "Starter Plan";
+      if (planName) planName.textContent = TIER_DISPLAY_NAMES[tier] || "?";
 
-      chrome.runtime.sendMessage({ type: "GET_USER_DAY_COUNT" }, (resp) => {
+      chrome.runtime.sendMessage({ type: "GET_USER_USAGE_COUNT" }, (resp) => {
         const dailyUsed =
           resp && typeof resp.daily === "number" ? resp.daily : 0;
+        const monthlyUsed =
+          resp && typeof resp.monthly === "number" ? resp.monthly : 0;
+
         updateUsageUI(dailyUsed, monthlyUsed, tier);
       });
 
@@ -373,7 +374,7 @@ document.addEventListener("DOMContentLoaded", () => {
     // Load saved settings and user profile for tier check
     chrome.storage.local.get(["tone", "useEmojis", "userProfile"], (result) => {
       const profile = result.userProfile || {};
-      const tier = normalizeTier(profile.tier);
+      const tier = normalizeTier(profile.subscription_tier);
       const hasProAccess = tier === "pro" || tier === "business";
 
       // Set Tone
