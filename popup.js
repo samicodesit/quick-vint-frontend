@@ -5,7 +5,7 @@ document.addEventListener("DOMContentLoaded", () => {
   const SUPABASE_ANON_KEY =
     "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImpxbG9pb3Zkd2phb3JubmZ2bXl1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDgyMDgzMzIsImV4cCI6MjA2Mzc4NDMzMn0.iFtkUorY1UqK8zamnwgjB-yhsXe0bJAA8YFm22bzc3A";
   const TIER_LIMITS = {
-    free: { daily: 2, monthly: 10 },
+    free: { daily: 2, monthly: 8 },
     starter: { daily: 15, monthly: 300 },
     pro: { daily: 40, monthly: 800 },
     business: { daily: 75, monthly: 1500 },
@@ -179,14 +179,18 @@ document.addEventListener("DOMContentLoaded", () => {
   // --- DATA & STATE MANAGEMENT ---
 
   /**
-   * Reads user state from chrome.storage.local and triggers a render.
-   * This is the primary way the popup gets its initial state.
+   * Refreshes user profile from database then reads from storage and triggers a render.
+   * This ensures we always have fresh data, matching the instant update behavior of usage counters.
    */
   function updateFromStorage() {
-    chrome.storage.local.get(["supabaseSession", "userProfile"], (data) => {
-      const user = data.supabaseSession?.user || null;
-      const profile = data.userProfile || null;
-      render(user, profile);
+    // First, trigger background to refresh profile from database
+    chrome.runtime.sendMessage({ type: "AUTH_UPDATED" }, () => {
+      // Then read the freshly updated storage and render
+      chrome.storage.local.get(["supabaseSession", "userProfile"], (data) => {
+        const user = data.supabaseSession?.user || null;
+        const profile = data.userProfile || null;
+        render(user, profile);
+      });
     });
   }
 
@@ -455,6 +459,15 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   }
 
+  function refreshSettingsAccess() {
+    chrome.storage.local.get(["userProfile"], (data) => {
+      const profile = data.userProfile || {};
+      const tier = normalizeTier(profile.subscription_tier);
+      const hasProAccess = tier === "pro" || tier === "business";
+      updateSettingsAccess(hasProAccess);
+    });
+  }
+
   function updateSettingsAccess(hasProAccess) {
     const toneContainer = document.querySelector(".tone-grid");
     const emojiContainer = document.querySelector(".toggle-container");
@@ -571,6 +584,7 @@ document.addEventListener("DOMContentLoaded", () => {
     chrome.storage.onChanged.addListener((changes) => {
       if (changes.supabaseSession || changes.userProfile) {
         updateFromStorage();
+        refreshSettingsAccess(); // Update settings tier access when profile changes
       }
     });
 
