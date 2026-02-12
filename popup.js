@@ -49,6 +49,7 @@ document.addEventListener("DOMContentLoaded", () => {
   const backIcon = document.querySelector(".back-icon");
   const toneOptions = document.querySelectorAll('input[name="tone"]');
   const emojiToggle = document.getElementById("emojiToggle");
+  const formatOptions = document.querySelectorAll('input[name="format"]');
 
   // --- HELPER & UTILITY FUNCTIONS ---
 
@@ -372,27 +373,58 @@ document.addEventListener("DOMContentLoaded", () => {
   // --- SETTINGS LOGIC ---
   function setupSettings() {
     // Load saved settings and user profile for tier check
-    chrome.storage.local.get(["tone", "useEmojis", "userProfile"], (result) => {
-      const profile = result.userProfile || {};
-      const tier = normalizeTier(profile.subscription_tier);
-      const hasProAccess = tier === "pro" || tier === "business";
+    chrome.storage.local.get(
+      ["tone", "useEmojis", "useBulletPoints", "userProfile"],
+      (result) => {
+        const profile = result.userProfile || {};
+        const tier = normalizeTier(profile.subscription_tier);
+        const hasProAccess = tier === "pro" || tier === "business";
 
-      // Set Tone
-      const savedTone = result.tone || "standard";
-      const toneInput = document.querySelector(
-        `input[name="tone"][value="${savedTone}"]`,
-      );
-      if (toneInput) toneInput.checked = true;
+        // Set Tone
+        const savedTone = result.tone || "standard";
+        const toneInput = document.querySelector(
+          `input[name="tone"][value="${savedTone}"]`,
+        );
+        if (toneInput) toneInput.checked = true;
 
-      // Set Emojis
-      if (emojiToggle) {
-        // Default to false if not set
-        emojiToggle.checked = result.useEmojis === true;
-      }
+        // Set Emojis
+        if (emojiToggle) {
+          // Default to false if not set
+          emojiToggle.checked = result.useEmojis === true;
+        }
 
-      // Apply tier gating
-      updateSettingsAccess(hasProAccess);
-    });
+        // Set Format
+        // Default to false (paragraphs) if not set or undefined
+        const useBulletPoints = result.useBulletPoints === true;
+        const formatValue = useBulletPoints ? "bullets" : "paragraphs";
+        const formatInput = document.querySelector(
+          `input[name="format"][value="${formatValue}"]`,
+        );
+        if (formatInput) formatInput.checked = true;
+
+        // Apply tier gating AND reset if expired
+        if (!hasProAccess) {
+          // If they lost access but still have premium tone selected, reset to standard
+          if (savedTone !== "standard") {
+            const standardInput = document.querySelector(
+              'input[name="tone"][value="standard"]',
+            );
+            if (standardInput) standardInput.checked = true;
+            // Also update storage so it persists
+            chrome.storage.local.set({ tone: "standard" });
+          }
+
+          // If they lost access but still have emojis on, turn them off
+          if (result.useEmojis === true) {
+            if (emojiToggle) emojiToggle.checked = false;
+            // Also update storage
+            chrome.storage.local.set({ useEmojis: false });
+          }
+        }
+
+        updateSettingsAccess(hasProAccess);
+      },
+    );
 
     // Save Tone on change
     toneOptions.forEach((radio) => {
@@ -411,6 +443,16 @@ document.addEventListener("DOMContentLoaded", () => {
         }
       });
     }
+
+    // Save Format on change
+    formatOptions.forEach((radio) => {
+      radio.addEventListener("change", (e) => {
+        if (e.target.checked) {
+          const isBullets = e.target.value === "bullets";
+          chrome.storage.local.set({ useBulletPoints: isBullets });
+        }
+      });
+    });
   }
 
   function updateSettingsAccess(hasProAccess) {
