@@ -27,7 +27,7 @@
 
   // --- HELPER FUNCTIONS ---
 
-  function showToast(message, type = "error", action = null) {
+  function showToast(message, type = "error", action = null, autoHide = true) {
     let toast = document.getElementById("quickvint-toast");
     if (!toast) {
       toast = document.createElement("div");
@@ -70,9 +70,9 @@
     if (window.quickvintToastTimeout)
       clearTimeout(window.quickvintToastTimeout);
 
-    // Only auto-hide if there is NO action (e.g. limit reached).
-    // If there IS an action, it stays until manually closed.
-    if (!action) {
+    // Only auto-hide if autoHide is true and there is NO action.
+    // If there IS an action or autoHide is false, it stays until manually closed.
+    if (autoHide && !action) {
       window.quickvintToastTimeout = setTimeout(() => {
         toast.classList.remove("visible");
       }, 4000);
@@ -604,6 +604,16 @@
         box-shadow: 0 10px 25px -5px rgba(220, 38, 38, 0.4), 0 8px 10px -6px rgba(220, 38, 38, 0.2);
       }
 
+      #quickvint-toast.info {
+        background: #0891b2; /* Cyan for info/tips */
+        box-shadow: 0 10px 25px -5px rgba(8, 145, 178, 0.4), 0 8px 10px -6px rgba(8, 145, 178, 0.2);
+      }
+
+      #quickvint-toast.success {
+        background: #059669; /* Green for success */
+        box-shadow: 0 10px 25px -5px rgba(5, 150, 105, 0.4), 0 8px 10px -6px rgba(5, 150, 105, 0.2);
+      }
+
       #quickvint-toast.visible {
         opacity: 1;
         visibility: visible;
@@ -647,6 +657,7 @@
       /* Icons are emojis, but if we use text/svg later, ensure they pop */
       #quickvint-toast.error .toast-icon { text-shadow: 0 0 10px rgba(220, 38, 38, 0.5); }
       #quickvint-toast.success .toast-icon { text-shadow: 0 0 10px rgba(5, 150, 105, 0.5); }
+      #quickvint-toast.info .toast-icon { text-shadow: 0 0 10px rgba(8, 145, 178, 0.5); }
     `;
     document.head.appendChild(style);
   }
@@ -1093,7 +1104,7 @@
         throw new Error(error || `HTTP ${response.status}`);
       }
 
-      const { title, description } = await response.json();
+      const { title, description, measurementAdvice } = await response.json();
       const titleInput = document.querySelector(SELECTORS.title);
       const descInput = document.querySelector(SELECTORS.description);
 
@@ -1107,6 +1118,13 @@
       }
 
       setButtonSuccessState();
+
+      // Show measurement advice if available
+      if (measurementAdvice && measurementAdvice.trim()) {
+        setTimeout(() => {
+          showToast(measurementAdvice, "info", null, false);
+        }, 300);
+      }
     } catch (err) {
       console.error("AutoLister AI Error:", err);
       showToast(err.message || "An unexpected error occurred.", "error");
