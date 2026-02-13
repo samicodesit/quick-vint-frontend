@@ -398,8 +398,8 @@ document.addEventListener("DOMContentLoaded", () => {
         }
 
         // Set Format
-        // Default to false (paragraphs) if not set or undefined
-        const useBulletPoints = result.useBulletPoints === true;
+        // Default to true (bullets) if not set or undefined
+        const useBulletPoints = result.useBulletPoints !== false;
         const formatValue = useBulletPoints ? "bullets" : "paragraphs";
         const formatInput = document.querySelector(
           `input[name="format"][value="${formatValue}"]`,

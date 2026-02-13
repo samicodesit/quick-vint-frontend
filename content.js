@@ -1036,10 +1036,12 @@
         selectedLanguage = "en",
         tone = "standard",
         useEmojis,
+        useBulletPoints = true,
       } = await chrome.storage.local.get([
         "selectedLanguage",
         "tone",
         "useEmojis",
+        "useBulletPoints",
       ]);
       const { access_token } = await sendMessage({ type: "GET_ACCESS_TOKEN" });
 
@@ -1063,6 +1065,7 @@
           languageCode: selectedLanguage,
           tone,
           useEmojis,
+          useBulletPoints,
         }),
       });
 
