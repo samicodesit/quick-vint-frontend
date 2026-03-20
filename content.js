@@ -54,31 +54,45 @@
     }
 
     const icon = type === "success" ? "✅" : type === "info" ? "ℹ️" : "⚠️";
-    let messageHtml = `<span>${message}</span>`;
+
+    // Build DOM nodes safely (no innerHTML with user/server data)
+    toast.textContent = "";
+    const iconSpan = document.createElement("span");
+    iconSpan.className = "toast-icon";
+    iconSpan.textContent = icon;
+    toast.appendChild(iconSpan);
+
+    const contentDiv = document.createElement("div");
+    contentDiv.className = "toast-content";
+    const msgSpan = document.createElement("span");
+    msgSpan.textContent = message;
+    contentDiv.appendChild(msgSpan);
 
     if (action && action.text && action.url) {
-      messageHtml += `<a href="${action.url}" target="_blank" style="margin-left: 12px; color: inherit; text-decoration: underline; font-weight: 700; white-space: nowrap;">${action.text} &rarr;</a>`;
+      const link = document.createElement("a");
+      link.href = action.url;
+      link.target = "_blank";
+      link.style.cssText = "margin-left: 12px; color: inherit; text-decoration: underline; font-weight: 700; white-space: nowrap;";
+      link.textContent = action.text + " →";
+      contentDiv.appendChild(link);
     }
+    toast.appendChild(contentDiv);
 
-    // Updated HTML structure with close button
-    toast.innerHTML = `
-      <span class="toast-icon">${icon}</span>
-      <div class="toast-content">${messageHtml}</div>
-      <button class="toast-close" aria-label="Close">×</button>
-    `;
+    const closeBtn = document.createElement("button");
+    closeBtn.className = "toast-close";
+    closeBtn.setAttribute("aria-label", "Close");
+    closeBtn.textContent = "×";
+    toast.appendChild(closeBtn);
 
     toast.className = type;
     toast.style.visibility = "visible"; // Ensure it's visible for the transition
 
     // Add close handler
-    const closeBtn = toast.querySelector(".toast-close");
-    if (closeBtn) {
-      closeBtn.onclick = () => {
-        toast.classList.remove("visible");
-        if (window.quickvintToastTimeout)
-          clearTimeout(window.quickvintToastTimeout);
-      };
-    }
+    closeBtn.onclick = () => {
+      toast.classList.remove("visible");
+      if (window.quickvintToastTimeout)
+        clearTimeout(window.quickvintToastTimeout);
+    };
 
     // Force reflow
     toast.offsetHeight;

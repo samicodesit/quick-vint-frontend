@@ -1148,7 +1148,7 @@
 
     <div class="ui-lang-bar">
       <span>🌐</span>
-      <select id="uiLanguageSelect"></select>
+      <select id="uiLanguageSelect" aria-label="Interface language"></select>
     </div>
 
     <main class="popup-content">
@@ -1248,8 +1248,8 @@
           </div>
           <div id="paidPlanView" class="hidden">
             <p id="renewalDate" class="renewal-text">
-              <span data-i18n="activeUntil">Active until</span>
-              <strong>—</strong>
+              <span id="renewalLabel" data-i18n="activeUntil">Active until</span>
+              <strong id="renewalDateValue">—</strong>
             </p>
             <button id="manageBtn" class="btn" data-i18n="manageSubscription">Manage Subscription</button>
             <a href="#" id="viewAllPlansLinkPaid" class="view-plans-link" data-i18n="compareAllPlans">Compare All Plans</a>
@@ -1347,7 +1347,7 @@
             </div>
             <div class="format-buttons-row">
               <label class="format-option" title="Bullet points">
-                <input type="radio" name="format" value="bullets">
+                <input type="radio" name="format" value="bullets" aria-label="Bullet points">
                 <span class="format-chip">
                   <div class="format-icon">
                     <div class="format-icon-bullet"><span></span></div>
@@ -1357,7 +1357,7 @@
                 </span>
               </label>
               <label class="format-option" title="Paragraphs">
-                <input type="radio" name="format" value="paragraphs" checked>
+                <input type="radio" name="format" value="paragraphs" checked aria-label="Paragraphs">
                 <span class="format-chip">
                   <div class="format-icon format-icon-para">
                     <span></span>

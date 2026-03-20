@@ -176,8 +176,8 @@ async function updateAndStoreUserProfile() {
 }
 
 /**
- * Fetches the user's daily API call count.
- * @returns {Promise<{daily: number|null}>} Null for business tier, otherwise the count.
+ * Fetches the user's daily and monthly API usage counts.
+ * @returns {Promise<{daily: number, monthly: number}>} Current usage counts.
  */
 async function fetchUserUsageCount() {
   const session = await ensureValidToken();
@@ -202,8 +202,6 @@ async function fetchUserUsageCount() {
       typeof profile?.api_calls_this_month === "number"
         ? profile.api_calls_this_month
         : 0;
-    if (profile?.subscription_tier === "business")
-      return { daily: null, monthly };
 
     const { data: limit, error: limitError } = await authClient
       .from("rate_limits")
@@ -219,7 +217,7 @@ async function fetchUserUsageCount() {
 
     return { daily: limit?.count || 0, monthly };
   } catch (error) {
-    console.error("Failed to fetch user day count:", error);
+    console.error("Failed to fetch user usage count:", error);
     return { daily: 0, monthly: 0 };
   }
 }

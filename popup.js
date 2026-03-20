@@ -28,8 +28,8 @@ document.addEventListener("DOMContentLoaded", () => {
     document.querySelectorAll("[data-i18n]").forEach((el) => {
       const key = el.getAttribute("data-i18n");
       if (T[key]) {
-        // For elements that contain child elements (like NEW badges), only set text of text nodes
-        if (el.children.length > 0 && key !== "upgradeNote" && key !== "upgradeToUnlock") {
+        // For elements that contain child elements (like NEW badges, <strong>), preserve children
+        if (el.children.length > 0) {
           // Find first text node and update it
           for (const node of el.childNodes) {
             if (node.nodeType === Node.TEXT_NODE && node.textContent.trim()) {
@@ -226,16 +226,18 @@ document.addEventListener("DOMContentLoaded", () => {
         if (freePlanView) freePlanView.classList.add("hidden");
         if (paidPlanView) paidPlanView.classList.remove("hidden");
         const rawEnd = profile.current_period_end;
-        if (renewalDate) {
-          if (rawEnd) {
-            const dt = new Date(rawEnd);
-            renewalDate.innerHTML = `Active until: <strong>${dt.toLocaleDateString(
-              undefined,
-              { year: "numeric", month: "short", day: "numeric" },
-            )}</strong>`;
-          } else {
-            renewalDate.innerHTML = `<strong>Active subscription</strong>`;
-          }
+        const dateEl = document.getElementById("renewalDateValue");
+        const labelEl = document.getElementById("renewalLabel");
+        if (rawEnd && dateEl) {
+          const dt = new Date(rawEnd);
+          if (labelEl) labelEl.textContent = T.activeUntil || "Active until";
+          dateEl.textContent = dt.toLocaleDateString(
+            undefined,
+            { year: "numeric", month: "short", day: "numeric" },
+          );
+        } else if (dateEl) {
+          if (labelEl) labelEl.textContent = "";
+          dateEl.textContent = T.activeSubscription || "Active subscription";
         }
       } else {
         if (paidPlanView) paidPlanView.classList.add("hidden");
@@ -265,10 +267,7 @@ document.addEventListener("DOMContentLoaded", () => {
     if (dailyProgressBar) dailyProgressBar.style.width = `${dailyPercent}%`;
     if (monthlyProgressBar)
       monthlyProgressBar.style.width = `${monthlyPercent}%`;
-    if (tier === "business") {
-      if (dailyCallsUsed) dailyCallsUsed.textContent = T.unlimited;
-      if (dailyProgressBar) dailyProgressBar.style.width = "100%";
-    }
+
   }
 
   // --- DATA & STATE MANAGEMENT ---
@@ -278,14 +277,17 @@ document.addEventListener("DOMContentLoaded", () => {
    * This ensures we always have fresh data, matching the instant update behavior of usage counters.
    */
   function updateFromStorage() {
-    // First, trigger background to refresh profile from database
+    chrome.storage.local.get(["supabaseSession", "userProfile"], (data) => {
+      const user = data.supabaseSession?.user || null;
+      const profile = data.userProfile || null;
+      render(user, profile);
+    });
+  }
+
+  /** Full refresh: re-fetch profile from DB then render. Use for explicit user actions / initial load only. */
+  function forceRefreshAndRender() {
     chrome.runtime.sendMessage({ type: "AUTH_UPDATED" }, () => {
-      // Then read the freshly updated storage and render
-      chrome.storage.local.get(["supabaseSession", "userProfile"], (data) => {
-        const user = data.supabaseSession?.user || null;
-        const profile = data.userProfile || null;
-        render(user, profile);
-      });
+      updateFromStorage();
     });
   }
 
@@ -703,10 +705,10 @@ document.addEventListener("DOMContentLoaded", () => {
     });
 
     // Also update when the popup gains focus, to catch changes from other tabs.
-    window.addEventListener("focus", updateFromStorage);
+    window.addEventListener("focus", forceRefreshAndRender);
 
-    // Initial load
-    updateFromStorage();
+    // Initial load — force refresh to get fresh data from DB
+    forceRefreshAndRender();
   }
 
   init();

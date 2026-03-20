@@ -60,7 +60,7 @@ Same as above but substitutes `https://quick-vint.vercel.app` as the API URL.
 |---|---|---|
 | `npm run build:local` | `http://localhost:5000` | Local development |
 | `npm run build:prod` | `https://quick-vint.vercel.app` | Staging/manual testing against prod |
-| `npm run build` | Default from `set-env.js` (localhost fallback) | CI / when `API_BASE_URL` env var is set |
+| `npm run build` | Production URL (or `API_BASE_URL` if set) | CI / default builds |
 | `npm run package` | Production (build.js forces prod URL) | Release packaging |
 | `npm run package:bash` | Same via shell script | Alternative release packaging |
 
@@ -145,9 +145,11 @@ npm run build:local
 
 ## Environment Variables
 
-| Variable        | Purpose                          | Default                         |
-|----------------|----------------------------------|---------------------------------|
-| `API_BASE_URL` | Backend API endpoint URL         | `http://localhost:5000`         |
+| Variable        | Purpose                          | Default                                            |
+|----------------|----------------------------------|----------------------------------------------------|
+| `API_BASE_URL` | Backend API endpoint URL         | `https://quick-vint.vercel.app` (production)       |
+
+For local development, use `npm run build:local` or explicitly set `API_BASE_URL=http://localhost:5000` in your environment or `.env` file.
 
 ## Localization
 
