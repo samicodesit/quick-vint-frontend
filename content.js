@@ -24,8 +24,26 @@
   let isAuthenticated = false;
   let pollInterval = null;
   let downloadedFiles = new Set();
+  let T = window.getUIStrings ? window.getUIStrings("en") : {};
 
   // --- HELPER FUNCTIONS ---
+
+  /** Load UI language from storage and also detect from Vinted TLD as fallback */
+  function initUILanguage(callback) {
+    chrome.storage.local.get(["uiLanguage"], (result) => {
+      if (result.uiLanguage && window.getUIStrings) {
+        T = window.getUIStrings(result.uiLanguage);
+      } else if (window.getUIStrings) {
+        // Auto-detect from Vinted domain TLD
+        const host = location.hostname; // e.g. www.vinted.fr
+        const tld = host.split(".").pop();
+        const tldMap = { fr: "fr", de: "de", es: "es", it: "it", nl: "nl", pl: "pl" };
+        const detected = tldMap[tld] || (window.detectUILanguageCode ? window.detectUILanguageCode() : "en");
+        T = window.getUIStrings(detected);
+      }
+      if (callback) callback();
+    });
+  }
 
   function showToast(message, type = "error", action = null, autoHide = true) {
     let toast = document.getElementById("quickvint-toast");
@@ -667,7 +685,7 @@
     btn.id = BTN_ID;
     btn.innerHTML = `
         <span class="icon">${WAND_ICON_SVG}</span>
-        <span class="label">Generate</span>
+        <span class="label">${T.generate || "Generate"}</span>
     `;
     btn.addEventListener("click", onGenerateClick);
     return btn;
@@ -679,7 +697,7 @@
     btn.disabled = true;
     btn.innerHTML = `
         <span class="icon">${PHONE_ICON_SVG}</span>
-        <span class="label">Phone</span>
+        <span class="label">${T.phone || "Phone"}</span>
     `;
     btn.addEventListener("click", onPhoneUploadClick);
     return btn;
@@ -690,8 +708,8 @@
     btn.id = SIGN_IN_BTN_ID;
     btn.innerHTML = `
         ${WAND_ICON_SVG}
-        <span>Sign in to enable AI Tools</span>
-        <span>(Click here)</span>
+        <span>${T.signInToEnable || "Sign in to enable AI Tools"}</span>
+        <span>${T.clickHere || "(Click here)"}</span>
     `;
 
     btn.addEventListener("click", (e) => {
@@ -731,13 +749,13 @@
     if (isBusy) {
       generateBtn.disabled = true;
       icon.style.display = "none";
-      label.textContent = "⏳ Generating…";
+      label.textContent = T.generating || "⏳ Generating…";
       generateBtn.style.cursor = "progress";
       generateBtn.style.backgroundColor = "#6b7280";
     } else {
       generateBtn.disabled = false;
       icon.style.display = "inline-block";
-      label.textContent = "Generate";
+      label.textContent = T.generate || "Generate";
       generateBtn.style.backgroundColor = "#4f46e5";
       generateBtn.style.cursor = "pointer";
     }
@@ -750,7 +768,7 @@
     if (!label || !icon) return;
 
     icon.style.display = "none";
-    label.textContent = "✅ Done";
+    label.textContent = T.done || "✅ Done";
 
     setTimeout(() => {
       isBusy = false;
@@ -811,16 +829,16 @@
       <div class="modal-content">
         <button class="close-x" aria-label="Close">&times;</button>
         <div class="modal-header">
-          <h3>📱 Upload from Phone</h3>
-          <span class="feature-pill">NEW · Free to test</span>
+          <h3>${T.uploadFromPhone || "📱 Upload from Phone"}</h3>
+          <span class="feature-pill">${T.featurePill || "NEW · Free to test"}</span>
         </div>
-        <p class="subtitle">Scan with your camera app</p>
+        <p class="subtitle">${T.scanWithCamera || "Scan with your camera app"}</p>
         <div class="qr-container">
           <img id="qr-code" src="https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(
             uploadUrl,
           )}" alt="QR Code" />
         </div>
-        <p class="instruction">Photos will appear in this listing automatically</p>
+        <p class="instruction">${T.photosWillAppear || "Photos will appear in this listing automatically"}</p>
         <div class="language-selector">
           <div class="language-select-wrapper">
             <select class="language-select" id="modal-language-select">
@@ -828,16 +846,16 @@
             </select>
           </div>
         </div>
-        <div class="status waiting">Waiting for photos from phone...</div>
+        <div class="status waiting">${T.waitingForPhotos || "Waiting for photos from phone..."}</div>
         <div class="modal-buttons">
-          <button class="close-btn">Done</button>
+          <button class="close-btn">${T.doneBtn || "Done"}</button>
           <button class="generate-btn">
             <span class="icon" style="width: 14px; height: 14px; display: inline-block; margin-right: 6px;">${WAND_ICON_SVG}</span>
-            Done + Generate
+            ${T.doneGenerate || "Done + Generate"}
           </button>
         </div>
         <div class="disclaimer">
-          <strong>Note:</strong> This feature will soon be available exclusively to Pro & Business plans.
+          <strong>Note:</strong> ${T.phoneDisclaimer || "This feature will soon be available exclusively to Pro & Business plans."}
         </div>
       </div>
     `;
@@ -901,7 +919,7 @@
 
   async function onPhoneUploadClick() {
     if (!isAuthenticated) {
-      showToast("Please sign in via the extension popup first.", "error");
+      showToast(T.signInFirst || "Please sign in via the extension popup first.", "error");
       return;
     }
 
@@ -948,20 +966,16 @@
           if (statusEl) {
             const total = downloadedFiles.size;
             statusEl.className = "status";
-            statusEl.textContent = `✓ ${total} file${
-              total !== 1 ? "s" : ""
-            } added. Ready for more...`;
+            statusEl.textContent = `✓ ${total} ${T.filesAdded || "file(s) added. Ready for more..."}`;
           }
         } else {
           // No files yet, show waiting message
           if (statusEl && downloadedFiles.size === 0) {
             statusEl.className = "status waiting";
-            statusEl.textContent = "Waiting for photos from phone...";
+            statusEl.textContent = T.waitingForPhotos || "Waiting for photos from phone...";
           } else if (statusEl && downloadedFiles.size > 0) {
             statusEl.className = "status";
-            statusEl.textContent = `✓ ${downloadedFiles.size} file${
-              downloadedFiles.size !== 1 ? "s" : ""
-            } added. Ready for more...`;
+            statusEl.textContent = `✓ ${downloadedFiles.size} ${T.filesAdded || "file(s) added. Ready for more..."}`;
           }
         }
       } catch (err) {
@@ -1017,7 +1031,7 @@
         fileInput.dispatchEvent(new Event("change", { bubbles: true }));
 
         const statusEl = document.querySelector(`#${MODAL_ID} .status`);
-        if (statusEl) statusEl.textContent = "Image uploaded!";
+        if (statusEl) statusEl.textContent = T.imageUploaded || "Image uploaded!";
       }
     } catch (err) {
       console.error("Error downloading image:", err);
@@ -1035,7 +1049,7 @@
       .filter(Boolean);
 
     if (!imageUrls.length) {
-      showToast("Please upload at least one image.", "error");
+      showToast(T.uploadAtLeastOne || "Please upload at least one image.", "error");
       return;
     }
 
@@ -1058,7 +1072,7 @@
 
       if (!access_token) {
         throw new Error(
-          "Your session has expired. Please sign in again via the extension.",
+          T.sessionExpired || "Your session has expired. Please sign in again via the extension.",
         );
       }
 
@@ -1082,7 +1096,7 @@
 
       if (response.status === 401) {
         isAuthenticated = false;
-        showToast("Session expired. Please sign in again.", "error");
+        showToast(T.sessionExpiredShort || "Session expired. Please sign in again.", "error");
         isBusy = false;
         updateButtonUI();
         return;
@@ -1091,9 +1105,9 @@
         const errData = await response.json();
         const pricingUrl = await getPricingUrl();
         showToast(
-          errData.error || "You have exceeded your daily/monthly usage limit.",
+          errData.error || T.usageLimitExceeded || "You have exceeded your daily/monthly usage limit.",
           "error",
-          { text: "Upgrade Plan", url: pricingUrl },
+          { text: T.upgradePlan || "Upgrade Plan", url: pricingUrl },
         );
         isBusy = false;
         updateButtonUI();
@@ -1127,7 +1141,7 @@
       }
     } catch (err) {
       console.error("AutoLister AI Error:", err);
-      showToast(err.message || "An unexpected error occurred.", "error");
+      showToast(err.message || T.unexpectedError || "An unexpected error occurred.", "error");
       isBusy = false;
       updateButtonUI();
     }
@@ -1198,7 +1212,35 @@
   function init() {
     injectStylesheet();
     initializeAuthState();
-    startInjectionObserver();
+    // Load UI language before injecting buttons so strings are localized
+    initUILanguage(() => {
+      startInjectionObserver();
+    });
+    // Listen for UI language changes from the popup settings
+    chrome.storage.onChanged.addListener((changes) => {
+      if (changes.uiLanguage && window.getUIStrings) {
+        T = window.getUIStrings(changes.uiLanguage.newValue || "en");
+        // Re-render buttons with new language
+        const existing = document.getElementById(BTN_ID);
+        if (existing) {
+          const container = existing.closest("div")?.parentNode;
+          if (container) {
+            // Remove old buttons
+            existing.closest("div")?.parentNode?.querySelector(`#${BTN_ID}`)?.closest("div[style]")?.remove();
+          }
+        }
+        // Reset refs and re-inject
+        generateBtn = null;
+        phoneBtn = null;
+        signInBtn = null;
+        const oldBtn = document.getElementById(BTN_ID);
+        const oldPhone = document.getElementById(PHONE_BTN_ID);
+        const oldSignIn = document.getElementById(SIGN_IN_BTN_ID);
+        if (oldBtn) oldBtn.parentElement?.parentElement?.remove();
+        if (oldSignIn && !oldBtn) oldSignIn.parentElement?.remove();
+        injectButton();
+      }
+    });
   }
 
   init();

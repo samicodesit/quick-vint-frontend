@@ -4,19 +4,112 @@ document.addEventListener("DOMContentLoaded", () => {
   const SUPABASE_URL = "https://jqloiovdwjaornnfvmyu.supabase.co";
   const SUPABASE_ANON_KEY =
     "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImpxbG9pb3Zkd2phb3JubmZ2bXl1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDgyMDgzMzIsImV4cCI6MjA2Mzc4NDMzMn0.iFtkUorY1UqK8zamnwgjB-yhsXe0bJAA8YFm22bzc3A";
-  const TIER_LIMITS = {
-    free: { daily: 2, monthly: 8 },
-    starter: { daily: 15, monthly: 300 },
-    pro: { daily: 40, monthly: 800 },
-    business: { daily: 75, monthly: 1500 },
+
+  // Fallback limits — overridden by /api/tier-config on load
+  let TIER_LIMITS = {
+    free: { daily: 3, monthly: 5 },
+    starter: { daily: 5, monthly: 75 },
+    pro: { daily: 15, monthly: 300 },
+    business: { daily: 50, monthly: 1000 },
   };
 
   const TIER_DISPLAY_NAMES = {
-    free: "Free Plan",
+    free: "Free",
     starter: "Starter Plan",
     pro: "Pro Plan",
     business: "Business Plan",
   };
+
+  // --- UI LOCALIZATION STATE ---
+  let T = window.getUIStrings("en"); // current UI strings, set properly in init
+
+  function applyUITranslations() {
+    // Update all elements with data-i18n attribute
+    document.querySelectorAll("[data-i18n]").forEach((el) => {
+      const key = el.getAttribute("data-i18n");
+      if (T[key]) {
+        // For elements that contain child elements (like NEW badges), only set text of text nodes
+        if (el.children.length > 0 && key !== "upgradeNote") {
+          // Find first text node and update it
+          for (const node of el.childNodes) {
+            if (node.nodeType === Node.TEXT_NODE && node.textContent.trim()) {
+              node.textContent = T[key] + " ";
+              break;
+            }
+          }
+        } else {
+          el.textContent = T[key];
+        }
+      }
+    });
+    // Update tier display names from current language
+    TIER_DISPLAY_NAMES.free = T.freePlan;
+    TIER_DISPLAY_NAMES.starter = T.starterPlan;
+    TIER_DISPLAY_NAMES.pro = T.proPlan;
+    TIER_DISPLAY_NAMES.business = T.businessPlan;
+    // Update content language dropdown placeholder if no language is selected yet
+    if (dropdownToggle && dropdownToggle.children.length === 0) {
+      dropdownToggle.textContent = T.selectLanguage;
+    }
+  }
+
+  function setupUILanguagePicker() {
+    const select = document.getElementById("uiLanguageSelect");
+    if (!select) return;
+    // Populate options
+    select.innerHTML = "";
+    window.UI_LANGUAGES.forEach((lang) => {
+      const opt = document.createElement("option");
+      opt.value = lang.code;
+      opt.textContent = lang.name;
+      select.appendChild(opt);
+    });
+    // Set current value
+    chrome.storage.local.get(["uiLanguage"], (result) => {
+      if (result.uiLanguage) {
+        select.value = result.uiLanguage;
+      } else {
+        const detected = window.detectUILanguageCode();
+        select.value = detected;
+        chrome.storage.local.set({ uiLanguage: detected });
+      }
+      T = window.getUIStrings(select.value);
+      applyUITranslations();
+      // Set up content language dropdown AFTER UI language is loaded
+      // so that if no content language is saved, we default to the same language
+      setupLanguageDropdown();
+    });
+    select.addEventListener("change", () => {
+      chrome.storage.local.set({ uiLanguage: select.value });
+      T = window.getUIStrings(select.value);
+      applyUITranslations();
+      // Re-render to update plan name etc.
+      updateFromStorage();
+    });
+  }
+
+  // Fetch authoritative limits from API (non-blocking)
+  fetch(`${API_BASE}/api/tier-config`)
+    .then((r) => (r.ok ? r.json() : null))
+    .then((data) => {
+      if (!data) return;
+      for (const [tier, cfg] of Object.entries(data)) {
+        if (cfg.limits) {
+          TIER_LIMITS[tier] = {
+            daily: cfg.limits.daily,
+            monthly: cfg.limits.monthly,
+          };
+        }
+        if (cfg.displayName && TIER_DISPLAY_NAMES[tier] !== undefined) {
+          // Keep " Plan" suffix for paid tiers
+          TIER_DISPLAY_NAMES[tier] =
+            tier === "free" ? cfg.displayName : cfg.displayName + " Plan";
+        }
+      }
+    })
+    .catch(() => {
+      /* use fallback values */
+    });
 
   // --- SUPABASE CLIENT ---
   const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
@@ -32,6 +125,8 @@ document.addEventListener("DOMContentLoaded", () => {
   const paidPlanView = document.getElementById("paidPlanView");
   const renewalDate = document.getElementById("renewalDate");
   const upgradeBtn = document.getElementById("upgradeBtn");
+  const upgradeStarterBtn = document.getElementById("upgradeStarterBtn");
+  const upgradeProBtn = document.getElementById("upgradeProBtn");
   const manageBtn = document.getElementById("manageBtn");
   const viewAllPlansLink = document.getElementById("viewAllPlansLink");
   const viewAllPlansLinkPaid = document.getElementById("viewAllPlansLinkPaid");
@@ -96,7 +191,7 @@ document.addEventListener("DOMContentLoaded", () => {
   function setLoading(button, isLoading, defaultText) {
     if (!button) return;
     button.disabled = isLoading;
-    button.textContent = isLoading ? "Processing…" : defaultText;
+    button.textContent = isLoading ? T.processing : defaultText;
   }
 
   function encodeUserData(data) {
@@ -171,7 +266,7 @@ document.addEventListener("DOMContentLoaded", () => {
     if (monthlyProgressBar)
       monthlyProgressBar.style.width = `${monthlyPercent}%`;
     if (tier === "business") {
-      if (dailyCallsUsed) dailyCallsUsed.textContent = `Unlimited`;
+      if (dailyCallsUsed) dailyCallsUsed.textContent = T.unlimited;
       if (dailyProgressBar) dailyProgressBar.style.width = "100%";
     }
   }
@@ -200,10 +295,10 @@ document.addEventListener("DOMContentLoaded", () => {
     if (!emailInput) return;
     const email = emailInput.value.trim();
     if (!email.includes("@")) {
-      showMessage("Please enter a valid email address.", "error");
+      showMessage(T.pleaseEnterValidEmail, "error");
       return;
     }
-    setLoading(sendMagicLinkBtn, true, "Send Magic Link");
+    setLoading(sendMagicLinkBtn, true, T.sendMagicLink);
     showMessage(null);
     try {
       const res = await fetch(`${API_BASE}/api/auth/magic-link`, {
@@ -231,53 +326,54 @@ document.addEventListener("DOMContentLoaded", () => {
 
       // Backend returns { message: "..." } for success
       showMessage(
-        data.message || "Check your email for the sign-in link.",
+        data.message || T.checkEmailForLink,
         "success",
       );
       emailInput.value = "";
     } catch (err) {
       showMessage(
-        err.message || "Connection issue. Please check your internet.",
+        err.message || T.connectionIssue,
         "error",
       );
     } finally {
-      setLoading(sendMagicLinkBtn, false, "Send Magic Link");
+      setLoading(sendMagicLinkBtn, false, T.sendMagicLink);
     }
   }
 
   function handleSignOut() {
-    setLoading(signOutBtn, true, "Sign Out");
+    setLoading(signOutBtn, true, T.signOut);
     chrome.runtime.sendMessage({ type: "SIGN_OUT" }, () => {
-      setLoading(signOutBtn, false, "Sign Out");
+      setLoading(signOutBtn, false, T.signOut);
     });
   }
 
-  async function handleUpgrade() {
+  async function handleUpgrade(tier, btn) {
     const {
       data: { session },
     } = await supabaseClient.auth.getSession();
     if (!session?.user?.email) {
-      showMessage("Please sign in to upgrade.", "error");
+      showMessage(T.pleaseSignInToUpgrade, "error");
       return;
     }
-    setLoading(upgradeBtn, true, "Loading…");
+    const label = btn ? btn.textContent : "Loading…";
+    setLoading(btn || upgradeBtn, true, "Loading…");
     try {
       const res = await fetch(`${API_BASE}/api/stripe/create-checkout`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: session.user.email, tier: "starter" }),
+        body: JSON.stringify({ email: session.user.email, tier }),
       });
       const { url } = await res.json();
       if (res.ok && url) {
         window.open(url, "_blank");
       } else {
-        showMessage("Unable to open the payment page.", "error");
+        showMessage(T.unableToOpenPayment, "error");
       }
     } catch (err) {
       console.error("Checkout error:", err);
-      showMessage("Connection issue. Please try again.", "error");
+      showMessage(T.connectionIssue, "error");
     } finally {
-      setLoading(upgradeBtn, false, "Upgrade to Starter (€3.99)");
+      setLoading(btn || upgradeBtn, false, label);
     }
   }
 
@@ -286,10 +382,10 @@ document.addEventListener("DOMContentLoaded", () => {
       data: { session },
     } = await supabaseClient.auth.getSession();
     if (!session?.user?.email) {
-      showMessage("Please sign in to manage your subscription.", "error");
+      showMessage(T.pleaseSignInToManage, "error");
       return;
     }
-    setLoading(manageBtn, true, "Loading…");
+    setLoading(manageBtn, true, T.processing);
     try {
       const res = await fetch(`${API_BASE}/api/stripe/create-portal`, {
         method: "POST",
@@ -300,13 +396,13 @@ document.addEventListener("DOMContentLoaded", () => {
       if (res.ok && url) {
         window.open(url, "_blank");
       } else {
-        showMessage("Unable to open the subscription page.", "error");
+        showMessage(T.unableToOpenSubscription, "error");
       }
     } catch (err) {
       console.error("Portal error:", err);
-      showMessage("Connection issue. Please try again.", "error");
+      showMessage(T.connectionIssue, "error");
     } finally {
-      setLoading(manageBtn, false, "Manage Subscription");
+      setLoading(manageBtn, false, T.manageSubscription);
     }
   }
 
@@ -331,15 +427,23 @@ document.addEventListener("DOMContentLoaded", () => {
   // --- LANGUAGE DROPDOWN LOGIC ---
   function setupLanguageDropdown() {
     chrome.storage.local.get(["selectedLanguage"], (result) => {
-      if (result.selectedLanguage) {
-        const selectedItem = [...languageOptions].find(
-          (item) => item.dataset.value === result.selectedLanguage,
-        );
-        if (selectedItem && dropdownToggle) {
-          dropdownToggle.innerHTML = selectedItem.innerHTML;
-          languageOptions.forEach((opt) => opt.classList.remove("selected"));
-          selectedItem.classList.add("selected");
-        }
+      let langCode = result.selectedLanguage;
+      // Auto-detect content language on first use
+      if (!langCode) {
+        const detected = window.detectUILanguageCode();
+        // Map UI language codes to content language codes (they match)
+        langCode = detected;
+        chrome.storage.local.set({ selectedLanguage: langCode });
+      }
+      const selectedItem = [...languageOptions].find(
+        (item) => item.dataset.value === langCode,
+      );
+      if (selectedItem && dropdownToggle) {
+        dropdownToggle.innerHTML = selectedItem.innerHTML;
+        languageOptions.forEach((opt) => opt.classList.remove("selected"));
+        selectedItem.classList.add("selected");
+      } else if (dropdownToggle) {
+        dropdownToggle.textContent = T.selectLanguage;
       }
     });
     const toggleDropdown = (show) => {
@@ -522,16 +626,14 @@ document.addEventListener("DOMContentLoaded", () => {
           console.error(
             error || new Error("Missing OAuth redirect URL from provider"),
           );
-          alert("Google sign-in failed. Please try again in a moment.");
+          alert(T.googleSignInFailed);
           return;
         }
 
         const popup = window.open(data.url, "_blank");
         if (!popup || popup.closed || typeof popup.closed === "undefined") {
           console.warn("OAuth popup was likely blocked by the browser.");
-          alert(
-            "We tried to open a Google sign-in window, but it may have been blocked by your browser. Please allow pop-ups for this extension and try again.",
-          );
+          alert(T.popupBlocked);
           return;
         }
         try {
@@ -551,7 +653,19 @@ document.addEventListener("DOMContentLoaded", () => {
       signOutBtnSettings.addEventListener("click", handleSignOut);
     }
     if (upgradeBtn) {
-      upgradeBtn.addEventListener("click", handleUpgrade);
+      upgradeBtn.addEventListener("click", () =>
+        handleUpgrade("starter", upgradeBtn),
+      );
+    }
+    if (upgradeStarterBtn) {
+      upgradeStarterBtn.addEventListener("click", () =>
+        handleUpgrade("starter", upgradeStarterBtn),
+      );
+    }
+    if (upgradeProBtn) {
+      upgradeProBtn.addEventListener("click", () =>
+        handleUpgrade("pro", upgradeProBtn),
+      );
     }
     if (manageBtn) {
       manageBtn.addEventListener("click", handleManageSubscription);
@@ -572,8 +686,8 @@ document.addEventListener("DOMContentLoaded", () => {
       });
     }
 
-    setupLanguageDropdown();
     setupSettings();
+    setupUILanguagePicker(); // also calls setupLanguageDropdown internally
 
     if (settingsToggleBtn) {
       settingsToggleBtn.addEventListener("click", toggleSettingsView);

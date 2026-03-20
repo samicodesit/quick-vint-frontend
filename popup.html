@@ -88,14 +88,14 @@
     /* --- Layout & Sections --- */
     .popup-header {
       background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-      padding: 18px 20px;
+      padding: 10px 20px;
       text-align: center;
       color: white;
       position: relative;
     }
 
     .popup-content {
-      padding: 8px 22px 20px;
+      padding: 6px 16px 8px;
       display: grid;
       grid-template-rows: auto 1fr;
       grid-template-areas:
@@ -106,13 +106,13 @@
     /* --- Typography --- */
     .popup-title {
       margin: 0;
-      font-size: 18px;
+      font-size: 17px;
       font-weight: 600;
       letter-spacing: -0.025em;
     }
 
     .subtitle {
-      margin-top: 4px;
+      margin-top: 2px;
       font-size: 12px;
       opacity: 0.9;
       font-weight: 400;
@@ -181,7 +181,7 @@
     }
 
     .btn {
-      padding: 12px 20px;
+      padding: 10px 20px;
       background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
       color: white;
       border: none;
@@ -214,6 +214,119 @@
 
     .btn-secondary:hover {
       background: #5b6471;
+    }
+
+    /* --- Plan Picker (side-by-side upgrade cards) --- */
+    .plan-picker {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+      margin-top: 3px;
+      margin-bottom: 1px;
+      align-items: stretch;
+    }
+
+    .plan-pick-card {
+      position: relative;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      border: 2px solid #e5e7eb;
+      border-radius: 10px;
+      padding: 8px 6px 7px;
+      text-align: center;
+      transition: border-color 0.2s ease, box-shadow 0.2s ease;
+      background: #fff;
+    }
+
+    .plan-pick-card:hover {
+      border-color: #667eea;
+      box-shadow: 0 2px 8px rgba(102, 126, 234, 0.12);
+    }
+
+    .plan-pick-card.recommended {
+      border-color: #10b981;
+      background: linear-gradient(180deg, #f0fdf4 0%, #ffffff 100%);
+    }
+
+    .plan-pick-card.recommended:hover {
+      border-color: #059669;
+      box-shadow: 0 2px 8px rgba(16, 185, 129, 0.18);
+    }
+
+    .plan-pick-badge {
+      position: absolute;
+      top: -9px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: #10b981;
+      color: #fff;
+      font-size: 9px;
+      font-weight: 700;
+      padding: 2px 8px;
+      border-radius: 8px;
+      letter-spacing: 0.3px;
+      text-transform: uppercase;
+    }
+
+    .plan-pick-name {
+      font-size: 12px;
+      font-weight: 700;
+      color: #1f2937;
+      margin-bottom: 1px;
+    }
+
+    .plan-pick-price {
+      font-size: 16px;
+      font-weight: 800;
+      color: #4f46e5;
+      margin-bottom: 1px;
+    }
+
+    .plan-pick-price span {
+      font-size: 10px;
+      font-weight: 500;
+      color: #9ca3af;
+    }
+
+    .plan-pick-feature {
+      font-size: 10px;
+      color: #6b7280;
+      margin-bottom: auto;
+      line-height: 1.3;
+    }
+
+    .plan-pick-btn {
+      display: block;
+      width: 100%;
+      margin-top: 6px;
+      padding: 5px 4px;
+      border: none;
+      border-radius: 6px;
+      font-size: 12px;
+      font-weight: 700;
+      cursor: pointer;
+      color: #fff;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      transition: transform 0.12s ease, opacity 0.12s ease;
+    }
+
+    .plan-pick-btn:hover {
+      transform: translateY(-1px);
+    }
+
+    .plan-pick-btn:active {
+      transform: translateY(0);
+    }
+
+    .plan-pick-btn:disabled {
+      background: #9ca3af;
+      cursor: not-allowed;
+      transform: none;
+    }
+
+    .plan-pick-card.recommended .plan-pick-btn {
+      background: linear-gradient(135deg, #10b981 0%, #059669 100%);
     }
 
     .upgradeBtn {
@@ -266,32 +379,32 @@
     .plan-card {
       background: #ffffff;
       border-radius: 12px;
-      padding: 16px;
+      padding: 8px 12px;
       border: 1px solid #f3f4f6;
       box-shadow: 0 4px 12px rgba(0, 0, 0, 0.04);
-      margin: 5px 0 8px;
+      margin: 2px 0 4px;
     }
 
     .plan-header {
-      font-size: 16px;
+      font-size: 14px;
       font-weight: 600;
       color: #1f2937;
       text-align: center;
-      margin-bottom: 16px;
+      margin-bottom: 5px;
     }
 
     .usage-meters {
       display: flex;
       flex-direction: column;
-      gap: 14px;
-      margin-bottom: 16px;
+      gap: 5px;
+      margin-bottom: 5px;
     }
 
     .usage-meter .meter-label {
       display: flex;
       justify-content: space-between;
       align-items: center;
-      margin-bottom: 6px;
+      margin-bottom: 3px;
       font-size: 12px;
       color: #4b5563;
     }
@@ -304,9 +417,9 @@
 
     .progress-bar-bg {
       width: 100%;
-      height: 8px;
+      height: 6px;
       background-color: #e5e7eb;
-      border-radius: 4px;
+      border-radius: 3px;
       overflow: hidden;
     }
 
@@ -323,11 +436,11 @@
       text-align: center;
       color: #667eea;
       text-decoration: none;
-      font-size: 13px;
+      font-size: 12px;
       font-weight: 600;
       margin: 0;
       transition: color 0.18s ease;
-      padding: 6px 0;
+      padding: 4px 0;
     }
 
     .view-plans-link:hover {
@@ -337,16 +450,17 @@
 
     /* --- Language Dropdown Component --- */
     .language-dropdown {
-      margin-bottom: 20px;
+      margin-bottom: 10px;
       padding: 0 4px;
       position: relative;
       z-index: 10;
     }
 
     .language-label {
-      font-size: 12px;
+      font-size: 11px;
       color: #6b7280;
-      margin-bottom: 4px;
+      margin-bottom: 3px;
+      margin-top: 10px;
       font-weight: 500;
     }
 
@@ -358,7 +472,7 @@
       border: 1px solid #d1d5db;
       border-radius: 8px;
       text-align: left;
-      padding: 10px 38px 10px 14px;
+      padding: 8px 38px 8px 14px;
       margin: 0;
       width: 100%;
       display: flex;
@@ -871,6 +985,34 @@
       box-shadow: 0 0 0 2px rgba(102, 126, 234, 0.2);
     }
 
+    /* --- UI Language Bar --- */
+    .ui-lang-bar {
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
+      gap: 6px;
+      padding: 3px 16px;
+      background: #f3f4f6;
+      border-bottom: 1px solid #e5e7eb;
+      font-size: 12px;
+      color: #6b7280;
+    }
+
+    .ui-lang-bar select {
+      border: none;
+      background: transparent;
+      font-size: 12px;
+      color: #4b5563;
+      cursor: pointer;
+      font-weight: 500;
+      padding: 0 2px;
+      outline: none;
+    }
+
+    .ui-lang-bar select:focus {
+      outline: none;
+    }
+
     /* --- Auth View Specific Styles --- */
 
     #signedOutView {
@@ -1001,20 +1143,25 @@
         <span class="settings-badge">NEW</span>
       </button>
       <h3 class="popup-title">AutoLister AI</h3>
-      <div class="subtitle">Smart Vinted listings with AI</div>
+      <div class="subtitle" data-i18n="subtitle">Smart Vinted listings with AI</div>
     </header>
+
+    <div class="ui-lang-bar">
+      <span>🌐</span>
+      <select id="uiLanguageSelect"></select>
+    </div>
 
     <main class="popup-content">
       <div id="messages" class="hidden"></div>
 
       <div id="loadingView">
-        <p>Loading...</p>
+        <p data-i18n="loading">Loading...</p>
       </div>
 
       <div id="signedOutView">
         <div class="auth-header">
-          <h2 class="auth-title">Welcome Back</h2>
-          <p class="auth-subtitle">Sign in to AutoLister AI</p>
+          <h2 class="auth-title" data-i18n="welcomeBack">Welcome Back</h2>
+          <p class="auth-subtitle" data-i18n="signInTo">Sign in to AutoLister AI</p>
         </div>
 
         <button id="googleSignIn" class="google-btn">
@@ -1030,23 +1177,23 @@
                 d="M -14.754 43.989 C -12.984 43.989 -11.404 44.599 -10.154 45.789 L -6.734 42.369 C -8.804 40.429 -11.514 39.239 -14.754 39.239 C -19.444 39.239 -23.494 41.939 -25.464 45.859 L -21.484 48.949 C -20.534 46.099 -17.884 43.989 -14.754 43.989 Z" />
             </g>
           </svg>
-          <span>Continue with Google</span>
+          <span data-i18n="continueWithGoogle">Continue with Google</span>
         </button>
 
         <div class="auth-divider">
-          <span>OR</span>
+          <span data-i18n="or">OR</span>
         </div>
 
-        <label for="emailInput" class="form-label">Email Address</label>
+        <label for="emailInput" class="form-label" data-i18n="emailAddress">Email Address</label>
         <div class="input-wrapper">
           <input type="email" id="emailInput" name="email" class="form-input with-icon" autocomplete="email"
             autocorrect="off" autocapitalize="off" spellcheck="false" placeholder="name@example.com" required />
         </div>
 
-        <button id="sendMagicLinkBtn" class="btn">Send Magic Link</button>
+        <button id="sendMagicLinkBtn" class="btn" data-i18n="sendMagicLink">Send Magic Link</button>
 
         <p class="small-text contact-text">
-          Need help? <a href="mailto:support@autolister.app" class="contact-link">Contact Support</a>
+          <span data-i18n="needHelp">Need help?</span> <a href="mailto:support@autolister.app" class="contact-link" data-i18n="contactSupport">Contact Support</a>
         </p>
       </div>
 
@@ -1057,14 +1204,14 @@
 
         <div id="subscriptionArea" class="plan-card">
           <div class="plan-header">
-            <span id="planName">Free Plan</span>
+            <span id="planName" data-i18n="freePlan">Free Plan</span>
           </div>
 
           <div class="usage-meters">
             <div class="usage-meter">
               <div class="meter-label">
-                <span>Daily Usage</span>
-                <span id="dailyCallsUsed">0 / 2</span>
+                <span data-i18n="dailyUsage">Daily Usage</span>
+                <span id="dailyCallsUsed">0 / 3</span>
               </div>
               <div class="progress-bar-bg">
                 <div id="dailyProgressBar" class="progress-bar-fill"></div>
@@ -1072,8 +1219,8 @@
             </div>
             <div class="usage-meter">
               <div class="meter-label">
-                <span>Monthly Usage</span>
-                <span id="monthlyCallsUsed">0 / 8</span>
+                <span data-i18n="monthlyUsage">Monthly Usage</span>
+                <span id="monthlyCallsUsed">0 / 5</span>
               </div>
               <div class="progress-bar-bg">
                 <div id="monthlyProgressBar" class="progress-bar-fill"></div>
@@ -1082,24 +1229,35 @@
           </div>
 
           <div id="freePlanView">
-            <button class="btn upgradeBtn" id="upgradeBtn">
-              Upgrade to Starter (€3.99)
-            </button>
-            <a href="#" id="viewAllPlansLink" class="view-plans-link">Compare All Plans</a>
-            <div class="poweredByText">Powered by <strong>Stripe</strong></div>
+            <div class="plan-picker">
+              <div class="plan-pick-card" data-tier="starter">
+                <div class="plan-pick-name" data-i18n="starter">Starter</div>
+                <div class="plan-pick-price">€3.99<span data-i18n="perMonth">/mo</span></div>
+                <div class="plan-pick-feature">5 <span data-i18n="listingsPerDay">listings/day</span></div>
+                <button class="plan-pick-btn" id="upgradeStarterBtn" data-i18n="getStarter">Get Starter</button>
+              </div>
+              <div class="plan-pick-card recommended" data-tier="pro">
+                <div class="plan-pick-badge" data-i18n="popular">Popular</div>
+                <div class="plan-pick-name" data-i18n="pro">Pro</div>
+                <div class="plan-pick-price">€9.99<span data-i18n="perMonth">/mo</span></div>
+                <div class="plan-pick-feature" data-i18n="toneEmojiFeature">Tone & emoji customization</div>
+                <button class="plan-pick-btn" id="upgradeProBtn" data-i18n="getPro">Get Pro</button>
+              </div>
+            </div>
+            <a href="#" id="viewAllPlansLink" class="view-plans-link" data-i18n="compareAllPlans">Compare All Plans</a>
           </div>
           <div id="paidPlanView" class="hidden">
             <p id="renewalDate" class="renewal-text">
-              Active until
+              <span data-i18n="activeUntil">Active until</span>
               <strong>—</strong>
             </p>
-            <button id="manageBtn" class="btn">Manage Subscription</button>
-            <a href="#" id="viewAllPlansLinkPaid" class="view-plans-link">Compare All Plans</a>
+            <button id="manageBtn" class="btn" data-i18n="manageSubscription">Manage Subscription</button>
+            <a href="#" id="viewAllPlansLinkPaid" class="view-plans-link" data-i18n="compareAllPlans">Compare All Plans</a>
           </div>
         </div>
 
         <div class="language-dropdown">
-          <div class="language-label">Generated content language</div>
+          <div class="language-label" data-i18n="contentLanguage">Generated content language</div>
           <button class="dropdown-toggle">Select Language</button>
           <ul class="dropdown-menu">
             <li data-value="en">
@@ -1173,19 +1331,19 @@
           </ul>
         </div>
 
-        <button id="signOutBtn" class="btn btn-secondary">Sign Out</button>
-        <p class="small-text">
+        <button id="signOutBtn" class="btn btn-secondary" style="padding:10px 16px; font-size:13px;" data-i18n="signOut">Sign Out</button>
+        <p class="small-text" style="margin-bottom:0;" data-i18n="helperText">
           The "Generate" button appears on Vinted item listing pages.
         </p>
       </div>
 
       <div id="settingsView">
-        <h4 class="section-title">Settings</h4>
+        <h4 class="section-title" data-i18n="settings">Settings</h4>
 
         <div class="settings-card">
           <div class="setting-row">
             <div class="setting-label-container">
-              <span class="setting-label">Text format <span class="new-badge">NEW</span></span>
+              <span class="setting-label" data-i18n="textFormat">Text format <span class="new-badge" data-i18n="newBadge">NEW</span></span>
             </div>
             <div class="format-buttons-row">
               <label class="format-option" title="Bullet points">
@@ -1215,23 +1373,23 @@
           <div class="setting-divider"></div>
 
           <div class="setting-group">
-            <label class="form-label">Description Tone <span class="new-badge">NEW</span></label>
+            <label class="form-label" data-i18n="descriptionTone">Description Tone <span class="new-badge" data-i18n="newBadge">NEW</span></label>
             <div class="tone-slider">
               <label class="tone-option">
                 <input type="radio" name="tone" value="standard" checked>
-                <span class="tone-chip">Standard</span>
+                <span class="tone-chip" data-i18n="toneStandard">Standard</span>
               </label>
               <label class="tone-option">
                 <input type="radio" name="tone" value="friendly">
-                <span class="tone-chip">Friendly</span>
+                <span class="tone-chip" data-i18n="toneFriendly">Friendly</span>
               </label>
               <label class="tone-option">
                 <input type="radio" name="tone" value="professional">
-                <span class="tone-chip">Pro</span>
+                <span class="tone-chip" data-i18n="tonePro">Pro</span>
               </label>
               <label class="tone-option">
                 <input type="radio" name="tone" value="enthusiastic">
-                <span class="tone-chip">Enthusiastic</span>
+                <span class="tone-chip" data-i18n="toneEnthusiastic">Enthusiastic</span>
               </label>
             </div>
           </div>
@@ -1240,8 +1398,8 @@
 
           <div class="toggle-container" onclick="document.getElementById('emojiToggle').click()">
             <div class="toggle-info">
-              <span class="toggle-label">Use Emojis <span class="new-badge">NEW</span></span>
-              <span class="toggle-sublabel">Add relevant emojis to text</span>
+              <span class="toggle-label" data-i18n="useEmojis">Use Emojis <span class="new-badge" data-i18n="newBadge">NEW</span></span>
+              <span class="toggle-sublabel" data-i18n="emojiSublabel">Add relevant emojis to text</span>
             </div>
             <label class="toggle-switch" onclick="event.stopPropagation()">
               <input type="checkbox" id="emojiToggle">
@@ -1272,15 +1430,15 @@
             <line x1="12" y1="16" x2="12.01" y2="16"></line>
           </svg>
           <div>
-            <strong>Upgrade to unlock:</strong> Description tone options and emoji enhancement are available on
-            <strong>Pro & Business</strong> plans.
-            <a href="#" class="upgrade-link" id="settingsUpgradeLink">View Plans →</a>
+            <strong data-i18n="upgradeToUnlock">Upgrade to unlock:</strong> <span data-i18n="upgradeNote">Description tone options and emoji enhancement are available on
+            <strong>Pro & Business</strong> plans.</span>
+            <a href="#" class="upgrade-link" id="settingsUpgradeLink" data-i18n="viewPlans">View Plans →</a>
           </div>
         </div>
 
         <div style="margin-top: auto;">
-          <button id="signOutBtnSettings" class="btn btn-secondary">Sign Out</button>
-          <p class="small-text">
+          <button id="signOutBtnSettings" class="btn btn-secondary" data-i18n="signOut">Sign Out</button>
+          <p class="small-text" data-i18n="helperText">
             The "Generate" button appears on Vinted item listing pages.
           </p>
         </div>
@@ -1289,6 +1447,7 @@
   </div>
 
   <script src="lib/supabase.js"></script>
+  <script src="lib/localization.js"></script>
   <script src="popup.js"></script>
 </body>
 
