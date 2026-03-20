@@ -981,7 +981,7 @@
           if (statusEl) {
             const total = downloadedFiles.size;
             statusEl.className = "status";
-            statusEl.textContent = `✓ ${total} ${T.filesAdded || "file(s) added. Ready for more..."}`;
+            statusEl.textContent = `✓ ${total} ${total === 1 ? (T.fileAdded || "file added. Ready for more...") : (T.filesAdded || "files added. Ready for more...")}`;
           }
         } else {
           // No files yet, show waiting message
@@ -990,7 +990,7 @@
             statusEl.textContent = T.waitingForPhotos || "Waiting for photos from phone...";
           } else if (statusEl && downloadedFiles.size > 0) {
             statusEl.className = "status";
-            statusEl.textContent = `✓ ${downloadedFiles.size} ${T.filesAdded || "file(s) added. Ready for more..."}`;
+            statusEl.textContent = `✓ ${downloadedFiles.size} ${downloadedFiles.size === 1 ? (T.fileAdded || "file added. Ready for more...") : (T.filesAdded || "files added. Ready for more...")}`;
           }
         }
       } catch (err) {

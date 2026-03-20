@@ -49,6 +49,10 @@ function getApiBaseUrl() {
     return PROD_URL;
 }
 
+function normalizeUrl(url) {
+    return url.trim().replace(/\/$/, '');
+}
+
 function replaceInFile(filePath, fromUrl, toUrl) {
     const fullPath = path.join(__dirname, '..', filePath);
     if (!fs.existsSync(fullPath)) return;
@@ -63,7 +67,7 @@ function replaceInFile(filePath, fromUrl, toUrl) {
 }
 
 function main() {
-    const targetUrl = getApiBaseUrl();
+    const targetUrl = normalizeUrl(getApiBaseUrl());
 
     console.log(`Setting API base URL to: ${targetUrl}`);
 
