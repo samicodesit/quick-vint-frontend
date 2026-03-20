@@ -80,7 +80,6 @@ This:
 - manifest.json, content.js, background.js
 - popup.html, popup.js
 - callback.html, callback.js
-- preview.html
 - lib/ (localization.js, supabase.js)
 - icons/
 - _locales/
@@ -108,6 +107,8 @@ This starts the API at `http://localhost:5000`.
 ```bash
 npm run build:local
 ```
+
+> **Note:** The `build:local` and `build:prod` scripts use POSIX-style env vars (`VAR=value command`), which requires a Unix shell (macOS/Linux/WSL). On native Windows, use WSL or set `API_BASE_URL` in a `.env` file and run `npm run build` instead.
 
 ### 4. Reload after changes
 

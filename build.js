@@ -19,7 +19,6 @@ const INCLUDE_LIST = [
     'popup.js',
     'callback.html',
     'callback.js',
-    'preview.html',
     'lib',
     'icons',
     '_locales',

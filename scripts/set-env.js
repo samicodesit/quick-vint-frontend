@@ -43,7 +43,9 @@ function getApiBaseUrl() {
         }
     }
 
-    // Default to production
+    // Default to production — this is intentional so that CI/CD and `npm run build`
+    // always produce a production build unless explicitly overridden.
+    // Use `npm run build:local` for local development.
     return PROD_URL;
 }
 

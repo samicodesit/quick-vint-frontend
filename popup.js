@@ -29,7 +29,7 @@ document.addEventListener("DOMContentLoaded", () => {
       const key = el.getAttribute("data-i18n");
       if (T[key]) {
         // For elements that contain child elements (like NEW badges), only set text of text nodes
-        if (el.children.length > 0 && key !== "upgradeNote") {
+        if (el.children.length > 0 && key !== "upgradeNote" && key !== "upgradeToUnlock") {
           // Find first text node and update it
           for (const node of el.childNodes) {
             if (node.nodeType === Node.TEXT_NODE && node.textContent.trim()) {

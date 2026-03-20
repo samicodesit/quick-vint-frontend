@@ -1165,6 +1165,7 @@
     const container = titleEl.closest("div");
     if (container && container.parentNode) {
       const btnContainer = document.createElement("div");
+      btnContainer.id = "quickvint-btn-container";
       // Container for tool buttons and the sign-in component, spaced below the title.
       btnContainer.style.marginTop = "20px";
 
@@ -1221,23 +1222,12 @@
       if (changes.uiLanguage && window.getUIStrings) {
         T = window.getUIStrings(changes.uiLanguage.newValue || "en");
         // Re-render buttons with new language
-        const existing = document.getElementById(BTN_ID);
-        if (existing) {
-          const container = existing.closest("div")?.parentNode;
-          if (container) {
-            // Remove old buttons
-            existing.closest("div")?.parentNode?.querySelector(`#${BTN_ID}`)?.closest("div[style]")?.remove();
-          }
-        }
+        const oldContainer = document.getElementById("quickvint-btn-container");
+        if (oldContainer) oldContainer.remove();
         // Reset refs and re-inject
         generateBtn = null;
         phoneBtn = null;
         signInBtn = null;
-        const oldBtn = document.getElementById(BTN_ID);
-        const oldPhone = document.getElementById(PHONE_BTN_ID);
-        const oldSignIn = document.getElementById(SIGN_IN_BTN_ID);
-        if (oldBtn) oldBtn.parentElement?.parentElement?.remove();
-        if (oldSignIn && !oldBtn) oldSignIn.parentElement?.remove();
         injectButton();
       }
     });
