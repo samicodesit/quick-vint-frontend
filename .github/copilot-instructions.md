@@ -20,10 +20,13 @@ This Chrome extension (`quick-vint`) works together with the backend API (`quick
 
 ## Subscription Tiers
 
-| Feature          | Free | Starter | Pro | Business |
-| ---------------- | ---- | ------- | --- | -------- |
-| Basic generation | ✓    | ✓       | ✓   | ✓        |
-| Tone selection   | ✗    | ✗       | ✓   | ✓        |
-| Emoji toggle     | ✗    | ✗       | ✓   | ✓        |
+| Feature            | Free          | Starter | Pro | Business |
+| ------------------ | ------------- | ------- | --- | -------- |
+| Basic generation   | ✓             | ✓       | ✓   | ✓        |
+| Tone selection     | ✗             | ✗       | ✓   | ✓        |
+| Emoji toggle       | ✗             | ✗       | ✓   | ✓        |
+| Daily limit        | none          | 5       | 15  | 50       |
+| Monthly limit      | —             | 75      | 300 | 1000     |
+| Lifetime limit     | 4 (one-time)  | —       | —   | —        |
 
 **Important:** Client-side tier checks are for UX only. All feature gating must be enforced server-side.

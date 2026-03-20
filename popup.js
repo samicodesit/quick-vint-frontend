@@ -7,7 +7,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
   // Fallback limits — overridden by /api/tier-config on load
   let TIER_LIMITS = {
-    free: { daily: 3, monthly: 5 },
+    free: { daily: null, monthly: 4 }, // lifetime total (no daily cap)
     starter: { daily: 5, monthly: 75 },
     pro: { daily: 15, monthly: 300 },
     business: { daily: 50, monthly: 1000 },
@@ -96,7 +96,7 @@ document.addEventListener("DOMContentLoaded", () => {
       for (const [tier, cfg] of Object.entries(data)) {
         if (cfg.limits) {
           TIER_LIMITS[tier] = {
-            daily: cfg.limits.daily,
+            daily: cfg.limits.daily ?? null,
             monthly: cfg.limits.monthly,
           };
         }
@@ -248,23 +248,42 @@ document.addEventListener("DOMContentLoaded", () => {
 
   function updateUsageUI(dailyUsed, monthlyUsed, tier) {
     const totals = TIER_LIMITS[tier] || TIER_LIMITS["free"];
-    const dailyTotal = totals.daily;
-    const monthlyTotal = totals.monthly;
-    const displayDailyUsed = Math.min(dailyUsed, dailyTotal);
-    const displayMonthlyUsed = Math.min(monthlyUsed, monthlyTotal);
-    const dailyPercent =
-      dailyTotal > 0 ? Math.min((dailyUsed / dailyTotal) * 100, 100) : 0;
-    const monthlyPercent =
-      monthlyTotal > 0 ? Math.min((monthlyUsed / monthlyTotal) * 100, 100) : 0;
+    const isFree = totals.daily === null;
+    const dailyMeter = document.getElementById("dailyMeter");
+    const monthlyUsageLabel = document.getElementById("monthlyUsageLabel");
 
-    if (dailyCallsUsed)
-      dailyCallsUsed.textContent = `${displayDailyUsed} / ${dailyTotal}`;
-    if (monthlyCallsUsed)
-      monthlyCallsUsed.textContent = `${displayMonthlyUsed} / ${monthlyTotal}`;
-    if (dailyProgressBar) dailyProgressBar.style.width = `${dailyPercent}%`;
-    if (monthlyProgressBar)
-      monthlyProgressBar.style.width = `${monthlyPercent}%`;
-
+    if (isFree) {
+      // Free tier: hide daily meter, show single lifetime total
+      if (dailyMeter) dailyMeter.classList.add("hidden");
+      if (monthlyUsageLabel) monthlyUsageLabel.textContent = T.totalUsage || "Total Usage";
+      const totalLimit = totals.monthly;
+      const displayTotal = Math.min(monthlyUsed, totalLimit);
+      const totalPercent = totalLimit > 0 ? Math.min((monthlyUsed / totalLimit) * 100, 100) : 0;
+      if (monthlyCallsUsed) monthlyCallsUsed.textContent = `${displayTotal} / ${totalLimit}`;
+      if (monthlyProgressBar) monthlyProgressBar.style.width = `${totalPercent}%`;
+    } else {
+      // Paid tiers: show both daily and monthly meters
+      if (dailyMeter) dailyMeter.classList.remove("hidden");
+      if (monthlyUsageLabel) {
+        monthlyUsageLabel.setAttribute("data-i18n", "monthlyUsage");
+        monthlyUsageLabel.textContent = T.monthlyUsage || "Monthly Usage";
+      }
+      const dailyTotal = totals.daily;
+      const monthlyTotal = totals.monthly;
+      const displayDailyUsed = Math.min(dailyUsed, dailyTotal);
+      const displayMonthlyUsed = Math.min(monthlyUsed, monthlyTotal);
+      const dailyPercent =
+        dailyTotal > 0 ? Math.min((dailyUsed / dailyTotal) * 100, 100) : 0;
+      const monthlyPercent =
+        monthlyTotal > 0 ? Math.min((monthlyUsed / monthlyTotal) * 100, 100) : 0;
+      if (dailyCallsUsed)
+        dailyCallsUsed.textContent = `${displayDailyUsed} / ${dailyTotal}`;
+      if (monthlyCallsUsed)
+        monthlyCallsUsed.textContent = `${displayMonthlyUsed} / ${monthlyTotal}`;
+      if (dailyProgressBar) dailyProgressBar.style.width = `${dailyPercent}%`;
+      if (monthlyProgressBar)
+        monthlyProgressBar.style.width = `${monthlyPercent}%`;
+    }
   }
 
   // --- DATA & STATE MANAGEMENT ---
