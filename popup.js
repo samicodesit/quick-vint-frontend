@@ -100,11 +100,8 @@ document.addEventListener("DOMContentLoaded", () => {
             monthly: cfg.limits.monthly,
           };
         }
-        if (cfg.displayName && TIER_DISPLAY_NAMES[tier] !== undefined) {
-          // Keep " Plan" suffix for paid tiers
-          TIER_DISPLAY_NAMES[tier] =
-            tier === "free" ? cfg.displayName : cfg.displayName + " Plan";
-        }
+        // displayName intentionally not overridden here;
+        // applyUITranslations() sets localized tier names from T.*Plan keys
       }
     })
     .catch(() => {
@@ -367,7 +364,7 @@ document.addEventListener("DOMContentLoaded", () => {
       });
       const { url } = await res.json();
       if (res.ok && url) {
-        window.open(url, "_blank");
+        window.open(url, "_blank", "noopener");
       } else {
         showMessage(T.unableToOpenPayment, "error");
       }
@@ -396,7 +393,7 @@ document.addEventListener("DOMContentLoaded", () => {
       });
       const { url } = await res.json();
       if (res.ok && url) {
-        window.open(url, "_blank");
+        window.open(url, "_blank", "noopener");
       } else {
         showMessage(T.unableToOpenSubscription, "error");
       }
@@ -421,7 +418,7 @@ document.addEventListener("DOMContentLoaded", () => {
       const token = encodeUserData(userData);
       if (token) {
         const url = `https://quick-vint.vercel.app/pricing?token=${token}`;
-        window.open(url, "_blank");
+        window.open(url, "_blank", "noopener");
       }
     });
   }

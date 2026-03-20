@@ -72,6 +72,7 @@
       const link = document.createElement("a");
       link.href = action.url;
       link.target = "_blank";
+      link.rel = "noopener noreferrer";
       link.style.cssText = "margin-left: 12px; color: inherit; text-decoration: underline; font-weight: 700; white-space: nowrap;";
       link.textContent = action.text + " →";
       contentDiv.appendChild(link);
