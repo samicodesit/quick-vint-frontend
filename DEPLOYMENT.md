@@ -44,8 +44,6 @@ This runs two steps:
    - `callback.js` / `callback.html` — Auth callback redirect
    - `manifest.json` — Host permissions
 
-2. **`terser content.js -o content.min.js`** — Minifies content script
-
 ### Production build
 
 ```bash

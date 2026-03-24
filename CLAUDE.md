@@ -12,9 +12,9 @@ AutoLister AI is a Chrome browser extension (Manifest V3) that provides AI-gener
 # Install dependencies
 npm install
 
-# Build minified content script for production
+# Build (set API base URL)
 npm run build
-# Runs: terser content.js -o content.min.js --compress --mangle
+# Runs: node scripts/set-env.js
 
 # Prepare (runs build automatically on npm install)
 npm run prepare
