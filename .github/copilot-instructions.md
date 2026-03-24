@@ -15,7 +15,7 @@ This Chrome extension (`quick-vint`) works together with the backend API (`quick
 - `content.js` is the main content script injected into Vinted pages
 - `background.js` is the service worker handling auth and proxy fetches
 - `popup.js` manages the extension popup UI (settings, auth, plan info)
-- Build: `npm run build` (terser minification of content.js)
+- Build: `npm run build` (URL substitution via `scripts/set-env.js`)
 - No test suite or linting configured
 
 ## Subscription Tiers

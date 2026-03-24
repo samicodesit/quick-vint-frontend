@@ -128,7 +128,7 @@ async function main() {
   log("====================================");
 
   // Ensure production URLs in the staged copy, not the source files
-  const { PROD_URL, replaceInFile } = require("./scripts/set-env");
+  const { PROD_URL } = require("./scripts/set-env");
   const FILES_TO_UPDATE = [
     "content.js",
     "popup.js",

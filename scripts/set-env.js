@@ -55,7 +55,7 @@ function normalizeUrl(url) {
 
 function replaceInFile(filePath, fromUrl, toUrl) {
   const fullPath = path.join(__dirname, "..", filePath);
-  if (!fs.existsSync(fullPath)) return;
+  if (!fs.existsSync(fullPath)) return false;
 
   const content = fs.readFileSync(fullPath, "utf8");
 
@@ -64,6 +64,7 @@ function replaceInFile(filePath, fromUrl, toUrl) {
   newContent = newContent.split(fromUrl).join(toUrl);
 
   fs.writeFileSync(fullPath, newContent, "utf8");
+  return true;
 }
 
 function main() {
@@ -73,8 +74,8 @@ function main() {
 
   for (const file of FILES_TO_PROCESS) {
     try {
-      replaceInFile(file, PROD_URL, targetUrl);
-      console.log(`  Updated: ${file}`);
+      const updated = replaceInFile(file, PROD_URL, targetUrl);
+      console.log(`  ${updated ? "Updated" : "Skipped (missing)"}: ${file}`);
     } catch (err) {
       console.error(`  Error in ${file}:`, err.message);
     }

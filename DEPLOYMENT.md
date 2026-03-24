@@ -122,7 +122,7 @@ npm run build:local
 | `manifest.json`       | Click refresh on `chrome://extensions/`                                       |
 | `lib/localization.js` | `npm run build:local`, refresh Vinted tab + re-open popup                     |
 
-**Tip:** `content.js` changes require both a build (for minification) AND a page refresh on Vinted.
+**Tip:** `content.js` changes require a page refresh on Vinted after reloading the extension.
 
 ## Publishing to Chrome Web Store
 
