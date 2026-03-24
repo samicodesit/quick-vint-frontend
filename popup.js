@@ -103,6 +103,8 @@ document.addEventListener("DOMContentLoaded", () => {
         // displayName intentionally not overridden here;
         // applyUITranslations() sets localized tier names from T.*Plan keys
       }
+      // Re-render usage UI with authoritative limits
+      if (typeof updateFromStorage === "function") updateFromStorage();
     })
     .catch(() => {
       /* use fallback values */
@@ -256,8 +258,10 @@ document.addEventListener("DOMContentLoaded", () => {
     if (isFree) {
       // Free tier: hide daily meter, show single lifetime total
       if (dailyMeter) dailyMeter.classList.add("hidden");
-      if (monthlyUsageLabel)
+      if (monthlyUsageLabel) {
+        monthlyUsageLabel.setAttribute("data-i18n", "totalUsage");
         monthlyUsageLabel.textContent = T.totalUsage || "Total Usage";
+      }
       const totalLimit = totals.monthly;
       const displayTotal = Math.min(monthlyUsed, totalLimit);
       const totalPercent =

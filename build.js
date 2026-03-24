@@ -127,7 +127,7 @@ async function main() {
   log("🏗️  AutoLister AI - Release Builder", "green");
   log("====================================");
 
-  // Ensure production URLs before packaging
+  // Ensure production URLs in the staged copy, not the source files
   const { PROD_URL, replaceInFile } = require("./scripts/set-env");
   const FILES_TO_UPDATE = [
     "content.js",
@@ -138,13 +138,6 @@ async function main() {
   ];
 
   log("🔄 Ensuring production URLs...", "yellow");
-  for (const file of FILES_TO_UPDATE) {
-    try {
-      replaceInFile(file, "http://localhost:5000", PROD_URL);
-    } catch (err) {
-      // File might not exist, skip
-    }
-  }
 
   const versionArg = process.argv[2];
   const scriptDir = __dirname;
@@ -208,6 +201,16 @@ async function main() {
         copyRecursive(srcPath, destPath);
       } else {
         log(`⚠️  Warning: ${item} not found, skipping`, "yellow");
+      }
+    }
+
+    // Apply production URL substitutions on the staged copy (not source files)
+    for (const file of FILES_TO_UPDATE) {
+      const stagedPath = path.join(tempDir, file);
+      if (fs.existsSync(stagedPath)) {
+        let content = fs.readFileSync(stagedPath, "utf8");
+        content = content.split("http://localhost:5000").join(PROD_URL);
+        fs.writeFileSync(stagedPath, content, "utf8");
       }
     }
 
