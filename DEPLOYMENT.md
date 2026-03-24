@@ -71,8 +71,8 @@ node build.js 1.3.4
 This:
 
 1. Updates `manifest.json` version to `1.3.4`
-2. Runs `set-env.js` with production URL to ensure all URLs are correct
-3. Copies all release files to a temp directory (see INCLUDE_LIST in build.js)
+2. Copies all release files to a temp directory (see INCLUDE_LIST in build.js)
+3. Replaces any non-production URLs with the production URL in staged files
 4. Creates `dist/autolister-ai-v1.3.4.zip` ready for Chrome Web Store upload
 
 **Files included in the release zip:**

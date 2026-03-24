@@ -205,11 +205,14 @@ async function main() {
     }
 
     // Apply production URL substitutions on the staged copy (not source files)
+    const NON_PROD_PATTERNS = ["http://localhost:5000", "http://localhost:3000", "http://localhost:4321"];
     for (const file of FILES_TO_UPDATE) {
       const stagedPath = path.join(tempDir, file);
       if (fs.existsSync(stagedPath)) {
         let content = fs.readFileSync(stagedPath, "utf8");
-        content = content.split("http://localhost:5000").join(PROD_URL);
+        for (const pattern of NON_PROD_PATTERNS) {
+          content = content.split(pattern).join(PROD_URL);
+        }
         fs.writeFileSync(stagedPath, content, "utf8");
       }
     }

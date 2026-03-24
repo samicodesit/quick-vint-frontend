@@ -38,7 +38,7 @@ function getApiBaseUrl() {
       if (!trimmed || trimmed.startsWith("#")) continue;
       const [key, ...valueParts] = line.split("=");
       if (key.trim() === "API_BASE_URL") {
-        return valueParts.join("=").trim();
+        return valueParts.join("=").trim().replace(/^["']|["']$/g, "");
       }
     }
   }

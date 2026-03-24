@@ -23,9 +23,7 @@
     "url": "https://github.com/samicodesit/quick-vint-frontend/issues"
   },
   "homepage": "https://github.com/samicodesit/quick-vint-frontend#readme",
-  "devDependencies": {
-    "terser": "^5.39.2"
-  },
+  "devDependencies": {},
   "dependencies": {
     "@supabase/supabase-js": "^2.49.8"
   }
