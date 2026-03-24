@@ -139,12 +139,12 @@ This is a Chrome Extension that must be loaded manually for development:
 
 ### Subscription Tiers
 
-| Tier     | Daily | Monthly | Features                 |
-| -------- | ----- | ------- | ------------------------ |
-| free     | —     | 4 (lifetime) | Basic generation    |
-| starter  | 5     | 75      | Standard generation      |
-| pro      | 15    | 300     | + Tone selection, emojis |
-| business | 50    | 1000    | + Highest limits         |
+| Tier     | Daily | Monthly      | Features                 |
+| -------- | ----- | ------------ | ------------------------ |
+| free     | —     | 4 (lifetime) | Basic generation         |
+| starter  | 5     | 75           | Standard generation      |
+| pro      | 15    | 300          | + Tone selection, emojis |
+| business | 50    | 1000         | + Highest limits         |
 
 Rate limiting is enforced server-side; the extension displays usage progress bars in the popup.
 

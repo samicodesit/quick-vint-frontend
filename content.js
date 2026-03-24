@@ -138,7 +138,9 @@
           };
           // Simple base64 encode
           const token = btoa(JSON.stringify(userData));
-          resolve(`https://quick-vint.vercel.app/pricing?token=${encodeURIComponent(token)}`);
+          resolve(
+            `https://quick-vint.vercel.app/pricing?token=${encodeURIComponent(token)}`,
+          );
         } catch (e) {
           console.error("Error building pricing URL:", e);
           resolve("https://quick-vint.vercel.app/pricing");
