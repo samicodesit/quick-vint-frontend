@@ -20,9 +20,7 @@
       "128": "icons/icon128.png"
     }
   },
-  "permissions": [
-    "storage"
-  ],
+  "permissions": ["storage"],
   "host_permissions": [
     "https://quick-vint.vercel.app/*",
     "*://*.vinted.at/*",
@@ -80,21 +78,14 @@
         "*://*.vinted.co.uk/*",
         "*://*.vinted.com/*"
       ],
-      "js": [
-        "lib/localization.js",
-        "content.js"
-      ],
+      "js": ["lib/localization.js", "content.js"],
       "run_at": "document_idle"
     }
   ],
   "web_accessible_resources": [
     {
-      "resources": [
-        "callback.html"
-      ],
-      "matches": [
-        "<all_urls>"
-      ]
+      "resources": ["callback.html"],
+      "matches": ["<all_urls>"]
     }
   ],
   "content_security_policy": {

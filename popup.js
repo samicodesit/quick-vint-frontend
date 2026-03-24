@@ -228,10 +228,11 @@ document.addEventListener("DOMContentLoaded", () => {
         if (rawEnd && dateEl) {
           const dt = new Date(rawEnd);
           if (labelEl) labelEl.textContent = T.activeUntil || "Active until";
-          dateEl.textContent = dt.toLocaleDateString(
-            undefined,
-            { year: "numeric", month: "short", day: "numeric" },
-          );
+          dateEl.textContent = dt.toLocaleDateString(undefined, {
+            year: "numeric",
+            month: "short",
+            day: "numeric",
+          });
         } else if (dateEl) {
           if (labelEl) labelEl.textContent = "";
           dateEl.textContent = T.activeSubscription || "Active subscription";
@@ -255,12 +256,16 @@ document.addEventListener("DOMContentLoaded", () => {
     if (isFree) {
       // Free tier: hide daily meter, show single lifetime total
       if (dailyMeter) dailyMeter.classList.add("hidden");
-      if (monthlyUsageLabel) monthlyUsageLabel.textContent = T.totalUsage || "Total Usage";
+      if (monthlyUsageLabel)
+        monthlyUsageLabel.textContent = T.totalUsage || "Total Usage";
       const totalLimit = totals.monthly;
       const displayTotal = Math.min(monthlyUsed, totalLimit);
-      const totalPercent = totalLimit > 0 ? Math.min((monthlyUsed / totalLimit) * 100, 100) : 0;
-      if (monthlyCallsUsed) monthlyCallsUsed.textContent = `${displayTotal} / ${totalLimit}`;
-      if (monthlyProgressBar) monthlyProgressBar.style.width = `${totalPercent}%`;
+      const totalPercent =
+        totalLimit > 0 ? Math.min((monthlyUsed / totalLimit) * 100, 100) : 0;
+      if (monthlyCallsUsed)
+        monthlyCallsUsed.textContent = `${displayTotal} / ${totalLimit}`;
+      if (monthlyProgressBar)
+        monthlyProgressBar.style.width = `${totalPercent}%`;
     } else {
       // Paid tiers: show both daily and monthly meters
       if (dailyMeter) dailyMeter.classList.remove("hidden");
@@ -275,7 +280,9 @@ document.addEventListener("DOMContentLoaded", () => {
       const dailyPercent =
         dailyTotal > 0 ? Math.min((dailyUsed / dailyTotal) * 100, 100) : 0;
       const monthlyPercent =
-        monthlyTotal > 0 ? Math.min((monthlyUsed / monthlyTotal) * 100, 100) : 0;
+        monthlyTotal > 0
+          ? Math.min((monthlyUsed / monthlyTotal) * 100, 100)
+          : 0;
       if (dailyCallsUsed)
         dailyCallsUsed.textContent = `${displayDailyUsed} / ${dailyTotal}`;
       if (monthlyCallsUsed)
@@ -343,16 +350,10 @@ document.addEventListener("DOMContentLoaded", () => {
       }
 
       // Backend returns { message: "..." } for success
-      showMessage(
-        data.message || T.checkEmailForLink,
-        "success",
-      );
+      showMessage(data.message || T.checkEmailForLink, "success");
       emailInput.value = "";
     } catch (err) {
-      showMessage(
-        err.message || T.connectionIssue,
-        "error",
-      );
+      showMessage(err.message || T.connectionIssue, "error");
     } finally {
       setLoading(sendMagicLinkBtn, false, T.sendMagicLink);
     }
@@ -436,7 +437,7 @@ document.addEventListener("DOMContentLoaded", () => {
       };
       const token = encodeUserData(userData);
       if (token) {
-        const url = `https://quick-vint.vercel.app/pricing?token=${token}`;
+        const url = `https://quick-vint.vercel.app/pricing?token=${encodeURIComponent(token)}`;
         window.open(url, "_blank", "noopener");
       }
     });
@@ -648,7 +649,7 @@ document.addEventListener("DOMContentLoaded", () => {
           return;
         }
 
-        const popup = window.open(data.url, "_blank");
+        const popup = window.open(data.url, "_blank", "noopener");
         if (!popup || popup.closed || typeof popup.closed === "undefined") {
           console.warn("OAuth popup was likely blocked by the browser.");
           alert(T.popupBlocked);

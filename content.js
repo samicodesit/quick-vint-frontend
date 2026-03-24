@@ -37,8 +37,17 @@
         // Auto-detect from Vinted domain TLD
         const host = location.hostname; // e.g. www.vinted.fr
         const tld = host.split(".").pop();
-        const tldMap = { fr: "fr", de: "de", es: "es", it: "it", nl: "nl", pl: "pl" };
-        const detected = tldMap[tld] || (window.detectUILanguageCode ? window.detectUILanguageCode() : "en");
+        const tldMap = {
+          fr: "fr",
+          de: "de",
+          es: "es",
+          it: "it",
+          nl: "nl",
+          pl: "pl",
+        };
+        const detected =
+          tldMap[tld] ||
+          (window.detectUILanguageCode ? window.detectUILanguageCode() : "en");
         T = window.getUIStrings(detected);
       }
       if (callback) callback();
@@ -73,7 +82,8 @@
       link.href = action.url;
       link.target = "_blank";
       link.rel = "noopener noreferrer";
-      link.style.cssText = "margin-left: 12px; color: inherit; text-decoration: underline; font-weight: 700; white-space: nowrap;";
+      link.style.cssText =
+        "margin-left: 12px; color: inherit; text-decoration: underline; font-weight: 700; white-space: nowrap;";
       link.textContent = action.text + " →";
       contentDiv.appendChild(link);
     }
@@ -128,7 +138,7 @@
           };
           // Simple base64 encode
           const token = btoa(JSON.stringify(userData));
-          resolve(`https://quick-vint.vercel.app/pricing?token=${token}`);
+          resolve(`https://quick-vint.vercel.app/pricing?token=${encodeURIComponent(token)}`);
         } catch (e) {
           console.error("Error building pricing URL:", e);
           resolve("https://quick-vint.vercel.app/pricing");
@@ -934,7 +944,10 @@
 
   async function onPhoneUploadClick() {
     if (!isAuthenticated) {
-      showToast(T.signInFirst || "Please sign in via the extension popup first.", "error");
+      showToast(
+        T.signInFirst || "Please sign in via the extension popup first.",
+        "error",
+      );
       return;
     }
 
@@ -981,16 +994,17 @@
           if (statusEl) {
             const total = downloadedFiles.size;
             statusEl.className = "status";
-            statusEl.textContent = `✓ ${total} ${total === 1 ? (T.fileAdded || "file added. Ready for more...") : (T.filesAdded || "files added. Ready for more...")}`;
+            statusEl.textContent = `✓ ${total} ${total === 1 ? T.fileAdded || "file added. Ready for more..." : T.filesAdded || "files added. Ready for more..."}`;
           }
         } else {
           // No files yet, show waiting message
           if (statusEl && downloadedFiles.size === 0) {
             statusEl.className = "status waiting";
-            statusEl.textContent = T.waitingForPhotos || "Waiting for photos from phone...";
+            statusEl.textContent =
+              T.waitingForPhotos || "Waiting for photos from phone...";
           } else if (statusEl && downloadedFiles.size > 0) {
             statusEl.className = "status";
-            statusEl.textContent = `✓ ${downloadedFiles.size} ${downloadedFiles.size === 1 ? (T.fileAdded || "file added. Ready for more...") : (T.filesAdded || "files added. Ready for more...")}`;
+            statusEl.textContent = `✓ ${downloadedFiles.size} ${downloadedFiles.size === 1 ? T.fileAdded || "file added. Ready for more..." : T.filesAdded || "files added. Ready for more..."}`;
           }
         }
       } catch (err) {
@@ -1046,7 +1060,8 @@
         fileInput.dispatchEvent(new Event("change", { bubbles: true }));
 
         const statusEl = document.querySelector(`#${MODAL_ID} .status`);
-        if (statusEl) statusEl.textContent = T.imageUploaded || "Image uploaded!";
+        if (statusEl)
+          statusEl.textContent = T.imageUploaded || "Image uploaded!";
       }
     } catch (err) {
       console.error("Error downloading image:", err);
@@ -1064,7 +1079,10 @@
       .filter(Boolean);
 
     if (!imageUrls.length) {
-      showToast(T.uploadAtLeastOne || "Please upload at least one image.", "error");
+      showToast(
+        T.uploadAtLeastOne || "Please upload at least one image.",
+        "error",
+      );
       return;
     }
 
@@ -1087,7 +1105,8 @@
 
       if (!access_token) {
         throw new Error(
-          T.sessionExpired || "Your session has expired. Please sign in again via the extension.",
+          T.sessionExpired ||
+            "Your session has expired. Please sign in again via the extension.",
         );
       }
 
@@ -1111,7 +1130,10 @@
 
       if (response.status === 401) {
         isAuthenticated = false;
-        showToast(T.sessionExpiredShort || "Session expired. Please sign in again.", "error");
+        showToast(
+          T.sessionExpiredShort || "Session expired. Please sign in again.",
+          "error",
+        );
         isBusy = false;
         updateButtonUI();
         return;
@@ -1120,7 +1142,9 @@
         const errData = await response.json();
         const pricingUrl = await getPricingUrl();
         showToast(
-          errData.error || T.usageLimitExceeded || "You have exceeded your daily/monthly usage limit.",
+          errData.error ||
+            T.usageLimitExceeded ||
+            "You have exceeded your daily/monthly usage limit.",
           "error",
           { text: T.upgradePlan || "Upgrade Plan", url: pricingUrl },
         );
@@ -1156,7 +1180,10 @@
       }
     } catch (err) {
       console.error("AutoLister AI Error:", err);
-      showToast(err.message || T.unexpectedError || "An unexpected error occurred.", "error");
+      showToast(
+        err.message || T.unexpectedError || "An unexpected error occurred.",
+        "error",
+      );
       isBusy = false;
       updateButtonUI();
     }

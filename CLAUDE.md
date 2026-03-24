@@ -141,7 +141,7 @@ This is a Chrome Extension that must be loaded manually for development:
 
 | Tier     | Daily | Monthly | Features                 |
 | -------- | ----- | ------- | ------------------------ |
-| free     | 3     | 5       | Basic generation         |
+| free     | —     | 4 (lifetime) | Basic generation    |
 | starter  | 5     | 75      | Standard generation      |
 | pro      | 15    | 300     | + Tone selection, emojis |
 | business | 50    | 1000    | + Highest limits         |

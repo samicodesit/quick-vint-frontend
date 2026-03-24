@@ -34,7 +34,7 @@ AutoLister AI is a Chrome browser extension (Manifest V3) that provides AI-gener
 
 | Tier         | Daily Limit | Monthly Limit | Features                           |
 | ------------ | ----------- | ------------- | ---------------------------------- |
-| **Free**     | 3           | 5             | Basic generation, standard tone    |
+| **Free**     | No daily cap| 4 (lifetime)  | Basic generation, standard tone    |
 | **Starter**  | 5           | 75            | All basic features                 |
 | **Pro**      | 15          | 300           | + Tone selection, emoji support    |
 | **Business** | 50          | 1000          | + Highest limits, priority support |
