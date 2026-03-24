@@ -69,50 +69,10 @@ function copyRecursive(src, dest) {
 }
 
 function createZip(sourceDir, outputFile) {
-  // Try using system zip command first
-  try {
-    execSync(
-      `cd "${sourceDir}" && zip -r "${outputFile}" . -x ".*" -x "*.md"`,
-      {
-        stdio: "ignore",
-      },
-    );
-    return;
-  } catch (e) {
-    // Fall through to manual zip creation
-  }
-
-  // Manual zip using Node.js
-  const yazl = require("yazl");
-  const zipfile = new yazl.ZipFile();
-  const output = fs.createWriteStream(outputFile);
-
-  zipfile.outputStream.pipe(output);
-
-  function addDirectory(dir, prefix = "") {
-    const entries = fs.readdirSync(dir);
-    for (const entry of entries) {
-      if (!shouldInclude(entry)) continue;
-
-      const fullPath = path.join(dir, entry);
-      const zipPath = path.join(prefix, entry);
-      const stat = fs.statSync(fullPath);
-
-      if (stat.isDirectory()) {
-        addDirectory(fullPath, zipPath);
-      } else {
-        zipfile.addFile(fullPath, zipPath);
-      }
-    }
-  }
-
-  addDirectory(sourceDir);
-  zipfile.end();
-
-  return new Promise((resolve, reject) => {
-    output.on("close", resolve);
-    output.on("error", reject);
-  });
+  execSync(
+    `cd "${sourceDir}" && zip -r "${outputFile}" . -x ".*" -x "*.md"`,
+    { stdio: "ignore" },
+  );
 }
 
 function formatBytes(bytes) {
@@ -205,7 +165,11 @@ async function main() {
     }
 
     // Apply production URL substitutions on the staged copy (not source files)
-    const NON_PROD_PATTERNS = ["http://localhost:5000", "http://localhost:3000", "http://localhost:4321"];
+    const NON_PROD_PATTERNS = [
+      "http://localhost:5000",
+      "http://localhost:3000",
+      "http://localhost:4321",
+    ];
     for (const file of FILES_TO_UPDATE) {
       const stagedPath = path.join(tempDir, file);
       if (fs.existsSync(stagedPath)) {
