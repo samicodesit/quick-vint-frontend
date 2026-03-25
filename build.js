@@ -69,10 +69,16 @@ function copyRecursive(src, dest) {
 }
 
 function createZip(sourceDir, outputFile) {
-  execSync(
-    `cd "${sourceDir}" && zip -r "${outputFile}" . -x ".*" -x "*.md"`,
-    { stdio: "ignore" },
-  );
+  try {
+    execSync(
+      `cd "${sourceDir}" && zip -r "${outputFile}" . -x ".*" -x "*.md"`,
+      { stdio: "ignore" },
+    );
+  } catch (e) {
+    throw new Error(
+      "Packaging requires the system 'zip' command. Install it (e.g. 'apt install zip' or 'brew install zip') and try again."
+    );
+  }
 }
 
 function formatBytes(bytes) {

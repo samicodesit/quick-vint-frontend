@@ -124,6 +124,8 @@ npm run build:local
 
 **Tip:** `content.js` changes require a page refresh on Vinted after reloading the extension.
 
+> **Note:** `npm run package` requires the system `zip` command (pre-installed on macOS and Linux). On Windows, use WSL or install zip via MSYS2/Git Bash.
+
 ## Publishing to Chrome Web Store
 
 1. Bump version and create the zip:

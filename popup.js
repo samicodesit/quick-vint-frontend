@@ -256,7 +256,9 @@ document.addEventListener("DOMContentLoaded", () => {
     const monthlyUsageLabel = document.getElementById("monthlyUsageLabel");
 
     if (isFree) {
-      // Free tier: hide daily meter, show single lifetime total
+      // Free tier: hide daily meter, show lifetime total.
+      // api_calls_this_month is intentionally never reset for free users (see reset-counts.ts),
+      // so it accurately represents lifetime usage.
       if (dailyMeter) dailyMeter.classList.add("hidden");
       if (monthlyUsageLabel) {
         monthlyUsageLabel.setAttribute("data-i18n", "totalUsage");
