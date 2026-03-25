@@ -204,7 +204,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
   // --- UI RENDERING ---
 
-  function render(user, profile) {
+  function render(user, profile, daily, monthly) {
     if (user && profile) {
       if (userEmailSpan) userEmailSpan.textContent = user.email;
       const status = profile.subscription_status || "free";
@@ -212,14 +212,8 @@ document.addEventListener("DOMContentLoaded", () => {
       const tier = normalizeTier(rawTier);
       if (planName) planName.textContent = TIER_DISPLAY_NAMES[tier] || "?";
 
-      chrome.runtime.sendMessage({ type: "GET_USER_USAGE_COUNT" }, (resp) => {
-        const dailyUsed =
-          resp && typeof resp.daily === "number" ? resp.daily : 0;
-        const monthlyUsed =
-          resp && typeof resp.monthly === "number" ? resp.monthly : 0;
-
-        updateUsageUI(dailyUsed, monthlyUsed, tier);
-      });
+      // Update usage UI synchronously before switching view
+      updateUsageUI(daily ?? 0, monthly ?? 0, tier);
 
       if (status === "active" && tier !== "free") {
         if (freePlanView) freePlanView.classList.add("hidden");
@@ -305,14 +299,13 @@ document.addEventListener("DOMContentLoaded", () => {
   // --- DATA & STATE MANAGEMENT ---
 
   /**
-   * Refreshes user profile from database then reads from storage and triggers a render.
-   * This ensures we always have fresh data, matching the instant update behavior of usage counters.
+   * Reads user state (profile + usage) in a single message and triggers a render.
    */
   function updateFromStorage() {
-    chrome.storage.local.get(["supabaseSession", "userProfile"], (data) => {
-      const user = data.supabaseSession?.user || null;
-      const profile = data.userProfile || null;
-      render(user, profile);
+    chrome.runtime.sendMessage({ type: "GET_USER_STATE" }, (resp) => {
+      const user = resp?.user || null;
+      const profile = resp?.profile || null;
+      render(user, profile, resp?.daily ?? 0, resp?.monthly ?? 0);
     });
   }
 
@@ -436,7 +429,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
   function handleViewAllPlans(e) {
     if (e) e.preventDefault();
-    chrome.runtime.sendMessage({ type: "GET_USER_PROFILE" }, (resp) => {
+    chrome.runtime.sendMessage({ type: "GET_USER_STATE" }, (resp) => {
       const userData = {
         source: "extension",
         signed_in: !!resp?.user,

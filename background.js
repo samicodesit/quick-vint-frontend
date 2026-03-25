@@ -245,17 +245,43 @@ async function handleSignOut() {
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   (async () => {
     switch (message.type) {
-      case "GET_USER_PROFILE":
+      case "GET_USER_STATE": {
         const { supabaseSession, userProfile } = await chrome.storage.local.get(
           ["supabaseSession", "userProfile"],
         );
-        sendResponse({
-          user: supabaseSession?.user || null,
-          profile: userProfile || null,
-        });
-        break;
+        const user = supabaseSession?.user || null;
+        const profile = userProfile || null;
+        const monthly =
+          typeof profile?.api_calls_this_month === "number"
+            ? profile.api_calls_this_month
+            : 0;
 
-      case "GET_ACCESS_TOKEN":
+        // Fetch fresh daily count from rate_limits
+        let daily = 0;
+        try {
+          const session = await ensureValidToken();
+          if (session?.access_token && user) {
+            const authClient = createAuthenticatedClient(session.access_token);
+            const { data: limit } = await authClient
+              .from("rate_limits")
+              .select("count")
+              .eq("user_id", user.id)
+              .eq("window_type", "day")
+              .gte("expires_at", new Date().toISOString())
+              .order("count", { ascending: false })
+              .limit(1)
+              .maybeSingle();
+            daily = limit?.count || 0;
+          }
+        } catch (e) {
+          // daily stays 0 on error
+        }
+
+        sendResponse({ user, profile, daily, monthly });
+        break;
+      }
+
+      case "GET_ACCESS_TOKEN": {
         const session = await ensureValidToken();
         sendResponse(
           session
@@ -266,13 +292,8 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
             : null,
         );
         break;
+      }
 
-      case "GET_USER_USAGE_COUNT":
-        const usageCount = await fetchUserUsageCount();
-        sendResponse(usageCount);
-        break;
-
-      // THIS IS THE FIX: Restore the handler for the signal from the callback page.
       case "AUTH_UPDATED":
         await updateAndStoreUserProfile();
         sendResponse({ ok: true });
