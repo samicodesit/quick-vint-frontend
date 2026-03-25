@@ -176,53 +176,6 @@ async function updateAndStoreUserProfile() {
 }
 
 /**
- * Fetches the user's daily and monthly API usage counts.
- * @returns {Promise<{daily: number, monthly: number}>} Current usage counts.
- */
-async function fetchUserUsageCount() {
-  const session = await ensureValidToken();
-  if (!session?.access_token) return { daily: 0, monthly: 0 };
-
-  try {
-    const authClient = createAuthenticatedClient(session.access_token);
-    const {
-      data: { user },
-      error: userError,
-    } = await authClient.auth.getUser();
-    if (userError || !user) throw userError || new Error("User not found.");
-
-    const { data: profile, error: profileError } = await authClient
-      .from("profiles")
-      .select("subscription_tier, api_calls_this_month")
-      .eq("id", user.id)
-      .single();
-    if (profileError) throw profileError;
-
-    const monthly =
-      typeof profile?.api_calls_this_month === "number"
-        ? profile.api_calls_this_month
-        : 0;
-
-    const { data: limit, error: limitError } = await authClient
-      .from("rate_limits")
-      .select("count")
-      .eq("user_id", user.id)
-      .eq("window_type", "day")
-      .gte("expires_at", new Date().toISOString())
-      .order("count", { ascending: false })
-      .limit(1)
-      .maybeSingle();
-
-    if (limitError) throw limitError;
-
-    return { daily: limit?.count || 0, monthly };
-  } catch (error) {
-    console.error("Failed to fetch user usage count:", error);
-    return { daily: 0, monthly: 0 };
-  }
-}
-
-/**
  * Signs the user out and clears all local session data.
  * @returns {Promise<{ok: boolean, error?: string}>}
  */
