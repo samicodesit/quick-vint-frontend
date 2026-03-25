@@ -398,6 +398,12 @@
       flex-direction: column;
       gap: 5px;
       margin-bottom: 5px;
+      opacity: 0;
+      transition: opacity 0.25s ease;
+    }
+
+    #usageMeters.loaded {
+      opacity: 1;
     }
 
     .usage-meter .meter-label {
@@ -428,8 +434,37 @@
       width: 0%;
       background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
       border-radius: 4px;
-      transition: width 0.2s ease;
+      transition: width 0.3s ease;
     }
+
+    /* --- Skeleton Loading --- */
+    @keyframes shimmer {
+      0% { background-position: -400px 0; }
+      100% { background-position: 400px 0; }
+    }
+
+    .skeleton {
+      background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
+      background-size: 800px 100%;
+      animation: shimmer 1.4s infinite linear;
+      border-radius: 6px;
+    }
+
+    .skeleton-line {
+      height: 12px;
+      margin-bottom: 6px;
+      border-radius: 4px;
+    }
+
+    .skeleton-bar {
+      height: 6px;
+      border-radius: 3px;
+      margin-top: 4px;
+    }
+
+    #signedInView.is-loaded .skeleton-block { display: none !important; }
+    #signedInView:not(.is-loaded) .real-content { visibility: hidden; }
+    #signedInView.is-loaded .real-content { visibility: visible; }
 
     .view-plans-link {
       display: block;
@@ -446,6 +481,16 @@
     .view-plans-link:hover {
       color: #5a67d8;
       text-decoration: underline;
+    }
+
+    #freePlanView,
+    #paidPlanView {
+      transition: opacity 0.2s ease;
+    }
+
+    #freePlanView.hidden,
+    #paidPlanView.hidden {
+      display: none !important;
     }
 
     /* --- Language Dropdown Component --- */
@@ -1199,6 +1244,18 @@
       </div>
 
       <div id="signedInView">
+        <!-- Skeleton placeholders — visible until .is-loaded is set -->
+        <div class="skeleton-block">
+          <div class="user-email skeleton" style="height:34px;margin-bottom:2px;"></div>
+          <div class="plan-card" style="margin:2px 0 4px;">
+            <div class="skeleton skeleton-line" style="width:40%;margin:0 auto 8px;"></div>
+            <div class="skeleton skeleton-line" style="width:80%;"></div>
+            <div class="skeleton skeleton-bar" style="width:100%;margin-bottom:8px;"></div>
+          </div>
+        </div>
+
+        <!-- Real content -->
+        <div class="real-content">
         <div class="user-email">
           <span id="userEmail"></span>
         </div>
@@ -1208,7 +1265,7 @@
             <span id="planName">Free Plan</span>
           </div>
 
-          <div class="usage-meters hidden" id="usageMeters">
+          <div class="usage-meters" id="usageMeters">
             <div class="usage-meter hidden" id="dailyMeter">
               <div class="meter-label">
                 <span data-i18n="dailyUsage">Daily Usage</span>
