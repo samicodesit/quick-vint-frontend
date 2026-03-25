@@ -5,7 +5,9 @@
   "main": "content.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
-    "build": "terser content.js -o content.min.js --compress --mangle",
+    "build": "node scripts/set-env.js",
+    "build:prod": "API_BASE_URL=https://quick-vint.vercel.app node scripts/set-env.js",
+    "build:local": "API_BASE_URL=http://localhost:5000 node scripts/set-env.js",
     "prepare": "npm run build",
     "package": "node build.js",
     "package:bash": "./build.sh"
@@ -21,9 +23,7 @@
     "url": "https://github.com/samicodesit/quick-vint-frontend/issues"
   },
   "homepage": "https://github.com/samicodesit/quick-vint-frontend#readme",
-  "devDependencies": {
-    "terser": "^5.39.2"
-  },
+  "devDependencies": {},
   "dependencies": {
     "@supabase/supabase-js": "^2.49.8"
   }

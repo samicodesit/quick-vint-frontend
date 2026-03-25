@@ -12,9 +12,9 @@ AutoLister AI is a Chrome browser extension (Manifest V3) that provides AI-gener
 # Install dependencies
 npm install
 
-# Build minified content script for production
+# Build (set API base URL)
 npm run build
-# Runs: terser content.js -o content.min.js --compress --mangle
+# Runs: node scripts/set-env.js
 
 # Prepare (runs build automatically on npm install)
 npm run prepare
@@ -34,6 +34,7 @@ This is a Chrome Extension that must be loaded manually for development:
 6. After making code changes, click the refresh icon on the extension card
 
 **Key development notes:**
+
 - `content.js` is the main content script injected into Vinted pages
 - `background.js` is the service worker (persists only while active, wakes on events)
 - Changes to background.js require extension reload
@@ -60,6 +61,7 @@ This is a Chrome Extension that must be loaded manually for development:
 ### Key Components
 
 **content.js** (Content Script)
+
 - Injected into all Vinted new listing pages (matches `*://*.vinted.*/items/new*`)
 - Creates "Generate" and "Phone" buttons near the title input
 - Handles image compression using Canvas API before sending to backend
@@ -67,6 +69,7 @@ This is a Chrome Extension that must be loaded manually for development:
 - Polls for phone-uploaded images via `PROXY_FETCH` messages to background
 
 **background.js** (Service Worker)
+
 - Manages Supabase authentication session and token refresh
 - Stores session in `chrome.storage.local` under key `supabaseSession`
 - Handles `PROXY_FETCH` messages to proxy cross-origin requests (for image blobs)
@@ -74,12 +77,14 @@ This is a Chrome Extension that must be loaded manually for development:
 - Auto-refreshes tokens 5 minutes before expiry with exponential backoff retry
 
 **popup.js** (Extension Popup)
+
 - UI for authentication (magic link), settings, and plan management
 - Supports language selection (stored in `chrome.storage.local.selectedLanguage`)
 - Settings include tone (standard/funny/professional) and emoji toggle (Pro/Business only)
 - Integrates with Stripe for subscription management
 
 **callback.js** (Auth Callback)
+
 - Handles Supabase magic link authentication
 - Localized UI (FR, DE, ES, IT, NL, default EN) based on timezone/language detection
 - Stores session and signals background via `AUTH_UPDATED` message
@@ -87,6 +92,7 @@ This is a Chrome Extension that must be loaded manually for development:
 ### Communication Patterns
 
 **Message types sent to background.js:**
+
 ```javascript
 // Get valid access token (auto-refreshes if needed)
 { type: "GET_ACCESS_TOKEN" } // returns { access_token, expires_at }
@@ -109,6 +115,7 @@ This is a Chrome Extension that must be loaded manually for development:
 ```
 
 **Storage keys in chrome.storage.local:**
+
 - `supabaseSession` - Full Supabase session object
 - `userProfile` - User's subscription tier, usage counts
 - `selectedLanguage` - Preferred language code (default: "en")
@@ -132,12 +139,12 @@ This is a Chrome Extension that must be loaded manually for development:
 
 ### Subscription Tiers
 
-| Tier | Daily | Monthly | Features |
-|------|-------|---------|----------|
-| free | 2 | 10 | Basic generation |
-| starter | 15 | 300 | Standard generation |
-| pro | 40 | 800 | + Tone selection, emojis |
-| business | 75 | 1500 | + Unlimited daily |
+| Tier     | Daily | Monthly      | Features                 |
+| -------- | ----- | ------------ | ------------------------ |
+| free     | —     | 4 (lifetime) | Basic generation         |
+| starter  | 5     | 75           | Standard generation      |
+| pro      | 15    | 300          | + Tone selection, emojis |
+| business | 50    | 1000         | + Highest limits         |
 
 Rate limiting is enforced server-side; the extension displays usage progress bars in the popup.
 

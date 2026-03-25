@@ -6,7 +6,7 @@
   const MODAL_ID = "quickvint-phone-modal";
   const API_BASE = "https://quick-vint.vercel.app";
   const PHONE_API_BASE = "https://quick-vint.vercel.app";
-  const PHONE_UPLOAD_PAGE = `${PHONE_API_BASE}/phone-upload.html`;
+  const PHONE_UPLOAD_PAGE = `${PHONE_API_BASE}/phone-upload`;
   const PHONE_UPLOAD_API = `${PHONE_API_BASE}/api/phone-upload`;
   const SELECTORS = {
     title: 'input[data-testid="title--input"]',
@@ -24,10 +24,37 @@
   let isAuthenticated = false;
   let pollInterval = null;
   let downloadedFiles = new Set();
+  let T = window.getUIStrings ? window.getUIStrings("en") : {};
 
   // --- HELPER FUNCTIONS ---
 
-  function showToast(message, type = "error", action = null) {
+  /** Load UI language from storage and also detect from Vinted TLD as fallback */
+  function initUILanguage(callback) {
+    chrome.storage.local.get(["uiLanguage"], (result) => {
+      if (result.uiLanguage && window.getUIStrings) {
+        T = window.getUIStrings(result.uiLanguage);
+      } else if (window.getUIStrings) {
+        // Auto-detect from Vinted domain TLD
+        const host = location.hostname; // e.g. www.vinted.fr
+        const tld = host.split(".").pop();
+        const tldMap = {
+          fr: "fr",
+          de: "de",
+          es: "es",
+          it: "it",
+          nl: "nl",
+          pl: "pl",
+        };
+        const detected =
+          tldMap[tld] ||
+          (window.detectUILanguageCode ? window.detectUILanguageCode() : "en");
+        T = window.getUIStrings(detected);
+      }
+      if (callback) callback();
+    });
+  }
+
+  function showToast(message, type = "error", action = null, autoHide = true) {
     let toast = document.getElementById("quickvint-toast");
     if (!toast) {
       toast = document.createElement("div");
@@ -36,31 +63,47 @@
     }
 
     const icon = type === "success" ? "✅" : type === "info" ? "ℹ️" : "⚠️";
-    let messageHtml = `<span>${message}</span>`;
+
+    // Build DOM nodes safely (no innerHTML with user/server data)
+    toast.textContent = "";
+    const iconSpan = document.createElement("span");
+    iconSpan.className = "toast-icon";
+    iconSpan.textContent = icon;
+    toast.appendChild(iconSpan);
+
+    const contentDiv = document.createElement("div");
+    contentDiv.className = "toast-content";
+    const msgSpan = document.createElement("span");
+    msgSpan.textContent = message;
+    contentDiv.appendChild(msgSpan);
 
     if (action && action.text && action.url) {
-      messageHtml += `<a href="${action.url}" target="_blank" style="margin-left: 12px; color: inherit; text-decoration: underline; font-weight: 700; white-space: nowrap;">${action.text} &rarr;</a>`;
+      const link = document.createElement("a");
+      link.href = action.url;
+      link.target = "_blank";
+      link.rel = "noopener noreferrer";
+      link.style.cssText =
+        "margin-left: 12px; color: inherit; text-decoration: underline; font-weight: 700; white-space: nowrap;";
+      link.textContent = action.text + " →";
+      contentDiv.appendChild(link);
     }
+    toast.appendChild(contentDiv);
 
-    // Updated HTML structure with close button
-    toast.innerHTML = `
-      <span class="toast-icon">${icon}</span>
-      <div class="toast-content">${messageHtml}</div>
-      <button class="toast-close" aria-label="Close">×</button>
-    `;
+    const closeBtn = document.createElement("button");
+    closeBtn.className = "toast-close";
+    closeBtn.setAttribute("aria-label", "Close");
+    closeBtn.textContent = "×";
+    toast.appendChild(closeBtn);
 
     toast.className = type;
     toast.style.visibility = "visible"; // Ensure it's visible for the transition
 
     // Add close handler
-    const closeBtn = toast.querySelector(".toast-close");
-    if (closeBtn) {
-      closeBtn.onclick = () => {
-        toast.classList.remove("visible");
-        if (window.quickvintToastTimeout)
-          clearTimeout(window.quickvintToastTimeout);
-      };
-    }
+    closeBtn.onclick = () => {
+      toast.classList.remove("visible");
+      if (window.quickvintToastTimeout)
+        clearTimeout(window.quickvintToastTimeout);
+    };
 
     // Force reflow
     toast.offsetHeight;
@@ -70,9 +113,9 @@
     if (window.quickvintToastTimeout)
       clearTimeout(window.quickvintToastTimeout);
 
-    // Only auto-hide if there is NO action (e.g. limit reached).
-    // If there IS an action, it stays until manually closed.
-    if (!action) {
+    // Only auto-hide if autoHide is true and there is NO action.
+    // If there IS an action or autoHide is false, it stays until manually closed.
+    if (autoHide && !action) {
       window.quickvintToastTimeout = setTimeout(() => {
         toast.classList.remove("visible");
       }, 4000);
@@ -95,10 +138,12 @@
           };
           // Simple base64 encode
           const token = btoa(JSON.stringify(userData));
-          resolve(`https://quick-vint.vercel.app/pricing.html?token=${token}`);
+          resolve(
+            `https://quick-vint.vercel.app/pricing?token=${encodeURIComponent(token)}`,
+          );
         } catch (e) {
           console.error("Error building pricing URL:", e);
-          resolve("https://quick-vint.vercel.app/pricing.html");
+          resolve("https://quick-vint.vercel.app/pricing");
         }
       });
     });
@@ -604,6 +649,16 @@
         box-shadow: 0 10px 25px -5px rgba(220, 38, 38, 0.4), 0 8px 10px -6px rgba(220, 38, 38, 0.2);
       }
 
+      #quickvint-toast.info {
+        background: #0891b2; /* Cyan for info/tips */
+        box-shadow: 0 10px 25px -5px rgba(8, 145, 178, 0.4), 0 8px 10px -6px rgba(8, 145, 178, 0.2);
+      }
+
+      #quickvint-toast.success {
+        background: #059669; /* Green for success */
+        box-shadow: 0 10px 25px -5px rgba(5, 150, 105, 0.4), 0 8px 10px -6px rgba(5, 150, 105, 0.2);
+      }
+
       #quickvint-toast.visible {
         opacity: 1;
         visibility: visible;
@@ -647,6 +702,7 @@
       /* Icons are emojis, but if we use text/svg later, ensure they pop */
       #quickvint-toast.error .toast-icon { text-shadow: 0 0 10px rgba(220, 38, 38, 0.5); }
       #quickvint-toast.success .toast-icon { text-shadow: 0 0 10px rgba(5, 150, 105, 0.5); }
+      #quickvint-toast.info .toast-icon { text-shadow: 0 0 10px rgba(8, 145, 178, 0.5); }
     `;
     document.head.appendChild(style);
   }
@@ -656,7 +712,7 @@
     btn.id = BTN_ID;
     btn.innerHTML = `
         <span class="icon">${WAND_ICON_SVG}</span>
-        <span class="label">Generate</span>
+        <span class="label">${T.generate || "Generate"}</span>
     `;
     btn.addEventListener("click", onGenerateClick);
     return btn;
@@ -668,7 +724,7 @@
     btn.disabled = true;
     btn.innerHTML = `
         <span class="icon">${PHONE_ICON_SVG}</span>
-        <span class="label">Phone</span>
+        <span class="label">${T.phone || "Phone"}</span>
     `;
     btn.addEventListener("click", onPhoneUploadClick);
     return btn;
@@ -679,8 +735,8 @@
     btn.id = SIGN_IN_BTN_ID;
     btn.innerHTML = `
         ${WAND_ICON_SVG}
-        <span>Sign in to enable AI Tools</span>
-        <span>(Click here)</span>
+        <span>${T.signInToEnable || "Sign in to enable AI Tools"}</span>
+        <span>${T.clickHere || "(Click here)"}</span>
     `;
 
     btn.addEventListener("click", (e) => {
@@ -720,13 +776,13 @@
     if (isBusy) {
       generateBtn.disabled = true;
       icon.style.display = "none";
-      label.textContent = "⏳ Generating…";
+      label.textContent = T.generating || "⏳ Generating…";
       generateBtn.style.cursor = "progress";
       generateBtn.style.backgroundColor = "#6b7280";
     } else {
       generateBtn.disabled = false;
       icon.style.display = "inline-block";
-      label.textContent = "Generate";
+      label.textContent = T.generate || "Generate";
       generateBtn.style.backgroundColor = "#4f46e5";
       generateBtn.style.cursor = "pointer";
     }
@@ -739,7 +795,7 @@
     if (!label || !icon) return;
 
     icon.style.display = "none";
-    label.textContent = "✅ Done";
+    label.textContent = T.done || "✅ Done";
 
     setTimeout(() => {
       isBusy = false;
@@ -800,16 +856,16 @@
       <div class="modal-content">
         <button class="close-x" aria-label="Close">&times;</button>
         <div class="modal-header">
-          <h3>📱 Upload from Phone</h3>
-          <span class="feature-pill">NEW · Free to test</span>
+          <h3>${T.uploadFromPhone || "📱 Upload from Phone"}</h3>
+          <span class="feature-pill">${T.featurePill || "NEW · Free to test"}</span>
         </div>
-        <p class="subtitle">Scan with your camera app</p>
+        <p class="subtitle">${T.scanWithCamera || "Scan with your camera app"}</p>
         <div class="qr-container">
           <img id="qr-code" src="https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(
             uploadUrl,
           )}" alt="QR Code" />
         </div>
-        <p class="instruction">Photos will appear in this listing automatically</p>
+        <p class="instruction">${T.photosWillAppear || "Photos will appear in this listing automatically"}</p>
         <div class="language-selector">
           <div class="language-select-wrapper">
             <select class="language-select" id="modal-language-select">
@@ -817,16 +873,16 @@
             </select>
           </div>
         </div>
-        <div class="status waiting">Waiting for photos from phone...</div>
+        <div class="status waiting">${T.waitingForPhotos || "Waiting for photos from phone..."}</div>
         <div class="modal-buttons">
-          <button class="close-btn">Done</button>
+          <button class="close-btn">${T.doneBtn || "Done"}</button>
           <button class="generate-btn">
             <span class="icon" style="width: 14px; height: 14px; display: inline-block; margin-right: 6px;">${WAND_ICON_SVG}</span>
-            Done + Generate
+            ${T.doneGenerate || "Done + Generate"}
           </button>
         </div>
         <div class="disclaimer">
-          <strong>Note:</strong> This feature will soon be available exclusively to Pro & Business plans.
+          <strong>Note:</strong> ${T.phoneDisclaimer || "This feature will soon be available exclusively to Pro & Business plans."}
         </div>
       </div>
     `;
@@ -890,7 +946,10 @@
 
   async function onPhoneUploadClick() {
     if (!isAuthenticated) {
-      showToast("Please sign in via the extension popup first.", "error");
+      showToast(
+        T.signInFirst || "Please sign in via the extension popup first.",
+        "error",
+      );
       return;
     }
 
@@ -937,20 +996,17 @@
           if (statusEl) {
             const total = downloadedFiles.size;
             statusEl.className = "status";
-            statusEl.textContent = `✓ ${total} file${
-              total !== 1 ? "s" : ""
-            } added. Ready for more...`;
+            statusEl.textContent = `✓ ${total} ${total === 1 ? T.fileAdded || "file added. Ready for more..." : T.filesAdded || "files added. Ready for more..."}`;
           }
         } else {
           // No files yet, show waiting message
           if (statusEl && downloadedFiles.size === 0) {
             statusEl.className = "status waiting";
-            statusEl.textContent = "Waiting for photos from phone...";
+            statusEl.textContent =
+              T.waitingForPhotos || "Waiting for photos from phone...";
           } else if (statusEl && downloadedFiles.size > 0) {
             statusEl.className = "status";
-            statusEl.textContent = `✓ ${downloadedFiles.size} file${
-              downloadedFiles.size !== 1 ? "s" : ""
-            } added. Ready for more...`;
+            statusEl.textContent = `✓ ${downloadedFiles.size} ${downloadedFiles.size === 1 ? T.fileAdded || "file added. Ready for more..." : T.filesAdded || "files added. Ready for more..."}`;
           }
         }
       } catch (err) {
@@ -1006,7 +1062,8 @@
         fileInput.dispatchEvent(new Event("change", { bubbles: true }));
 
         const statusEl = document.querySelector(`#${MODAL_ID} .status`);
-        if (statusEl) statusEl.textContent = "Image uploaded!";
+        if (statusEl)
+          statusEl.textContent = T.imageUploaded || "Image uploaded!";
       }
     } catch (err) {
       console.error("Error downloading image:", err);
@@ -1024,7 +1081,10 @@
       .filter(Boolean);
 
     if (!imageUrls.length) {
-      showToast("Please upload at least one image.", "error");
+      showToast(
+        T.uploadAtLeastOne || "Please upload at least one image.",
+        "error",
+      );
       return;
     }
 
@@ -1036,16 +1096,19 @@
         selectedLanguage = "en",
         tone = "standard",
         useEmojis,
+        useBulletPoints = true,
       } = await chrome.storage.local.get([
         "selectedLanguage",
         "tone",
         "useEmojis",
+        "useBulletPoints",
       ]);
       const { access_token } = await sendMessage({ type: "GET_ACCESS_TOKEN" });
 
       if (!access_token) {
         throw new Error(
-          "Your session has expired. Please sign in again via the extension.",
+          T.sessionExpired ||
+            "Your session has expired. Please sign in again via the extension.",
         );
       }
 
@@ -1063,12 +1126,16 @@
           languageCode: selectedLanguage,
           tone,
           useEmojis,
+          useBulletPoints,
         }),
       });
 
       if (response.status === 401) {
         isAuthenticated = false;
-        showToast("Session expired. Please sign in again.", "error");
+        showToast(
+          T.sessionExpiredShort || "Session expired. Please sign in again.",
+          "error",
+        );
         isBusy = false;
         updateButtonUI();
         return;
@@ -1077,9 +1144,11 @@
         const errData = await response.json();
         const pricingUrl = await getPricingUrl();
         showToast(
-          errData.error || "You have exceeded your daily/monthly usage limit.",
+          errData.error ||
+            T.usageLimitExceeded ||
+            "You have exceeded your daily/monthly usage limit.",
           "error",
-          { text: "Upgrade Plan", url: pricingUrl },
+          { text: T.upgradePlan || "Upgrade Plan", url: pricingUrl },
         );
         isBusy = false;
         updateButtonUI();
@@ -1090,7 +1159,7 @@
         throw new Error(error || `HTTP ${response.status}`);
       }
 
-      const { title, description } = await response.json();
+      const { title, description, measurementAdvice } = await response.json();
       const titleInput = document.querySelector(SELECTORS.title);
       const descInput = document.querySelector(SELECTORS.description);
 
@@ -1104,9 +1173,19 @@
       }
 
       setButtonSuccessState();
+
+      // Show measurement advice if available
+      if (measurementAdvice && measurementAdvice.trim()) {
+        setTimeout(() => {
+          showToast(measurementAdvice, "info", null, false);
+        }, 300);
+      }
     } catch (err) {
       console.error("AutoLister AI Error:", err);
-      showToast(err.message || "An unexpected error occurred.", "error");
+      showToast(
+        err.message || T.unexpectedError || "An unexpected error occurred.",
+        "error",
+      );
       isBusy = false;
       updateButtonUI();
     }
@@ -1130,6 +1209,7 @@
     const container = titleEl.closest("div");
     if (container && container.parentNode) {
       const btnContainer = document.createElement("div");
+      btnContainer.id = "quickvint-btn-container";
       // Container for tool buttons and the sign-in component, spaced below the title.
       btnContainer.style.marginTop = "20px";
 
@@ -1177,7 +1257,24 @@
   function init() {
     injectStylesheet();
     initializeAuthState();
-    startInjectionObserver();
+    // Load UI language before injecting buttons so strings are localized
+    initUILanguage(() => {
+      startInjectionObserver();
+    });
+    // Listen for UI language changes from the popup settings
+    chrome.storage.onChanged.addListener((changes) => {
+      if (changes.uiLanguage && window.getUIStrings) {
+        T = window.getUIStrings(changes.uiLanguage.newValue || "en");
+        // Re-render buttons with new language
+        const oldContainer = document.getElementById("quickvint-btn-container");
+        if (oldContainer) oldContainer.remove();
+        // Reset refs and re-inject
+        generateBtn = null;
+        phoneBtn = null;
+        signInBtn = null;
+        injectButton();
+      }
+    });
   }
 
   init();

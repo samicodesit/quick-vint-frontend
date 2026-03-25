@@ -4,19 +4,111 @@ document.addEventListener("DOMContentLoaded", () => {
   const SUPABASE_URL = "https://jqloiovdwjaornnfvmyu.supabase.co";
   const SUPABASE_ANON_KEY =
     "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImpxbG9pb3Zkd2phb3JubmZ2bXl1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDgyMDgzMzIsImV4cCI6MjA2Mzc4NDMzMn0.iFtkUorY1UqK8zamnwgjB-yhsXe0bJAA8YFm22bzc3A";
-  const TIER_LIMITS = {
-    free: { daily: 2, monthly: 10 },
-    starter: { daily: 15, monthly: 300 },
-    pro: { daily: 40, monthly: 800 },
-    business: { daily: 75, monthly: 1500 },
+
+  // Fallback limits — overridden by /api/tier-config on load
+  let TIER_LIMITS = {
+    free: { daily: null, monthly: 4 }, // lifetime total (no daily cap)
+    starter: { daily: 5, monthly: 75 },
+    pro: { daily: 15, monthly: 300 },
+    business: { daily: 50, monthly: 1000 },
   };
 
   const TIER_DISPLAY_NAMES = {
-    free: "Free Plan",
+    free: "Free",
     starter: "Starter Plan",
     pro: "Pro Plan",
     business: "Business Plan",
   };
+
+  // --- UI LOCALIZATION STATE ---
+  let T = window.getUIStrings("en"); // current UI strings, set properly in init
+
+  function applyUITranslations() {
+    // Update all elements with data-i18n attribute
+    document.querySelectorAll("[data-i18n]").forEach((el) => {
+      const key = el.getAttribute("data-i18n");
+      if (T[key]) {
+        // For elements that contain child elements (like NEW badges, <strong>), preserve children
+        if (el.children.length > 0) {
+          // Find first text node and update it
+          for (const node of el.childNodes) {
+            if (node.nodeType === Node.TEXT_NODE && node.textContent.trim()) {
+              node.textContent = T[key] + " ";
+              break;
+            }
+          }
+        } else {
+          el.textContent = T[key];
+        }
+      }
+    });
+    // Update tier display names from current language
+    TIER_DISPLAY_NAMES.free = T.freePlan;
+    TIER_DISPLAY_NAMES.starter = T.starterPlan;
+    TIER_DISPLAY_NAMES.pro = T.proPlan;
+    TIER_DISPLAY_NAMES.business = T.businessPlan;
+    // Update content language dropdown placeholder if no language is selected yet
+    if (dropdownToggle && dropdownToggle.children.length === 0) {
+      dropdownToggle.textContent = T.selectLanguage;
+    }
+  }
+
+  function setupUILanguagePicker() {
+    const select = document.getElementById("uiLanguageSelect");
+    if (!select) return;
+    // Populate options
+    select.innerHTML = "";
+    window.UI_LANGUAGES.forEach((lang) => {
+      const opt = document.createElement("option");
+      opt.value = lang.code;
+      opt.textContent = lang.name;
+      select.appendChild(opt);
+    });
+    // Set current value
+    chrome.storage.local.get(["uiLanguage"], (result) => {
+      if (result.uiLanguage) {
+        select.value = result.uiLanguage;
+      } else {
+        const detected = window.detectUILanguageCode();
+        select.value = detected;
+        chrome.storage.local.set({ uiLanguage: detected });
+      }
+      T = window.getUIStrings(select.value);
+      applyUITranslations();
+      // Set up content language dropdown AFTER UI language is loaded
+      // so that if no content language is saved, we default to the same language
+      setupLanguageDropdown();
+    });
+    select.addEventListener("change", () => {
+      chrome.storage.local.set({ uiLanguage: select.value });
+      T = window.getUIStrings(select.value);
+      applyUITranslations();
+      // Re-render to update plan name etc.
+      updateFromStorage();
+    });
+  }
+
+  // Fetch authoritative limits from API (non-blocking)
+  fetch(`${API_BASE}/api/tier-config`)
+    .then((r) => (r.ok ? r.json() : null))
+    .then((data) => {
+      if (!data) return;
+      for (const [tier, cfg] of Object.entries(data)) {
+        if (cfg.limits) {
+          TIER_LIMITS[tier] = {
+            daily: cfg.limits.daily ?? null,
+            monthly: cfg.limits.monthly,
+          };
+        }
+        // displayName intentionally not overridden here;
+        // applyUITranslations() sets localized tier names from T.*Plan keys
+      }
+      // Re-render usage UI with authoritative limits
+      if (typeof updateFromStorage === "function") updateFromStorage();
+    })
+    .catch(() => {
+      /* use fallback values */
+    });
 
   // --- SUPABASE CLIENT ---
   const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
@@ -32,6 +124,8 @@ document.addEventListener("DOMContentLoaded", () => {
   const paidPlanView = document.getElementById("paidPlanView");
   const renewalDate = document.getElementById("renewalDate");
   const upgradeBtn = document.getElementById("upgradeBtn");
+  const upgradeStarterBtn = document.getElementById("upgradeStarterBtn");
+  const upgradeProBtn = document.getElementById("upgradeProBtn");
   const manageBtn = document.getElementById("manageBtn");
   const viewAllPlansLink = document.getElementById("viewAllPlansLink");
   const viewAllPlansLinkPaid = document.getElementById("viewAllPlansLinkPaid");
@@ -49,6 +143,7 @@ document.addEventListener("DOMContentLoaded", () => {
   const backIcon = document.querySelector(".back-icon");
   const toneOptions = document.querySelectorAll('input[name="tone"]');
   const emojiToggle = document.getElementById("emojiToggle");
+  const formatOptions = document.querySelectorAll('input[name="format"]');
 
   // --- HELPER & UTILITY FUNCTIONS ---
 
@@ -95,7 +190,7 @@ document.addEventListener("DOMContentLoaded", () => {
   function setLoading(button, isLoading, defaultText) {
     if (!button) return;
     button.disabled = isLoading;
-    button.textContent = isLoading ? "Processing…" : defaultText;
+    button.textContent = isLoading ? T.processing : defaultText;
   }
 
   function encodeUserData(data) {
@@ -109,36 +204,34 @@ document.addEventListener("DOMContentLoaded", () => {
 
   // --- UI RENDERING ---
 
-  function render(user, profile) {
+  function render(user, profile, daily, monthly) {
     if (user && profile) {
       if (userEmailSpan) userEmailSpan.textContent = user.email;
       const status = profile.subscription_status || "free";
       const rawTier = profile.subscription_tier || "free";
       const tier = normalizeTier(rawTier);
-      const monthlyUsed = profile.api_calls_this_month || 0;
-      if (planName)
-        planName.textContent = TIER_DISPLAY_NAMES[tier] || "Starter Plan";
+      if (planName) planName.textContent = TIER_DISPLAY_NAMES[tier] || "?";
 
-      chrome.runtime.sendMessage({ type: "GET_USER_DAY_COUNT" }, (resp) => {
-        const dailyUsed =
-          resp && typeof resp.daily === "number" ? resp.daily : 0;
-        updateUsageUI(dailyUsed, monthlyUsed, tier);
-      });
+      // Update usage UI synchronously before switching view
+      updateUsageUI(daily ?? 0, monthly ?? 0, tier);
 
       if (status === "active" && tier !== "free") {
         if (freePlanView) freePlanView.classList.add("hidden");
         if (paidPlanView) paidPlanView.classList.remove("hidden");
         const rawEnd = profile.current_period_end;
-        if (renewalDate) {
-          if (rawEnd) {
-            const dt = new Date(rawEnd);
-            renewalDate.innerHTML = `Active until: <strong>${dt.toLocaleDateString(
-              undefined,
-              { year: "numeric", month: "short", day: "numeric" },
-            )}</strong>`;
-          } else {
-            renewalDate.innerHTML = `<strong>Active subscription</strong>`;
-          }
+        const dateEl = document.getElementById("renewalDateValue");
+        const labelEl = document.getElementById("renewalLabel");
+        if (rawEnd && dateEl) {
+          const dt = new Date(rawEnd);
+          if (labelEl) labelEl.textContent = T.activeUntil || "Active until";
+          dateEl.textContent = dt.toLocaleDateString(undefined, {
+            year: "numeric",
+            month: "short",
+            day: "numeric",
+          });
+        } else if (dateEl) {
+          if (labelEl) labelEl.textContent = "";
+          dateEl.textContent = T.activeSubscription || "Active subscription";
         }
       } else {
         if (paidPlanView) paidPlanView.classList.add("hidden");
@@ -152,39 +245,74 @@ document.addEventListener("DOMContentLoaded", () => {
 
   function updateUsageUI(dailyUsed, monthlyUsed, tier) {
     const totals = TIER_LIMITS[tier] || TIER_LIMITS["free"];
-    const dailyTotal = totals.daily;
-    const monthlyTotal = totals.monthly;
-    const displayDailyUsed = Math.min(dailyUsed, dailyTotal);
-    const displayMonthlyUsed = Math.min(monthlyUsed, monthlyTotal);
-    const dailyPercent =
-      dailyTotal > 0 ? Math.min((dailyUsed / dailyTotal) * 100, 100) : 0;
-    const monthlyPercent =
-      monthlyTotal > 0 ? Math.min((monthlyUsed / monthlyTotal) * 100, 100) : 0;
+    const isFree = totals.daily === null;
+    const dailyMeter = document.getElementById("dailyMeter");
+    const usageMeters = document.getElementById("usageMeters");
+    const monthlyUsageLabel = document.getElementById("monthlyUsageLabel");
 
-    if (dailyCallsUsed)
-      dailyCallsUsed.textContent = `${displayDailyUsed} / ${dailyTotal}`;
-    if (monthlyCallsUsed)
-      monthlyCallsUsed.textContent = `${displayMonthlyUsed} / ${monthlyTotal}`;
-    if (dailyProgressBar) dailyProgressBar.style.width = `${dailyPercent}%`;
-    if (monthlyProgressBar)
-      monthlyProgressBar.style.width = `${monthlyPercent}%`;
-    if (tier === "business") {
-      if (dailyCallsUsed) dailyCallsUsed.textContent = `Unlimited`;
-      if (dailyProgressBar) dailyProgressBar.style.width = "100%";
+    if (isFree) {
+      // Free tier: hide daily meter, show lifetime total.
+      // api_calls_this_month is intentionally never reset for free users (see reset-counts.ts),
+      // so it accurately represents lifetime usage.
+      if (dailyMeter) dailyMeter.classList.add("hidden");
+      if (monthlyUsageLabel) {
+        monthlyUsageLabel.setAttribute("data-i18n", "totalUsage");
+        monthlyUsageLabel.textContent = T.totalUsage || "Total Usage";
+      }
+      const totalLimit = totals.monthly;
+      const displayTotal = Math.min(monthlyUsed, totalLimit);
+      const totalPercent =
+        totalLimit > 0 ? Math.min((monthlyUsed / totalLimit) * 100, 100) : 0;
+      if (monthlyCallsUsed)
+        monthlyCallsUsed.textContent = `${displayTotal} / ${totalLimit}`;
+      if (monthlyProgressBar)
+        monthlyProgressBar.style.width = `${totalPercent}%`;
+      if (usageMeters) usageMeters.classList.add("loaded");
+    } else {
+      // Paid tiers: show both daily and monthly meters
+      if (dailyMeter) dailyMeter.classList.remove("hidden");
+      if (monthlyUsageLabel) {
+        monthlyUsageLabel.setAttribute("data-i18n", "monthlyUsage");
+        monthlyUsageLabel.textContent = T.monthlyUsage || "Monthly Usage";
+      }
+      const dailyTotal = totals.daily;
+      const monthlyTotal = totals.monthly;
+      const displayDailyUsed = Math.min(dailyUsed, dailyTotal);
+      const displayMonthlyUsed = Math.min(monthlyUsed, monthlyTotal);
+      const dailyPercent =
+        dailyTotal > 0 ? Math.min((dailyUsed / dailyTotal) * 100, 100) : 0;
+      const monthlyPercent =
+        monthlyTotal > 0
+          ? Math.min((monthlyUsed / monthlyTotal) * 100, 100)
+          : 0;
+      if (dailyCallsUsed)
+        dailyCallsUsed.textContent = `${displayDailyUsed} / ${dailyTotal}`;
+      if (monthlyCallsUsed)
+        monthlyCallsUsed.textContent = `${displayMonthlyUsed} / ${monthlyTotal}`;
+      if (dailyProgressBar) dailyProgressBar.style.width = `${dailyPercent}%`;
+      if (monthlyProgressBar)
+        monthlyProgressBar.style.width = `${monthlyPercent}%`;
+      if (usageMeters) usageMeters.classList.add("loaded");
     }
   }
 
   // --- DATA & STATE MANAGEMENT ---
 
   /**
-   * Reads user state from chrome.storage.local and triggers a render.
-   * This is the primary way the popup gets its initial state.
+   * Reads user state (profile + usage) in a single message and triggers a render.
    */
   function updateFromStorage() {
-    chrome.storage.local.get(["supabaseSession", "userProfile"], (data) => {
-      const user = data.supabaseSession?.user || null;
-      const profile = data.userProfile || null;
-      render(user, profile);
+    chrome.runtime.sendMessage({ type: "GET_USER_STATE" }, (resp) => {
+      const user = resp?.user || null;
+      const profile = resp?.profile || null;
+      render(user, profile, resp?.daily ?? 0, resp?.monthly ?? 0);
+    });
+  }
+
+  /** Full refresh: re-fetch profile from DB then render. Use for explicit user actions / initial load only. */
+  function forceRefreshAndRender() {
+    chrome.runtime.sendMessage({ type: "AUTH_UPDATED" }, () => {
+      updateFromStorage();
     });
   }
 
@@ -194,10 +322,10 @@ document.addEventListener("DOMContentLoaded", () => {
     if (!emailInput) return;
     const email = emailInput.value.trim();
     if (!email.includes("@")) {
-      showMessage("Please enter a valid email address.", "error");
+      showMessage(T.pleaseEnterValidEmail, "error");
       return;
     }
-    setLoading(sendMagicLinkBtn, true, "Send Magic Link");
+    setLoading(sendMagicLinkBtn, true, T.sendMagicLink);
     showMessage(null);
     try {
       const res = await fetch(`${API_BASE}/api/auth/magic-link`, {
@@ -224,54 +352,49 @@ document.addEventListener("DOMContentLoaded", () => {
       }
 
       // Backend returns { message: "..." } for success
-      showMessage(
-        data.message || "Check your email for the sign-in link.",
-        "success",
-      );
+      showMessage(data.message || T.checkEmailForLink, "success");
       emailInput.value = "";
     } catch (err) {
-      showMessage(
-        err.message || "Connection issue. Please check your internet.",
-        "error",
-      );
+      showMessage(err.message || T.connectionIssue, "error");
     } finally {
-      setLoading(sendMagicLinkBtn, false, "Send Magic Link");
+      setLoading(sendMagicLinkBtn, false, T.sendMagicLink);
     }
   }
 
   function handleSignOut() {
-    setLoading(signOutBtn, true, "Sign Out");
+    setLoading(signOutBtn, true, T.signOut);
     chrome.runtime.sendMessage({ type: "SIGN_OUT" }, () => {
-      setLoading(signOutBtn, false, "Sign Out");
+      setLoading(signOutBtn, false, T.signOut);
     });
   }
 
-  async function handleUpgrade() {
+  async function handleUpgrade(tier, btn) {
     const {
       data: { session },
     } = await supabaseClient.auth.getSession();
     if (!session?.user?.email) {
-      showMessage("Please sign in to upgrade.", "error");
+      showMessage(T.pleaseSignInToUpgrade, "error");
       return;
     }
-    setLoading(upgradeBtn, true, "Loading…");
+    const label = btn ? btn.textContent : "Loading…";
+    setLoading(btn || upgradeBtn, true, "Loading…");
     try {
       const res = await fetch(`${API_BASE}/api/stripe/create-checkout`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: session.user.email, tier: "starter" }),
+        body: JSON.stringify({ email: session.user.email, tier }),
       });
       const { url } = await res.json();
       if (res.ok && url) {
-        window.open(url, "_blank");
+        window.open(url, "_blank", "noopener");
       } else {
-        showMessage("Unable to open the payment page.", "error");
+        showMessage(T.unableToOpenPayment, "error");
       }
     } catch (err) {
       console.error("Checkout error:", err);
-      showMessage("Connection issue. Please try again.", "error");
+      showMessage(T.connectionIssue, "error");
     } finally {
-      setLoading(upgradeBtn, false, "Upgrade to Starter (€3.99)");
+      setLoading(btn || upgradeBtn, false, label);
     }
   }
 
@@ -280,10 +403,10 @@ document.addEventListener("DOMContentLoaded", () => {
       data: { session },
     } = await supabaseClient.auth.getSession();
     if (!session?.user?.email) {
-      showMessage("Please sign in to manage your subscription.", "error");
+      showMessage(T.pleaseSignInToManage, "error");
       return;
     }
-    setLoading(manageBtn, true, "Loading…");
+    setLoading(manageBtn, true, T.processing);
     try {
       const res = await fetch(`${API_BASE}/api/stripe/create-portal`, {
         method: "POST",
@@ -292,21 +415,21 @@ document.addEventListener("DOMContentLoaded", () => {
       });
       const { url } = await res.json();
       if (res.ok && url) {
-        window.open(url, "_blank");
+        window.open(url, "_blank", "noopener");
       } else {
-        showMessage("Unable to open the subscription page.", "error");
+        showMessage(T.unableToOpenSubscription, "error");
       }
     } catch (err) {
       console.error("Portal error:", err);
-      showMessage("Connection issue. Please try again.", "error");
+      showMessage(T.connectionIssue, "error");
     } finally {
-      setLoading(manageBtn, false, "Manage Subscription");
+      setLoading(manageBtn, false, T.manageSubscription);
     }
   }
 
   function handleViewAllPlans(e) {
     if (e) e.preventDefault();
-    chrome.runtime.sendMessage({ type: "GET_USER_PROFILE" }, (resp) => {
+    chrome.runtime.sendMessage({ type: "GET_USER_STATE" }, (resp) => {
       const userData = {
         source: "extension",
         signed_in: !!resp?.user,
@@ -316,8 +439,8 @@ document.addEventListener("DOMContentLoaded", () => {
       };
       const token = encodeUserData(userData);
       if (token) {
-        const url = `https://quick-vint.vercel.app/pricing.html?token=${token}`;
-        window.open(url, "_blank");
+        const url = `https://quick-vint.vercel.app/pricing?token=${encodeURIComponent(token)}`;
+        window.open(url, "_blank", "noopener");
       }
     });
   }
@@ -325,15 +448,23 @@ document.addEventListener("DOMContentLoaded", () => {
   // --- LANGUAGE DROPDOWN LOGIC ---
   function setupLanguageDropdown() {
     chrome.storage.local.get(["selectedLanguage"], (result) => {
-      if (result.selectedLanguage) {
-        const selectedItem = [...languageOptions].find(
-          (item) => item.dataset.value === result.selectedLanguage,
-        );
-        if (selectedItem && dropdownToggle) {
-          dropdownToggle.innerHTML = selectedItem.innerHTML;
-          languageOptions.forEach((opt) => opt.classList.remove("selected"));
-          selectedItem.classList.add("selected");
-        }
+      let langCode = result.selectedLanguage;
+      // Auto-detect content language on first use
+      if (!langCode) {
+        const detected = window.detectUILanguageCode();
+        // Map UI language codes to content language codes (they match)
+        langCode = detected;
+        chrome.storage.local.set({ selectedLanguage: langCode });
+      }
+      const selectedItem = [...languageOptions].find(
+        (item) => item.dataset.value === langCode,
+      );
+      if (selectedItem && dropdownToggle) {
+        dropdownToggle.innerHTML = selectedItem.innerHTML;
+        languageOptions.forEach((opt) => opt.classList.remove("selected"));
+        selectedItem.classList.add("selected");
+      } else if (dropdownToggle) {
+        dropdownToggle.textContent = T.selectLanguage;
       }
     });
     const toggleDropdown = (show) => {
@@ -371,27 +502,58 @@ document.addEventListener("DOMContentLoaded", () => {
   // --- SETTINGS LOGIC ---
   function setupSettings() {
     // Load saved settings and user profile for tier check
-    chrome.storage.local.get(["tone", "useEmojis", "userProfile"], (result) => {
-      const profile = result.userProfile || {};
-      const tier = normalizeTier(profile.tier);
-      const hasProAccess = tier === "pro" || tier === "business";
+    chrome.storage.local.get(
+      ["tone", "useEmojis", "useBulletPoints", "userProfile"],
+      (result) => {
+        const profile = result.userProfile || {};
+        const tier = normalizeTier(profile.subscription_tier);
+        const hasProAccess = tier === "pro" || tier === "business";
 
-      // Set Tone
-      const savedTone = result.tone || "standard";
-      const toneInput = document.querySelector(
-        `input[name="tone"][value="${savedTone}"]`,
-      );
-      if (toneInput) toneInput.checked = true;
+        // Set Tone
+        const savedTone = result.tone || "standard";
+        const toneInput = document.querySelector(
+          `input[name="tone"][value="${savedTone}"]`,
+        );
+        if (toneInput) toneInput.checked = true;
 
-      // Set Emojis
-      if (emojiToggle) {
-        // Default to false if not set
-        emojiToggle.checked = result.useEmojis === true;
-      }
+        // Set Emojis
+        if (emojiToggle) {
+          // Default to false if not set
+          emojiToggle.checked = result.useEmojis === true;
+        }
 
-      // Apply tier gating
-      updateSettingsAccess(hasProAccess);
-    });
+        // Set Format
+        // Default to true (bullets) if not set or undefined
+        const useBulletPoints = result.useBulletPoints !== false;
+        const formatValue = useBulletPoints ? "bullets" : "paragraphs";
+        const formatInput = document.querySelector(
+          `input[name="format"][value="${formatValue}"]`,
+        );
+        if (formatInput) formatInput.checked = true;
+
+        // Apply tier gating AND reset if expired
+        if (!hasProAccess) {
+          // If they lost access but still have premium tone selected, reset to standard
+          if (savedTone !== "standard") {
+            const standardInput = document.querySelector(
+              'input[name="tone"][value="standard"]',
+            );
+            if (standardInput) standardInput.checked = true;
+            // Also update storage so it persists
+            chrome.storage.local.set({ tone: "standard" });
+          }
+
+          // If they lost access but still have emojis on, turn them off
+          if (result.useEmojis === true) {
+            if (emojiToggle) emojiToggle.checked = false;
+            // Also update storage
+            chrome.storage.local.set({ useEmojis: false });
+          }
+        }
+
+        updateSettingsAccess(hasProAccess);
+      },
+    );
 
     // Save Tone on change
     toneOptions.forEach((radio) => {
@@ -410,6 +572,25 @@ document.addEventListener("DOMContentLoaded", () => {
         }
       });
     }
+
+    // Save Format on change
+    formatOptions.forEach((radio) => {
+      radio.addEventListener("change", (e) => {
+        if (e.target.checked) {
+          const isBullets = e.target.value === "bullets";
+          chrome.storage.local.set({ useBulletPoints: isBullets });
+        }
+      });
+    });
+  }
+
+  function refreshSettingsAccess() {
+    chrome.storage.local.get(["userProfile"], (data) => {
+      const profile = data.userProfile || {};
+      const tier = normalizeTier(profile.subscription_tier);
+      const hasProAccess = tier === "pro" || tier === "business";
+      updateSettingsAccess(hasProAccess);
+    });
   }
 
   function updateSettingsAccess(hasProAccess) {
@@ -466,16 +647,14 @@ document.addEventListener("DOMContentLoaded", () => {
           console.error(
             error || new Error("Missing OAuth redirect URL from provider"),
           );
-          alert("Google sign-in failed. Please try again in a moment.");
+          alert(T.googleSignInFailed);
           return;
         }
 
-        const popup = window.open(data.url, "_blank");
+        const popup = window.open(data.url, "_blank", "noopener");
         if (!popup || popup.closed || typeof popup.closed === "undefined") {
           console.warn("OAuth popup was likely blocked by the browser.");
-          alert(
-            "We tried to open a Google sign-in window, but it may have been blocked by your browser. Please allow pop-ups for this extension and try again.",
-          );
+          alert(T.popupBlocked);
           return;
         }
         try {
@@ -495,7 +674,19 @@ document.addEventListener("DOMContentLoaded", () => {
       signOutBtnSettings.addEventListener("click", handleSignOut);
     }
     if (upgradeBtn) {
-      upgradeBtn.addEventListener("click", handleUpgrade);
+      upgradeBtn.addEventListener("click", () =>
+        handleUpgrade("starter", upgradeBtn),
+      );
+    }
+    if (upgradeStarterBtn) {
+      upgradeStarterBtn.addEventListener("click", () =>
+        handleUpgrade("starter", upgradeStarterBtn),
+      );
+    }
+    if (upgradeProBtn) {
+      upgradeProBtn.addEventListener("click", () =>
+        handleUpgrade("pro", upgradeProBtn),
+      );
     }
     if (manageBtn) {
       manageBtn.addEventListener("click", handleManageSubscription);
@@ -516,8 +707,8 @@ document.addEventListener("DOMContentLoaded", () => {
       });
     }
 
-    setupLanguageDropdown();
     setupSettings();
+    setupUILanguagePicker(); // also calls setupLanguageDropdown internally
 
     if (settingsToggleBtn) {
       settingsToggleBtn.addEventListener("click", toggleSettingsView);
@@ -528,14 +719,15 @@ document.addEventListener("DOMContentLoaded", () => {
     chrome.storage.onChanged.addListener((changes) => {
       if (changes.supabaseSession || changes.userProfile) {
         updateFromStorage();
+        refreshSettingsAccess(); // Update settings tier access when profile changes
       }
     });
 
     // Also update when the popup gains focus, to catch changes from other tabs.
-    window.addEventListener("focus", updateFromStorage);
+    window.addEventListener("focus", forceRefreshAndRender);
 
-    // Initial load
-    updateFromStorage();
+    // Initial load — force refresh to get fresh data from DB
+    forceRefreshAndRender();
   }
 
   init();
