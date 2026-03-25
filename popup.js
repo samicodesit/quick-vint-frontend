@@ -253,6 +253,7 @@ document.addEventListener("DOMContentLoaded", () => {
     const totals = TIER_LIMITS[tier] || TIER_LIMITS["free"];
     const isFree = totals.daily === null;
     const dailyMeter = document.getElementById("dailyMeter");
+    const usageMeters = document.getElementById("usageMeters");
     const monthlyUsageLabel = document.getElementById("monthlyUsageLabel");
 
     if (isFree) {
@@ -272,6 +273,7 @@ document.addEventListener("DOMContentLoaded", () => {
         monthlyCallsUsed.textContent = `${displayTotal} / ${totalLimit}`;
       if (monthlyProgressBar)
         monthlyProgressBar.style.width = `${totalPercent}%`;
+      if (usageMeters) usageMeters.classList.remove("hidden");
     } else {
       // Paid tiers: show both daily and monthly meters
       if (dailyMeter) dailyMeter.classList.remove("hidden");
@@ -296,6 +298,7 @@ document.addEventListener("DOMContentLoaded", () => {
       if (dailyProgressBar) dailyProgressBar.style.width = `${dailyPercent}%`;
       if (monthlyProgressBar)
         monthlyProgressBar.style.width = `${monthlyPercent}%`;
+      if (usageMeters) usageMeters.classList.remove("hidden");
     }
   }
 
