@@ -49,9 +49,7 @@
     }
 
     #loadingView {
-      text-align: center;
-      padding: 30px 0;
-      color: #666;
+      padding: 0;
     }
 
     /* Loading State */
@@ -444,7 +442,7 @@
     }
 
     .skeleton {
-      background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
+      background: linear-gradient(90deg, #f0f0f0 25%, #e8e8e8 50%, #f0f0f0 75%);
       background-size: 800px 100%;
       animation: shimmer 1.4s infinite linear;
       border-radius: 6px;
@@ -461,10 +459,6 @@
       border-radius: 3px;
       margin-top: 4px;
     }
-
-    #signedInView.is-loaded .skeleton-block { display: none !important; }
-    #signedInView:not(.is-loaded) .real-content { visibility: hidden; }
-    #signedInView.is-loaded .real-content { visibility: visible; }
 
     .view-plans-link {
       display: block;
@@ -1200,7 +1194,16 @@
       <div id="messages" class="hidden"></div>
 
       <div id="loadingView">
-        <p data-i18n="loading">Loading...</p>
+        <div class="user-email skeleton" style="height:34px;margin-bottom:2px;"></div>
+        <div class="plan-card" style="margin:2px 0 4px;">
+          <div class="skeleton skeleton-line" style="width:40%;margin:0 auto 10px;"></div>
+          <div class="skeleton skeleton-line" style="width:75%;"></div>
+          <div class="skeleton skeleton-bar" style="width:100%;margin-bottom:10px;"></div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:4px;">
+            <div class="skeleton" style="height:90px;border-radius:10px;"></div>
+            <div class="skeleton" style="height:90px;border-radius:10px;"></div>
+          </div>
+        </div>
       </div>
 
       <div id="signedOutView">
@@ -1244,18 +1247,6 @@
       </div>
 
       <div id="signedInView">
-        <!-- Skeleton placeholders — visible until .is-loaded is set -->
-        <div class="skeleton-block">
-          <div class="user-email skeleton" style="height:34px;margin-bottom:2px;"></div>
-          <div class="plan-card" style="margin:2px 0 4px;">
-            <div class="skeleton skeleton-line" style="width:40%;margin:0 auto 8px;"></div>
-            <div class="skeleton skeleton-line" style="width:80%;"></div>
-            <div class="skeleton skeleton-bar" style="width:100%;margin-bottom:8px;"></div>
-          </div>
-        </div>
-
-        <!-- Real content -->
-        <div class="real-content">
         <div class="user-email">
           <span id="userEmail"></span>
         </div>
