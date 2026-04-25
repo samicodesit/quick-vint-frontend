@@ -1,6 +1,13 @@
 // --- IMPORTS & INITIALIZATION ---
 importScripts("lib/supabase.js");
 
+// --- FIRST RUN: open welcome/onboarding page on install ---
+chrome.runtime.onInstalled.addListener((details) => {
+  if (details.reason === "install") {
+    chrome.tabs.create({ url: "https://autolister.app/welcome" });
+  }
+});
+
 // --- CONSTANTS ---
 const SUPABASE_URL = "https://jqloiovdwjaornnfvmyu.supabase.co";
 const SUPABASE_ANON_KEY =
