@@ -1,6 +1,13 @@
 // --- IMPORTS & INITIALIZATION ---
 importScripts("lib/supabase.js");
 
+// --- FIRST RUN: open welcome/onboarding page on install ---
+chrome.runtime.onInstalled.addListener((details) => {
+  if (details.reason === "install") {
+    chrome.tabs.create({ url: "https://autolister.app/welcome" });
+  }
+});
+
 // --- CONSTANTS ---
 const SUPABASE_URL = "https://jqloiovdwjaornnfvmyu.supabase.co";
 const SUPABASE_ANON_KEY =
@@ -179,9 +186,9 @@ async function updateAndStoreUserProfile() {
  * Fetches the user's daily API call count.
  * @returns {Promise<{daily: number|null}>} Null for business tier, otherwise the count.
  */
-async function fetchUserDayCount() {
+async function fetchUserUsageCount() {
   const session = await ensureValidToken();
-  if (!session?.access_token) return { daily: 0 };
+  if (!session?.access_token) return { daily: 0, monthly: 0 };
 
   try {
     const authClient = createAuthenticatedClient(session.access_token);
@@ -193,12 +200,17 @@ async function fetchUserDayCount() {
 
     const { data: profile, error: profileError } = await authClient
       .from("profiles")
-      .select("subscription_tier")
+      .select("subscription_tier, api_calls_this_month")
       .eq("id", user.id)
       .single();
     if (profileError) throw profileError;
 
-    if (profile?.subscription_tier === "business") return { daily: null };
+    const monthly =
+      typeof profile?.api_calls_this_month === "number"
+        ? profile.api_calls_this_month
+        : 0;
+    if (profile?.subscription_tier === "business")
+      return { daily: null, monthly };
 
     const { data: limit, error: limitError } = await authClient
       .from("rate_limits")
@@ -212,10 +224,10 @@ async function fetchUserDayCount() {
 
     if (limitError) throw limitError;
 
-    return { daily: limit?.count || 0 };
+    return { daily: limit?.count || 0, monthly };
   } catch (error) {
     console.error("Failed to fetch user day count:", error);
-    return { daily: 0 };
+    return { daily: 0, monthly: 0 };
   }
 }
 
@@ -264,9 +276,9 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         );
         break;
 
-      case "GET_USER_DAY_COUNT":
-        const dayCount = await fetchUserDayCount();
-        sendResponse(dayCount);
+      case "GET_USER_USAGE_COUNT":
+        const usageCount = await fetchUserUsageCount();
+        sendResponse(usageCount);
         break;
 
       // THIS IS THE FIX: Restore the handler for the signal from the callback page.

@@ -5,7 +5,7 @@ document.addEventListener("DOMContentLoaded", () => {
   const SUPABASE_ANON_KEY =
     "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImpxbG9pb3Zkd2phb3JubmZ2bXl1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDgyMDgzMzIsImV4cCI6MjA2Mzc4NDMzMn0.iFtkUorY1UqK8zamnwgjB-yhsXe0bJAA8YFm22bzc3A";
   const TIER_LIMITS = {
-    free: { daily: 2, monthly: 10 },
+    free: { daily: 2, monthly: 8 },
     starter: { daily: 15, monthly: 300 },
     pro: { daily: 40, monthly: 800 },
     business: { daily: 75, monthly: 1500 },
@@ -47,8 +47,10 @@ document.addEventListener("DOMContentLoaded", () => {
   const settingsToggleBtn = document.getElementById("settingsToggleBtn");
   const gearIcon = document.querySelector(".gear-icon");
   const backIcon = document.querySelector(".back-icon");
+  const trustNotes = document.querySelectorAll(".trust-note");
   const toneOptions = document.querySelectorAll('input[name="tone"]');
   const emojiToggle = document.getElementById("emojiToggle");
+  const formatOptions = document.querySelectorAll('input[name="format"]');
 
   // --- HELPER & UTILITY FUNCTIONS ---
 
@@ -107,6 +109,30 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   }
 
+  function getTrustNoteText(languageCode) {
+    const code = (languageCode || "en").toLowerCase();
+    const trustByLanguage = {
+      en: "Safe workflow by design: text generation only, no automated mass account actions.",
+      fr: "Flux de travail sécurisé : génération de texte uniquement, sans actions de masse automatisées sur le compte.",
+      de: "Sicherer Workflow: nur Textgenerierung, keine automatisierten Massenaktionen auf dem Konto.",
+      es: "Flujo seguro: solo generación de texto, sin acciones masivas automatizadas en la cuenta.",
+      it: "Flusso di lavoro sicuro: solo generazione di testo, senza azioni di massa automatizzate sull'account.",
+      nl: "Veilige workflow: alleen tekstgeneratie, geen geautomatiseerde massa-acties op je account.",
+      pl: "Bezpieczny workflow: tylko generowanie tekstu, bez masowych zautomatyzowanych akcji na koncie.",
+      cz: "Bezpečný workflow: pouze generování textu, bez automatizovaných hromadných akcí na účtu.",
+      da: "Sikkert workflow: kun tekstgenerering, ingen automatiserede massehandlinger på kontoen.",
+    };
+    return trustByLanguage[code] || trustByLanguage.en;
+  }
+
+  function applyTrustNoteLocalization(languageCode) {
+    if (!trustNotes || trustNotes.length === 0) return;
+    const localizedText = getTrustNoteText(languageCode);
+    trustNotes.forEach((node) => {
+      node.textContent = localizedText;
+    });
+  }
+
   // --- UI RENDERING ---
 
   function render(user, profile) {
@@ -115,13 +141,14 @@ document.addEventListener("DOMContentLoaded", () => {
       const status = profile.subscription_status || "free";
       const rawTier = profile.subscription_tier || "free";
       const tier = normalizeTier(rawTier);
-      const monthlyUsed = profile.api_calls_this_month || 0;
-      if (planName)
-        planName.textContent = TIER_DISPLAY_NAMES[tier] || "Starter Plan";
+      if (planName) planName.textContent = TIER_DISPLAY_NAMES[tier] || "Free Plan";
 
-      chrome.runtime.sendMessage({ type: "GET_USER_DAY_COUNT" }, (resp) => {
+      chrome.runtime.sendMessage({ type: "GET_USER_USAGE_COUNT" }, (resp) => {
         const dailyUsed =
           resp && typeof resp.daily === "number" ? resp.daily : 0;
+        const monthlyUsed =
+          resp && typeof resp.monthly === "number" ? resp.monthly : 0;
+
         updateUsageUI(dailyUsed, monthlyUsed, tier);
       });
 
@@ -177,14 +204,18 @@ document.addEventListener("DOMContentLoaded", () => {
   // --- DATA & STATE MANAGEMENT ---
 
   /**
-   * Reads user state from chrome.storage.local and triggers a render.
-   * This is the primary way the popup gets its initial state.
+   * Refreshes user profile from database then reads from storage and triggers a render.
+   * This ensures we always have fresh data, matching the instant update behavior of usage counters.
    */
   function updateFromStorage() {
-    chrome.storage.local.get(["supabaseSession", "userProfile"], (data) => {
-      const user = data.supabaseSession?.user || null;
-      const profile = data.userProfile || null;
-      render(user, profile);
+    // First, trigger background to refresh profile from database
+    chrome.runtime.sendMessage({ type: "AUTH_UPDATED" }, () => {
+      // Then read the freshly updated storage and render
+      chrome.storage.local.get(["supabaseSession", "userProfile"], (data) => {
+        const user = data.supabaseSession?.user || null;
+        const profile = data.userProfile || null;
+        render(user, profile);
+      });
     });
   }
 
@@ -316,7 +347,7 @@ document.addEventListener("DOMContentLoaded", () => {
       };
       const token = encodeUserData(userData);
       if (token) {
-        const url = `https://quick-vint.vercel.app/pricing.html?token=${token}`;
+        const url = `https://quick-vint.vercel.app/pricing?token=${token}`;
         window.open(url, "_blank");
       }
     });
@@ -334,6 +365,11 @@ document.addEventListener("DOMContentLoaded", () => {
           languageOptions.forEach((opt) => opt.classList.remove("selected"));
           selectedItem.classList.add("selected");
         }
+        applyTrustNoteLocalization(result.selectedLanguage);
+      } else {
+        const browserLanguage = (navigator.language || "en").slice(0, 2);
+        const fallbackCode = browserLanguage === "cs" ? "cz" : browserLanguage;
+        applyTrustNoteLocalization(fallbackCode);
       }
     });
     const toggleDropdown = (show) => {
@@ -359,6 +395,7 @@ document.addEventListener("DOMContentLoaded", () => {
         li.classList.add("selected");
         toggleDropdown(false);
         chrome.storage.local.set({ selectedLanguage: li.dataset.value });
+        applyTrustNoteLocalization(li.dataset.value);
       });
     });
     document.addEventListener("click", (e) => {
@@ -371,27 +408,58 @@ document.addEventListener("DOMContentLoaded", () => {
   // --- SETTINGS LOGIC ---
   function setupSettings() {
     // Load saved settings and user profile for tier check
-    chrome.storage.local.get(["tone", "useEmojis", "userProfile"], (result) => {
-      const profile = result.userProfile || {};
-      const tier = normalizeTier(profile.tier);
-      const hasProAccess = tier === "pro" || tier === "business";
+    chrome.storage.local.get(
+      ["tone", "useEmojis", "useBulletPoints", "userProfile"],
+      (result) => {
+        const profile = result.userProfile || {};
+        const tier = normalizeTier(profile.subscription_tier);
+        const hasProAccess = tier === "pro" || tier === "business";
 
-      // Set Tone
-      const savedTone = result.tone || "standard";
-      const toneInput = document.querySelector(
-        `input[name="tone"][value="${savedTone}"]`,
-      );
-      if (toneInput) toneInput.checked = true;
+        // Set Tone
+        const savedTone = result.tone || "standard";
+        const toneInput = document.querySelector(
+          `input[name="tone"][value="${savedTone}"]`,
+        );
+        if (toneInput) toneInput.checked = true;
 
-      // Set Emojis
-      if (emojiToggle) {
-        // Default to false if not set
-        emojiToggle.checked = result.useEmojis === true;
-      }
+        // Set Emojis
+        if (emojiToggle) {
+          // Default to false if not set
+          emojiToggle.checked = result.useEmojis === true;
+        }
 
-      // Apply tier gating
-      updateSettingsAccess(hasProAccess);
-    });
+        // Set Format
+        // Default to true (bullets) if not set or undefined
+        const useBulletPoints = result.useBulletPoints !== false;
+        const formatValue = useBulletPoints ? "bullets" : "paragraphs";
+        const formatInput = document.querySelector(
+          `input[name="format"][value="${formatValue}"]`,
+        );
+        if (formatInput) formatInput.checked = true;
+
+        // Apply tier gating AND reset if expired
+        if (!hasProAccess) {
+          // If they lost access but still have premium tone selected, reset to standard
+          if (savedTone !== "standard") {
+            const standardInput = document.querySelector(
+              'input[name="tone"][value="standard"]',
+            );
+            if (standardInput) standardInput.checked = true;
+            // Also update storage so it persists
+            chrome.storage.local.set({ tone: "standard" });
+          }
+
+          // If they lost access but still have emojis on, turn them off
+          if (result.useEmojis === true) {
+            if (emojiToggle) emojiToggle.checked = false;
+            // Also update storage
+            chrome.storage.local.set({ useEmojis: false });
+          }
+        }
+
+        updateSettingsAccess(hasProAccess);
+      },
+    );
 
     // Save Tone on change
     toneOptions.forEach((radio) => {
@@ -410,6 +478,25 @@ document.addEventListener("DOMContentLoaded", () => {
         }
       });
     }
+
+    // Save Format on change
+    formatOptions.forEach((radio) => {
+      radio.addEventListener("change", (e) => {
+        if (e.target.checked) {
+          const isBullets = e.target.value === "bullets";
+          chrome.storage.local.set({ useBulletPoints: isBullets });
+        }
+      });
+    });
+  }
+
+  function refreshSettingsAccess() {
+    chrome.storage.local.get(["userProfile"], (data) => {
+      const profile = data.userProfile || {};
+      const tier = normalizeTier(profile.subscription_tier);
+      const hasProAccess = tier === "pro" || tier === "business";
+      updateSettingsAccess(hasProAccess);
+    });
   }
 
   function updateSettingsAccess(hasProAccess) {
@@ -528,6 +615,7 @@ document.addEventListener("DOMContentLoaded", () => {
     chrome.storage.onChanged.addListener((changes) => {
       if (changes.supabaseSession || changes.userProfile) {
         updateFromStorage();
+        refreshSettingsAccess(); // Update settings tier access when profile changes
       }
     });
 

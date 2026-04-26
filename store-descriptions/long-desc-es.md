@@ -1,31 +1,38 @@
-AutoLister AI convierte tus fotos en anuncios listos para vender con un clic.
+AutoLister AI es un Vinted Description Generator para vendedores que quieren velocidad sin automatizacion riesgosa.
 
-NUEVO: SUBIDA DESDE EL MÓVIL
-Haz fotos con tu móvil, escanea el código QR y aparecerán instantáneamente en tu página de anuncio de Vinted con contenido generado por IA en menos de 10 segundos.
+NUEVO: SUBIDA DESDE EL MOVIL
+Toma fotos con tu movil, escanea el codigo QR y aparecen en segundos en tu pagina de anuncio de Vinted.
 
-CÓMO FUNCIONA
+COMO FUNCIONA
 
-1. Sube las fotos de tu artículo a Vinted
-2. Haz clic en el botón "Generate"
-3. Recibe un título y descripción creados por IA al instante
+1. Sube las fotos de tu articulo a Vinted
+2. Haz clic en el boton "Generate"
+3. Recibe al instante un titulo y una descripcion creados por IA
 
-QUÉ OBTIENES
-• Títulos generados por IA para mejor posicionamiento en búsquedas
-• Descripciones atractivas con detalles del estado y consejos de estilo
-• Detección automática de marca, color y tipo de artículo
-• 5 hashtags dirigidos para máxima visibilidad
-• Contenido en 18 idiomas para llegar a más compradores
+DISENADO PARA UN FLUJO MAS SEGURO
+• AutoLister solo genera texto de anuncio
+• Sin auto-like, auto-follow ni acciones masivas
+• Tu mantienes el control antes de publicar
 
-PARA QUIÉN ES
-• Vendedores ocasionales con pocos artículos
-• Vendedores activos gestionando decenas de anuncios diarios
-• Revendedores que quieren descripciones profesionales y coherentes
+AUTOLISTER VS BOTS DE AUTOMATIZACION
+• Los bots se enfocan en acciones repetitivas de engagement
+• AutoLister se enfoca en texto de calidad desde tus fotos
+• Ideal para crear anuncios mas rapido con un flujo mas seguro
 
-POR QUÉ LOS VENDEDORES LO ADORAN
-✓ Ahorra horas—de la foto a la publicación en segundos
-✓ Vende más rápido con descripciones que convierten
-✓ Funciona en todos los dominios Vinted (.fr, .de, .com, etc.)
+QUE OBTIENES
+• Titulos IA para mejorar la visibilidad del anuncio
+• Descripciones claras con estado y contexto de estilo
+• Deteccion automatica de marca, color y tipo de articulo
+• 5 hashtags dirigidos para mejor descubrimiento
+• Contenido en 18 idiomas para llegar a mas compradores
+
+PARA QUIEN ES
+• Vendedores ocasionales
+• Vendedores activos con muchos anuncios
+• Revendedores que quieren descripciones profesionales y consistentes
+
+NO ES PARA
+• Usuarios que buscan bots de auto-like, auto-follow o auto-relist
+• Usuarios que quieren comportamiento de cuenta totalmente automatizado
 
 Instala AutoLister AI y convierte tu armario en dinero.
-
-¡Más funciones próximamente!

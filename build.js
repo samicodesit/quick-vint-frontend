@@ -125,6 +125,19 @@ async function main() {
     log('🏗️  AutoLister AI - Release Builder', 'green');
     log('====================================');
 
+    // Ensure production URLs before packaging
+    const { PROD_URL, replaceInFile } = require('./scripts/set-env');
+    const FILES_TO_UPDATE = ['content.js', 'popup.js', 'callback.js', 'callback.html', 'manifest.json'];
+
+    log('🔄 Ensuring production URLs...', 'yellow');
+    for (const file of FILES_TO_UPDATE) {
+        try {
+            replaceInFile(file, 'http://localhost:5000', PROD_URL);
+        } catch (err) {
+            // File might not exist, skip
+        }
+    }
+
     const versionArg = process.argv[2];
     const scriptDir = __dirname;
     const manifestPath = path.join(scriptDir, 'manifest.json');

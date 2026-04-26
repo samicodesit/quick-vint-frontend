@@ -154,6 +154,19 @@
       margin-top: 8px;
     }
 
+    .trust-note {
+      margin-top: 10px;
+      margin-bottom: 0;
+      padding: 8px 10px;
+      border-radius: 8px;
+      border: 1px solid #dbeafe;
+      background: #eff6ff;
+      color: #1e3a8a;
+      font-size: 11px;
+      text-align: center;
+      line-height: 1.35;
+    }
+
     .renewal-text {
       text-align: center;
       margin-bottom: 12px;
@@ -563,20 +576,143 @@
       text-decoration: underline;
     }
 
-    .setting-group {
-      margin-bottom: 0;
+    /* Single-line Setting Row */
+    .setting-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 0px;
     }
 
-    .tone-grid {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 8px;
+    .setting-label-container {
+      display: flex;
+      flex-direction: column;
+    }
+
+    .setting-label {
+      font-size: 13px;
+      font-weight: 600;
+      color: #1f2937;
+    }
+
+    /* Format Options - Inline */
+    .format-buttons-row {
+      display: flex;
+      gap: 10px;
+    }
+
+    .format-option {
+      cursor: pointer;
+      position: relative;
+      display: flex;
+      align-items: center;
+    }
+
+    .format-option input {
+      position: absolute;
+      opacity: 0;
+      width: 0;
+      height: 0;
+    }
+
+    /* Compact Chip */
+    .format-chip {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 40px;
+      height: 40px;
+      background: #ffffff;
+      border: 1px solid #e5e7eb;
+      border-radius: 8px;
+      transition: all 0.2s ease;
+      position: relative;
+    }
+
+    /* Hide Format Labels for Inline Mode */
+    .format-label {
+      display: none;
+    }
+
+    .format-icon {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+      width: 20px;
+    }
+
+    .format-icon-bullet {
+      display: flex;
+      align-items: center;
+      gap: 3px;
+    }
+
+    .format-icon-bullet::before {
+      content: '';
+      width: 4px;
+      height: 4px;
+      background: #d1d5db;
+      border-radius: 50%;
+      flex-shrink: 0;
+      transition: background-color 0.2s;
+    }
+
+    .format-icon-bullet span {
+      height: 3px;
+      background: #cccccc;
+      border-radius: 1.5px;
+      flex: 1;
+      transition: background-color 0.2s;
+    }
+
+    .format-icon-para span {
+      display: block;
+      height: 3px;
+      background: #cccccc;
+      border-radius: 1.5px;
+      width: 100%;
+      margin-bottom: 0px;
+      transition: background-color 0.2s;
+    }
+
+    .format-icon-para span:last-child {
+      width: 60%;
+    }
+
+    /* Selected state for paragraphs icon */
+    .format-option input:checked~.format-chip .format-icon-para span {
+      background: #a5b4fc;
+    }
+
+    /* Selected State */
+    .format-option input:checked~.format-chip {
+      background: #eef2ff;
+      border-color: #667eea;
+      box-shadow: 0 0 0 1px #667eea;
+    }
+
+    .format-option input:checked~.format-chip .format-icon-bullet::before {
+      background: #667eea;
+    }
+
+    .format-option input:checked~.format-chip .format-icon-bullet span {
+      background: #a5b4fc;
+    }
+
+    /* Tone Slider (Segmented Control) */
+    .tone-slider {
+      display: flex;
+      background: #f3f4f6;
+      border-radius: 8px;
+      padding: 4px;
       margin-top: 10px;
+      gap: 2px;
     }
 
     .tone-option {
       cursor: pointer;
       position: relative;
+      flex: 1;
     }
 
     .tone-option input {
@@ -590,31 +726,28 @@
       display: flex;
       align-items: center;
       justify-content: center;
-      padding: 10px 4px;
+      padding: 6px 4px;
       text-align: center;
-      background: #f9fafb;
-      border: 1px solid #e5e7eb;
-      border-radius: 8px;
-      font-size: 12px;
+      background: transparent;
+      border-radius: 6px;
+      font-size: 11px;
       font-weight: 500;
-      color: #4b5563;
+      color: #6b7280;
       transition: all 0.2s ease;
       position: relative;
+      width: 100%;
+      box-sizing: border-box;
     }
 
     .tone-chip.locked {
       opacity: 0.5;
       cursor: not-allowed;
-      background: #f3f4f6;
     }
 
     .tone-chip.locked::after {
       content: '🔒';
-      position: absolute;
-      right: 6px;
-      top: 50%;
-      transform: translateY(-50%);
-      font-size: 10px;
+      font-size: 8px;
+      margin-left: 2px;
       opacity: 0.6;
     }
 
@@ -623,24 +756,21 @@
     }
 
     .tone-option input:checked+.tone-chip {
-      background: #eef2ff;
-      border-color: #667eea;
+      background: #ffffff;
       color: #4f46e5;
       font-weight: 600;
-      box-shadow: 0 2px 5px rgba(102, 126, 234, 0.15);
+      box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
     }
 
     .tone-option input:checked+.tone-chip.locked {
-      background: #f9fafb;
-      border-color: #e5e7eb;
-      color: #4b5563;
+      background: transparent;
+      color: #71717a;
       box-shadow: none;
       font-weight: 500;
     }
 
     .tone-option:hover .tone-chip:not(.locked) {
-      border-color: #d1d5db;
-      background: #ffffff;
+      color: #374151;
     }
 
     .setting-divider {
@@ -928,6 +1058,8 @@
 
         <button id="sendMagicLinkBtn" class="btn">Send Magic Link</button>
 
+        <p class="trust-note">Safe workflow by design: text generation only, no automated mass account actions.</p>
+
         <p class="small-text contact-text">
           Need help? <a href="mailto:support@autolister.app" class="contact-link">Contact Support</a>
         </p>
@@ -956,7 +1088,7 @@
             <div class="usage-meter">
               <div class="meter-label">
                 <span>Monthly Usage</span>
-                <span id="monthlyCallsUsed">0 / 10</span>
+                <span id="monthlyCallsUsed">0 / 8</span>
               </div>
               <div class="progress-bar-bg">
                 <div id="monthlyProgressBar" class="progress-bar-fill"></div>
@@ -979,6 +1111,8 @@
             <button id="manageBtn" class="btn">Manage Subscription</button>
             <a href="#" id="viewAllPlansLinkPaid" class="view-plans-link">Compare All Plans</a>
           </div>
+
+          <p class="trust-note">Safe workflow by design: text generation only, no automated mass account actions.</p>
         </div>
 
         <div class="language-dropdown">
@@ -1066,9 +1200,40 @@
         <h4 class="section-title">Settings</h4>
 
         <div class="settings-card">
+          <div class="setting-row">
+            <div class="setting-label-container">
+              <span class="setting-label">Text format <span class="new-badge">NEW</span></span>
+            </div>
+            <div class="format-buttons-row">
+              <label class="format-option" title="Bullet points">
+                <input type="radio" name="format" value="bullets" checked>
+                <span class="format-chip">
+                  <div class="format-icon">
+                    <div class="format-icon-bullet"><span></span></div>
+                    <div class="format-icon-bullet"><span></span></div>
+                    <div class="format-icon-bullet"><span></span></div>
+                  </div>
+                </span>
+              </label>
+              <label class="format-option" title="Paragraphs">
+                <input type="radio" name="format" value="paragraphs">
+                <span class="format-chip">
+                  <div class="format-icon format-icon-para">
+                    <span></span>
+                    <span></span>
+                    <span></span>
+                    <span></span>
+                  </div>
+                </span>
+              </label>
+            </div>
+          </div>
+
+          <div class="setting-divider"></div>
+
           <div class="setting-group">
             <label class="form-label">Description Tone <span class="new-badge">NEW</span></label>
-            <div class="tone-grid">
+            <div class="tone-slider">
               <label class="tone-option">
                 <input type="radio" name="tone" value="standard" checked>
                 <span class="tone-chip">Standard</span>
@@ -1079,7 +1244,7 @@
               </label>
               <label class="tone-option">
                 <input type="radio" name="tone" value="professional">
-                <span class="tone-chip">Professional</span>
+                <span class="tone-chip">Pro</span>
               </label>
               <label class="tone-option">
                 <input type="radio" name="tone" value="enthusiastic">
