@@ -113,14 +113,14 @@ document.addEventListener("DOMContentLoaded", () => {
     const code = (languageCode || "en").toLowerCase();
     const trustByLanguage = {
       en: "Safe workflow by design: text generation only, no automated mass account actions.",
-      fr: "Flux de travail securise : generation de texte uniquement, sans actions de masse automatisees sur le compte.",
+      fr: "Flux de travail sécurisé : génération de texte uniquement, sans actions de masse automatisées sur le compte.",
       de: "Sicherer Workflow: nur Textgenerierung, keine automatisierten Massenaktionen auf dem Konto.",
-      es: "Flujo seguro: solo generacion de texto, sin acciones masivas automatizadas en la cuenta.",
+      es: "Flujo seguro: solo generación de texto, sin acciones masivas automatizadas en la cuenta.",
       it: "Flusso di lavoro sicuro: solo generazione di testo, senza azioni di massa automatizzate sull'account.",
       nl: "Veilige workflow: alleen tekstgeneratie, geen geautomatiseerde massa-acties op je account.",
       pl: "Bezpieczny workflow: tylko generowanie tekstu, bez masowych zautomatyzowanych akcji na koncie.",
-      cz: "Bezpecny workflow: pouze generovani textu, bez automatizovanych hromadnych akci na uctu.",
-      da: "Sikkert workflow: kun tekstgenerering, ingen automatiserede massehandlinger pa kontoen.",
+      cz: "Bezpečný workflow: pouze generování textu, bez automatizovaných hromadných akcí na účtu.",
+      da: "Sikkert workflow: kun tekstgenerering, ingen automatiserede massehandlinger på kontoen.",
     };
     return trustByLanguage[code] || trustByLanguage.en;
   }
@@ -141,7 +141,7 @@ document.addEventListener("DOMContentLoaded", () => {
       const status = profile.subscription_status || "free";
       const rawTier = profile.subscription_tier || "free";
       const tier = normalizeTier(rawTier);
-      if (planName) planName.textContent = TIER_DISPLAY_NAMES[tier] || "?";
+      if (planName) planName.textContent = TIER_DISPLAY_NAMES[tier] || "Free Plan";
 
       chrome.runtime.sendMessage({ type: "GET_USER_USAGE_COUNT" }, (resp) => {
         const dailyUsed =
