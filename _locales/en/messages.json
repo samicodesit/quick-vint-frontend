@@ -1,10 +1,10 @@
 {
   "appName": {
-    "message": "AutoLister AI - Vinted Description Generator & Bot",
+    "message": "AutoLister AI - Vinted Description Generator",
     "description": "Store Listing Title"
   },
   "appDesc": {
-    "message": "One-click AI-generated title & description for Vinted listings",
+    "message": "Safe AI title & description generator for Vinted listings",
     "description": "Store Listing Summary"
   }
 }

@@ -1,31 +1,38 @@
-AutoLister AI promění vaše fotky v připravené inzeráty jedním kliknutím.
+AutoLister AI je Vinted Description Generator pro prodejce, kteri chteji rychlejsi inzerci bez rizikove automatizace.
 
-NOVINKA: NAHRÁVÁNÍ Z TELEFONU
-Vyfoťte předměty telefonem, naskenujte QR kód a fotky se okamžitě objeví na vaší stránce inzerátu Vinted s obsahem generovaným AI za méně než 10 sekund.
+NOVINKA: NAHRAVANI Z TELEFONU
+Vyfotte predmety telefonem, naskenujte QR kod a fotky se objevi na strance inzeratu Vinted behem par sekund.
 
 JAK TO FUNGUJE
 
-1. Nahrajte fotky předmětu na Vinted
-2. Klikněte na tlačítko "Generate"
-3. Okamžitě získejte titulek a popis vytvořené umělou inteligencí
+1. Nahrajte fotky predmetu na Vinted
+2. Kliknete na tlacitko "Generate"
+3. Okamzite ziskate titulek a popis vytvoreny AI
 
-CO ZÍSKÁTE
-• Titulky generované AI pro lepší pozice ve vyhledávání
-• Přesvědčivé popisy s detaily o stavu a stylingovými tipy
-• Automatická detekce značky, barvy a typu předmětu
-• 5 cílených hashtagů pro maximální viditelnost
-• Obsah v 18 jazycích pro dosažení více kupujících
+NAVRZENO PRO BEZPECNEJSI WORKFLOW
+• AutoLister generuje pouze text inzeratu
+• Zadny auto-like, auto-follow ani hromadne akce
+• Pred publikaci mate vse pod kontrolou
+
+AUTOLISTER VS AUTOMATIZACNI BOTI
+• Boti se soustredi na opakovane engagement akce
+• AutoLister se soustredi na kvalitni text inzeratu z vasich fotek
+• Idealni pro rychlejsi tvorbu inzeratu s bezpecnejsim workflow
+
+CO ZISKATE
+• AI titulky pro lepsi viditelnost ve vyhledavani
+• Jasne popisy s detaily o stavu a stylu
+• Automaticke rozpoznani znacky, barvy a typu predmetu
+• 5 cilenych hashtagu pro lepsi objevitelnost
+• Obsah v 18 jazycich pro vice kupujicich
 
 PRO KOHO
-• Příležitostní prodejci s pár předměty
-• Aktivní prodejci spravující desítky inzerátů denně
-• Přeprodejci, kteří chtějí konzistentní profesionální popisy
+• Prilezitostni prodejci
+• Aktivni prodejci s mnoha inzeraty
+• Reselleri, kteri chteji profesionalni a konzistentni popisy
 
-PROČ HO PRODEJCI MILUJÍ
-✓ Ušetřete hodiny—od fotky k publikaci za pár sekund
-✓ Prodávejte rychleji s popisy, které konvertují
-✓ Funguje na všech Vinted doménách (.fr, .de, .com, atd.)
+NENI TO PRO
+• Uzivatele hledajici auto-like, auto-follow nebo auto-relist boty
+• Uzivatele, kteri chteji plne automatizovane chovani uctu
 
-Nainstalujte AutoLister AI a proměňte svůj šatník v peníze.
-
-Další funkce již brzy!
+Nainstalujte AutoLister AI a promente svuj satnik v penize.

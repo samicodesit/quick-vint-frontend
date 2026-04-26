@@ -1,8 +1,8 @@
 {
   "appName": {
-    "message": "AutoLister AI - Vinted Description Generator & Bot"
+    "message": "AutoLister AI - Vinted Description Generator"
   },
   "appDesc": {
-    "message": "Titre et description générés par IA en un clic pour vos annonces Vinted"
+    "message": "Generateur IA securise de titres et descriptions pour annonces Vinted"
   }
 }

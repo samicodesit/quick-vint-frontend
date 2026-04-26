@@ -47,6 +47,7 @@ document.addEventListener("DOMContentLoaded", () => {
   const settingsToggleBtn = document.getElementById("settingsToggleBtn");
   const gearIcon = document.querySelector(".gear-icon");
   const backIcon = document.querySelector(".back-icon");
+  const trustNotes = document.querySelectorAll(".trust-note");
   const toneOptions = document.querySelectorAll('input[name="tone"]');
   const emojiToggle = document.getElementById("emojiToggle");
   const formatOptions = document.querySelectorAll('input[name="format"]');
@@ -106,6 +107,30 @@ document.addEventListener("DOMContentLoaded", () => {
       console.error("Failed to encode user data:", e);
       return null;
     }
+  }
+
+  function getTrustNoteText(languageCode) {
+    const code = (languageCode || "en").toLowerCase();
+    const trustByLanguage = {
+      en: "Safe workflow by design: text generation only, no automated mass account actions.",
+      fr: "Flux de travail securise : generation de texte uniquement, sans actions de masse automatisees sur le compte.",
+      de: "Sicherer Workflow: nur Textgenerierung, keine automatisierten Massenaktionen auf dem Konto.",
+      es: "Flujo seguro: solo generacion de texto, sin acciones masivas automatizadas en la cuenta.",
+      it: "Flusso di lavoro sicuro: solo generazione di testo, senza azioni di massa automatizzate sull'account.",
+      nl: "Veilige workflow: alleen tekstgeneratie, geen geautomatiseerde massa-acties op je account.",
+      pl: "Bezpieczny workflow: tylko generowanie tekstu, bez masowych zautomatyzowanych akcji na koncie.",
+      cz: "Bezpecny workflow: pouze generovani textu, bez automatizovanych hromadnych akci na uctu.",
+      da: "Sikkert workflow: kun tekstgenerering, ingen automatiserede massehandlinger pa kontoen.",
+    };
+    return trustByLanguage[code] || trustByLanguage.en;
+  }
+
+  function applyTrustNoteLocalization(languageCode) {
+    if (!trustNotes || trustNotes.length === 0) return;
+    const localizedText = getTrustNoteText(languageCode);
+    trustNotes.forEach((node) => {
+      node.textContent = localizedText;
+    });
   }
 
   // --- UI RENDERING ---
@@ -340,6 +365,11 @@ document.addEventListener("DOMContentLoaded", () => {
           languageOptions.forEach((opt) => opt.classList.remove("selected"));
           selectedItem.classList.add("selected");
         }
+        applyTrustNoteLocalization(result.selectedLanguage);
+      } else {
+        const browserLanguage = (navigator.language || "en").slice(0, 2);
+        const fallbackCode = browserLanguage === "cs" ? "cz" : browserLanguage;
+        applyTrustNoteLocalization(fallbackCode);
       }
     });
     const toggleDropdown = (show) => {
@@ -365,6 +395,7 @@ document.addEventListener("DOMContentLoaded", () => {
         li.classList.add("selected");
         toggleDropdown(false);
         chrome.storage.local.set({ selectedLanguage: li.dataset.value });
+        applyTrustNoteLocalization(li.dataset.value);
       });
     });
     document.addEventListener("click", (e) => {

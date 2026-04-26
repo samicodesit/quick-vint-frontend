@@ -1,31 +1,38 @@
-AutoLister AI trasforma le tue foto in annunci pronti per la vendita con un clic.
+AutoLister AI e un Vinted Description Generator per venditori che vogliono velocita senza automazione rischiosa.
 
 NUOVO: UPLOAD DAL TELEFONO
-Scatta foto con il telefono, scansiona il codice QR e appariranno istantaneamente sulla tua pagina annuncio Vinted con contenuto generato dall'IA in meno di 10 secondi.
+Scatta foto dal telefono, scansiona il QR code e le immagini appaiono in pochi secondi sulla tua pagina annuncio Vinted.
 
 COME FUNZIONA
 
 1. Carica le foto del tuo articolo su Vinted
 2. Clicca il pulsante "Generate"
-3. Ricevi titolo e descrizione creati dall'IA istantaneamente
+3. Ottieni subito titolo e descrizione creati dall'IA
+
+PROGETTATO PER UN FLUSSO PIU SICURO
+• AutoLister genera solo testo per gli annunci
+• Nessun auto-like, auto-follow o azione massiva
+• Mantieni il controllo prima di ogni pubblicazione
+
+AUTOLISTER VS BOT DI AUTOMAZIONE
+• I bot puntano su azioni ripetitive di engagement
+• AutoLister punta su testo di qualita dalle tue foto
+• Ideale per creare annunci piu velocemente con un flusso piu sicuro
 
 COSA OTTIENI
-• Titoli generati dall'IA per posizionarsi meglio nelle ricerche
-• Descrizioni coinvolgenti con dettagli sulle condizioni e consigli di stile
-• Rilevamento automatico di marca, colore e tipo di articolo
-• 5 hashtag mirati per la massima visibilità
-• Contenuto in 18 lingue per raggiungere più acquirenti
+• Titoli IA pensati per migliorare la visibilita
+• Descrizioni chiare con dettagli su condizioni e stile
+• Rilevamento automatico di brand, colore e tipo articolo
+• 5 hashtag mirati per migliore scoperta
+• Contenuti in 18 lingue per raggiungere piu acquirenti
 
-PER CHI È
-• Venditori occasionali con pochi articoli
-• Venditori attivi che gestiscono decine di annunci al giorno
-• Rivenditori che vogliono descrizioni professionali e coerenti
+PER CHI E
+• Venditori occasionali
+• Venditori attivi con molti annunci
+• Reseller che vogliono descrizioni professionali e coerenti
 
-PERCHÉ I VENDITORI LO ADORANO
-✓ Risparmia ore—dalla foto alla pubblicazione in pochi secondi
-✓ Vendi più velocemente con descrizioni che convertono
-✓ Funziona su tutti i domini Vinted (.fr, .de, .com, ecc.)
+NON E PER
+• Chi cerca bot auto-like, auto-follow o auto-relist
+• Chi vuole comportamento account totalmente automatizzato
 
 Installa AutoLister AI e trasforma il tuo guardaroba in denaro.
-
-Altre funzionalità in arrivo presto!

@@ -1,31 +1,38 @@
-AutoLister AI zamienia Twoje zdjęcia w gotowe ogłoszenia sprzedażowe jednym kliknięciem.
+AutoLister AI to Vinted Description Generator dla sprzedawcow, ktorzy chca szybciej wystawiac bez ryzykownej automatyzacji.
 
-NOWOŚĆ: PRZESYŁANIE Z TELEFONU
-Zrób zdjęcia telefonem, zeskanuj kod QR, a natychmiast pojawią się na Twojej stronie ogłoszenia Vinted z treścią generowaną przez AI w mniej niż 10 sekund.
+NOWOSC: PRZESYLANIE Z TELEFONU
+Zrob zdjecia telefonem, zeskanuj kod QR, a pojawia sie na stronie ogloszenia Vinted w kilka sekund.
 
-JAK TO DZIAŁA
+JAK TO DZIALA
 
-1. Prześlij zdjęcia przedmiotu na Vinted
+1. Przeslij zdjecia przedmiotu na Vinted
 2. Kliknij przycisk "Generate"
-3. Otrzymaj natychmiast tytuł i opis stworzone przez sztuczną inteligencję
+3. Otrzymaj natychmiast tytul i opis stworzone przez AI
+
+ZAPROJEKTOWANE DLA BEZPIECZNIEJSZEGO PROCESU
+• AutoLister generuje tylko tekst ogloszenia
+• Bez auto-like, auto-follow i masowych akcji
+• Ty zachowujesz kontrole przed publikacja
+
+AUTOLISTER VS BOTY AUTOMATYZUJACE
+• Boty skupiaja sie na powtarzalnych akcjach engagement
+• AutoLister skupia sie na jakosciowym tekscie z Twoich zdjec
+• Idealny dla szybszego tworzenia ogloszen w bezpieczniejszym workflow
 
 CO OTRZYMUJESZ
-• Tytuły generowane przez AI dla lepszej pozycji w wyszukiwaniu
-• Przekonujące opisy ze szczegółami dotyczącymi stanu i wskazówkami stylistycznymi
-• Automatyczne wykrywanie marki, koloru i rodzaju przedmiotu
-• 5 ukierunkowanych hashtagów dla maksymalnej widoczności
-• Treść w 18 językach, aby dotrzeć do większej liczby kupujących
+• Tytuly AI wspierajace widocznosc ogloszen
+• Jasne opisy ze stanem i kontekstem stylu
+• Automatyczne wykrywanie marki, koloru i typu przedmiotu
+• 5 celowanych hashtagow dla lepszej widocznosci
+• Tresc w 18 jezykach, aby dotrzec do wiekszej liczby kupujacych
 
 DLA KOGO
-• Okazjonalni sprzedawcy z kilkoma przedmiotami
-• Aktywni sprzedawcy zarządzający codziennie dziesiątkami ogłoszeń
-• Odsprzedawcy chcący profesjonalnych, spójnych opisów
+• Sprzedawcy okazjonalni
+• Sprzedawcy aktywni z duza liczba ogloszen
+• Resellerzy chcacych profesjonalnych i spojnych opisow
 
-DLACZEGO SPRZEDAWCY TO KOCHAJĄ
-✓ Oszczędź godziny—od zdjęcia do publikacji w kilka sekund
-✓ Sprzedawaj szybciej dzięki opisom, które konwertują
-✓ Działa na wszystkich domenach Vinted (.fr, .de, .com, itd.)
+NIE DLA
+• Uzytkownikow szukajacych botow auto-like, auto-follow lub auto-relist
+• Uzytkownikow oczekujacych pelnej automatyzacji konta
 
-Zainstaluj AutoLister AI i zamień swoją szafę w gotówkę.
-
-Więcej funkcji już wkrótce!
+Zainstaluj AutoLister AI i zamien swoja szafe w gotowke.
