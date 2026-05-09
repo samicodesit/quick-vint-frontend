@@ -169,14 +169,22 @@ async function updateAndStoreUserProfile() {
     const { data: profile, error: profileError } = await authClient
       .from("profiles")
       .select(
-        "subscription_status, api_calls_this_month, subscription_tier, current_period_end",
+        "subscription_status, api_calls_this_month, subscription_tier, current_period_end, subscription_credits, rollover_credits, pack_credits, credits_cycle_end, is_legacy_plan, pending_tier",
       )
       .eq("id", user.id)
       .single();
 
     if (profileError) throw profileError;
 
-    await chrome.storage.local.set({ userProfile: profile });
+    const { count: packPurchasesCount } = await authClient
+      .from("credit_transactions")
+      .select("id", { count: "exact", head: true })
+      .eq("user_id", user.id)
+      .eq("type", "pack_purchase");
+
+    await chrome.storage.local.set({
+      userProfile: { ...profile, pack_purchases_count: packPurchasesCount ?? 0 },
+    });
   } catch (error) {
     console.error("Failed to update and store user profile:", error);
   }

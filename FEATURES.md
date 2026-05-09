@@ -26,18 +26,29 @@ AutoLister AI is a Chrome browser extension (Manifest V3) that provides AI-gener
 
 ---
 
-## Subscription Tiers
+## Subscription Tiers (credit-based)
 
-| Tier | Daily Limit | Monthly Limit | Features |
-|------|-------------|---------------|----------|
-| **Free** | 2 | 10 | Basic generation, standard tone |
-| **Starter** | 15 | 300 | All basic features |
-| **Pro** | 40 | 800 | + Tone selection, emoji support |
-| **Business** | Unlimited | 1500 | + Unlimited daily, priority support |
+| Tier | Price | Credits/mo | Rollover Cap | Highlight Features |
+|------|-------|-----------:|-------------:|--------------------|
+| **Free** | €0 | 5 + 2/wk for 4 weeks (13 lifetime) | — | 5 phone uploads/month |
+| **Closet Clear Pack** | €3.99 one-time | 15 (never expire) | — | All 15 work with phone upload |
+| **Starter** | €5.99/mo | 80 | 240 | Unlimited phone upload |
+| **Plus** | €9.99/mo | 200 | 600 | + Listing Preferences, Smart Re-Gen |
+| **Pro** | €14.99/mo | 400 | 1,200 | + Tone Control, Emoji, Multi-language batch, completeness tips, priority support |
+| **Business** | €24.99/mo | 1,000 | 3,000 | + Priority processing, dedicated support |
 
-### Premium Features (Pro/Business)
-- **Tone selection**: Choose between Standard, Funny, or Professional writing styles
-- **Emoji toggle**: Enable/disable emoji usage in generated descriptions
+Each generation costs one credit. Multi-language batch generations cost one credit per language. Subscription credits burn first; pack credits last and never expire.
+
+### Premium Features
+- **Listing Preferences (Plus+)**: Predefined checkbox prefs that get appended to every generation prompt.
+- **Smart Re-Gen (Plus+)**: Directional re-generation (Detailed / Casual / Short).
+- **Tone Control (Pro+)**: Friendly, Professional, or Enthusiastic tone slider.
+- **Emoji Support (Pro+)**: Toggle relevant emojis in the description.
+- **Multi-Language Batch (Pro+)**: Generate the same listing across multiple Vinted domains in one click.
+- **Priority Processing (Business)**: Priority server processing.
+
+### Legacy Plans
+Subscribers from before the credit-based pricing keep their original daily/monthly listing limits at their original price. Cancel + re-subscribe moves the user to the current plan list above.
 
 ---
 

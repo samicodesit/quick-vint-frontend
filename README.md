@@ -18,50 +18,56 @@ Vinted sellers waste hours every week writing repetitive titles and descriptions
 Feature	Description
 🤖 One-Click AI Generation	Photos → AI title + description, instantly
 🛡️ Account-Safe	Built to comply with Vinted — won't risk seller accounts (key trust signal — flagged on every plan)
-📱 Phone Upload	Snap pics on mobile, list from desktop (Pro & Business soon)
-🌍 6 Languages	EN · FR · DE · ES · IT · NL — auto-detected
-🎨 Tone Control	Standard / Funny / Professional (Pro & Business)
+📱 Phone Upload	Snap pics on mobile, list from desktop (5/mo on Free, unlimited on Starter+)
+🌍 18 Languages	EN · FR · DE · NL · ES · IT · PT · PL · CZ · SK · DA · FI · HU · LT · RO · EL · HR
+🎨 Tone Control	Standard / Friendly / Pro / Enthusiastic (Pro & Business)
 ✨ Emoji Support	Boost listing engagement (Pro & Business)
+🌍 Multi-Language Batch	Generate one listing across multiple languages in a single click (Pro & Business)
+🎯 Listing Preferences	Predefined checkbox prefs that get appended to every prompt (Plus & up)
+↻ Smart Re-Gen	Directional re-gen (Detailed / Casual / Short) (Plus & up)
 🔐 Magic-Link Login	Passwordless sign-in via email (Supabase)
 💳 Stripe Billing	Self-serve upgrades, cancel anytime
 💰 Pricing (EUR)
-Free Trial	Starter	Pro ⭐ Most Popular	Business
-Price	€0 / forever	€3.99 / mo	€9.99 / mo	€19.99 / mo
-Daily limit	2 listings	15 listings	40 listings	No daily limit
-Monthly limit	8 listings	300 listings	800 listings	1,500 listings
-AI titles & descriptions	✅	✅	✅	✅
-Account-Safe	✅	✅	✅	✅
-Phone upload	✅ (soon Pro/Business only)	✅ (soon Pro/Business only)	✅	✅
-Change AI writing tone	❌	❌	✅	✅
-Emoji support	❌	❌	✅	✅
-Priority processing	❌	❌	❌	✅
-Dedicated support	❌	❌	❌	✅
-Best for	Trying it out	Casual sellers	Active resellers	High-volume / shops
-⚠️ Heads-up for marketing: Phone upload is currently on all plans but will become Pro & Business exclusive soon — use this as an upgrade-incentive message in announcements.
+| | Pack | Starter | Plus | Pro ★ | Business |
+|---|---|---|---|---|---|
+| Price | €3.99 one-time | €5.99/mo | €9.99/mo | €14.99/mo | €24.99/mo |
+| Credits | 15 (never expire) | 80/mo | 200/mo | 400/mo | 1,000/mo |
+| Per credit | €0.27 | €0.075 | €0.050 | €0.037 | €0.025 |
+| Rollover cap | — | 240 | 600 | 1,200 | 3,000 |
+| Phone Upload | All 15 | Unlimited | Unlimited | Unlimited | Unlimited |
+| Listing Preferences + Smart Re-Gen | ❌ | ❌ | ✅ | ✅ | ✅ |
+| Tone Control / Emoji / Multi-language batch | ❌ | ❌ | ❌ | ✅ | ✅ |
+| Priority processing / dedicated support | ❌ | ❌ | ❌ | — | ✅ |
+
+Free tier: 5 credits at signup + 2 credits/week for 4 weeks (13 lifetime). 5 phone uploads/month.
 
 🎯 Target Customers (ICP)
 Segment	Plan Fit	Hook
-Closet-clearers / casual sellers	Free → Starter	"Make your old clothes sound brand new."
-Side-hustle resellers (10–30 items/wk)	Pro	"The sweet spot for serious resellers."
-Power resellers, vintage shops	Business	"Unlimited daily firepower with priority support."
+Closet-clearers (one-off)	Pack	"15 credits for €3.99 — no commitment."
+Casual sellers	Starter	"Less than a coffee for 80 listings/month."
+Regular sellers (15–30 items/mo)	Plus	"Listing preferences + smart re-gen for stickier workflows."
+Active resellers	Pro	"More polish, more languages, more reach."
+Power resellers, vintage shops	Business	"1,000 credits/mo, priority processing, dedicated support."
 Cross-border EU sellers	Pro / Business	"Sell across Europe in any language — without speaking it."
+
 📣 Sales & Marketing Angles
 Headlines
 "List 10 items in the time it used to take to list 1."
-"Sell across Europe in 6 languages — without speaking them."
+"Sell across Europe in 18 languages — without speaking them."
 "Account-Safe AI. Built for Vinted. Trusted by resellers."
 "Stop staring at blank description boxes."
 Per-Plan Pitch (one-liners)
-Free: "Try it risk-free — 2 AI listings every day, forever."
-Starter (€3.99): "Less than a coffee for 15 listings/day."
-Pro (€9.99): "40 listings/day + emojis + tone control. Most sellers pick this one."
-Business (€19.99): "No daily cap, priority processing, dedicated support."
+Free: "13 credits to try it, no card required."
+Pack (€3.99): "15 credits that never expire — for the weekend clearout."
+Starter (€5.99): "80 listings/month with rollover up to 240."
+Plus (€9.99): "200 credits + listing preferences + smart re-gen."
+Pro (€14.99): "Tone, emoji, multi-language — for sellers who care about output quality."
+Business (€24.99): "1,000 credits, priority processing, direct support."
 Conversion Levers
 "Account-Safe" badge on every tier — addresses the #1 reseller fear (account bans)
-Daily + monthly caps — predictable, easy to understand, encourage daily habit
-€3.99 entry tier — extremely low upgrade friction from Free
+Per-credit pricing on every card — pack at €0.27/credit next to subs at €0.075 makes the upsell obvious
 "Most Popular" anchor on Pro — drives ARPU up
-Upcoming feature gating (Phone upload) — natural urgency for free users to upgrade
+Pack-second-purchase nudge — converts repeat pack buyers into subscribers
 ⚠️ Things to Know (FAQs for Sales)
 ✅ Vinted only (*.vinted.*) — eBay/Depop/Mercari not supported (yet — roadmap opportunity)
 ✅ Chrome only — no Firefox/Safari version
