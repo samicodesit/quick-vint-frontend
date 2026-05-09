@@ -167,58 +167,6 @@
     return detectCountryAndLocalization();
   }
 
-  async function handlePlanSelection(planTier) {
-    if (!userSession?.user?.email) {
-      alert("Please wait for authentication to complete before upgrading.");
-      return;
-    }
-
-    const planCard = document.querySelector(`[data-plan="${planTier}"]`);
-    const originalContent = planCard.innerHTML;
-
-    // Show loading state
-    planCard.innerHTML = `
-      <div class="checkout-loading-container">
-        <div class="checkout-spinner"></div>
-        <div class="checkout-loading-text">Opening checkout...</div>
-      </div>
-    `;
-
-    try {
-      const response = await fetch(
-        "https://quick-vint.vercel.app/api/stripe/create-checkout",
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            email: userSession.user.email,
-            tier: planTier,
-          }),
-        },
-      );
-
-      const data = await response.json();
-
-      if (response.ok && data.url) {
-        window.open(data.url, "_blank");
-        // Restore original content after short delay
-        setTimeout(() => {
-          planCard.innerHTML = originalContent;
-        }, 2000);
-      } else {
-        throw new Error(data.error || "Failed to create checkout session");
-      }
-    } catch (error) {
-      console.error("Checkout error:", error);
-      alert(
-        "Unable to open checkout. Please try upgrading through the extension or contact support.",
-      );
-      planCard.innerHTML = originalContent;
-    }
-  }
-
   async function checkAndCustomizeForExistingSubscriber() {
     if (!userSession?.user?.email) return;
 
@@ -447,16 +395,6 @@
         }
       };
     }
-
-    // Initialize plan card click handlers
-    const starterCard = document.getElementById("starter-card");
-    const proCard = document.getElementById("pro-card");
-    const businessCard = document.getElementById("business-card");
-
-    if (starterCard) starterCard.onclick = () => handlePlanSelection("starter");
-    if (proCard) proCard.onclick = () => handlePlanSelection("pro");
-    if (businessCard)
-      businessCard.onclick = () => handlePlanSelection("business");
 
     // Initialize close tab button
     const closeTabBtn = document.getElementById("close-tab");
