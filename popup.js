@@ -46,8 +46,8 @@ document.addEventListener("DOMContentLoaded", () => {
   const TIER_FEATURES = {
     starter_v2: [],
     plus:       ["Listing Preferences", "Smart Re-Gen"],
-    pro_v2:     ["Listing Preferences", "Smart Re-Gen", "Tone Control", "Emoji", "Multi-language batch", "Listing improvement tips"],
-    business_v2:["Listing Preferences", "Smart Re-Gen", "Tone Control", "Emoji", "Multi-language batch", "Listing improvement tips", "Priority processing"],
+    pro_v2:     ["Listing Preferences", "Smart Re-Gen", "Tone Control", "Emoji", "Multi-language batch", "Listing improvement tips", "Priority support"],
+    business_v2:["Listing Preferences", "Smart Re-Gen", "Tone Control", "Emoji", "Multi-language batch", "Listing improvement tips", "Priority support", "Priority processing", "Dedicated support"],
   };
 
   // --- SUPABASE CLIENT ---
@@ -369,7 +369,7 @@ document.addEventListener("DOMContentLoaded", () => {
     // Infer legacy from is_legacy_plan field; fall back to tier name for older cached profiles
     const isLegacy = profile.is_legacy_plan !== undefined
       ? !!profile.is_legacy_plan
-      : ["starter", "pro", "business"].includes(rawTier);
+      : ["starter", "pro", "business"].includes(tier);
 
     const isNewSubscribed = status === "active" && !isLegacy && tier !== "free";
 

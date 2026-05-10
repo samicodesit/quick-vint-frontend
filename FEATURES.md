@@ -34,8 +34,8 @@ AutoLister AI is a Chrome browser extension (Manifest V3) that provides AI-gener
 | **Closet Clear Pack** | €3.99 one-time | 15 (never expire) | — | All 15 work with phone upload |
 | **Starter** | €5.99/mo | 80 | 240 | Unlimited phone upload |
 | **Plus** | €9.99/mo | 200 | 600 | + Listing Preferences, Smart Re-Gen |
-| **Pro** | €14.99/mo | 400 | 1,200 | + Tone Control, Emoji, Multi-language batch, completeness tips, priority support |
-| **Business** | €24.99/mo | 1,000 | 3,000 | + Priority processing, dedicated support |
+| **Pro** | €14.99/mo | 400 | 1,200 | + Tone Control, Emoji, Multi-language batch, completeness tips, priority support (24h) |
+| **Business** | €24.99/mo | 1,000 | 3,000 | + Priority processing, dedicated direct support |
 
 Each generation costs one credit. Multi-language batch generations cost one credit per language. Subscription credits burn first; pack credits last and never expire.
 

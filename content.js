@@ -76,6 +76,28 @@
 
   // --- HELPER FUNCTIONS ---
 
+  function normalizeTier(tier) {
+    if (!tier) return "free";
+    const map = {
+      unlimited_monthly: "starter",
+      unlimited_annual: "starter",
+      starter: "starter",
+      pro: "pro",
+      business: "business",
+      free: "free",
+      starter_v2: "starter_v2",
+      plus: "plus",
+      pro_v2: "pro_v2",
+      business_v2: "business_v2",
+    };
+    return map[tier] || "free";
+  }
+
+  function isLegacyProfile(profile) {
+    if (profile?.is_legacy_plan !== undefined) return !!profile.is_legacy_plan;
+    return ["starter", "pro", "business"].includes(normalizeTier(profile?.subscription_tier));
+  }
+
   function showToast(message, type = "error", action = null, autoHide = true) {
     let toast = document.getElementById("quickvint-toast");
     if (!toast) {
@@ -249,8 +271,8 @@
   async function loadAccessLevel() {
     return new Promise((resolve) => {
       chrome.storage.local.get(["userProfile"], (data) => {
-        const tier = data.userProfile?.subscription_tier || "free";
-        const isLegacy = !!data.userProfile?.is_legacy_plan;
+        const tier = normalizeTier(data.userProfile?.subscription_tier);
+        const isLegacy = isLegacyProfile(data.userProfile);
         if (isLegacy) {
           // Legacy pro/business get Plus+Pro access; legacy starter/free get nothing
           hasPlusAccess = ["pro", "business"].includes(tier);
@@ -291,7 +313,7 @@
       item.dataset.prefId = pref.id;
       item.innerHTML = `<input type="checkbox" value="${pref.id}" ${hasPlusAccess ? "" : "disabled"}> ${pref.label}`;
       if (hasPlusAccess) {
-        item.querySelector("input").addEventListener("change", savePrefState);
+        item.querySelector("input").onchange = savePrefState;
       }
       prefList.appendChild(item);
     });
@@ -411,6 +433,71 @@
     if (btn) btn.disabled = n === 0 || isBusy;
   }
 
+  function createLangResultName(lang) {
+    const name = document.createElement("div");
+    name.className = "qv-lang-result-name";
+    name.textContent = `${lang.flag} ${lang.name}`;
+    return name;
+  }
+
+  function createLangStatus(text, color) {
+    const status = document.createElement("div");
+    status.style.fontSize = "11.5px";
+    status.style.color = color;
+    status.style.marginTop = "6px";
+    status.textContent = text;
+    return status;
+  }
+
+  function renderLangLoading(card, lang) {
+    card.replaceChildren(
+      createLangResultName(lang),
+      createLangStatus("Generating...", "#9ca3af"),
+    );
+  }
+
+  function renderLangError(card, lang, message) {
+    card.replaceChildren(
+      createLangResultName(lang),
+      createLangStatus(`Error: ${message || "Generation failed"}`, "#dc2626"),
+    );
+  }
+
+  function renderLangSuccess(card, lang, title, description) {
+    const header = document.createElement("div");
+    header.className = "qv-lang-result-header";
+
+    const name = document.createElement("span");
+    name.className = "qv-lang-result-name";
+    name.textContent = `${lang.flag} ${lang.name}`;
+
+    const copyBtn = document.createElement("button");
+    copyBtn.className = "qv-copy-btn";
+    copyBtn.textContent = "Copy";
+
+    header.appendChild(name);
+    header.appendChild(copyBtn);
+
+    const titleEl = document.createElement("div");
+    titleEl.className = "qv-lang-result-title";
+    titleEl.textContent = title || "";
+
+    const descEl = document.createElement("div");
+    descEl.className = "qv-lang-result-desc";
+    descEl.textContent = description || "";
+
+    card.replaceChildren(header, titleEl, descEl);
+
+    copyBtn.onclick = () => {
+      navigator.clipboard.writeText(`${title || ""}\n\n${description || ""}`).then(() => {
+        copyBtn.textContent = "Copied!";
+        setTimeout(() => {
+          copyBtn.textContent = "Copy";
+        }, 1500);
+      });
+    };
+  }
+
   function updateFeaturePanelAccess() {
     if (!featurePanel) return;
 
@@ -421,11 +508,14 @@
         item.classList.remove("locked");
         if (cb) {
           cb.disabled = false;
-          cb.addEventListener("change", savePrefState);
+          cb.onchange = savePrefState;
         }
       } else {
         item.classList.add("locked");
-        if (cb) cb.disabled = true;
+        if (cb) {
+          cb.disabled = true;
+          cb.onchange = null;
+        }
       }
     });
     const prefsLockedMsg = document.getElementById("qv-prefs-locked-msg");
@@ -758,10 +848,15 @@
 
   async function onGenerateAllClick() {
     if (!hasProAccess || selectedBatchLangs.size === 0) return;
+    if (isBusy) return;
     if (lastImageUrls.length === 0) {
       showToast("Generate a listing first, then use batch generation.", "error");
       return;
     }
+
+    isBusy = true;
+    updateButtonUI();
+    updateBatchLangFooter();
 
     const btn = document.getElementById("qv-gen-all-btn");
     if (btn) { btn.disabled = true; btn.textContent = "⏳ Generating…"; }
@@ -787,7 +882,7 @@
           const loadingCard = document.createElement("div");
           loadingCard.className = "qv-lang-result-card";
           loadingCard.id = `qv-result-${lang.code}`;
-          loadingCard.innerHTML = `<div class="qv-lang-result-name">${lang.flag} ${lang.name}</div><div style="font-size:11.5px;color:#9ca3af;margin-top:6px">⏳ Generating…</div>`;
+          renderLangLoading(loadingCard, lang);
           langResults.appendChild(loadingCard);
         }
 
@@ -808,37 +903,23 @@
           const card = document.getElementById(`qv-result-${lang.code}`);
           if (!response.ok) {
             const err = await response.json().catch(() => ({}));
-            if (card) card.innerHTML = `<div class="qv-lang-result-name">${lang.flag} ${lang.name}</div><div style="font-size:11.5px;color:#dc2626;margin-top:6px">⚠️ ${err.error || "Generation failed"}</div>`;
+            if (card) renderLangError(card, lang, err.error || "Generation failed");
             continue;
           }
 
           const { title, description } = await response.json();
-          const copyText = `${title}\n\n${description}`;
-
-          if (card) {
-            card.innerHTML = `
-              <div class="qv-lang-result-header">
-                <span class="qv-lang-result-name">${lang.flag} ${lang.name}</span>
-                <button class="qv-copy-btn">Copy</button>
-              </div>
-              <div class="qv-lang-result-title">${title}</div>
-              <div class="qv-lang-result-desc">${description.replace(/</g, "&lt;")}</div>
-            `;
-            card.querySelector(".qv-copy-btn").onclick = () => {
-              navigator.clipboard.writeText(copyText).then(() => {
-                card.querySelector(".qv-copy-btn").textContent = "Copied!";
-                setTimeout(() => { const b = card.querySelector(".qv-copy-btn"); if (b) b.textContent = "Copy"; }, 1500);
-              });
-            };
-          }
+          if (card) renderLangSuccess(card, lang, title, description);
         } catch (e) {
           const card = document.getElementById(`qv-result-${lang.code}`);
-          if (card) card.innerHTML += `<div style="font-size:11.5px;color:#dc2626">⚠️ Error: ${e.message}</div>`;
+          if (card) renderLangError(card, lang, e.message);
         }
       }
     } catch (err) {
       showToast(err.message || "Batch generation failed.", "error");
     } finally {
+      isBusy = false;
+      updateButtonUI();
+      updateBatchLangFooter();
       if (btn) { btn.disabled = selectedBatchLangs.size === 0; btn.textContent = "Generate All"; }
     }
   }
@@ -2277,6 +2358,8 @@
       btnContainer.appendChild(featurePanel);
 
       container.parentNode.insertBefore(btnContainer, container.nextSibling);
+      restorePrefState();
+      updateFeaturePanelAccess();
       updateButtonUI();
 
       // Wire up suggestion submit
