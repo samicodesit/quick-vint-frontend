@@ -654,8 +654,7 @@ document.addEventListener("DOMContentLoaded", () => {
         applyTrustNoteLocalization(result.selectedLanguage);
       } else {
         const browserLanguage = (navigator.language || "en").slice(0, 2);
-        const fallbackCode = browserLanguage === "cs" ? "cz" : browserLanguage;
-        applyTrustNoteLocalization(fallbackCode);
+        applyTrustNoteLocalization(browserLanguage);
       }
     });
     const toggleDropdown = (show) => {

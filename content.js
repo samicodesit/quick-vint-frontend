@@ -49,6 +49,7 @@
     { code: "pl", flag: "🇵🇱", name: "Polski", domain: "vinted.pl" },
     { code: "cz", flag: "🇨🇿", name: "Čeština", domain: "vinted.cz" },
     { code: "sk", flag: "🇸🇰", name: "Slovenčina", domain: "vinted.sk" },
+    { code: "sv", flag: "🇸🇪", name: "Svenska", domain: "vinted.se" },
     { code: "da", flag: "🇩🇰", name: "Dansk", domain: "vinted.dk" },
     { code: "fi", flag: "🇫🇮", name: "Suomeksi", domain: "vinted.fi" },
     { code: "hu", flag: "🇭🇺", name: "Magyar", domain: "vinted.hu" },
@@ -106,19 +107,38 @@
       document.body.appendChild(toast);
     }
 
-    const icon = type === "success" ? "✅" : type === "info" ? "ℹ️" : "⚠️";
-    let messageHtml = `<span>${message}</span>`;
+    const iconText = type === "success" ? "✅" : type === "info" ? "ℹ️" : "⚠️";
+    const icon = document.createElement("span");
+    icon.className = "toast-icon";
+    icon.textContent = iconText;
+
+    const content = document.createElement("div");
+    content.className = "toast-content";
+
+    const messageText = document.createElement("span");
+    messageText.textContent = message;
+    content.appendChild(messageText);
 
     if (action && action.text && action.url) {
-      messageHtml += `<a href="${action.url}" target="_blank" style="margin-left: 12px; color: inherit; text-decoration: underline; font-weight: 700; white-space: nowrap;">${action.text} &rarr;</a>`;
+      const actionLink = document.createElement("a");
+      actionLink.href = action.url;
+      actionLink.target = "_blank";
+      actionLink.rel = "noopener noreferrer";
+      actionLink.style.marginLeft = "12px";
+      actionLink.style.color = "inherit";
+      actionLink.style.textDecoration = "underline";
+      actionLink.style.fontWeight = "700";
+      actionLink.style.whiteSpace = "nowrap";
+      actionLink.textContent = `${action.text} →`;
+      content.appendChild(actionLink);
     }
 
-    // Updated HTML structure with close button
-    toast.innerHTML = `
-      <span class="toast-icon">${icon}</span>
-      <div class="toast-content">${messageHtml}</div>
-      <button class="toast-close" aria-label="Close">×</button>
-    `;
+    const closeButton = document.createElement("button");
+    closeButton.className = "toast-close";
+    closeButton.setAttribute("aria-label", "Close");
+    closeButton.textContent = "×";
+
+    toast.replaceChildren(icon, content, closeButton);
 
     toast.className = type;
     toast.style.visibility = "visible"; // Ensure it's visible for the transition
@@ -353,13 +373,12 @@
     langPills.id = "qv-lang-pills";
 
     BATCH_LANGS.forEach((lang) => {
-      const pill = document.createElement("div");
+      const pill = document.createElement("button");
+      pill.type = "button";
       pill.className = "qv-lang-pill" + (hasProAccess ? "" : " disabled");
       pill.dataset.code = lang.code;
-      pill.innerHTML = `${lang.flag} ${lang.name}`;
-      if (hasProAccess) {
-        pill.addEventListener("click", () => toggleBatchLang(lang.code, pill));
-      }
+      pill.textContent = `${lang.flag} ${lang.name}`;
+      pill.disabled = !hasProAccess;
       langPills.appendChild(pill);
     });
 
@@ -525,10 +544,12 @@
     featurePanel.querySelectorAll(".qv-lang-pill").forEach((pill) => {
       if (hasProAccess) {
         pill.classList.remove("disabled");
+        pill.disabled = false;
         const code = pill.dataset.code;
         pill.onclick = () => toggleBatchLang(code, pill);
       } else {
         pill.classList.add("disabled");
+        pill.disabled = true;
         pill.onclick = null;
       }
     });
@@ -732,33 +753,41 @@
 
     const list = document.getElementById("qv-checks-list");
     if (!list) return;
-    list.innerHTML = "";
+    list.replaceChildren();
 
     checks.forEach((check) => {
       const item = document.createElement("div");
       item.className = "qv-check-item";
 
       const icon = check.pass ? "✅" : "⚠️";
-      let bodyHtml;
+      const iconEl = document.createElement("span");
+      iconEl.className = "qv-check-icon";
+      iconEl.textContent = icon;
 
-      if (check.pass) {
-        bodyHtml = `<span class="qv-check-label">${check.label}</span>`;
-      } else if (hasProAccess) {
-        bodyHtml = `
-          <span class="qv-check-label warn">${check.label}</span>
-          <div class="qv-check-tip">${check.tip}</div>
-        `;
-      } else {
-        bodyHtml = `
-          <span class="qv-check-label warn">${check.label}</span>
-          <div><span class="qv-check-upgrade">🔒 Upgrade for tips</span></div>
-        `;
+      const body = document.createElement("div");
+      body.className = "qv-check-body";
+
+      const label = document.createElement("span");
+      label.className = "qv-check-label" + (check.pass ? "" : " warn");
+      label.textContent = check.label;
+      body.appendChild(label);
+
+      if (!check.pass && hasProAccess) {
+        const tip = document.createElement("div");
+        tip.className = "qv-check-tip";
+        tip.textContent = check.tip;
+        body.appendChild(tip);
+      } else if (!check.pass) {
+        const upgradeWrapper = document.createElement("div");
+        const upgrade = document.createElement("span");
+        upgrade.className = "qv-check-upgrade";
+        upgrade.textContent = "🔒 Upgrade for tips";
+        upgradeWrapper.appendChild(upgrade);
+        body.appendChild(upgradeWrapper);
       }
 
-      item.innerHTML = `
-        <span class="qv-check-icon">${icon}</span>
-        <div class="qv-check-body">${bodyHtml}</div>
-      `;
+      item.appendChild(iconEl);
+      item.appendChild(body);
       list.appendChild(item);
     });
   }
@@ -862,7 +891,7 @@
     if (btn) { btn.disabled = true; btn.textContent = "⏳ Generating…"; }
 
     const langResults = document.getElementById("qv-lang-results");
-    if (langResults) langResults.innerHTML = "";
+    if (langResults) langResults.replaceChildren();
 
     try {
       const {
@@ -1605,6 +1634,9 @@
         transition: all 0.15s;
         user-select: none;
         background: #fff;
+        font-family: inherit;
+        line-height: 1.2;
+        appearance: none;
       }
       .qv-lang-pill:hover:not(.disabled) {
         border-color: #4f46e5;
@@ -1962,7 +1994,7 @@
       { code: "fr", name: "Français" },
       { code: "nl", name: "Nederlands" },
       { code: "da", name: "Dansk" },
-      { code: "cs", name: "Čeština" },
+      { code: "cz", name: "Čeština" },
       { code: "sk", name: "Slovenčina" },
       { code: "sv", name: "Svenska" },
       { code: "de", name: "Deutsch" },

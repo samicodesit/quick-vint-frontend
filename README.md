@@ -5,7 +5,7 @@ AutoLister AI — Final Product Summary
 For: Marketing, Sales & GTM teams Website: autolister.app · Support: support@autolister.app
 
 🚀 What It Is
-AutoLister AI is a Chrome extension that uses AI to instantly generate professional product titles and descriptions for Vinted sellers. Upload your photos, click one button, and get a ready-to-publish listing in seconds — in 6 European languages.
+AutoLister AI is a Chrome extension that uses AI to instantly generate professional product titles and descriptions for Vinted sellers. Upload your photos, click one button, and get a ready-to-publish listing in seconds — in 18 European languages.
 
 Tagline ideas:
 
@@ -19,7 +19,7 @@ Feature	Description
 🤖 One-Click AI Generation	Photos → AI title + description, instantly
 🛡️ Account-Safe	Built to comply with Vinted — won't risk seller accounts (key trust signal — flagged on every plan)
 📱 Phone Upload	Snap pics on mobile, list from desktop (5/mo on Free, unlimited on Starter+)
-🌍 18 Languages	EN · FR · DE · NL · ES · IT · PT · PL · CZ · SK · DA · FI · HU · LT · RO · EL · HR
+🌍 18 Languages	EN · FR · DE · NL · ES · IT · PT · PL · CZ · SK · SV · DA · FI · HU · LT · RO · EL · HR
 🎨 Tone Control	Standard / Friendly / Pro / Enthusiastic (Pro & Business)
 ✨ Emoji Support	Boost listing engagement (Pro & Business)
 🌍 Multi-Language Batch	Generate one listing across multiple languages in a single click (Pro & Business)
