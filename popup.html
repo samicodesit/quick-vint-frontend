@@ -41,20 +41,16 @@
 
     /* --- View Controller --- */
     #messages {
-      grid-area: messages;
+      margin-bottom: 12px;
     }
 
     #loadingView,
     #signedOutView,
     #signedInView,
     #settingsView {
-      grid-area: views;
       width: 100%;
-      height: 100%;
-      opacity: 0;
-      visibility: hidden;
-      pointer-events: none;
-      transition: opacity 0.2s ease;
+      box-sizing: border-box;
+      display: none;
     }
 
     #loadingView {
@@ -65,31 +61,21 @@
 
     /* Loading State */
     body:not([data-view]) #loadingView {
-      opacity: 1;
-      visibility: visible;
-      pointer-events: auto;
+      display: block;
     }
 
     /* Signed Out State */
     body[data-view="signed-out"]:not(.settings-active) #signedOutView {
-      opacity: 1;
-      visibility: visible;
-      pointer-events: auto;
+      display: flex;
     }
 
     /* Signed In State */
     body[data-view="signed-in"]:not(.settings-active) #signedInView {
-      opacity: 1;
-      visibility: visible;
-      pointer-events: auto;
+      display: flex;
     }
 
     /* Settings State */
     body.settings-active #settingsView {
-      opacity: 1;
-      visibility: visible;
-      pointer-events: auto;
-      z-index: 10;
       display: flex;
       flex-direction: column;
     }
@@ -105,11 +91,6 @@
 
     .popup-content {
       padding: 6px 20px 14px;
-      display: grid;
-      grid-template-rows: auto 1fr;
-      grid-template-areas:
-        "messages"
-        "views";
     }
 
     /* --- Typography --- */
@@ -246,7 +227,6 @@
     /* --- Message/Notification Component --- */
     #messages {
       padding: 12px 16px;
-      margin-bottom: 16px;
       border-radius: 8px;
       text-align: center;
       font-size: 13px;
@@ -564,6 +544,26 @@
     .view-plans-link:hover {
       color: #5a67d8;
       text-decoration: underline;
+    }
+
+    .free-helper-note {
+      margin: 8px 0 0;
+      font-size: 11px;
+      color: #6b7280;
+      text-align: center;
+      line-height: 1.45;
+    }
+
+    .sync-note {
+      margin: 8px 0 0;
+      padding: 8px 10px;
+      border-radius: 8px;
+      background: #f9fafb;
+      border: 1px solid #e5e7eb;
+      color: #6b7280;
+      font-size: 11px;
+      line-height: 1.4;
+      text-align: center;
     }
 
     /* Pack nudge modal */
@@ -1164,9 +1164,18 @@
     /* --- Auth View Specific Styles --- */
 
     #signedOutView {
-      display: flex;
       flex-direction: column;
       padding: 10px 4px;
+    }
+
+    #signedInView {
+      flex-direction: column;
+      gap: 10px;
+      padding: 2px 4px 0;
+    }
+
+    #signOutBtn {
+      margin-bottom: 0;
     }
 
     /* Header Styling */
@@ -1293,7 +1302,6 @@
 
     <main class="popup-content">
       <div id="messages" class="hidden"></div>
-
       <div id="loadingView">
         <p>Loading...</p>
       </div>
@@ -1304,39 +1312,39 @@
           <p class="auth-subtitle">Sign in to AutoLister AI</p>
         </div>
 
-        <button id="googleSignIn" class="google-btn">
-          <svg class="google-icon" viewBox="0 0 24 24" width="18" height="18" xmlns="http://www.w3.org/2000/svg">
-            <g transform="matrix(1, 0, 0, 1, 27.009001, -39.238998)">
-              <path fill="#4285F4"
-                d="M -3.264 51.509 C -3.264 50.719 -3.334 49.969 -3.454 49.239 L -14.754 49.239 L -14.754 53.749 L -8.284 53.749 C -8.574 55.229 -9.424 56.479 -10.684 57.329 L -10.684 60.329 L -6.824 60.329 C -4.564 58.239 -3.264 55.159 -3.264 51.509 Z" />
-              <path fill="#34A853"
-                d="M -14.754 63.239 C -11.514 63.239 -8.804 62.159 -6.824 60.329 L -10.684 57.329 C -11.764 58.049 -13.134 58.489 -14.754 58.489 C -17.884 58.489 -20.534 56.379 -21.484 53.529 L -25.464 53.529 L -25.464 56.619 C -23.494 60.539 -19.444 63.239 -14.754 63.239 Z" />
-              <path fill="#FBBC05"
-                d="M -21.484 53.529 C -21.734 52.809 -21.864 52.039 -21.864 51.239 C -21.864 50.439 -21.724 49.669 -21.484 48.949 L -21.484 45.859 L -25.464 45.859 C -26.284 47.479 -26.754 49.299 -26.754 51.239 C -26.754 53.179 -26.284 54.999 -25.464 56.619 L -21.484 53.529 Z" />
-              <path fill="#EA4335"
-                d="M -14.754 43.989 C -12.984 43.989 -11.404 44.599 -10.154 45.789 L -6.734 42.369 C -8.804 40.429 -11.514 39.239 -14.754 39.239 C -19.444 39.239 -23.494 41.939 -25.464 45.859 L -21.484 48.949 C -20.534 46.099 -17.884 43.989 -14.754 43.989 Z" />
-            </g>
-          </svg>
-          <span>Continue with Google</span>
-        </button>
+          <button id="googleSignIn" class="google-btn">
+            <svg class="google-icon" viewBox="0 0 24 24" width="18" height="18" xmlns="http://www.w3.org/2000/svg">
+              <g transform="matrix(1, 0, 0, 1, 27.009001, -39.238998)">
+                <path fill="#4285F4"
+                  d="M -3.264 51.509 C -3.264 50.719 -3.334 49.969 -3.454 49.239 L -14.754 49.239 L -14.754 53.749 L -8.284 53.749 C -8.574 55.229 -9.424 56.479 -10.684 57.329 L -10.684 60.329 L -6.824 60.329 C -4.564 58.239 -3.264 55.159 -3.264 51.509 Z" />
+                <path fill="#34A853"
+                  d="M -14.754 63.239 C -11.514 63.239 -8.804 62.159 -6.824 60.329 L -10.684 57.329 C -11.764 58.049 -13.134 58.489 -14.754 58.489 C -17.884 58.489 -20.534 56.379 -21.484 53.529 L -25.464 53.529 L -25.464 56.619 C -23.494 60.539 -19.444 63.239 -14.754 63.239 Z" />
+                <path fill="#FBBC05"
+                  d="M -21.484 53.529 C -21.734 52.809 -21.864 52.039 -21.864 51.239 C -21.864 50.439 -21.724 49.669 -21.484 48.949 L -21.484 45.859 L -25.464 45.859 C -26.284 47.479 -26.754 49.299 -26.754 51.239 C -26.754 53.179 -26.284 54.999 -25.464 56.619 L -21.484 53.529 Z" />
+                <path fill="#EA4335"
+                  d="M -14.754 43.989 C -12.984 43.989 -11.404 44.599 -10.154 45.789 L -6.734 42.369 C -8.804 40.429 -11.514 39.239 -14.754 39.239 C -19.444 39.239 -23.494 41.939 -25.464 45.859 L -21.484 48.949 C -20.534 46.099 -17.884 43.989 -14.754 43.989 Z" />
+              </g>
+            </svg>
+            <span>Continue with Google</span>
+          </button>
 
-        <div class="auth-divider">
-          <span>OR</span>
-        </div>
+          <div class="auth-divider">
+            <span>OR</span>
+          </div>
 
-        <label for="emailInput" class="form-label">Email Address</label>
-        <div class="input-wrapper">
-          <input type="email" id="emailInput" name="email" class="form-input with-icon" autocomplete="email"
-            autocorrect="off" autocapitalize="off" spellcheck="false" placeholder="name@example.com" required />
-        </div>
+          <label for="emailInput" class="form-label">Email Address</label>
+          <div class="input-wrapper">
+            <input type="email" id="emailInput" name="email" class="form-input with-icon" autocomplete="email"
+              autocorrect="off" autocapitalize="off" spellcheck="false" placeholder="name@example.com" required />
+          </div>
 
-        <button id="sendMagicLinkBtn" class="btn">Send Magic Link</button>
+          <button id="sendMagicLinkBtn" class="btn">Send Magic Link</button>
 
-        <p class="trust-note">Safe workflow by design: text generation only, no automated mass account actions.</p>
+          <p class="trust-note">Safe workflow by design: text generation only, no automated mass account actions.</p>
 
-        <p class="small-text contact-text">
-          Need help? <a href="mailto:support@autolister.app" class="contact-link">Contact Support</a>
-        </p>
+          <p class="small-text contact-text">
+            Need help? <a href="mailto:support@autolister.app" class="contact-link">Contact Support</a>
+          </p>
       </div>
 
       <div id="signedInView">
@@ -1344,193 +1352,195 @@
           <span id="userEmail"></span>
         </div>
 
-        <div id="subscriptionArea" class="plan-card">
-          <!-- Plan name + optional legacy badge -->
-          <div class="plan-header-row">
-            <span id="planName" class="plan-header-text">Free</span>
-            <span id="legacyBadge" class="legacy-badge hidden">Legacy</span>
-          </div>
+          <div id="subscriptionArea" class="plan-card">
+            <!-- Plan name + optional legacy badge -->
+            <div class="plan-header-row">
+              <span id="planName" class="plan-header-text">Free</span>
+              <span id="legacyBadge" class="legacy-badge hidden">Legacy</span>
+            </div>
 
-          <!-- Credits block: shown for new-tier users -->
-          <div id="creditsBlock" class="credits-block hidden">
-            <div class="stat-row">
-              <span class="stat-label">Credits remaining</span>
-              <span id="creditsTotalVal" class="stat-value stat-value--big">—</span>
-            </div>
-            <div id="creditsSplit" class="credits-split hidden">
-              <div class="split-line">
-                <span class="split-tree">├──</span>
-                <span id="subCreditVal">0</span>&nbsp;subscription credits&nbsp;<span id="resetBadge" class="reset-badge hidden"></span>
+            <!-- Credits block: shown for new-tier users -->
+            <div id="creditsBlock" class="credits-block hidden">
+              <div class="stat-row">
+                <span class="stat-label">Credits remaining</span>
+                <span id="creditsTotalVal" class="stat-value stat-value--big">—</span>
               </div>
-              <div class="split-line">
-                <span class="split-tree">└──</span>
-                <span id="packCreditVal">0</span>&nbsp;pack credits&nbsp;<span class="pack-perm">(permanent)</span>
+              <div id="creditsSplit" class="credits-split hidden">
+                <div class="split-line">
+                  <span class="split-tree">├──</span>
+                  <span id="subCreditVal">0</span>&nbsp;subscription credits&nbsp;<span id="resetBadge" class="reset-badge hidden"></span>
+                </div>
+                <div class="split-line">
+                  <span class="split-tree">└──</span>
+                  <span id="packCreditVal">0</span>&nbsp;pack credits&nbsp;<span class="pack-perm">(permanent)</span>
+                </div>
               </div>
-            </div>
-            <div id="rolloverRow" class="stat-row hidden">
-              <span class="stat-label">Rollover bank</span>
-              <span id="rolloverVal" class="stat-value">—</span>
-            </div>
-            <div class="stat-row">
-              <span class="stat-label">Listed this month</span>
-              <span id="listingsVal" class="stat-value">—</span>
-            </div>
-          </div>
-
-          <!-- Legacy meters: shown for legacy plan users -->
-          <div id="legacyMeters" class="usage-meters hidden">
-            <div class="usage-meter">
-              <div class="meter-label">
-                <span>Daily Usage</span>
-                <span id="dailyCallsUsed">0 / 2</span>
+              <div id="rolloverRow" class="stat-row hidden">
+                <span class="stat-label">Rollover bank</span>
+                <span id="rolloverVal" class="stat-value">—</span>
               </div>
-              <div class="progress-bar-bg">
-                <div id="dailyProgressBar" class="progress-bar-fill"></div>
+              <div class="stat-row">
+                <span class="stat-label">Listed this month</span>
+                <span id="listingsVal" class="stat-value">—</span>
               </div>
             </div>
-            <div class="usage-meter">
-              <div class="meter-label">
-                <span>Monthly Usage</span>
-                <span id="monthlyCallsUsed">0 / 8</span>
+            <p id="profileSyncNote" class="sync-note hidden">Your account details are still syncing. Close and reopen the popup in a moment.</p>
+
+            <!-- Legacy meters: shown for legacy plan users -->
+            <div id="legacyMeters" class="usage-meters hidden">
+              <div class="usage-meter">
+                <div class="meter-label">
+                  <span>Daily Usage</span>
+                  <span id="dailyCallsUsed">0 / 2</span>
+                </div>
+                <div class="progress-bar-bg">
+                  <div id="dailyProgressBar" class="progress-bar-fill"></div>
+                </div>
               </div>
-              <div class="progress-bar-bg">
-                <div id="monthlyProgressBar" class="progress-bar-fill"></div>
+              <div class="usage-meter">
+                <div class="meter-label">
+                  <span>Monthly Usage</span>
+                  <span id="monthlyCallsUsed">0 / 8</span>
+                </div>
+                <div class="progress-bar-bg">
+                  <div id="monthlyProgressBar" class="progress-bar-fill"></div>
+                </div>
               </div>
+            </div>
+
+            <!-- Free credits exhausted wall -->
+            <div id="exhaustedWall" class="exhausted-wall hidden">
+              <p class="exhausted-emoji">✨</p>
+              <p class="exhausted-title">You've used all your free credits</p>
+              <p class="exhausted-body">You generated 13 listings with AutoLister. To keep going:</p>
+              <div class="exhausted-btns">
+                <button id="buyPackExhaustedBtn" class="btn-pack">
+                  Get 15 credits
+                  <span class="btn-sub">€3.99 one-time</span>
+                </button>
+                <a href="#" id="seePlansExhaustedLink" class="btn-plans">
+                  See plans
+                  <span class="btn-sub">from €5.99/mo</span>
+                </a>
+              </div>
+              <p class="exhausted-note">No commitment needed.</p>
+            </div>
+
+            <!-- Pending downgrade banner -->
+            <div id="downgradeBanner" class="downgrade-banner hidden">
+              <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none"
+                stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+                style="flex-shrink:0;margin-top:1px">
+                <circle cx="12" cy="12" r="10"></circle>
+                <line x1="12" y1="8" x2="12" y2="12"></line>
+                <line x1="12" y1="16" x2="12.01" y2="16"></line>
+              </svg>
+              <p id="downgradeText" class="downgrade-text"></p>
+            </div>
+
+            <!-- Free user actions: get pack or see plans -->
+            <div id="freeActionsArea" class="hidden">
+              <button id="buyPackBtn" class="btn upgradeBtn">Get 15 credits — €3.99</button>
+              <a href="#" id="viewAllPlansLink" class="view-plans-link">See all plans</a>
+              <p class="free-helper-note">One listing uses one credit. Packs never expire; subscriptions reset monthly.</p>
+            </div>
+
+            <!-- New-tier subscribed: upgrade button (hidden for business_v2) -->
+            <div id="upgradeArea" class="hidden">
+              <button id="upgradeBtn" class="btn upgradeBtn"></button>
+            </div>
+
+            <!-- Paid plan view: renewal date + manage button -->
+            <div id="paidPlanView" class="hidden">
+              <p id="renewalDate" class="renewal-text">Active until <strong>—</strong></p>
+              <button id="manageBtn" class="btn">Manage Subscription</button>
+            </div>
+
+            <!-- Legacy users: subtle new-plan migration banner -->
+            <div id="legacyMigrateBanner" class="legacy-migrate-banner hidden">
+              New plans available — rollover credits, no daily limits.
+              <a href="#" id="legacySeePlansLink" class="upgrade-link">See what's new</a>
             </div>
           </div>
 
-          <!-- Free credits exhausted wall -->
-          <div id="exhaustedWall" class="exhausted-wall hidden">
-            <p class="exhausted-emoji">✨</p>
-            <p class="exhausted-title">You've used all your free credits</p>
-            <p class="exhausted-body">You generated 13 listings with AutoLister. To keep going:</p>
-            <div class="exhausted-btns">
-              <button id="buyPackExhaustedBtn" class="btn-pack">
-                Get 15 credits
-                <span class="btn-sub">€3.99 one-time</span>
-              </button>
-              <a href="#" id="seePlansExhaustedLink" class="btn-plans">
-                See plans
-                <span class="btn-sub">from €5.99/mo</span>
-              </a>
-            </div>
-            <p class="exhausted-note">No commitment needed.</p>
+          <div class="language-dropdown">
+            <div class="language-label">Output language</div>
+            <button class="dropdown-toggle">Select Language</button>
+            <ul class="dropdown-menu">
+              <li data-value="en">
+                <img src="https://flagcdn.com/w40/gb.png" alt="UK Flag" class="flag-icon" />
+                English
+              </li>
+              <li data-value="fr">
+                <img src="https://flagcdn.com/w40/fr.png" alt="French Flag" class="flag-icon" />
+                Français
+              </li>
+              <li data-value="cz">
+                <img src="https://flagcdn.com/w40/cz.png" alt="Czech Flag" class="flag-icon" />
+                Čeština
+              </li>
+              <li data-value="da">
+                <img src="https://flagcdn.com/w40/dk.png" alt="Danish Flag" class="flag-icon" />
+                Dansk
+              </li>
+              <li data-value="nl">
+                <img src="https://flagcdn.com/w40/nl.png" alt="Dutch Flag" class="flag-icon" />
+                Nederlands
+              </li>
+              <li data-value="de">
+                <img src="https://flagcdn.com/w40/de.png" alt="German Flag" class="flag-icon" />
+                Deutsch
+              </li>
+              <li data-value="el">
+                <img src="https://flagcdn.com/w40/gr.png" alt="Greek Flag" class="flag-icon" />
+                Ελληνικά
+              </li>
+              <li data-value="hr">
+                <img src="https://flagcdn.com/w40/hr.png" alt="Croatian Flag" class="flag-icon" />
+                Hrvatski
+              </li>
+              <li data-value="fi">
+                <img src="https://flagcdn.com/w40/fi.png" alt="Finnish Flag" class="flag-icon" />
+                Suomeksi
+              </li>
+              <li data-value="hu">
+                <img src="https://flagcdn.com/w40/hu.png" alt="Hungarian Flag" class="flag-icon" />
+                Magyar
+              </li>
+              <li data-value="it">
+                <img src="https://flagcdn.com/w40/it.png" alt="Italian Flag" class="flag-icon" />
+                Italiano
+              </li>
+              <li data-value="lt">
+                <img src="https://flagcdn.com/w40/lt.png" alt="Lithuanian Flag" class="flag-icon" />
+                Lietuvių
+              </li>
+              <li data-value="pl">
+                <img src="https://flagcdn.com/w40/pl.png" alt="Polish Flag" class="flag-icon" />
+                Polski
+              </li>
+              <li data-value="pt">
+                <img src="https://flagcdn.com/w40/pt.png" alt="Portuguese Flag" class="flag-icon" />
+                Português
+              </li>
+              <li data-value="ro">
+                <img src="https://flagcdn.com/w40/ro.png" alt="Romanian Flag" class="flag-icon" />
+                Română
+              </li>
+              <li data-value="es">
+                <img src="https://flagcdn.com/w40/es.png" alt="Spanish Flag" class="flag-icon" />
+                Español
+              </li>
+              <li data-value="sk">
+                <img src="https://flagcdn.com/w40/sk.png" alt="Slovak Flag" class="flag-icon" />
+                Slovenčina
+              </li>
+              <li data-value="sv">
+                <img src="https://flagcdn.com/w40/se.png" alt="Swedish Flag" class="flag-icon" />
+                Svenska
+              </li>
+            </ul>
           </div>
-
-          <!-- Pending downgrade banner -->
-          <div id="downgradeBanner" class="downgrade-banner hidden">
-            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none"
-              stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
-              style="flex-shrink:0;margin-top:1px">
-              <circle cx="12" cy="12" r="10"></circle>
-              <line x1="12" y1="8" x2="12" y2="12"></line>
-              <line x1="12" y1="16" x2="12.01" y2="16"></line>
-            </svg>
-            <p id="downgradeText" class="downgrade-text"></p>
-          </div>
-
-          <!-- Free user actions: get pack or see plans -->
-          <div id="freeActionsArea" class="hidden">
-            <button id="buyPackBtn" class="btn upgradeBtn">Get 15 credits — €3.99</button>
-            <a href="#" id="viewAllPlansLink" class="view-plans-link">See all plans</a>
-          </div>
-
-          <!-- New-tier subscribed: upgrade button (hidden for business_v2) -->
-          <div id="upgradeArea" class="hidden">
-            <button id="upgradeBtn" class="btn upgradeBtn"></button>
-          </div>
-
-          <!-- Paid plan view: renewal date + manage button -->
-          <div id="paidPlanView" class="hidden">
-            <p id="renewalDate" class="renewal-text">Active until <strong>—</strong></p>
-            <button id="manageBtn" class="btn">Manage Subscription</button>
-          </div>
-
-          <!-- Legacy users: subtle new-plan migration banner -->
-          <div id="legacyMigrateBanner" class="legacy-migrate-banner hidden">
-            New plans available — rollover credits, no daily limits.
-            <a href="#" id="legacySeePlansLink" class="upgrade-link">See what's new</a>
-          </div>
-        </div>
-
-        <div class="language-dropdown">
-          <div class="language-label">Output language</div>
-          <button class="dropdown-toggle">Select Language</button>
-          <ul class="dropdown-menu">
-            <li data-value="en">
-              <img src="https://flagcdn.com/w40/gb.png" alt="UK Flag" class="flag-icon" />
-              English
-            </li>
-            <li data-value="fr">
-              <img src="https://flagcdn.com/w40/fr.png" alt="French Flag" class="flag-icon" />
-              Français
-            </li>
-            <li data-value="cz">
-              <img src="https://flagcdn.com/w40/cz.png" alt="Czech Flag" class="flag-icon" />
-              Čeština
-            </li>
-            <li data-value="da">
-              <img src="https://flagcdn.com/w40/dk.png" alt="Danish Flag" class="flag-icon" />
-              Dansk
-            </li>
-            <li data-value="nl">
-              <img src="https://flagcdn.com/w40/nl.png" alt="Dutch Flag" class="flag-icon" />
-              Nederlands
-            </li>
-            <li data-value="de">
-              <img src="https://flagcdn.com/w40/de.png" alt="German Flag" class="flag-icon" />
-              Deutsch
-            </li>
-            <li data-value="el">
-              <img src="https://flagcdn.com/w40/gr.png" alt="Greek Flag" class="flag-icon" />
-              Ελληνικά
-            </li>
-            <li data-value="hr">
-              <img src="https://flagcdn.com/w40/hr.png" alt="Croatian Flag" class="flag-icon" />
-              Hrvatski
-            </li>
-            <li data-value="fi">
-              <img src="https://flagcdn.com/w40/fi.png" alt="Finnish Flag" class="flag-icon" />
-              Suomeksi
-            </li>
-            <li data-value="hu">
-              <img src="https://flagcdn.com/w40/hu.png" alt="Hungarian Flag" class="flag-icon" />
-              Magyar
-            </li>
-            <li data-value="it">
-              <img src="https://flagcdn.com/w40/it.png" alt="Italian Flag" class="flag-icon" />
-              Italiano
-            </li>
-            <li data-value="lt">
-              <img src="https://flagcdn.com/w40/lt.png" alt="Lithuanian Flag" class="flag-icon" />
-              Lietuvių
-            </li>
-            <li data-value="pl">
-              <img src="https://flagcdn.com/w40/pl.png" alt="Polish Flag" class="flag-icon" />
-              Polski
-            </li>
-            <li data-value="pt">
-              <img src="https://flagcdn.com/w40/pt.png" alt="Portuguese Flag" class="flag-icon" />
-              Português
-            </li>
-            <li data-value="ro">
-              <img src="https://flagcdn.com/w40/ro.png" alt="Romanian Flag" class="flag-icon" />
-              Română
-            </li>
-            <li data-value="es">
-              <img src="https://flagcdn.com/w40/es.png" alt="Spanish Flag" class="flag-icon" />
-              Español
-            </li>
-            <li data-value="sk">
-              <img src="https://flagcdn.com/w40/sk.png" alt="Slovak Flag" class="flag-icon" />
-              Slovenčina
-            </li>
-            <li data-value="sv">
-              <img src="https://flagcdn.com/w40/se.png" alt="Swedish Flag" class="flag-icon" />
-              Svenska
-            </li>
-          </ul>
-        </div>
 
         <button id="signOutBtn" class="btn btn-secondary">Sign Out</button>
       </div>
@@ -1538,100 +1548,100 @@
       <div id="settingsView">
         <h4 class="section-title">Settings</h4>
 
-        <div class="settings-card">
-          <div class="setting-row">
-            <div class="setting-label-container">
-              <span class="setting-label">Text format <span class="new-badge">NEW</span></span>
+          <div class="settings-card">
+            <div class="setting-row">
+              <div class="setting-label-container">
+                <span class="setting-label">Text format <span class="new-badge">NEW</span></span>
+              </div>
+              <div class="format-buttons-row">
+                <label class="format-option" title="Bullet points">
+                  <input type="radio" name="format" value="bullets" checked>
+                  <span class="format-chip">
+                    <div class="format-icon">
+                      <div class="format-icon-bullet"><span></span></div>
+                      <div class="format-icon-bullet"><span></span></div>
+                      <div class="format-icon-bullet"><span></span></div>
+                    </div>
+                  </span>
+                </label>
+                <label class="format-option" title="Paragraphs">
+                  <input type="radio" name="format" value="paragraphs">
+                  <span class="format-chip">
+                    <div class="format-icon format-icon-para">
+                      <span></span>
+                      <span></span>
+                      <span></span>
+                      <span></span>
+                    </div>
+                  </span>
+                </label>
+              </div>
             </div>
-            <div class="format-buttons-row">
-              <label class="format-option" title="Bullet points">
-                <input type="radio" name="format" value="bullets" checked>
-                <span class="format-chip">
-                  <div class="format-icon">
-                    <div class="format-icon-bullet"><span></span></div>
-                    <div class="format-icon-bullet"><span></span></div>
-                    <div class="format-icon-bullet"><span></span></div>
-                  </div>
-                </span>
-              </label>
-              <label class="format-option" title="Paragraphs">
-                <input type="radio" name="format" value="paragraphs">
-                <span class="format-chip">
-                  <div class="format-icon format-icon-para">
-                    <span></span>
-                    <span></span>
-                    <span></span>
-                    <span></span>
-                  </div>
-                </span>
+
+            <div class="setting-divider"></div>
+
+            <div class="setting-group">
+              <label class="form-label">Description Tone <span class="new-badge">NEW</span></label>
+              <div class="tone-slider">
+                <label class="tone-option">
+                  <input type="radio" name="tone" value="standard" checked>
+                  <span class="tone-chip">Standard</span>
+                </label>
+                <label class="tone-option">
+                  <input type="radio" name="tone" value="friendly">
+                  <span class="tone-chip">Friendly</span>
+                </label>
+                <label class="tone-option">
+                  <input type="radio" name="tone" value="professional">
+                  <span class="tone-chip">Pro</span>
+                </label>
+                <label class="tone-option">
+                  <input type="radio" name="tone" value="enthusiastic">
+                  <span class="tone-chip">Enthusiastic</span>
+                </label>
+              </div>
+            </div>
+
+            <div class="setting-divider"></div>
+
+            <div class="toggle-container" onclick="document.getElementById('emojiToggle').click()">
+              <div class="toggle-info">
+                <span class="toggle-label">Use Emojis <span class="new-badge">NEW</span></span>
+                <span class="toggle-sublabel">Add relevant emojis to text</span>
+              </div>
+              <label class="toggle-switch" onclick="event.stopPropagation()">
+                <input type="checkbox" id="emojiToggle">
+                <span class="slider"></span>
               </label>
             </div>
           </div>
 
-          <div class="setting-divider"></div>
+          <div class="info-note" style="display: none;">
+            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none"
+              stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+              style="flex-shrink: 0; margin-top: 1px;">
+              <circle cx="12" cy="12" r="10"></circle>
+              <line x1="12" y1="16" x2="12" y2="12"></line>
+              <line x1="12" y1="8" x2="12.01" y2="8"></line>
+            </svg>
+            <span><strong>Free Early Access:</strong> These features are currently free to test, but will soon be
+              exclusive to
+              <strong>Pro & Business</strong> plans only.</span>
+          </div>
 
-          <div class="setting-group">
-            <label class="form-label">Description Tone <span class="new-badge">NEW</span></label>
-            <div class="tone-slider">
-              <label class="tone-option">
-                <input type="radio" name="tone" value="standard" checked>
-                <span class="tone-chip">Standard</span>
-              </label>
-              <label class="tone-option">
-                <input type="radio" name="tone" value="friendly">
-                <span class="tone-chip">Friendly</span>
-              </label>
-              <label class="tone-option">
-                <input type="radio" name="tone" value="professional">
-                <span class="tone-chip">Pro</span>
-              </label>
-              <label class="tone-option">
-                <input type="radio" name="tone" value="enthusiastic">
-                <span class="tone-chip">Enthusiastic</span>
-              </label>
+          <div class="upgrade-note" style="display: none;">
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none"
+              stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+              style="flex-shrink: 0; margin-top: 2px;">
+              <circle cx="12" cy="12" r="10"></circle>
+              <line x1="12" y1="8" x2="12" y2="12"></line>
+              <line x1="12" y1="16" x2="12.01" y2="16"></line>
+            </svg>
+            <div>
+              <strong>Tone & emoji</strong> unlock on Pro and Business.
+              <a href="#" class="upgrade-link" id="settingsUpgradeLink">View Plans →</a>
             </div>
           </div>
-
-          <div class="setting-divider"></div>
-
-          <div class="toggle-container" onclick="document.getElementById('emojiToggle').click()">
-            <div class="toggle-info">
-              <span class="toggle-label">Use Emojis <span class="new-badge">NEW</span></span>
-              <span class="toggle-sublabel">Add relevant emojis to text</span>
-            </div>
-            <label class="toggle-switch" onclick="event.stopPropagation()">
-              <input type="checkbox" id="emojiToggle">
-              <span class="slider"></span>
-            </label>
-          </div>
-        </div>
-
-        <div class="info-note" style="display: none;">
-          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none"
-            stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
-            style="flex-shrink: 0; margin-top: 1px;">
-            <circle cx="12" cy="12" r="10"></circle>
-            <line x1="12" y1="16" x2="12" y2="12"></line>
-            <line x1="12" y1="8" x2="12.01" y2="8"></line>
-          </svg>
-          <span><strong>Free Early Access:</strong> These features are currently free to test, but will soon be
-            exclusive to
-            <strong>Pro & Business</strong> plans only.</span>
-        </div>
-
-        <div class="upgrade-note" style="display: none;">
-          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none"
-            stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
-            style="flex-shrink: 0; margin-top: 2px;">
-            <circle cx="12" cy="12" r="10"></circle>
-            <line x1="12" y1="8" x2="12" y2="12"></line>
-            <line x1="12" y1="16" x2="12.01" y2="16"></line>
-          </svg>
-          <div>
-            <strong>Tone & emoji</strong> unlock on Pro and Business.
-            <a href="#" class="upgrade-link" id="settingsUpgradeLink">View Plans →</a>
-          </div>
-        </div>
 
         <div style="margin-top: auto;">
           <button id="signOutBtnSettings" class="btn btn-secondary">Sign Out</button>

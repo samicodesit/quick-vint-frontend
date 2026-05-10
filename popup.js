@@ -177,7 +177,7 @@ document.addEventListener("DOMContentLoaded", () => {
     const ids = [
       "creditsBlock", "legacyMeters", "exhaustedWall",
       "freeActionsArea", "upgradeArea", "paidPlanView",
-      "legacyMigrateBanner", "downgradeBanner",
+      "legacyMigrateBanner", "downgradeBanner", "profileSyncNote",
     ];
     ids.forEach((id) => {
       const el = document.getElementById(id);
@@ -346,11 +346,22 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   function renderFreeFallback(profile) {
-    // No credit fields yet — show basic free actions
+    // Cached profile is missing credit fields — show a quiet sync state.
     const listingsEl = document.getElementById("listingsVal");
-    if (listingsEl) listingsEl.textContent = profile.api_calls_this_month ?? 0;
+    const creditsBlock = document.getElementById("creditsBlock");
+    if (creditsBlock) creditsBlock.classList.remove("hidden");
+    const totalEl = document.getElementById("creditsTotalVal");
+    if (totalEl) totalEl.textContent = "—";
+    const splitBlock = document.getElementById("creditsSplit");
+    if (splitBlock) splitBlock.classList.add("hidden");
+    const rolloverRow = document.getElementById("rolloverRow");
+    if (rolloverRow) rolloverRow.classList.add("hidden");
+    if (listingsEl) listingsEl.textContent = profile.api_calls_this_month ?? "—";
+    const syncNote = document.getElementById("profileSyncNote");
+    if (syncNote) syncNote.classList.remove("hidden");
     const freeActionsArea = document.getElementById("freeActionsArea");
     if (freeActionsArea) freeActionsArea.classList.remove("hidden");
+    console.warn("Profile missing credit fields; rendered free fallback state.", profile);
   }
 
   // --- UI RENDERING ---
