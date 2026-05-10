@@ -176,25 +176,37 @@ async function updateAndStoreUserProfile() {
 
     if (profileError) throw profileError;
 
-    const { count: packPurchasesCount, error: packPurchasesError } = await authClient
+    await chrome.storage.local.set({
+      userProfile: profile,
+    });
+  } catch (error) {
+    console.error("Failed to update and store user profile:", error);
+  }
+}
+
+async function fetchPackPurchasesCount() {
+  const session = await ensureValidToken();
+  if (!session?.access_token) return 0;
+
+  try {
+    const authClient = createAuthenticatedClient(session.access_token);
+    const {
+      data: { user },
+      error: userError,
+    } = await authClient.auth.getUser();
+    if (userError || !user) throw userError || new Error("User not found.");
+
+    const { count, error } = await authClient
       .from("credit_transactions")
       .select("id", { count: "exact", head: true })
       .eq("user_id", user.id)
       .eq("type", "pack_purchase");
+    if (error) throw error;
 
-    const { userProfile: previousProfile = {} } =
-      await chrome.storage.local.get(["userProfile"]);
-    let storedPackPurchasesCount = packPurchasesCount ?? 0;
-    if (packPurchasesError) {
-      console.error("Failed to fetch pack purchase count:", packPurchasesError);
-      storedPackPurchasesCount = previousProfile.pack_purchases_count ?? 0;
-    }
-
-    await chrome.storage.local.set({
-      userProfile: { ...profile, pack_purchases_count: storedPackPurchasesCount },
-    });
+    return count ?? 0;
   } catch (error) {
-    console.error("Failed to update and store user profile:", error);
+    console.error("Failed to fetch pack purchase count:", error);
+    return 0;
   }
 }
 
@@ -295,6 +307,11 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       case "GET_USER_USAGE_COUNT":
         const usageCount = await fetchUserUsageCount();
         sendResponse(usageCount);
+        break;
+
+      case "GET_PACK_PURCHASES_COUNT":
+        const packPurchasesCount = await fetchPackPurchasesCount();
+        sendResponse({ count: packPurchasesCount });
         break;
 
       // THIS IS THE FIX: Restore the handler for the signal from the callback page.

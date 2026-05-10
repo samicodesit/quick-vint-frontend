@@ -156,6 +156,7 @@ document.addEventListener("DOMContentLoaded", () => {
       it: "Flusso di lavoro sicuro: solo generazione di testo, senza azioni di massa automatizzate sull'account.",
       nl: "Veilige workflow: alleen tekstgeneratie, geen geautomatiseerde massa-acties op je account.",
       pl: "Bezpieczny workflow: tylko generowanie tekstu, bez masowych zautomatyzowanych akcji na koncie.",
+      cs: "Bezpečný workflow: pouze generování textu, bez automatizovaných hromadných akcí na účtu.",
       cz: "Bezpečný workflow: pouze generování textu, bez automatizovaných hromadných akcí na účtu.",
       da: "Sikkert workflow: kun tekstgenerering, ingen automatiserede massehandlinger på kontoen.",
     };
@@ -445,8 +446,8 @@ document.addEventListener("DOMContentLoaded", () => {
 
   async function getPackPurchasesCount() {
     return new Promise((resolve) => {
-      chrome.storage.local.get(["userProfile"], (data) => {
-        resolve(data.userProfile?.pack_purchases_count ?? 0);
+      chrome.runtime.sendMessage({ type: "GET_PACK_PURCHASES_COUNT" }, (resp) => {
+        resolve(resp?.count ?? 0);
       });
     });
   }
@@ -643,18 +644,23 @@ document.addEventListener("DOMContentLoaded", () => {
   function setupLanguageDropdown() {
     chrome.storage.local.get(["selectedLanguage"], (result) => {
       if (result.selectedLanguage) {
+        const selectedLanguage =
+          result.selectedLanguage === "cs" ? "cz" : result.selectedLanguage;
+        if (selectedLanguage !== result.selectedLanguage) {
+          chrome.storage.local.set({ selectedLanguage });
+        }
         const selectedItem = [...languageOptions].find(
-          (item) => item.dataset.value === result.selectedLanguage,
+          (item) => item.dataset.value === selectedLanguage,
         );
         if (selectedItem && dropdownToggle) {
           dropdownToggle.innerHTML = selectedItem.innerHTML;
           languageOptions.forEach((opt) => opt.classList.remove("selected"));
           selectedItem.classList.add("selected");
         }
-        applyTrustNoteLocalization(result.selectedLanguage);
+        applyTrustNoteLocalization(selectedLanguage);
       } else {
         const browserLanguage = (navigator.language || "en").slice(0, 2);
-        applyTrustNoteLocalization(browserLanguage);
+        applyTrustNoteLocalization(browserLanguage === "cs" ? "cz" : browserLanguage);
       }
     });
     const toggleDropdown = (show) => {

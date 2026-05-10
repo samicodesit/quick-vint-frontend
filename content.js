@@ -294,8 +294,9 @@
         const tier = normalizeTier(data.userProfile?.subscription_tier);
         const isLegacy = isLegacyProfile(data.userProfile);
         if (isLegacy) {
-          // Legacy pro/business get Plus+Pro access; legacy starter/free get nothing
-          hasPlusAccess = ["pro", "business"].includes(tier);
+          // Legacy users keep their original feature set instead of inheriting
+          // new Plus-only features.
+          hasPlusAccess = false;
           hasProAccess = ["pro", "business"].includes(tier);
         } else {
           hasPlusAccess = ["plus", "pro_v2", "business_v2"].includes(tier);
@@ -796,6 +797,7 @@
 
   async function onRegenClick(style, imageUrls) {
     const urls = imageUrls || lastImageUrls;
+    if (isBusy) return;
     if (!urls.length) {
       showToast("No images to re-generate from.", "error");
       return;
@@ -814,7 +816,7 @@
 
     try {
       const {
-        selectedLanguage = "en",
+        selectedLanguage: storedLanguage = "en",
         tone = "standard",
         useEmojis,
         useBulletPoints = true,
@@ -822,6 +824,7 @@
       } = await chrome.storage.local.get([
         "selectedLanguage", "tone", "useEmojis", "useBulletPoints", "listingPreferences",
       ]);
+      const selectedLanguage = storedLanguage === "cs" ? "cz" : storedLanguage;
       const { access_token } = await sendMessage({ type: "GET_ACCESS_TOKEN" });
       if (!access_token) throw new Error("Session expired. Please sign in again.");
 
@@ -930,6 +933,24 @@
           });
 
           const card = document.getElementById(`qv-result-${lang.code}`);
+          if (response.status === 401) {
+            isAuthenticated = false;
+            showToast("Session expired.", "error");
+            break;
+          }
+          if (response.status === 429 || response.status === 402) {
+            const errData = await response.json().catch(() => ({}));
+            const pricingUrl = await getPricingUrl();
+            showToast(
+              errData.error || "Credit limit reached.",
+              "error",
+              { text: "Upgrade Plan", url: pricingUrl },
+            );
+            if (card) {
+              renderLangError(card, lang, errData.error || "Credit limit reached");
+            }
+            break;
+          }
           if (!response.ok) {
             const err = await response.json().catch(() => ({}));
             if (card) renderLangError(card, lang, err.error || "Generation failed");
@@ -1986,8 +2007,12 @@
     const uploadUrl = `${PHONE_UPLOAD_PAGE}?s=${sessionId}`;
 
     // Get saved language preference
-    const { selectedLanguage = "en" } =
+    const { selectedLanguage: storedLanguage = "en" } =
       await chrome.storage.local.get("selectedLanguage");
+    const selectedLanguage = storedLanguage === "cs" ? "cz" : storedLanguage;
+    if (selectedLanguage !== storedLanguage) {
+      chrome.storage.local.set({ selectedLanguage });
+    }
 
     const languageOptions = [
       { code: "en", name: "English" },
@@ -2252,7 +2277,7 @@
 
     try {
       const {
-        selectedLanguage = "en",
+        selectedLanguage: storedLanguage = "en",
         tone = "standard",
         useEmojis,
         useBulletPoints = true,
@@ -2264,6 +2289,7 @@
         "useBulletPoints",
         "listingPreferences",
       ]);
+      const selectedLanguage = storedLanguage === "cs" ? "cz" : storedLanguage;
       const { access_token } = await sendMessage({ type: "GET_ACCESS_TOKEN" });
 
       if (!access_token) {

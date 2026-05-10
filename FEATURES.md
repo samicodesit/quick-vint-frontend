@@ -145,7 +145,7 @@ The extension supports store listing localization:
 - **English** (default)
 - **French** (fr)
 - **German** (de)
-- **Czech** (cz)
+- **Czech store locale** (`_locales/cs/`; product output language uses `cz`)
 - **Italian** (it)
 
 Store listing title and description are localized via `_locales/messages.json` files.
