@@ -32,6 +32,7 @@ document.addEventListener("DOMContentLoaded", () => {
     pro_v2: 1200,
     business_v2: 3000,
   };
+  const PHONE_UPLOAD_MONTHLY_LIMIT = 5;
 
   // Next tier upgrade path and button label
   const NEXT_TIER_INFO = {
@@ -49,6 +50,20 @@ document.addEventListener("DOMContentLoaded", () => {
     pro_v2:     ["Listing Preferences", "Smart Re-Gen", "Tone Control", "Emoji", "Multi-language batch", "Listing improvement tips", "Priority support"],
     business_v2:["Listing Preferences", "Smart Re-Gen", "Tone Control", "Emoji", "Multi-language batch", "Listing improvement tips", "Priority support", "Priority processing", "Dedicated support"],
   };
+
+  const LISTING_PREFS = [
+    {
+      id: "pet_free_home",
+      label: "Pet-free home",
+      help: "Adds this trust note when relevant.",
+    },
+    {
+      id: "smoke_free_home",
+      label: "Smoke-free home",
+      help: "Adds this trust note when relevant.",
+    },
+  ];
+  const LISTING_PREF_IDS = new Set(LISTING_PREFS.map((pref) => pref.id));
 
   // --- SUPABASE CLIENT ---
   const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
@@ -84,6 +99,12 @@ document.addEventListener("DOMContentLoaded", () => {
   const toneOptions = document.querySelectorAll('input[name="tone"]');
   const emojiToggle = document.getElementById("emojiToggle");
   const formatOptions = document.querySelectorAll('input[name="format"]');
+  const prefsSettingsGrid = document.getElementById("prefsSettingsGrid");
+  const prefsSettingsUpgradeNote = document.getElementById("prefsSettingsUpgradeNote");
+  const phoneUploadUsed = document.getElementById("phoneUploadUsed");
+  const phoneUploadLimit = document.getElementById("phoneUploadLimit");
+  const phoneUploadBar = document.getElementById("phoneUploadBar");
+  const phoneUsageRow = document.querySelector('.phone-usage-row');
 
   // --- HELPER & UTILITY FUNCTIONS ---
 
@@ -97,6 +118,14 @@ document.addEventListener("DOMContentLoaded", () => {
         gearIcon.classList.remove("hidden");
         backIcon.classList.add("hidden");
       }
+    }
+  }
+
+  function closeSettingsView() {
+    document.body.classList.remove("settings-active");
+    if (gearIcon && backIcon) {
+      gearIcon.classList.remove("hidden");
+      backIcon.classList.add("hidden");
     }
   }
 
@@ -117,6 +146,22 @@ document.addEventListener("DOMContentLoaded", () => {
     return map[tier] || "free";
   }
 
+  function isLegacyProfile(profile) {
+    if (profile?.is_legacy_plan !== undefined) return !!profile.is_legacy_plan;
+    return ["starter", "pro", "business"].includes(normalizeTier(profile?.subscription_tier));
+  }
+
+  function getFeatureAccess(profile) {
+    const tier = normalizeTier(profile?.subscription_tier);
+    const isLegacy = isLegacyProfile(profile);
+    return {
+      hasPlusAccess: !isLegacy && ["plus", "pro_v2", "business_v2"].includes(tier),
+      hasProAccess: isLegacy
+        ? ["pro", "business"].includes(tier)
+        : ["pro_v2", "business_v2"].includes(tier),
+    };
+  }
+
   function showMessage(msg, type = "info") {
     if (!messagesDiv) return;
     if (!msg) {
@@ -129,6 +174,31 @@ document.addEventListener("DOMContentLoaded", () => {
     if (type === "info" || type === "success") {
       setTimeout(() => messagesDiv.classList.add("hidden"), 4000);
     }
+  }
+
+  function sanitizeListingPreferences(preferences = []) {
+    const normalized = preferences.flatMap((pref) => (
+      pref === "smoke_pet_free" ? ["pet_free_home", "smoke_free_home"] : [pref]
+    ));
+    return [...new Set(normalized)].filter((pref) => LISTING_PREF_IDS.has(pref));
+  }
+
+  function hasUnlimitedPhoneUploads(profile, tier, isSubscribed) {
+    return Number(profile?.pack_credits || 0) > 0 || isSubscribed || ["starter", "pro", "business"].includes(tier);
+  }
+
+  function renderPhoneUploadUsage(profile = null, tier = "free", isSubscribed = false) {
+    const used = Number(profile?.phone_uploads_this_month || 0);
+    const unlimited = hasUnlimitedPhoneUploads(profile, tier, isSubscribed);
+    if (phoneUploadUsed) phoneUploadUsed.textContent = used;
+    if (phoneUploadLimit) phoneUploadLimit.textContent = unlimited ? "∞" : PHONE_UPLOAD_MONTHLY_LIMIT;
+    if (phoneUploadBar) {
+      phoneUploadBar.style.width = unlimited
+        ? "100%"
+        : `${Math.min(100, (used / PHONE_UPLOAD_MONTHLY_LIMIT) * 100)}%`;
+      phoneUploadBar.classList.toggle("unlimited", unlimited);
+    }
+    if (phoneUsageRow) phoneUsageRow.classList.toggle("hidden", unlimited);
   }
 
   function setLoading(button, isLoading, defaultText) {
@@ -315,7 +385,7 @@ document.addEventListener("DOMContentLoaded", () => {
     const rolloverRow = document.getElementById("rolloverRow");
     const rolloverVal = document.getElementById("rolloverVal");
     if (rolloverRow) {
-      if (rolloverCap > 0) {
+      if (rolloverCap > 0 && rolloverCredits > 0) {
         rolloverRow.classList.remove("hidden");
         if (rolloverVal) rolloverVal.textContent = `${rolloverCredits} / ${rolloverCap}`;
       } else {
@@ -367,12 +437,26 @@ document.addEventListener("DOMContentLoaded", () => {
   // --- UI RENDERING ---
 
   function render(user, profile) {
-    if (!user || !profile) {
+    if (!user) {
+      closeSettingsView();
       document.body.dataset.view = "signed-out";
+      renderPhoneUploadUsage();
       return;
     }
 
     if (userEmailSpan) userEmailSpan.textContent = user.email;
+
+    hideAllPlanViews();
+
+    if (!profile) {
+      if (planName) planName.textContent = "Free";
+      if (legacyBadge) legacyBadge.classList.add("hidden");
+      renderFreeFallback({});
+      renderPhoneUploadUsage();
+      renderDowngradeBanner({});
+      document.body.dataset.view = "signed-in";
+      return;
+    }
 
     const rawTier = profile.subscription_tier || "free";
     const tier = normalizeTier(rawTier);
@@ -384,11 +468,12 @@ document.addEventListener("DOMContentLoaded", () => {
       : ["starter", "pro", "business"].includes(tier);
 
     const isNewSubscribed = status === "active" && !isLegacy && tier !== "free";
+    const isPhoneUploadUnlimited = isLegacy
+      ? ["starter", "pro", "business"].includes(tier)
+      : isNewSubscribed;
 
     if (planName) planName.textContent = TIER_DISPLAY_NAMES[tier] || tier;
     if (legacyBadge) legacyBadge.classList.toggle("hidden", !isLegacy);
-
-    hideAllPlanViews();
 
     const subCredits = profile.subscription_credits ?? null;
     const packCredits = profile.pack_credits ?? 0;
@@ -410,6 +495,7 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     renderDowngradeBanner(profile);
+    renderPhoneUploadUsage(profile, tier, isPhoneUploadUnlimited);
 
     document.body.dataset.view = "signed-in";
   }
@@ -443,12 +529,40 @@ document.addEventListener("DOMContentLoaded", () => {
 
   // --- DATA & STATE MANAGEMENT ---
 
-  function updateFromStorage() {
-    chrome.runtime.sendMessage({ type: "AUTH_UPDATED" }, () => {
-      chrome.storage.local.get(["supabaseSession", "userProfile"], (data) => {
-        const user = data.supabaseSession?.user || null;
-        const profile = data.userProfile || null;
-        render(user, profile);
+  function getStoredAuthState(callback) {
+    chrome.storage.local.get(["supabaseSession", "userProfile"], (data) => {
+      callback({
+        user: data.supabaseSession?.user || null,
+        profile: data.userProfile || null,
+      });
+    });
+  }
+
+  function getCurrentUserEmail() {
+    return new Promise((resolve) => {
+      chrome.storage.local.get(["supabaseSession"], (data) => {
+        resolve(data.supabaseSession?.user?.email || "");
+      });
+    });
+  }
+
+  function updateFromStorage({ refreshProfile = false } = {}) {
+    getStoredAuthState(({ user, profile }) => {
+      render(user, profile);
+
+      if (!refreshProfile || !user) return;
+      chrome.runtime.sendMessage({ type: "AUTH_UPDATED" }, (resp) => {
+        if (chrome.runtime.lastError) {
+          console.warn("Unable to refresh auth state:", chrome.runtime.lastError.message);
+          return;
+        }
+        if (resp?.user || resp?.profile) {
+          render(resp.user || user, resp.profile || profile);
+          return;
+        }
+        getStoredAuthState(({ user: latestUser, profile: latestProfile }) => {
+          render(latestUser, latestProfile);
+        });
       });
     });
   }
@@ -502,20 +616,18 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   async function handleBuyPack(btn) {
-    const {
-      data: { session },
-    } = await supabaseClient.auth.getSession();
-    if (!session?.user?.email) {
+    const email = await getCurrentUserEmail();
+    if (!email) {
       showMessage("Please sign in first.", "error");
       return;
     }
     const packCount = await getPackPurchasesCount();
     // After 2 prior packs (about to buy the 3rd), nudge to a subscription.
     if (packCount >= 2) {
-      showPackNudge(packCount, session.user.email);
+      showPackNudge(packCount, email);
       return;
     }
-    await proceedPackCheckout(session.user.email, btn);
+    await proceedPackCheckout(email, btn);
   }
 
   // --- API & EVENT HANDLERS ---
@@ -568,16 +680,17 @@ document.addEventListener("DOMContentLoaded", () => {
 
   function handleSignOut() {
     setLoading(signOutBtn, true, "Sign Out");
+    setLoading(signOutBtnSettings, true, "Sign Out");
     chrome.runtime.sendMessage({ type: "SIGN_OUT" }, () => {
       setLoading(signOutBtn, false, "Sign Out");
+      setLoading(signOutBtnSettings, false, "Sign Out");
+      updateFromStorage();
     });
   }
 
   async function handleUpgrade() {
-    const {
-      data: { session },
-    } = await supabaseClient.auth.getSession();
-    if (!session?.user?.email) {
+    const email = await getCurrentUserEmail();
+    if (!email) {
       showMessage("Please sign in to upgrade.", "error");
       return;
     }
@@ -588,7 +701,7 @@ document.addEventListener("DOMContentLoaded", () => {
       const res = await fetch(`${API_BASE}/api/stripe/create-checkout`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: session.user.email, tier: targetTier }),
+        body: JSON.stringify({ email, tier: targetTier }),
       });
       const { url } = await res.json();
       if (res.ok && url) {
@@ -605,10 +718,8 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   async function handleManageSubscription() {
-    const {
-      data: { session },
-    } = await supabaseClient.auth.getSession();
-    if (!session?.user?.email) {
+    const email = await getCurrentUserEmail();
+    if (!email) {
       showMessage("Please sign in to manage your subscription.", "error");
       return;
     }
@@ -617,7 +728,7 @@ document.addEventListener("DOMContentLoaded", () => {
       const res = await fetch(`${API_BASE}/api/stripe/create-portal`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: session.user.email }),
+        body: JSON.stringify({ email }),
       });
       const { url } = await res.json();
       if (res.ok && url) {
@@ -708,13 +819,55 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   // --- SETTINGS LOGIC ---
+  function renderListingPreferencesSettings() {
+    if (!prefsSettingsGrid) return;
+    prefsSettingsGrid.replaceChildren();
+
+    LISTING_PREFS.forEach((pref) => {
+      const item = document.createElement("label");
+      item.className = "pref-option";
+      item.dataset.prefId = pref.id;
+      item.innerHTML = `
+        <input type="checkbox" value="${pref.id}">
+        <span class="pref-option-copy">
+          <span class="pref-option-title">${pref.label}</span>
+          <span class="pref-option-subtitle">${pref.help}</span>
+        </span>
+      `;
+      prefsSettingsGrid.appendChild(item);
+    });
+  }
+
+  function setupListingPreferencesSettings() {
+    if (!prefsSettingsGrid) return;
+
+    chrome.storage.local.get(["listingPreferences"], (result) => {
+      const saved = sanitizeListingPreferences(result.listingPreferences || []);
+      if ((result.listingPreferences || []).join("|") !== saved.join("|")) {
+        chrome.storage.local.set({ listingPreferences: saved });
+      }
+      prefsSettingsGrid.querySelectorAll('input[type="checkbox"]').forEach((input) => {
+        input.checked = saved.includes(input.value);
+      });
+    });
+
+    prefsSettingsGrid.addEventListener("change", (event) => {
+      const target = event.target;
+      if (!(target instanceof HTMLInputElement) || target.type !== "checkbox" || target.disabled) return;
+
+      const checked = Array.from(
+        prefsSettingsGrid.querySelectorAll('input[type="checkbox"]:checked'),
+      ).map((input) => input.value);
+      chrome.storage.local.set({ listingPreferences: sanitizeListingPreferences(checked) });
+    });
+  }
+
   function setupSettings() {
     chrome.storage.local.get(
-      ["tone", "useEmojis", "useBulletPoints", "userProfile"],
+      ["tone", "useEmojis", "useBulletPoints", "userProfile", "listingPreferences"],
       (result) => {
         const profile = result.userProfile || {};
-        const tier = normalizeTier(profile.subscription_tier);
-        const hasProAccess = tier === "pro" || tier === "business" || tier === "pro_v2" || tier === "business_v2";
+        const { hasPlusAccess, hasProAccess } = getFeatureAccess(profile);
 
         const savedTone = result.tone || "standard";
         const toneInput = document.querySelector(
@@ -747,7 +900,12 @@ document.addEventListener("DOMContentLoaded", () => {
           }
         }
 
-        updateSettingsAccess(hasProAccess);
+        const savedPrefs = result.listingPreferences || [];
+        if (!hasPlusAccess && savedPrefs.length > 0) {
+          chrome.storage.local.set({ listingPreferences: [] });
+        }
+
+        updateSettingsAccess({ hasPlusAccess, hasProAccess });
       },
     );
 
@@ -780,13 +938,11 @@ document.addEventListener("DOMContentLoaded", () => {
   function refreshSettingsAccess() {
     chrome.storage.local.get(["userProfile"], (data) => {
       const profile = data.userProfile || {};
-      const tier = normalizeTier(profile.subscription_tier);
-      const hasProAccess = tier === "pro" || tier === "business" || tier === "pro_v2" || tier === "business_v2";
-      updateSettingsAccess(hasProAccess);
+      updateSettingsAccess(getFeatureAccess(profile));
     });
   }
 
-  function updateSettingsAccess(hasProAccess) {
+  function updateSettingsAccess({ hasPlusAccess, hasProAccess }) {
     const emojiContainer = document.querySelector(".toggle-container");
     const infoNote = document.querySelector(".info-note");
     const upgradeNote = document.querySelector(".upgrade-note");
@@ -817,6 +973,20 @@ document.addEventListener("DOMContentLoaded", () => {
       }
       if (infoNote) infoNote.style.display = "none";
       if (upgradeNote) upgradeNote.style.display = "flex";
+    }
+
+    if (prefsSettingsGrid) {
+      prefsSettingsGrid.querySelectorAll(".pref-option").forEach((option) => {
+        const input = option.querySelector('input[type="checkbox"]');
+        if (!input) return;
+        option.classList.toggle("locked", !hasPlusAccess);
+        input.disabled = !hasPlusAccess;
+        if (!hasPlusAccess) input.checked = false;
+      });
+    }
+
+    if (prefsSettingsUpgradeNote) {
+      prefsSettingsUpgradeNote.style.display = hasPlusAccess ? "none" : "flex";
     }
   }
 
@@ -943,6 +1113,10 @@ document.addEventListener("DOMContentLoaded", () => {
     if (settingsUpgradeLink) {
       settingsUpgradeLink.addEventListener("click", handleViewAllPlans);
     }
+    const prefsUpgradeLink = document.getElementById("prefsUpgradeLink");
+    if (prefsUpgradeLink) {
+      prefsUpgradeLink.addEventListener("click", handleViewAllPlans);
+    }
     if (emailInput) {
       emailInput.addEventListener("keydown", (e) => {
         if (e.key === "Enter") handleSendMagicLink();
@@ -950,6 +1124,8 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     setupLanguageDropdown();
+    renderListingPreferencesSettings();
+    setupListingPreferencesSettings();
     setupSettings();
 
     if (settingsToggleBtn) {
@@ -961,11 +1137,17 @@ document.addEventListener("DOMContentLoaded", () => {
         updateFromStorage();
         refreshSettingsAccess();
       }
+      if (changes.listingPreferences && prefsSettingsGrid) {
+        const saved = sanitizeListingPreferences(changes.listingPreferences.newValue || []);
+        prefsSettingsGrid.querySelectorAll('input[type="checkbox"]').forEach((input) => {
+          input.checked = saved.includes(input.value);
+        });
+      }
     });
 
-    window.addEventListener("focus", updateFromStorage);
+    window.addEventListener("focus", () => updateFromStorage({ refreshProfile: true }));
 
-    updateFromStorage();
+    updateFromStorage({ refreshProfile: true });
   }
 
   init();

@@ -156,7 +156,10 @@ function createAuthenticatedClient(accessToken) {
  */
 async function updateAndStoreUserProfile() {
   const session = await ensureValidToken();
-  if (!session?.access_token) return;
+  if (!session?.access_token) {
+    await chrome.storage.local.remove(["userProfile"]);
+    return { user: null, profile: null, error: "No active session." };
+  }
 
   try {
     const authClient = createAuthenticatedClient(session.access_token);
@@ -169,7 +172,7 @@ async function updateAndStoreUserProfile() {
     const { data: profile, error: profileError } = await authClient
       .from("profiles")
       .select(
-        "subscription_status, api_calls_this_month, subscription_tier, current_period_end, subscription_credits, rollover_credits, pack_credits, credits_cycle_end, is_legacy_plan, pending_tier",
+        "subscription_status, api_calls_this_month, subscription_tier, current_period_end, subscription_credits, rollover_credits, pack_credits, credits_cycle_end, is_legacy_plan, pending_tier, phone_uploads_this_month, last_phone_upload_reset",
       )
       .eq("id", user.id)
       .single();
@@ -179,8 +182,10 @@ async function updateAndStoreUserProfile() {
     await chrome.storage.local.set({
       userProfile: profile,
     });
+    return { user, profile, error: null };
   } catch (error) {
     console.error("Failed to update and store user profile:", error);
+    return { user: session.user || null, profile: null, error: error.message };
   }
 }
 
@@ -268,8 +273,10 @@ async function handleSignOut() {
   try {
     const { error } = await supabaseClient.auth.signOut();
     if (error) throw error;
+    await chrome.storage.local.remove(["supabaseSession", "userProfile"]);
     return { ok: true };
   } catch (err) {
+    await chrome.storage.local.remove(["supabaseSession", "userProfile"]);
     return { error: err.message };
   }
 }
@@ -316,8 +323,8 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
       // THIS IS THE FIX: Restore the handler for the signal from the callback page.
       case "AUTH_UPDATED":
-        await updateAndStoreUserProfile();
-        sendResponse({ ok: true });
+        const profileResult = await updateAndStoreUserProfile();
+        sendResponse({ ok: !profileResult?.error, ...profileResult });
         break;
 
       case "SIGN_OUT":

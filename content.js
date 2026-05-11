@@ -27,17 +27,21 @@
 
   const FEATURE_PANEL_ID = "quickvint-feature-panel";
   const RESULT_PANEL_ID = "quickvint-result-panel";
+  const MULTILANG_PANEL_ID = "quickvint-multilang-panel";
+  const COMPLETENESS_PANEL_ID = "quickvint-completeness-panel";
+  const GENERATE_TOOLS_ID = "quickvint-generate-tools";
+  const GENERATE_MODE_BTN_ID = "quickvint-generate-mode-btn";
+  const PREFS_TOGGLE_BTN_ID = "quickvint-prefs-toggle";
+  const PREFS_DOCK_ID = "quickvint-prefs-dock";
+  const BATCH_LANGS_STORAGE_KEY = "batchLanguages";
+  const MEASUREMENT_HINT_KEY = "quickvintMeasurementHintLastShownAt";
+  const MEASUREMENT_HINT_INTERVAL_MS = 7 * 24 * 60 * 60 * 1000;
 
   const LISTING_PREFS = [
-    { id: "measurements", label: "Mention item measurements" },
-    { id: "smoke_pet_free", label: '"Smoke-free, pet-free home"' },
-    { id: "shipping_speed", label: "Mention shipping speed" },
-    { id: "closing_line", label: "Add a friendly closing line" },
-    { id: "fabric_material", label: "Mention fabric/material when visible" },
-    { id: "true_to_size", label: "Note if item is true to size" },
-    { id: "retail_price", label: "Mention original retail price if known" },
-    { id: "care_instructions", label: "Include care instructions" },
+    { id: "pet_free_home", label: "Pet-free home" },
+    { id: "smoke_free_home", label: "Smoke-free home" },
   ];
+  const LISTING_PREF_IDS = new Set(LISTING_PREFS.map((pref) => pref.id));
 
   const BATCH_LANGS = [
     { code: "fr", flag: "🇫🇷", name: "Français", domain: "vinted.fr" },
@@ -64,6 +68,10 @@
   let generateBtn = null;
   let phoneBtn = null;
   let signInBtn = null;
+  let generateTools = null;
+  let generateModeBtn = null;
+  let prefsToggleBtn = null;
+  let prefsDock = null;
   let isBusy = false;
   let isAuthenticated = false;
   let pollInterval = null;
@@ -72,6 +80,8 @@
   let hasProAccess = false;
   let featurePanel = null;
   let resultPanel = null;
+  let multiLangPanel = null;
+  let completenessPanel = null;
   let lastImageUrls = [];
   let selectedBatchLangs = new Set();
 
@@ -201,6 +211,117 @@
     });
   }
 
+  async function fetchWithTimeout(url, options = {}, timeoutMs = 90000) {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), timeoutMs);
+    try {
+      return await fetch(url, { ...options, signal: controller.signal });
+    } finally {
+      clearTimeout(timeout);
+    }
+  }
+
+  function setTextareaValue(value) {
+    const descInput = document.querySelector(SELECTORS.description);
+    if (!descInput) return;
+    descInput.value = value;
+    descInput.dispatchEvent(new Event("input", { bubbles: true }));
+  }
+
+  function appendDescriptionsToTextarea(descriptions) {
+    if (!descriptions.length) return;
+    setTextareaValue(descriptions.join("\n\n"));
+  }
+
+  function sanitizeListingPreferences(preferences = []) {
+    const normalized = preferences.flatMap((pref) => (
+      pref === "smoke_pet_free" ? ["pet_free_home", "smoke_free_home"] : [pref]
+    ));
+    return [...new Set(normalized)].filter((pref) => LISTING_PREF_IDS.has(pref));
+  }
+
+  function getLangMeta(code) {
+    return BATCH_LANGS.find((lang) => lang.code === code)
+      || BATCH_LANGS.find((lang) => lang.code === "en")
+      || { code: "en", name: "English", flag: "" };
+  }
+
+  function formatLangCode(code) {
+    return (code || "en").toUpperCase();
+  }
+
+  function getFlagCountryCode(code) {
+    const map = {
+      en: "gb",
+      fr: "fr",
+      de: "de",
+      nl: "nl",
+      es: "es",
+      it: "it",
+      pt: "pt",
+      pl: "pl",
+      cz: "cz",
+      sk: "sk",
+      sv: "se",
+      da: "dk",
+      fi: "fi",
+      hu: "hu",
+      lt: "lt",
+      ro: "ro",
+      el: "gr",
+      hr: "hr",
+    };
+    return map[code] || "gb";
+  }
+
+  function createFlagImage(code, alt = "") {
+    const img = document.createElement("img");
+    img.className = "qv-lang-flag";
+    img.src = `https://flagcdn.com/w40/${getFlagCountryCode(code)}.png`;
+    img.alt = alt;
+    img.loading = "lazy";
+    return img;
+  }
+
+  async function updateGenerateModeLabel() {
+    if (!generateBtn) return;
+    const { selectedLanguage: storedLanguage = "en" } =
+      await chrome.storage.local.get("selectedLanguage");
+    const selectedLanguage = storedLanguage === "cs" ? "cz" : storedLanguage;
+    const label = generateBtn.querySelector(".label");
+    const flag = generateBtn.querySelector(".qv-output-flag");
+    const lang = getLangMeta(selectedLanguage);
+    if (flag) {
+      flag.src = `https://flagcdn.com/w40/${getFlagCountryCode(selectedLanguage)}.png`;
+      flag.alt = lang.name;
+    }
+    if (label && !isBusy) label.textContent = "Generate";
+    if (generateModeBtn) {
+      const selectedCount = selectedBatchLangs.size;
+      generateModeBtn.textContent = selectedCount > 0
+        ? `Multi ${selectedCount}`
+        : "Multi-lang";
+      generateModeBtn.title = selectedCount > 0
+        ? `Single: ${lang.name}. Multi-language set: ${selectedCount} selected.`
+        : `Single output language: ${lang.name}. Click for multi-language options.`;
+    }
+  }
+
+  async function maybeShowMeasurementAdvice(message) {
+    const trimmed = message?.trim();
+    if (!trimmed) return;
+
+    const data = await chrome.storage.local.get([MEASUREMENT_HINT_KEY]);
+    const lastShownAt = Number(data[MEASUREMENT_HINT_KEY] || 0);
+    const now = Date.now();
+    if (lastShownAt && now - lastShownAt < MEASUREMENT_HINT_INTERVAL_MS) return;
+
+    chrome.storage.local.set({ [MEASUREMENT_HINT_KEY]: now });
+    setTimeout(() => {
+      showToast(trimmed, "info", null, true);
+    }, 300);
+  }
+
   /**
    * Compresses and resizes an image to reduce token usage for AI processing.
    * @param {string} imageUrl - The original image URL
@@ -212,9 +333,13 @@
     return new Promise((resolve, reject) => {
       const img = new Image();
       img.crossOrigin = "anonymous";
+      const timeout = setTimeout(() => {
+        reject(new Error(`Image compression timed out: ${imageUrl}`));
+      }, 15000);
 
       img.onload = () => {
         try {
+          clearTimeout(timeout);
           // Calculate new dimensions while maintaining aspect ratio
           let width = img.width;
           let height = img.height;
@@ -245,6 +370,7 @@
       };
 
       img.onerror = () => {
+        clearTimeout(timeout);
         reject(new Error(`Failed to load image: ${imageUrl}`));
       };
 
@@ -252,23 +378,27 @@
     });
   }
 
+  function nextFrame() {
+    return new Promise((resolve) => requestAnimationFrame(() => resolve()));
+  }
+
   /**
-   * Compresses multiple images in parallel with error handling.
+   * Compresses multiple images with small UI yields between canvas work.
    * @param {string[]} imageUrls - Array of image URLs
    * @returns {Promise<string[]>} Array of compressed base64 images
    */
   async function compressImages(imageUrls) {
-    const compressionPromises = imageUrls.map(async (url) => {
+    const compressed = [];
+    for (const url of imageUrls) {
       try {
-        return await compressImage(url);
+        compressed.push(await compressImage(url));
       } catch (error) {
         console.warn(`Failed to compress image ${url}:`, error);
-        // Return original URL as fallback if compression fails
-        return url;
+        compressed.push(url);
       }
-    });
-
-    return Promise.all(compressionPromises);
+      await nextFrame();
+    }
+    return compressed;
   }
 
   function getUploadedImageUrls() {
@@ -307,22 +437,28 @@
     });
   }
 
-  // --- FEATURE PANEL (Preferences + Multi-lang) ---
+  // --- FEATURE PANEL (Preferences) ---
 
   function createFeaturePanel() {
     const panel = document.createElement("div");
     panel.id = FEATURE_PANEL_ID;
+    panel.className = "qv-floating-panel";
 
-    // ── Listing Preferences ──────────────────────────────────
-    const prefsSection = document.createElement("div");
-    prefsSection.className = "qv-section";
+    const prefsSection = document.createElement("details");
+    prefsSection.className = "qv-disclosure";
 
-    const prefsHeader = document.createElement("div");
-    prefsHeader.className = "qv-section-header";
+    const prefsHeader = document.createElement("summary");
+    prefsHeader.className = "qv-disclosure-summary";
     prefsHeader.innerHTML = `
-      <span class="qv-section-title">🎨 Listing Preferences</span>
+      <span class="qv-disclosure-title-wrap">
+        <span class="qv-section-title">Listing Preferences</span>
+        <span class="qv-disclosure-subtitle">Small trust notes added to future generations</span>
+      </span>
       <span class="qv-tier-badge plus">Plus</span>
     `;
+
+    const prefsBody = document.createElement("div");
+    prefsBody.className = "qv-disclosure-body";
 
     const prefList = document.createElement("div");
     prefList.className = "qv-pref-list";
@@ -342,73 +478,116 @@
     const lockedMsgPrefs = document.createElement("div");
     lockedMsgPrefs.className = "qv-locked-msg";
     lockedMsgPrefs.id = "qv-prefs-locked-msg";
-    lockedMsgPrefs.textContent = "🔒 Available on Plus — upgrade to personalise every listing";
+    lockedMsgPrefs.textContent = "Available on Plus";
     lockedMsgPrefs.style.display = hasPlusAccess ? "none" : "flex";
 
     const suggestRow = document.createElement("div");
     suggestRow.className = "qv-suggest-row";
     suggestRow.innerHTML = `
-      <input type="text" class="qv-suggest-input" id="qv-suggest-input"
-        placeholder="Suggest a new preference…" maxlength="200">
-      <button class="qv-suggest-btn" id="qv-suggest-btn">Submit</button>
+      <div class="qv-suggest-copy">
+        <span class="qv-suggest-title">Missing an option?</span>
+        <span class="qv-suggest-help">Send one preference idea.</span>
+      </div>
+      <div class="qv-suggest-controls">
+        <input type="text" class="qv-suggest-input" id="qv-suggest-input"
+          placeholder="Request another option" maxlength="200">
+        <button class="qv-suggest-btn" id="qv-suggest-btn">Send</button>
+      </div>
     `;
 
+    const footerRow = document.createElement("div");
+    footerRow.className = "qv-panel-footer";
+    footerRow.innerHTML = `
+      <button type="button" class="qv-panel-link-btn" id="qv-open-full-settings">Popup settings</button>
+    `;
+
+    prefsBody.appendChild(prefList);
+    prefsBody.appendChild(lockedMsgPrefs);
+    prefsBody.appendChild(suggestRow);
+    prefsBody.appendChild(footerRow);
     prefsSection.appendChild(prefsHeader);
-    prefsSection.appendChild(prefList);
-    prefsSection.appendChild(lockedMsgPrefs);
-    prefsSection.appendChild(suggestRow);
+    prefsSection.appendChild(prefsBody);
 
-    // ── Multi-Language Batch ──────────────────────────────────
-    const mlSection = document.createElement("div");
-    mlSection.className = "qv-section";
+    panel.appendChild(prefsSection);
 
-    const mlHeader = document.createElement("div");
-    mlHeader.className = "qv-section-header";
-    mlHeader.innerHTML = `
-      <span class="qv-section-title">🌍 Multi-Language Generation</span>
-      <span class="qv-tier-badge pro">Pro</span>
+    return panel;
+  }
+
+  function createPrefsToggleButton() {
+    const btn = document.createElement("button");
+    btn.id = PREFS_TOGGLE_BTN_ID;
+    btn.type = "button";
+    btn.className = "qv-inline-control-btn";
+    btn.innerHTML = `
+      <span class="qv-inline-control-label">Preferences</span>
+      <span class="qv-tier-badge plus">Plus</span>
+    `;
+    btn.addEventListener("click", () => {
+      if (!featurePanel) return;
+      const nextOpen = !featurePanel.classList.contains("visible");
+      featurePanel.classList.toggle("visible", nextOpen);
+      btn.classList.toggle("active", nextOpen);
+      const details = featurePanel.querySelector("details");
+      if (details) details.open = nextOpen;
+    });
+    return btn;
+  }
+
+  function createPrefsDock() {
+    const dock = document.createElement("div");
+    dock.id = PREFS_DOCK_ID;
+
+    prefsToggleBtn = createPrefsToggleButton();
+    featurePanel = createFeaturePanel();
+
+    dock.appendChild(prefsToggleBtn);
+    dock.appendChild(featurePanel);
+    return dock;
+  }
+
+  function createMultiLangPanel() {
+    const panel = document.createElement("div");
+    panel.id = MULTILANG_PANEL_ID;
+    panel.className = "qv-popover-panel";
+    panel.style.display = "none";
+    panel.innerHTML = `
+      <details class="qv-disclosure">
+        <summary class="qv-disclosure-summary">
+          <span class="qv-disclosure-title-wrap">
+            <span class="qv-section-title">Generation Language</span>
+            <span class="qv-disclosure-subtitle" id="qv-single-lang-note">Single generation uses popup output language</span>
+          </span>
+          <span class="qv-tier-badge pro">Pro</span>
+        </summary>
+        <div class="qv-disclosure-body">
+          <div class="qv-mode-note" id="qv-mode-note">Use Generate for the selected output language, or select languages below for multi-generation. Each language uses 1 credit.</div>
+          <div class="qv-lang-pills" id="qv-lang-pills"></div>
+          <div class="qv-locked-msg" id="qv-ml-locked-msg">Available on Pro</div>
+          <div class="qv-multilang-footer">
+            <span class="qv-lang-counter" id="qv-lang-counter">Select languages to generate at once</span>
+            <button class="qv-gen-all-btn" id="qv-gen-all-btn" disabled>Generate All</button>
+          </div>
+          <div class="qv-lang-results" id="qv-lang-results"></div>
+        </div>
+      </details>
     `;
 
-    const langPills = document.createElement("div");
-    langPills.className = "qv-lang-pills";
-    langPills.id = "qv-lang-pills";
-
+    const langPills = panel.querySelector("#qv-lang-pills");
     BATCH_LANGS.forEach((lang) => {
       const pill = document.createElement("button");
       pill.type = "button";
       pill.className = "qv-lang-pill" + (hasProAccess ? "" : " disabled");
       pill.dataset.code = lang.code;
-      pill.textContent = `${lang.flag} ${lang.name}`;
+      pill.appendChild(createFlagImage(lang.code, lang.name));
+      pill.appendChild(document.createTextNode(lang.name));
       pill.disabled = !hasProAccess;
       langPills.appendChild(pill);
     });
 
-    const lockedMsgML = document.createElement("div");
-    lockedMsgML.className = "qv-locked-msg";
-    lockedMsgML.id = "qv-ml-locked-msg";
-    lockedMsgML.textContent = "🔒 Available on Pro — generate in multiple languages at once";
-    lockedMsgML.style.display = hasProAccess ? "none" : "flex";
-
-    const mlFooter = document.createElement("div");
-    mlFooter.className = "qv-multilang-footer";
-    mlFooter.style.display = hasProAccess ? "" : "none";
-    mlFooter.innerHTML = `
-      <span class="qv-lang-counter" id="qv-lang-counter">Select languages to generate at once</span>
-      <button class="qv-gen-all-btn" id="qv-gen-all-btn" disabled>Generate All</button>
-    `;
-
-    const langResults = document.createElement("div");
-    langResults.className = "qv-lang-results";
-    langResults.id = "qv-lang-results";
-
-    mlSection.appendChild(mlHeader);
-    mlSection.appendChild(langPills);
-    mlSection.appendChild(lockedMsgML);
-    mlSection.appendChild(mlFooter);
-    mlSection.appendChild(langResults);
-
-    panel.appendChild(prefsSection);
-    panel.appendChild(mlSection);
+    const lockedMsg = panel.querySelector("#qv-ml-locked-msg");
+    const footer = panel.querySelector(".qv-multilang-footer");
+    if (lockedMsg) lockedMsg.style.display = hasProAccess ? "none" : "flex";
+    if (footer) footer.style.display = hasProAccess ? "" : "none";
 
     return panel;
   }
@@ -418,15 +597,36 @@
     document.querySelectorAll("#qv-pref-list input:checked").forEach((cb) => {
       checked.push(cb.value);
     });
-    chrome.storage.local.set({ listingPreferences: checked });
+    chrome.storage.local.set({ listingPreferences: sanitizeListingPreferences(checked) });
   }
 
   function restorePrefState() {
     chrome.storage.local.get(["listingPreferences"], (data) => {
-      const saved = data.listingPreferences || [];
+      const saved = sanitizeListingPreferences(data.listingPreferences || []);
+      if ((data.listingPreferences || []).join("|") !== saved.join("|")) {
+        chrome.storage.local.set({ listingPreferences: saved });
+      }
       document.querySelectorAll("#qv-pref-list input").forEach((cb) => {
         cb.checked = saved.includes(cb.value);
       });
+    });
+  }
+
+  function restoreBatchLangState() {
+    chrome.storage.local.get([BATCH_LANGS_STORAGE_KEY], (data) => {
+      const saved = Array.isArray(data[BATCH_LANGS_STORAGE_KEY])
+        ? data[BATCH_LANGS_STORAGE_KEY]
+        : [];
+      selectedBatchLangs = new Set(
+        saved.filter((code) => BATCH_LANGS.some((lang) => lang.code === code)),
+      );
+      if (multiLangPanel) {
+        multiLangPanel.querySelectorAll(".qv-lang-pill").forEach((pill) => {
+          pill.classList.toggle("selected", selectedBatchLangs.has(pill.dataset.code));
+        });
+      }
+      updateBatchLangFooter();
+      updateGenerateModeLabel();
     });
   }
 
@@ -438,7 +638,9 @@
       selectedBatchLangs.add(code);
       pillEl.classList.add("selected");
     }
+    chrome.storage.local.set({ [BATCH_LANGS_STORAGE_KEY]: [...selectedBatchLangs] });
     updateBatchLangFooter();
+    updateGenerateModeLabel();
   }
 
   function updateBatchLangFooter() {
@@ -540,9 +742,17 @@
     });
     const prefsLockedMsg = document.getElementById("qv-prefs-locked-msg");
     if (prefsLockedMsg) prefsLockedMsg.style.display = hasPlusAccess ? "none" : "flex";
+  }
 
-    // Multi-lang pills
-    featurePanel.querySelectorAll(".qv-lang-pill").forEach((pill) => {
+  function closeFeaturePanel() {
+    if (featurePanel) featurePanel.classList.remove("visible");
+    if (prefsToggleBtn) prefsToggleBtn.classList.remove("active");
+  }
+
+  function updateMultiLangPanelAccess() {
+    if (!multiLangPanel) return;
+
+    multiLangPanel.querySelectorAll(".qv-lang-pill").forEach((pill) => {
       if (hasProAccess) {
         pill.classList.remove("disabled");
         pill.disabled = false;
@@ -554,14 +764,43 @@
         pill.onclick = null;
       }
     });
-    const mlLockedMsg = document.getElementById("qv-ml-locked-msg");
+    const mlLockedMsg = multiLangPanel.querySelector("#qv-ml-locked-msg");
     if (mlLockedMsg) mlLockedMsg.style.display = hasProAccess ? "none" : "flex";
 
-    const mlFooter = featurePanel.querySelector(".qv-multilang-footer");
+    const mlFooter = multiLangPanel.querySelector(".qv-multilang-footer");
     if (mlFooter) mlFooter.style.display = hasProAccess ? "" : "none";
 
     const genAllBtn = document.getElementById("qv-gen-all-btn");
     if (genAllBtn) genAllBtn.disabled = selectedBatchLangs.size === 0 || isBusy;
+  }
+
+  function positionFloatingTools() {
+    const anchor = generateTools || document.querySelector(SELECTORS.description);
+    if (!anchor) return;
+    const rect = anchor.getBoundingClientRect();
+    const anchorLeft = rect.left || 12;
+    const anchorBottom = rect.bottom || 80;
+    const panelLeft = Math.max(12, Math.min(window.innerWidth - 340, anchorLeft));
+    const panelTop = Math.max(12, Math.min(window.innerHeight - 440, anchorBottom + 8));
+    [multiLangPanel, resultPanel, completenessPanel].forEach((panel) => {
+      if (!panel) return;
+      panel.style.left = `${panelLeft}px`;
+      panel.style.top = `${panelTop}px`;
+    });
+    if (resultPanel && completenessPanel && resultPanel.style.display !== "none") {
+      const resultHeight = resultPanel.offsetHeight || 150;
+      completenessPanel.style.top = `${Math.min(window.innerHeight - 190, panelTop + resultHeight + 8)}px`;
+    }
+  }
+
+  function toggleMultiLangPanel(forceOpen) {
+    if (!multiLangPanel) return;
+    const nextOpen = forceOpen ?? multiLangPanel.style.display === "none";
+    multiLangPanel.style.display = nextOpen ? "block" : "none";
+    if (generateModeBtn) generateModeBtn.classList.toggle("active", nextOpen);
+    const details = multiLangPanel.querySelector("details");
+    if (details) details.open = true;
+    if (nextOpen) positionFloatingTools();
   }
 
   function updateResultPanelAccess() {
@@ -584,59 +823,77 @@
     if (lockedMsg) lockedMsg.style.display = hasPlusAccess ? "none" : "flex";
   }
 
-  // --- RESULT PANEL (Smart Re-Gen + Completeness) ---
+  function setRefineButtonsBusy(busy, activeStyle = null) {
+    ["detailed", "casual", "short"].forEach((style) => {
+      const btn = document.getElementById(`qv-regen-${style}`);
+      if (!btn) return;
+      btn.disabled = busy || !hasPlusAccess;
+      btn.classList.toggle("loading", busy && style === activeStyle);
+      const label = btn.querySelector("span");
+      if (label) {
+        label.textContent = busy && style === activeStyle
+          ? "Refining..."
+          : style.charAt(0).toUpperCase() + style.slice(1);
+      }
+    });
+  }
+
+  function closeResultPanel() {
+    if (resultPanel) resultPanel.style.display = "none";
+    if (completenessPanel) completenessPanel.style.display = "none";
+  }
+
+  // --- RESULT PANEL (Smart Re-Gen) ---
 
   function createResultPanel() {
     const panel = document.createElement("div");
     panel.id = RESULT_PANEL_ID;
+    panel.className = "qv-popover-panel qv-aftergen-panel";
     panel.style.display = "none";
-
-    // ── Smart Re-Gen ──────────────────────────────────────────
-    const regenSection = document.createElement("div");
-    regenSection.className = "qv-section";
-
-    regenSection.innerHTML = `
-      <div class="qv-section-header">
-        <span class="qv-section-title">↻ Re-generate as:</span>
-      </div>
-      <div class="qv-regen-buttons">
-        <button class="qv-regen-btn${hasPlusAccess ? "" : " locked"}" id="qv-regen-detailed"
-          ${hasPlusAccess ? "" : "disabled"}>📝 Detailed</button>
-        <button class="qv-regen-btn${hasPlusAccess ? "" : " locked"}" id="qv-regen-casual"
-          ${hasPlusAccess ? "" : "disabled"}>💬 Casual</button>
-        <button class="qv-regen-btn${hasPlusAccess ? "" : " locked"}" id="qv-regen-short"
-          ${hasPlusAccess ? "" : "disabled"}>✂️ Short</button>
-      </div>
-      <div class="qv-locked-msg" id="qv-regen-locked-msg" style="display:${hasPlusAccess ? "none" : "flex"}">🔒 Available on Plus — directional re-generation</div>
-      <div class="qv-regen-divider">
-        <div class="qv-regen-divider-line"></div>
-        <span class="qv-regen-divider-text">or just re-run</span>
-        <div class="qv-regen-divider-line"></div>
-      </div>
-      <div class="qv-basic-regen-row">
-        <button class="qv-basic-regen-btn" id="qv-basic-regen">↻ Regenerate</button>
-        <span class="qv-credit-note">Costs 1 credit</span>
+    panel.innerHTML = `
+      <div class="qv-section">
+        <div class="qv-section-header">
+          <span class="qv-section-title">Refine Description</span>
+          <button type="button" class="qv-panel-close-btn" id="qv-close-result-panel" aria-label="Dismiss">×</button>
+        </div>
+        <div class="qv-section-subtitle">Generate a new version from the same photos.</div>
+        <div class="qv-regen-buttons">
+          <button class="qv-regen-btn${hasPlusAccess ? "" : " locked"}" id="qv-regen-detailed"
+            ${hasPlusAccess ? "" : "disabled"}><span>Detailed</span><small>More buyer detail</small></button>
+          <button class="qv-regen-btn${hasPlusAccess ? "" : " locked"}" id="qv-regen-casual"
+            ${hasPlusAccess ? "" : "disabled"}><span>Casual</span><small>Warmer tone</small></button>
+          <button class="qv-regen-btn${hasPlusAccess ? "" : " locked"}" id="qv-regen-short"
+            ${hasPlusAccess ? "" : "disabled"}><span>Short</span><small>More concise</small></button>
+        </div>
+        <div class="qv-locked-msg qv-regen-locked-msg" id="qv-regen-locked-msg" style="display:${hasPlusAccess ? "none" : "flex"}">Refine options are available on Plus.</div>
       </div>
     `;
 
-    // ── Listing Completeness ──────────────────────────────────
-    const completenessSection = document.createElement("div");
-    completenessSection.className = "qv-section";
-    completenessSection.id = "qv-completeness-section";
-    completenessSection.innerHTML = `
-      <div class="qv-completeness-header">
-        <span class="qv-section-title">Listing Completeness</span>
-        <span class="qv-score-badge" id="qv-score-badge">—/8</span>
-      </div>
-      <div class="qv-score-bar-bg">
-        <div class="qv-score-bar-fill" id="qv-score-bar-fill" style="width:0%"></div>
-      </div>
-      <div class="qv-checks-list" id="qv-checks-list"></div>
+    return panel;
+  }
+
+  function createCompletenessPanel() {
+    const panel = document.createElement("div");
+    panel.id = COMPLETENESS_PANEL_ID;
+    panel.className = "qv-popover-panel qv-completeness-popover";
+    panel.style.display = "none";
+    panel.innerHTML = `
+      <details class="qv-disclosure">
+        <summary class="qv-disclosure-summary">
+          <span class="qv-disclosure-title-wrap">
+            <span class="qv-section-title">Listing Completeness</span>
+            <span class="qv-disclosure-subtitle">Checks only fields visible on this page</span>
+          </span>
+          <span class="qv-score-badge" id="qv-score-badge">—/3</span>
+        </summary>
+        <div class="qv-disclosure-body">
+          <div class="qv-score-bar-bg">
+            <div class="qv-score-bar-fill" id="qv-score-bar-fill" style="width:0%"></div>
+          </div>
+          <div class="qv-checks-list" id="qv-checks-list"></div>
+        </div>
+      </details>
     `;
-
-    panel.appendChild(regenSection);
-    panel.appendChild(completenessSection);
-
     return panel;
   }
 
@@ -650,70 +907,24 @@
 
     const checks = [];
 
-    // 1. Title length
     const titleLen = title.length;
     checks.push({
-      pass: titleLen >= 40,
-      label: `Title length (${titleLen}/100 chars)`,
-      tip: `Aim for 40+ chars out of Vinted's 100-char limit`,
+      pass: titleLen >= 20,
+      label: `Title: ${titleLen}/100 chars`,
+      tip: "Add a clear title before publishing",
     });
 
-    // 2. Description length
     const descLen = desc.length;
     checks.push({
-      pass: descLen >= 100,
-      label: `Description length (${descLen} chars)`,
-      tip: `Expand to 100+ chars for better search indexing`,
+      pass: descLen >= 80,
+      label: `Description: ${descLen} chars`,
+      tip: "Add a fuller description before publishing",
     });
 
-    // 3. Photo count
     checks.push({
-      pass: photoCount >= 5,
+      pass: photoCount >= 3,
       label: `Photos: ${photoCount} uploaded`,
-      tip: `Add ${Math.max(0, 8 - photoCount)} more photos — 8+ gets better visibility`,
-    });
-
-    // 4. Hashtags
-    const hashtagCount = (desc.match(/#\w+/g) || []).length;
-    checks.push({
-      pass: hashtagCount >= 3,
-      label: `Hashtags: ${hashtagCount} found`,
-      tip: `Add 3+ hashtags to improve search discoverability`,
-    });
-
-    // 5. Brand in title (starts with capitalised word)
-    const brandMatch = /^[A-Z][a-zA-Z]+/.test(title.trim());
-    checks.push({
-      pass: brandMatch,
-      label: brandMatch ? "Brand detected in title" : "Brand not detected in title",
-      tip: "Start your title with the brand name to improve discoverability",
-    });
-
-    // 6. Size mentioned
-    const sizePattern = /\b(XS|S|M|L|XL|XXL|XXXL|\d{1,3}\/\d{1,3}|\bsize\b|\btaille\b|\bmaat\b)/i;
-    const hasSize = sizePattern.test(title) || sizePattern.test(desc);
-    checks.push({
-      pass: hasSize,
-      label: hasSize ? "Size mentioned" : "Size not mentioned",
-      tip: "Add the size to title or description — buyers filter by size",
-    });
-
-    // 7. Color mentioned
-    const colorPattern = /\b(black|white|blue|red|green|yellow|grey|gray|brown|pink|purple|orange|beige|navy|cream|noir|blanc|bleu|rouge|vert|gris|schwarz|weiß|blau|rot|grün|zwart|wit|blauw|rood|groen|geel|grijs|bruin|roze)\b/i;
-    const hasColor = colorPattern.test(title) || colorPattern.test(desc);
-    checks.push({
-      pass: hasColor,
-      label: hasColor ? "Color mentioned" : "Color not mentioned",
-      tip: "Include the color — buyers often search by color",
-    });
-
-    // 8. Material mentioned
-    const materialPattern = /\b(cotton|polyester|wool|linen|silk|leather|denim|cashmere|velvet|satin|nylon|viscose|coton|laine|soie|cuir|katoen|wol|zijde|leer|baumwolle|wolle|seide|leder)\b/i;
-    const hasMaterial = materialPattern.test(desc);
-    checks.push({
-      pass: hasMaterial,
-      label: hasMaterial ? "Material mentioned" : "Material not mentioned",
-      tip: "Mention the fabric/material — helps buyers know what they're getting",
+      tip: "Add at least 3 photos",
     });
 
     const score = checks.filter((c) => c.pass).length;
@@ -723,13 +934,18 @@
   function showResultPanel(imageUrls) {
     if (!resultPanel) return;
     resultPanel.style.display = "block";
-
-    // Wire basic regen (available to all tiers)
-    const basicBtn = document.getElementById("qv-basic-regen");
-    if (basicBtn) basicBtn.onclick = () => onRegenClick(null, imageUrls);
+    positionFloatingTools();
+    if (completenessPanel) {
+      completenessPanel.style.display = "block";
+      const details = completenessPanel.querySelector("details");
+      if (details) details.open = false;
+    }
 
     // Wire directional regen buttons (Plus+ only) and update their locked state
     updateResultPanelAccess();
+
+    const closeBtn = document.getElementById("qv-close-result-panel");
+    if (closeBtn) closeBtn.onclick = closeResultPanel;
 
     // Run completeness check
     updateCompletenessUI();
@@ -760,7 +976,7 @@
       const item = document.createElement("div");
       item.className = "qv-check-item";
 
-      const icon = check.pass ? "✅" : "⚠️";
+      const icon = check.pass ? "✓" : "!";
       const iconEl = document.createElement("span");
       iconEl.className = "qv-check-icon";
       iconEl.textContent = icon;
@@ -782,7 +998,7 @@
         const upgradeWrapper = document.createElement("div");
         const upgrade = document.createElement("span");
         upgrade.className = "qv-check-upgrade";
-        upgrade.textContent = "🔒 Upgrade for tips";
+        upgrade.textContent = "Upgrade for tips";
         upgradeWrapper.appendChild(upgrade);
         body.appendChild(upgradeWrapper);
       }
@@ -806,13 +1022,7 @@
     isBusy = true;
     updateButtonUI();
     updateBatchLangFooter();
-
-    // Temporarily label the basic regen btn
-    const basicBtn = document.getElementById("qv-basic-regen");
-    if (basicBtn) {
-      basicBtn.disabled = true;
-      basicBtn.textContent = "⏳ Generating…";
-    }
+    setRefineButtonsBusy(true, style);
 
     try {
       const {
@@ -838,7 +1048,7 @@
           useEmojis,
           useBulletPoints,
           regenStyle: style || undefined,
-          listingPreferences: hasPlusAccess ? listingPreferences : [],
+        listingPreferences: hasPlusAccess ? sanitizeListingPreferences(listingPreferences) : [],
         }),
       });
 
@@ -856,13 +1066,10 @@
 
       const { title, description, measurementAdvice } = await response.json();
       const titleInput = document.querySelector(SELECTORS.title);
-      const descInput = document.querySelector(SELECTORS.description);
       if (titleInput) { titleInput.value = title; titleInput.dispatchEvent(new Event("input", { bubbles: true })); }
-      if (descInput) { descInput.value = description; descInput.dispatchEvent(new Event("input", { bubbles: true })); }
+      setTextareaValue(description);
 
-      if (measurementAdvice?.trim()) {
-        setTimeout(() => showToast(measurementAdvice, "info", null, false), 300);
-      }
+      await maybeShowMeasurementAdvice(measurementAdvice);
 
       setTimeout(() => updateCompletenessUI(), 100);
     } catch (err) {
@@ -871,24 +1078,19 @@
       isBusy = false;
       updateButtonUI();
       updateBatchLangFooter();
-      if (basicBtn) {
-        basicBtn.disabled = false;
-        basicBtn.textContent = "↻ Regenerate";
-      }
+      setRefineButtonsBusy(false);
+      updateResultPanelAccess();
     }
   }
 
   async function onGenerateAllClick() {
     if (!hasProAccess || selectedBatchLangs.size === 0) return;
     if (isBusy) return;
-    if (lastImageUrls.length === 0) {
-      showToast("Generate a listing first, then use batch generation.", "error");
-      return;
-    }
-
     isBusy = true;
     updateButtonUI();
     updateBatchLangFooter();
+
+    let imageUrlsForBatch = lastImageUrls;
 
     const btn = document.getElementById("qv-gen-all-btn");
     if (btn) { btn.disabled = true; btn.textContent = "⏳ Generating…"; }
@@ -897,6 +1099,17 @@
     if (langResults) langResults.replaceChildren();
 
     try {
+      if (imageUrlsForBatch.length === 0) {
+        const rawImageUrls = Array.from(document.querySelectorAll(SELECTORS.images))
+          .map((img) => img.src)
+          .filter(Boolean);
+        if (!rawImageUrls.length) {
+          throw new Error("Upload photos first, then generate.");
+        }
+        imageUrlsForBatch = await compressImages(rawImageUrls);
+        lastImageUrls = imageUrlsForBatch;
+      }
+
       const {
         tone = "standard",
         useEmojis,
@@ -907,6 +1120,7 @@
       if (!access_token) throw new Error("Session expired.");
 
       const langList = BATCH_LANGS.filter((l) => selectedBatchLangs.has(l.code));
+      const langDescriptions = [];
 
       for (const lang of langList) {
         // Show loading card
@@ -923,12 +1137,12 @@
             method: "POST",
             headers: { "Content-Type": "application/json", Authorization: `Bearer ${access_token}` },
             body: JSON.stringify({
-              imageUrls: lastImageUrls,
+              imageUrls: imageUrlsForBatch,
               languageCode: lang.code,
               tone,
               useEmojis,
               useBulletPoints,
-              listingPreferences: hasPlusAccess ? listingPreferences : [],
+              listingPreferences: hasPlusAccess ? sanitizeListingPreferences(listingPreferences) : [],
             }),
           });
 
@@ -959,11 +1173,15 @@
 
           const { title, description } = await response.json();
           if (card) renderLangSuccess(card, lang, title, description);
+          langDescriptions.push(`${lang.name}\n${description || ""}`.trim());
         } catch (e) {
           const card = document.getElementById(`qv-result-${lang.code}`);
           if (card) renderLangError(card, lang, e.message);
         }
       }
+
+      appendDescriptionsToTextarea(langDescriptions);
+      setTimeout(() => updateCompletenessUI(), 100);
     } catch (err) {
       showToast(err.message || "Batch generation failed.", "error");
     } finally {
@@ -1000,10 +1218,10 @@
 
       input.value = "";
       btn.textContent = "✓ Sent!";
-      setTimeout(() => { btn.textContent = "Submit"; btn.disabled = false; }, 2000);
+      setTimeout(() => { btn.textContent = "Send"; btn.disabled = false; }, 2000);
       showToast("Thanks! Your suggestion has been sent to the AutoLister team.", "success");
     } catch (err) {
-      btn.textContent = "Submit";
+      btn.textContent = "Send";
       btn.disabled = false;
       showToast("Failed to send suggestion. Please try again.", "error");
     }
@@ -1018,7 +1236,9 @@
       if (isAuthenticated) {
         loadAccessLevel().then(() => {
           updateFeaturePanelAccess();
+          updateMultiLangPanelAccess();
           restorePrefState();
+          restoreBatchLangState();
         });
       }
     });
@@ -1032,9 +1252,12 @@
     if (changes.userProfile) {
       loadAccessLevel().then(() => {
         updateFeaturePanelAccess();
+        updateMultiLangPanelAccess();
         updateResultPanelAccess();
+        updateGenerateModeLabel();
       });
     }
+    if (changes.selectedLanguage) updateGenerateModeLabel();
   });
 
   // --- UI ---
@@ -1044,6 +1267,8 @@
     style.textContent = `
       #${BTN_ID}, #${PHONE_BTN_ID} {
         display: none;
+        width: auto;
+        flex: 0 0 auto;
         align-items: center;
         justify-content: center;
         padding: 8px 16px;
@@ -1152,6 +1377,20 @@
         height: 16px;
         margin-right: 6px;
       }
+
+      .qv-output-flag,
+      .qv-lang-flag {
+        width: 18px;
+        height: 13px;
+        border-radius: 2px;
+        object-fit: cover;
+        flex: 0 0 auto;
+        box-shadow: 0 0 0 1px rgba(15, 23, 42, 0.1);
+      }
+
+      #${BTN_ID} .qv-output-flag {
+        margin-right: 6px;
+      }
       
       /* Modal Styles */
       #${MODAL_ID} {
@@ -1182,11 +1421,13 @@
       
       #${MODAL_ID} .modal-content {
         background: white;
-        padding: 40px;
-        border-radius: 24px;
+        padding: 28px;
+        border-radius: 16px;
         text-align: center;
-        max-width: 380px;
+        max-width: 440px;
         width: 90%;
+        max-height: calc(100vh - 40px);
+        overflow: auto;
         box-shadow: 0 20px 60px -10px rgba(0, 0, 0, 0.3);
         animation: slideUp 0.3s ease-out;
         position: relative;
@@ -1247,11 +1488,11 @@
       #${MODAL_ID} .subtitle {
         font-size: 14px;
         color: #6b7280;
-        margin: 0 0 32px 0;
+        margin: 0 0 18px 0;
       }
       
       #${MODAL_ID} .qr-container {
-        margin: 0 auto 24px;
+        margin: 0 auto 16px;
         padding: 12px;
         background: white;
         border-radius: 20px;
@@ -1268,7 +1509,7 @@
       }
       
       #${MODAL_ID} .instruction {
-        margin: 0 0 24px 0;
+        margin: 0 0 14px 0;
         color: #4b5563;
         font-size: 14px;
         line-height: 1.5;
@@ -1278,7 +1519,7 @@
         display: flex;
         gap: 12px;
         justify-content: center;
-        margin-top: 32px;
+        margin-top: 18px;
       }
       
       #${MODAL_ID} .close-btn, #${MODAL_ID} .generate-btn {
@@ -1313,6 +1554,13 @@
         background: #4338ca;
         transform: translateY(-1px);
         box-shadow: 0 6px 16px rgba(79, 70, 229, 0.35);
+      }
+
+      #${MODAL_ID} .generate-btn:disabled {
+        background: #9ca3af;
+        cursor: not-allowed;
+        transform: none;
+        box-shadow: none;
       }
       
       #${MODAL_ID} .status {
@@ -1349,10 +1597,109 @@
       }
       
       #${MODAL_ID} .language-selector {
-        margin: 0 0 20px;
+        margin: 0 0 14px;
         display: flex;
         justify-content: center;
         position: relative;
+      }
+
+      #${MODAL_ID} .phone-gen-mode {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 6px;
+        margin: 0 0 12px;
+        padding: 3px;
+        border: 1px solid #e5e7eb;
+        border-radius: 10px;
+        background: #f9fafb;
+      }
+
+      #${MODAL_ID} .phone-mode-btn {
+        border: none;
+        border-radius: 8px;
+        background: transparent;
+        color: #4b5563;
+        padding: 8px 10px;
+        font-size: 12.5px;
+        font-weight: 700;
+        cursor: pointer;
+      }
+
+      #${MODAL_ID} .phone-mode-btn.active {
+        background: #ffffff;
+        color: #4338ca;
+        box-shadow: 0 1px 4px rgba(15, 23, 42, 0.08);
+      }
+
+      #${MODAL_ID} .phone-mode-btn:disabled {
+        opacity: 0.45;
+        cursor: not-allowed;
+      }
+
+      #${MODAL_ID} .phone-multi-language {
+        margin: 0 0 14px;
+        padding: 10px;
+        border: 1px solid #e5e7eb;
+        border-radius: 10px;
+        background: #ffffff;
+        text-align: left;
+      }
+
+      #${MODAL_ID} .phone-multi-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+        margin-bottom: 8px;
+        font-size: 12px;
+        font-weight: 700;
+        color: #374151;
+      }
+
+      #${MODAL_ID} .phone-lang-pills {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+        max-height: 112px;
+        overflow: auto;
+      }
+
+      #${MODAL_ID} .phone-lang-pill {
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+        padding: 5px 8px;
+        border: 1px solid #e5e7eb;
+        border-radius: 999px;
+        background: #ffffff;
+        color: #374151;
+        font-size: 11.5px;
+        font-weight: 600;
+        cursor: pointer;
+      }
+
+      #${MODAL_ID} .phone-lang-pill.selected {
+        border-color: #4f46e5;
+        background: #eef2ff;
+        color: #3730a3;
+      }
+
+      #${MODAL_ID} .phone-lang-pill:disabled {
+        opacity: 0.45;
+        cursor: not-allowed;
+      }
+
+      #${MODAL_ID} .phone-lang-pill .qv-lang-flag {
+        width: 16px;
+        height: 12px;
+        border-radius: 2px;
+      }
+
+      #${MODAL_ID} .phone-multi-note {
+        margin-top: 8px;
+        color: #6b7280;
+        font-size: 11px;
+        line-height: 1.35;
       }
       
       #${MODAL_ID} .language-select-wrapper {
@@ -1502,10 +1849,180 @@
 
       /* ═══ QuickVint Feature Panels ═══════════════════════════════ */
       #${FEATURE_PANEL_ID},
-      #${RESULT_PANEL_ID} {
+      #${PREFS_DOCK_ID},
+      #${RESULT_PANEL_ID},
+      #${MULTILANG_PANEL_ID},
+      #${COMPLETENESS_PANEL_ID} {
         font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
         font-size: 13px;
         color: #1f2937;
+      }
+
+      .qv-panel-shell {
+        margin-top: 10px;
+      }
+
+      #${GENERATE_TOOLS_ID} {
+        position: relative;
+        z-index: 9;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        flex-wrap: wrap;
+        margin-top: 10px;
+        padding: 0;
+        pointer-events: auto;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      }
+
+      #${GENERATE_TOOLS_ID} #${BTN_ID},
+      #${GENERATE_TOOLS_ID} #${PHONE_BTN_ID},
+      #${GENERATE_TOOLS_ID} #${GENERATE_MODE_BTN_ID},
+      #${GENERATE_TOOLS_ID} #${PREFS_TOGGLE_BTN_ID} {
+        display: inline-flex !important;
+      }
+
+      #${GENERATE_TOOLS_ID} #${SIGN_IN_BTN_ID} {
+        display: none;
+      }
+
+      #${GENERATE_TOOLS_ID} .qv-toolbar {
+        display: inline-flex !important;
+        align-items: center;
+        gap: 7px !important;
+        padding: 0;
+        border: none;
+        border-radius: 0;
+        background: transparent;
+        box-shadow: none;
+        max-width: 100%;
+        overflow-x: auto;
+      }
+
+      #${GENERATE_TOOLS_ID} .qv-toolbar > button {
+        min-height: 36px;
+        border-radius: 8px !important;
+        margin: 0;
+        box-shadow: 0 4px 12px rgba(15, 23, 42, 0.08) !important;
+      }
+
+      #${GENERATE_TOOLS_ID} .qv-toolbar > button + button {
+        margin-left: 0;
+      }
+
+      #${GENERATE_TOOLS_ID} #${BTN_ID} {
+        font-weight: 700;
+        padding-left: 14px;
+        padding-right: 14px;
+      }
+
+      #${GENERATE_TOOLS_ID} #${GENERATE_MODE_BTN_ID},
+      #${GENERATE_TOOLS_ID} #${PREFS_TOGGLE_BTN_ID} {
+        border: 1px solid #dbe4ff;
+        background: #ffffff;
+        color: #3730a3;
+      }
+
+      #${GENERATE_TOOLS_ID} #${GENERATE_MODE_BTN_ID}:hover,
+      #${GENERATE_TOOLS_ID} #${PREFS_TOGGLE_BTN_ID}:hover {
+        background: #eef2ff;
+        border-color: #a5b4fc;
+      }
+
+      #${GENERATE_TOOLS_ID} #${PHONE_BTN_ID} {
+        padding-left: 13px;
+        padding-right: 13px;
+      }
+
+      #${GENERATE_TOOLS_ID} #${PREFS_TOGGLE_BTN_ID} {
+        min-width: 122px;
+      }
+
+      .qv-floating-panel {
+        position: fixed;
+        top: 72px;
+        right: 16px;
+        width: min(360px, calc(100vw - 40px));
+        z-index: 2147482992;
+        opacity: 0;
+        transform: translateY(-6px) scale(0.98);
+        pointer-events: none;
+        transition: opacity 0.22s ease, transform 0.22s ease;
+      }
+      .qv-floating-panel.visible {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+        pointer-events: auto;
+      }
+
+      #${PREFS_DOCK_ID} {
+        position: fixed;
+        top: 184px;
+        right: 16px;
+        z-index: 2147483000;
+        display: none;
+        width: auto;
+        height: 34px;
+        pointer-events: none;
+      }
+      #${PREFS_DOCK_ID}.visible {
+        display: block;
+      }
+      #${PREFS_DOCK_ID} > * {
+        pointer-events: auto;
+      }
+
+      .qv-inline-control-btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 6px;
+        min-width: 116px;
+        height: 34px;
+        padding: 0 12px;
+        border: 1px solid #dbe4ff;
+        border-radius: 8px;
+        background: #ffffff;
+        color: #374151;
+        font-size: 12px;
+        font-weight: 600;
+        cursor: pointer;
+        transition: all 0.18s ease;
+        white-space: nowrap;
+        box-shadow: 0 10px 28px rgba(15, 23, 42, 0.12);
+      }
+      .qv-inline-control-btn::before {
+        content: "+";
+        width: 16px;
+        height: 16px;
+        border-radius: 50%;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        background: #eef2ff;
+        color: #3730a3;
+        font-size: 14px;
+        font-weight: 800;
+        line-height: 1;
+      }
+      .qv-inline-control-btn:hover,
+      .qv-inline-control-btn.active {
+        border-color: #a5b4fc;
+        background: #eef2ff;
+        color: #3730a3;
+        box-shadow: 0 8px 24px rgba(79,70,229,0.12);
+      }
+      .qv-inline-control-label {
+        position: static;
+        width: auto;
+        height: auto;
+        overflow: visible;
+        clip: auto;
+      }
+      .qv-inline-control-btn .qv-tier-badge {
+        position: static;
+        padding: 1px 5px;
+        font-size: 9px;
       }
 
       .qv-section {
@@ -1517,17 +2034,160 @@
         box-shadow: 0 1px 3px rgba(0,0,0,0.04);
       }
 
+      .qv-popover-panel {
+        position: fixed;
+        width: min(330px, calc(100vw - 24px));
+        max-height: min(430px, calc(100vh - 96px));
+        overflow: auto;
+        z-index: 2147482991;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        font-size: 13px;
+        color: #1f2937;
+        filter: drop-shadow(0 18px 30px rgba(15, 23, 42, 0.14));
+      }
+
+      .qv-aftergen-panel,
+      .qv-completeness-popover {
+        width: min(300px, calc(100vw - 24px));
+      }
+
+      #${GENERATE_MODE_BTN_ID} {
+        display: none;
+        align-items: center;
+        justify-content: center;
+        min-width: 94px;
+        height: 36px;
+        padding: 0 10px;
+        border: 1px solid #dbe4ff;
+        border-radius: 8px;
+        background: #ffffff;
+        color: #3730a3;
+        font-size: 12px;
+        font-weight: 700;
+        cursor: pointer;
+        box-shadow: rgba(0, 0, 0, 0.08) 0px 2px 4px;
+        white-space: nowrap;
+      }
+      #${GENERATE_MODE_BTN_ID}::before {
+        content: "🌐";
+        margin-right: 5px;
+        font-family: "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif;
+      }
+
+      #${GENERATE_MODE_BTN_ID}:hover,
+      #${GENERATE_MODE_BTN_ID}.active {
+        background: #eef2ff;
+        border-color: #a5b4fc;
+      }
+
+      .qv-disclosure {
+        background: #fff;
+        border: 1px solid #e5e7eb;
+        border-radius: 10px;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+        overflow: hidden;
+        transition: box-shadow 0.2s ease, border-color 0.2s ease;
+      }
+      .qv-disclosure[open] {
+        box-shadow: 0 4px 14px rgba(0,0,0,0.06);
+        border-color: #dbe4ff;
+      }
+      .qv-disclosure-summary {
+        list-style: none;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        padding: 12px 14px;
+        cursor: pointer;
+      }
+      .qv-mode-note {
+        margin: 10px 0;
+        padding: 8px 10px;
+        border-radius: 8px;
+        background: #f8fafc;
+        border: 1px solid #e5e7eb;
+        color: #4b5563;
+        font-size: 11.5px;
+        line-height: 1.35;
+      }
+      .qv-disclosure-summary::-webkit-details-marker {
+        display: none;
+      }
+      .qv-disclosure-title-wrap {
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+        min-width: 0;
+      }
+      .qv-disclosure-subtitle {
+        font-size: 11.5px;
+        color: #6b7280;
+      }
+      .qv-disclosure-body {
+        padding: 0 14px 14px;
+        border-top: 1px solid #f3f4f6;
+      }
+
+      .qv-panel-footer {
+        display: flex;
+        justify-content: flex-end;
+        margin-top: 8px;
+        padding-top: 8px;
+        border-top: 1px solid #f3f4f6;
+      }
+      .qv-panel-link-btn {
+        background: #ffffff;
+        border: 1px solid #dbe4ff;
+        border-radius: 7px;
+        color: #4338ca;
+        font-size: 11.5px;
+        font-weight: 700;
+        cursor: pointer;
+        padding: 6px 9px;
+      }
+      .qv-panel-link-btn:hover {
+        background: #eef2ff;
+      }
+
       .qv-section-header {
         display: flex;
         align-items: center;
         justify-content: space-between;
-        margin-bottom: 10px;
+        margin-bottom: 4px;
       }
 
       .qv-section-title {
         font-size: 12.5px;
         font-weight: 700;
         color: #1f2937;
+      }
+
+      .qv-section-subtitle {
+        font-size: 11.5px;
+        color: #6b7280;
+        margin: 0 0 10px;
+      }
+
+      .qv-panel-close-btn {
+        width: 24px;
+        height: 24px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        border: 1px solid #e5e7eb;
+        border-radius: 6px;
+        background: #ffffff;
+        color: #6b7280;
+        font-size: 18px;
+        line-height: 1;
+        cursor: pointer;
+        padding: 0;
+        font-family: inherit;
+      }
+      .qv-panel-close-btn:hover {
+        background: #f9fafb;
+        color: #111827;
       }
 
       .qv-tier-badge {
@@ -1596,11 +2256,33 @@
       }
 
       .qv-suggest-row {
+        display: grid;
+        gap: 8px;
+        margin-top: 10px;
+        padding: 10px;
+        border-top: 1px solid #f3f4f6;
+        border: 1px solid #eef2ff;
+        border-radius: 8px;
+        background: #f8faff;
+      }
+      .qv-suggest-copy {
+        display: flex;
+        justify-content: space-between;
+        gap: 8px;
+        align-items: baseline;
+      }
+      .qv-suggest-title {
+        font-size: 12px;
+        font-weight: 700;
+        color: #1f2937;
+      }
+      .qv-suggest-help {
+        font-size: 11px;
+        color: #6b7280;
+      }
+      .qv-suggest-controls {
         display: flex;
         gap: 6px;
-        margin-top: 10px;
-        padding-top: 10px;
-        border-top: 1px solid #f3f4f6;
       }
       .qv-suggest-input {
         flex: 1;
@@ -1645,7 +2327,7 @@
       .qv-lang-pill {
         display: flex;
         align-items: center;
-        gap: 4px;
+        gap: 6px;
         padding: 5px 11px;
         border: 1px solid #e5e7eb;
         border-radius: 20px;
@@ -1759,13 +2441,14 @@
 
       /* Result Panel: Smart Re-Gen */
       .qv-regen-buttons {
-        display: flex;
-        gap: 6px;
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 7px;
         margin-bottom: 6px;
       }
       .qv-regen-btn {
-        flex: 1;
-        padding: 8px 4px;
+        min-width: 0;
+        padding: 9px 6px;
         border: 1px solid #e5e7eb;
         background: white;
         border-radius: 8px;
@@ -1776,12 +2459,28 @@
         transition: all 0.15s;
         text-align: center;
         font-family: inherit;
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+        align-items: center;
+        justify-content: center;
+        line-height: 1.2;
+        min-height: 52px;
+      }
+      .qv-regen-btn small {
+        display: block;
+        color: #6b7280;
+        font-size: 10.5px;
+        font-weight: 500;
       }
       .qv-regen-btn:hover:not(.locked) {
         border-color: #4f46e5;
         color: #4f46e5;
         background: #eef2ff;
         transform: translateY(-1px);
+      }
+      .qv-regen-btn:hover:not(.locked) small {
+        color: #4338ca;
       }
       .qv-regen-btn.locked {
         opacity: 0.4;
@@ -1793,36 +2492,19 @@
         cursor: not-allowed;
         transform: none;
       }
+      .qv-regen-btn.loading {
+        opacity: 1;
+        border-color: #c7d2fe;
+        background: #eef2ff;
+        color: #4338ca;
+      }
 
-      .qv-regen-divider {
-        display: flex;
-        align-items: center;
-        gap: 8px;
-        margin: 8px 0;
-      }
-      .qv-regen-divider-line { flex: 1; height: 1px; background: #f3f4f6; }
-      .qv-regen-divider-text { font-size: 10.5px; color: #9ca3af; white-space: nowrap; }
-
-      .qv-basic-regen-row {
-        display: flex;
-        align-items: center;
-        gap: 8px;
-      }
-      .qv-basic-regen-btn {
-        padding: 7px 14px;
-        background: #f3f4f6;
-        border: 1px solid #e5e7eb;
-        border-radius: 8px;
-        font-size: 12.5px;
-        font-weight: 600;
-        color: #374151;
-        cursor: pointer;
-        transition: all 0.15s;
-        font-family: inherit;
-      }
-      .qv-basic-regen-btn:hover { background: #e5e7eb; }
-      .qv-basic-regen-btn:disabled { opacity: 0.5; cursor: not-allowed; }
       .qv-credit-note { font-size: 11px; color: #9ca3af; }
+
+      .qv-regen-locked-msg {
+        margin-top: 8px;
+        justify-content: center;
+      }
 
       /* Result Panel: Completeness Check */
       .qv-completeness-header {
@@ -1895,9 +2577,23 @@
     btn.id = BTN_ID;
     btn.innerHTML = `
         <span class="icon">${WAND_ICON_SVG}</span>
+        <img class="qv-output-flag" src="https://flagcdn.com/w40/gb.png" alt="English">
         <span class="label">Generate</span>
     `;
     btn.addEventListener("click", onGenerateClick);
+    return btn;
+  }
+
+  function createGenerateModeButton() {
+    const btn = document.createElement("button");
+    btn.id = GENERATE_MODE_BTN_ID;
+    btn.type = "button";
+    btn.textContent = "Multi-lang";
+    btn.addEventListener("click", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      toggleMultiLangPanel();
+    });
     return btn;
   }
 
@@ -1933,18 +2629,41 @@
   function updateButtonUI() {
     // If not authenticated, show premium sign-in button and hide others
     if (!isAuthenticated) {
-      if (signInBtn) signInBtn.style.display = "flex";
-      if (generateBtn) generateBtn.style.display = "none";
-      if (phoneBtn) phoneBtn.style.display = "none";
-      if (featurePanel) featurePanel.style.display = "none";
+      if (signInBtn) signInBtn.style.display = "none";
+      if (generateTools) generateTools.style.display = "flex";
+      if (generateBtn) generateBtn.style.display = "inline-flex";
+      if (generateModeBtn) generateModeBtn.style.display = "inline-flex";
+      if (phoneBtn) phoneBtn.style.display = "inline-flex";
+      if (prefsToggleBtn) prefsToggleBtn.style.display = "inline-flex";
+      if (prefsDock) prefsDock.classList.remove("visible");
+      closeFeaturePanel();
+      if (resultPanel) resultPanel.style.display = "none";
+      if (multiLangPanel) multiLangPanel.style.display = "none";
+      if (completenessPanel) completenessPanel.style.display = "none";
+      if (generateBtn) {
+        generateBtn.disabled = false;
+        generateBtn.style.backgroundColor = "#4f46e5";
+        generateBtn.style.cursor = "pointer";
+      }
+      if (phoneBtn) {
+        phoneBtn.disabled = false;
+        phoneBtn.style.backgroundColor = "#4f46e5";
+        phoneBtn.style.cursor = "pointer";
+      }
+      updateGenerateModeLabel();
+      positionFloatingTools();
       return;
     }
 
     // Authenticated state
     if (signInBtn) signInBtn.style.display = "none";
-    if (generateBtn) generateBtn.style.display = "flex";
-    if (phoneBtn) phoneBtn.style.display = "flex";
-    if (featurePanel) featurePanel.style.display = "";
+    if (generateTools) generateTools.style.display = "flex";
+    if (generateBtn) generateBtn.style.display = "inline-flex";
+    if (generateModeBtn) generateModeBtn.style.display = "inline-flex";
+    if (phoneBtn) phoneBtn.style.display = "inline-flex";
+    if (prefsToggleBtn) prefsToggleBtn.style.display = "inline-flex";
+    if (prefsDock) prefsDock.classList.add("visible");
+    positionFloatingTools();
 
     if (!generateBtn) return;
     const label = generateBtn.querySelector(".label");
@@ -1961,15 +2680,25 @@
     if (isBusy) {
       generateBtn.disabled = true;
       icon.style.display = "none";
-      label.textContent = "⏳ Generating…";
+      const flag = generateBtn.querySelector(".qv-output-flag");
+      if (flag) flag.style.display = "none";
+      label.textContent = "Generating...";
       generateBtn.style.cursor = "progress";
       generateBtn.style.backgroundColor = "#6b7280";
+      if (generateModeBtn) generateModeBtn.disabled = true;
+      if (phoneBtn) phoneBtn.disabled = true;
+      if (prefsToggleBtn) prefsToggleBtn.disabled = true;
     } else {
       generateBtn.disabled = false;
       icon.style.display = "inline-block";
-      label.textContent = "Generate";
+      const flag = generateBtn.querySelector(".qv-output-flag");
+      if (flag) flag.style.display = "inline-block";
       generateBtn.style.backgroundColor = "#4f46e5";
       generateBtn.style.cursor = "pointer";
+      if (generateModeBtn) generateModeBtn.disabled = false;
+      if (phoneBtn) phoneBtn.disabled = false;
+      if (prefsToggleBtn) prefsToggleBtn.disabled = false;
+      updateGenerateModeLabel();
     }
   }
 
@@ -1977,10 +2706,12 @@
     if (!generateBtn) return;
     const label = generateBtn.querySelector(".label");
     const icon = generateBtn.querySelector(".icon");
+    const flag = generateBtn.querySelector(".qv-output-flag");
     if (!label || !icon) return;
 
     icon.style.display = "none";
-    label.textContent = "✅ Done";
+    if (flag) flag.style.display = "none";
+    label.textContent = "Done";
 
     setTimeout(() => {
       isBusy = false;
@@ -2013,6 +2744,13 @@
     if (selectedLanguage !== storedLanguage) {
       chrome.storage.local.set({ selectedLanguage });
     }
+    const batchData = await chrome.storage.local.get([BATCH_LANGS_STORAGE_KEY]);
+    const savedBatchLangs = Array.isArray(batchData[BATCH_LANGS_STORAGE_KEY])
+      ? batchData[BATCH_LANGS_STORAGE_KEY]
+      : [...selectedBatchLangs];
+    selectedBatchLangs = new Set(
+      savedBatchLangs.filter((code) => BATCH_LANGS.some((lang) => lang.code === code)),
+    );
 
     const languageOptions = [
       { code: "en", name: "English" },
@@ -2049,7 +2787,6 @@
         <button class="close-x" aria-label="Close">&times;</button>
         <div class="modal-header">
           <h3>📱 Upload from Phone</h3>
-          <span class="feature-pill">NEW · Free to test</span>
         </div>
         <p class="subtitle">Scan with your camera app</p>
         <div class="qr-container">
@@ -2058,19 +2795,31 @@
           )}" alt="QR Code" />
         </div>
         <p class="instruction">Photos will appear in this listing automatically</p>
-        <div class="language-selector">
+        <div class="phone-gen-mode" role="group" aria-label="Generation mode">
+          <button type="button" class="phone-mode-btn active" data-mode="single">Single language</button>
+          <button type="button" class="phone-mode-btn" data-mode="multi" ${hasProAccess ? "" : "disabled"}>Multi-lang</button>
+        </div>
+        <div class="language-selector" id="phone-single-language">
           <div class="language-select-wrapper">
             <select class="language-select" id="modal-language-select">
               ${optionsHTML}
             </select>
           </div>
         </div>
+        <div class="phone-multi-language" id="phone-multi-language" style="display:none;">
+          <div class="phone-multi-header">
+            <span id="phone-multi-count">No languages selected</span>
+            <span class="qv-tier-badge pro">Pro</span>
+          </div>
+          <div class="phone-lang-pills" id="phone-lang-pills"></div>
+          <div class="phone-multi-note" id="phone-multi-note">Choose languages once; your selection is saved for next time. Each language uses 1 credit.</div>
+        </div>
         <div class="status waiting">Waiting for photos from phone...</div>
         <div class="modal-buttons">
           <button class="close-btn">Done</button>
-          <button class="generate-btn">
+          <button class="generate-btn" data-mode="single">
             <span class="icon" style="width: 14px; height: 14px; display: inline-block; margin-right: 6px;">${WAND_ICON_SVG}</span>
-            Done + Generate
+            <span class="qv-phone-action-label">Done + Generate</span>
           </button>
         </div>
       </div>
@@ -2087,13 +2836,79 @@
       });
     }
 
+    const generateBtnModal = modal.querySelector(".generate-btn");
+    const singlePanel = modal.querySelector("#phone-single-language");
+    const multiPanel = modal.querySelector("#phone-multi-language");
+    const multiCount = modal.querySelector("#phone-multi-count");
+    const modeButtons = modal.querySelectorAll(".phone-mode-btn");
+    const phoneLangPills = modal.querySelector("#phone-lang-pills");
+
+    function updatePhoneMultiState() {
+      if (multiCount) {
+        const count = selectedBatchLangs.size;
+        multiCount.textContent = count === 0
+          ? "No languages selected"
+          : `${count} language${count > 1 ? "s" : ""} selected`;
+      }
+      if (generateBtnModal) {
+        const mode = generateBtnModal.dataset.mode || "single";
+        generateBtnModal.disabled = mode === "multi" && (!hasProAccess || selectedBatchLangs.size === 0);
+        const actionLabel = generateBtnModal.querySelector(".qv-phone-action-label");
+        if (actionLabel) {
+          actionLabel.textContent = mode === "multi" ? "Done + Generate Multi" : "Done + Generate";
+        }
+      }
+      if (phoneLangPills) {
+        phoneLangPills.querySelectorAll(".phone-lang-pill").forEach((pill) => {
+          pill.classList.toggle("selected", selectedBatchLangs.has(pill.dataset.code));
+        });
+      }
+    }
+
+    if (phoneLangPills) {
+      BATCH_LANGS.forEach((lang) => {
+        const pill = document.createElement("button");
+        pill.type = "button";
+        pill.className = "phone-lang-pill";
+        pill.dataset.code = lang.code;
+        pill.appendChild(createFlagImage(lang.code, lang.name));
+        pill.appendChild(document.createTextNode(lang.name));
+        pill.disabled = !hasProAccess;
+        pill.addEventListener("click", () => {
+          toggleBatchLang(lang.code, pill);
+          updatePhoneMultiState();
+        });
+        phoneLangPills.appendChild(pill);
+      });
+    }
+
+    modeButtons.forEach((button) => {
+      button.addEventListener("click", () => {
+        if (button.disabled) return;
+        const mode = button.dataset.mode || "single";
+        modeButtons.forEach((btn) => btn.classList.toggle("active", btn === button));
+        if (singlePanel) singlePanel.style.display = mode === "single" ? "flex" : "none";
+        if (multiPanel) multiPanel.style.display = mode === "multi" ? "block" : "none";
+        if (generateBtnModal) generateBtnModal.dataset.mode = mode;
+        updatePhoneMultiState();
+      });
+    });
+    updatePhoneMultiState();
+
     // Close button handlers
     modal.querySelector(".close-x").addEventListener("click", closeModal);
     modal.querySelector(".close-btn").addEventListener("click", closeModal);
     modal.querySelector(".generate-btn").addEventListener("click", () => {
+      const mode = modal.querySelector(".generate-btn")?.dataset.mode || "single";
       closeModal();
       // Trigger generate after a brief delay to ensure modal cleanup completes
-      setTimeout(() => onGenerateClick(), 100);
+      setTimeout(() => {
+        if (mode === "multi") {
+          onGenerateAllClick();
+        } else {
+          onGenerateClick();
+        }
+      }, 100);
     });
 
     // Close when clicking outside modal (on backdrop)
@@ -2169,12 +2984,16 @@
             : response.data;
         if (data.files && data.files.length > 0) {
           let newFilesCount = 0;
+          let importedFileCount = 0;
 
           for (const file of data.files) {
             if (!downloadedFiles.has(file.name)) {
               downloadedFiles.add(file.name);
-              newFilesCount++;
-              await downloadAndInjectImage(file.url, file.name);
+              const didImport = await downloadAndInjectImage(file.url, file.name);
+              if (didImport) {
+                newFilesCount++;
+                importedFileCount++;
+              }
             }
           }
 
@@ -2252,13 +3071,17 @@
 
         const statusEl = document.querySelector(`#${MODAL_ID} .status`);
         if (statusEl) statusEl.textContent = "Image uploaded!";
+        return true;
       }
+      return false;
     } catch (err) {
       console.error("Error downloading image:", err);
+      return false;
     }
   }
 
   async function onGenerateClick() {
+    if (isBusy) return;
     if (!isAuthenticated) {
       chrome.runtime.sendMessage({ type: "OPEN_POPUP" });
       return;
@@ -2274,6 +3097,7 @@
     isBusy = true;
     updateButtonUI();
     updateBatchLangFooter();
+    await nextFrame();
 
     try {
       const {
@@ -2301,7 +3125,7 @@
       const compressedImages = await compressImages(imageUrls);
       lastImageUrls = compressedImages;
 
-      const response = await fetch(`${API_BASE}/api/generate`, {
+      const response = await fetchWithTimeout(`${API_BASE}/api/generate`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -2313,9 +3137,9 @@
           tone,
           useEmojis,
           useBulletPoints,
-          listingPreferences: hasPlusAccess ? listingPreferences : [],
+          listingPreferences: hasPlusAccess ? sanitizeListingPreferences(listingPreferences) : [],
         }),
-      });
+      }, 90000);
 
       if (response.status === 401) {
         isAuthenticated = false;
@@ -2343,27 +3167,21 @@
 
       const { title, description, measurementAdvice } = await response.json();
       const titleInput = document.querySelector(SELECTORS.title);
-      const descInput = document.querySelector(SELECTORS.description);
 
       if (titleInput) {
         titleInput.value = title;
         titleInput.dispatchEvent(new Event("input", { bubbles: true }));
       }
-      if (descInput) {
-        descInput.value = description;
-        descInput.dispatchEvent(new Event("input", { bubbles: true }));
-      }
+      setTextareaValue(description);
 
       setButtonSuccessState(compressedImages);
-
-      if (measurementAdvice && measurementAdvice.trim()) {
-        setTimeout(() => {
-          showToast(measurementAdvice, "info", null, false);
-        }, 300);
-      }
+      await maybeShowMeasurementAdvice(measurementAdvice);
     } catch (err) {
       console.error("AutoLister AI Error:", err);
-      showToast(err.message || "An unexpected error occurred.", "error");
+      const message = err.name === "AbortError"
+        ? "Generation timed out. Please try again."
+        : err.message || "An unexpected error occurred.";
+      showToast(message, "error");
       isBusy = false;
       updateButtonUI();
       updateBatchLangFooter();
@@ -2373,52 +3191,85 @@
   // --- INJECTION & OBSERVATION LOGIC ---
 
   function injectButton() {
-    const existingBtn = document.getElementById(BTN_ID);
-    if (existingBtn) {
-      generateBtn = existingBtn;
-      phoneBtn = document.getElementById(PHONE_BTN_ID);
-      signInBtn = document.getElementById(SIGN_IN_BTN_ID);
-      featurePanel = document.getElementById(FEATURE_PANEL_ID);
-      resultPanel = document.getElementById(RESULT_PANEL_ID);
-      updateButtonUI();
-      return true;
-    }
+    try {
+      const existingBtn = document.getElementById(BTN_ID);
+      if (existingBtn) {
+        generateBtn = existingBtn;
+        generateTools = document.getElementById(GENERATE_TOOLS_ID);
+        generateModeBtn = document.getElementById(GENERATE_MODE_BTN_ID);
+        phoneBtn = document.getElementById(PHONE_BTN_ID);
+        signInBtn = document.getElementById(SIGN_IN_BTN_ID);
+        prefsToggleBtn = document.getElementById(PREFS_TOGGLE_BTN_ID);
+        prefsDock = document.getElementById(PREFS_DOCK_ID);
+        featurePanel = document.getElementById(FEATURE_PANEL_ID);
+        resultPanel = document.getElementById(RESULT_PANEL_ID);
+        multiLangPanel = document.getElementById(MULTILANG_PANEL_ID);
+        completenessPanel = document.getElementById(COMPLETENESS_PANEL_ID);
+        return true;
+      }
 
-    const titleEl = document.querySelector(SELECTORS.title);
-    if (!titleEl) return false;
+      const titleEl = document.querySelector(SELECTORS.title);
+      const descEl = document.querySelector(SELECTORS.description);
+      if (!titleEl || !descEl) return false;
 
-    const container = titleEl.closest("div");
-    if (container && container.parentNode) {
+      [FEATURE_PANEL_ID, RESULT_PANEL_ID, MULTILANG_PANEL_ID, COMPLETENESS_PANEL_ID].forEach((id) => {
+        document.getElementById(id)?.remove();
+      });
+
+      const titleDescriptionCard =
+        document.querySelector('[data-testid="title"]')?.closest(".web_ui__Card__card")
+        || document.querySelector('[data-testid="description"]')?.closest(".web_ui__Card__card")
+        || titleEl.closest(".web_ui__Card__card")
+        || descEl.closest(".web_ui__Card__card")
+        || titleEl.closest('label[data-testid="title"]')?.parentElement
+        || titleEl.parentElement;
+
       const btnContainer = document.createElement("div");
-      btnContainer.style.marginTop = "20px";
+      btnContainer.id = GENERATE_TOOLS_ID;
+      btnContainer.style.margin = "0 0 10px";
+      btnContainer.style.display = "flex";
 
-      // Button row
       const toolsWrapper = document.createElement("div");
+      toolsWrapper.className = "qv-toolbar";
       toolsWrapper.style.display = "flex";
       toolsWrapper.style.alignItems = "center";
+      toolsWrapper.style.gap = "6px";
+      toolsWrapper.style.flexWrap = "nowrap";
 
       generateBtn = createButton();
+      generateModeBtn = createGenerateModeButton();
       phoneBtn = createPhoneButton();
       signInBtn = createSignInComponent();
+      prefsToggleBtn = createPrefsToggleButton();
+      featurePanel = createFeaturePanel();
 
       toolsWrapper.appendChild(generateBtn);
+      toolsWrapper.appendChild(generateModeBtn);
       toolsWrapper.appendChild(phoneBtn);
+      toolsWrapper.appendChild(prefsToggleBtn);
 
-      // Result panel (Smart Re-Gen + Completeness) — hidden until first generation
       resultPanel = createResultPanel();
-
-      // Feature panel (Preferences + Multi-lang) — always visible when authenticated
-      featurePanel = createFeaturePanel();
+      multiLangPanel = createMultiLangPanel();
+      completenessPanel = createCompletenessPanel();
 
       btnContainer.appendChild(toolsWrapper);
       btnContainer.appendChild(signInBtn);
-      btnContainer.appendChild(resultPanel);
-      btnContainer.appendChild(featurePanel);
 
-      container.parentNode.insertBefore(btnContainer, container.nextSibling);
+      if (titleDescriptionCard?.parentNode) {
+        titleDescriptionCard.parentNode.insertBefore(btnContainer, titleDescriptionCard);
+      } else {
+        document.body.appendChild(btnContainer);
+      }
+      document.body.appendChild(featurePanel);
+      document.body.appendChild(resultPanel);
+      document.body.appendChild(multiLangPanel);
+      document.body.appendChild(completenessPanel);
       restorePrefState();
+      restoreBatchLangState();
       updateFeaturePanelAccess();
+      updateMultiLangPanelAccess();
       updateButtonUI();
+      positionFloatingTools();
 
       // Wire up suggestion submit
       const suggestBtn = document.getElementById("qv-suggest-btn");
@@ -2434,23 +3285,29 @@
       const genAllBtn = document.getElementById("qv-gen-all-btn");
       if (genAllBtn) genAllBtn.addEventListener("click", onGenerateAllClick);
 
+      const fullSettingsBtn = document.getElementById("qv-open-full-settings");
+      if (fullSettingsBtn) {
+        fullSettingsBtn.addEventListener("click", () => {
+          closeFeaturePanel();
+          chrome.runtime.sendMessage({ type: "OPEN_POPUP" });
+        });
+      }
+
       return true;
+    } catch (error) {
+      console.error("QuickVint injection failed:", error);
+      return false;
     }
-    return false;
   }
 
   function startInjectionObserver() {
+    injectButton();
     const pollInterval = setInterval(() => {
-      if (injectButton()) {
-        clearInterval(pollInterval);
-      }
-    }, 100);
+      injectButton();
+    }, 1000);
 
     const observer = new MutationObserver(() => {
-      if (injectButton()) {
-        observer.disconnect();
-        clearInterval(pollInterval);
-      }
+      injectButton();
     });
 
     observer.observe(document.body, { childList: true, subtree: true });
@@ -2461,6 +3318,18 @@
   function init() {
     injectStylesheet();
     initializeAuthState();
+    document.addEventListener("click", (event) => {
+      const target = event.target;
+      if (!(target instanceof Element)) return;
+      if (featurePanel && prefsToggleBtn && !featurePanel.contains(target) && !prefsToggleBtn.contains(target)) {
+        closeFeaturePanel();
+      }
+      if (multiLangPanel && generateModeBtn && !multiLangPanel.contains(target) && !generateModeBtn.contains(target)) {
+        toggleMultiLangPanel(false);
+      }
+    });
+    window.addEventListener("resize", positionFloatingTools);
+    window.addEventListener("scroll", positionFloatingTools, true);
     startInjectionObserver();
   }
 
