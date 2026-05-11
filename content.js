@@ -720,7 +720,10 @@
     if (!isAuthenticated) return;
 
     const now = Date.now();
-    if (!force && now - lastProfileRefreshAt < PROFILE_REFRESH_MIN_INTERVAL_MS) {
+    if (
+      !force &&
+      now - lastProfileRefreshAt < PROFILE_REFRESH_MIN_INTERVAL_MS
+    ) {
       return;
     }
 
@@ -1821,7 +1824,8 @@
 
       #${SIGN_IN_BTN_ID} {
         display: none;
-        width: 100%;
+        width: auto;
+        min-width: 220px;
         margin-top: 10px;
         padding: 14px 24px;
         background: linear-gradient(135deg, rgb(79, 70, 229) 0%, rgb(67, 56, 202) 100%);
@@ -2412,7 +2416,7 @@
       #${GENERATE_TOOLS_ID} #${PHONE_BTN_ID},
       #${GENERATE_TOOLS_ID} #${GENERATE_MODE_BTN_ID},
       #${GENERATE_TOOLS_ID} #${PREFS_TOGGLE_BTN_ID} {
-        display: inline-flex !important;
+        display: inline-flex;
       }
 
       #${GENERATE_TOOLS_ID} #${SIGN_IN_BTN_ID} {
@@ -3204,9 +3208,11 @@
   function createSignInComponent() {
     const btn = document.createElement("button");
     btn.id = SIGN_IN_BTN_ID;
+    btn.style.minWidth = "220px";
+    btn.style.width = "auto";
     btn.innerHTML = `
         ${WAND_ICON_SVG}
-        <span>Sign in to enable AI Tools</span>
+        <span>Sign in to AutoLister</span>
         <span>(Click here)</span>
     `;
 
@@ -3219,30 +3225,19 @@
   }
 
   function updateButtonUI() {
-    // If not authenticated, show premium sign-in button and hide others
+    // If not authenticated, hide tools and show the sign-in CTA button.
     if (!isAuthenticated) {
-      if (signInBtn) signInBtn.style.display = "none";
-      if (generateTools) generateTools.style.display = "flex";
-      if (generateBtn) generateBtn.style.display = "inline-flex";
-      if (generateModeBtn) generateModeBtn.style.display = "inline-flex";
-      if (phoneBtn) phoneBtn.style.display = "inline-flex";
-      if (prefsToggleBtn) prefsToggleBtn.style.display = "inline-flex";
+      if (signInBtn) signInBtn.style.display = "inline-flex";
+      if (generateTools) generateTools.style.display = "none";
+      if (generateBtn) generateBtn.style.display = "none";
+      if (generateModeBtn) generateModeBtn.style.display = "none";
+      if (phoneBtn) phoneBtn.style.display = "none";
+      if (prefsToggleBtn) prefsToggleBtn.style.display = "none";
       if (prefsDock) prefsDock.classList.remove("visible");
       closeFeaturePanel();
       if (resultPanel) resultPanel.style.display = "none";
       if (multiLangPanel) multiLangPanel.style.display = "none";
       if (completenessPanel) completenessPanel.style.display = "none";
-      if (generateBtn) {
-        generateBtn.disabled = false;
-        generateBtn.style.backgroundColor = "#4f46e5";
-        generateBtn.style.cursor = "pointer";
-      }
-      if (phoneBtn) {
-        phoneBtn.disabled = false;
-        phoneBtn.style.backgroundColor = "#4f46e5";
-        phoneBtn.style.cursor = "pointer";
-      }
-      updateGenerateModeLabel();
       positionFloatingTools();
       return;
     }
@@ -4009,10 +4004,7 @@
     document.addEventListener("visibilitychange", () => {
       if (document.visibilityState === "visible") refreshProfileAndAccess();
     });
-    setInterval(
-      () => refreshProfileAndAccess(),
-      PROFILE_REFRESH_INTERVAL_MS,
-    );
+    setInterval(() => refreshProfileAndAccess(), PROFILE_REFRESH_INTERVAL_MS);
     startInjectionObserver();
   }
 
