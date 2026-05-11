@@ -36,19 +36,37 @@ document.addEventListener("DOMContentLoaded", () => {
 
   // Next tier upgrade path and button label
   const NEXT_TIER_INFO = {
-    free:        { id: "starter_v2", label: "Upgrade to Starter — €5.99/mo" },
-    starter_v2:  { id: "plus",       label: "Upgrade to Plus — €9.99/mo" },
-    plus:        { id: "pro_v2",     label: "Upgrade to Pro — €14.99/mo" },
-    pro_v2:      { id: "business_v2", label: "Upgrade to Business — €24.99/mo" },
+    free: { id: "starter_v2", label: "Upgrade to Starter — €5.99/mo" },
+    starter_v2: { id: "plus", label: "Upgrade to Plus — €9.99/mo" },
+    plus: { id: "pro_v2", label: "Upgrade to Pro — €14.99/mo" },
+    pro_v2: { id: "business_v2", label: "Upgrade to Business — €24.99/mo" },
     business_v2: null,
   };
 
   // Features per tier for downgrade "you'll lose" message
   const TIER_FEATURES = {
     starter_v2: [],
-    plus:       ["Listing Preferences", "Smart Re-Gen"],
-    pro_v2:     ["Listing Preferences", "Smart Re-Gen", "Tone Control", "Emoji", "Multi-language batch", "Listing improvement tips", "Priority support"],
-    business_v2:["Listing Preferences", "Smart Re-Gen", "Tone Control", "Emoji", "Multi-language batch", "Listing improvement tips", "Priority support", "Priority processing", "Dedicated support"],
+    plus: ["Listing Preferences", "Smart Re-Gen"],
+    pro_v2: [
+      "Listing Preferences",
+      "Smart Re-Gen",
+      "Tone Control",
+      "Emoji",
+      "Multi-language batch",
+      "Listing improvement tips",
+      "Priority support",
+    ],
+    business_v2: [
+      "Listing Preferences",
+      "Smart Re-Gen",
+      "Tone Control",
+      "Emoji",
+      "Multi-language batch",
+      "Listing improvement tips",
+      "Priority support",
+      "Priority processing",
+      "Dedicated support",
+    ],
   };
 
   const LISTING_PREFS = [
@@ -100,11 +118,13 @@ document.addEventListener("DOMContentLoaded", () => {
   const emojiToggle = document.getElementById("emojiToggle");
   const formatOptions = document.querySelectorAll('input[name="format"]');
   const prefsSettingsGrid = document.getElementById("prefsSettingsGrid");
-  const prefsSettingsUpgradeNote = document.getElementById("prefsSettingsUpgradeNote");
+  const prefsSettingsUpgradeNote = document.getElementById(
+    "prefsSettingsUpgradeNote",
+  );
   const phoneUploadUsed = document.getElementById("phoneUploadUsed");
   const phoneUploadLimit = document.getElementById("phoneUploadLimit");
   const phoneUploadBar = document.getElementById("phoneUploadBar");
-  const phoneUsageRow = document.querySelector('.phone-usage-row');
+  const phoneUsageRow = document.querySelector(".phone-usage-row");
 
   // --- HELPER & UTILITY FUNCTIONS ---
 
@@ -148,14 +168,17 @@ document.addEventListener("DOMContentLoaded", () => {
 
   function isLegacyProfile(profile) {
     if (profile?.is_legacy_plan !== undefined) return !!profile.is_legacy_plan;
-    return ["starter", "pro", "business"].includes(normalizeTier(profile?.subscription_tier));
+    return ["starter", "pro", "business"].includes(
+      normalizeTier(profile?.subscription_tier),
+    );
   }
 
   function getFeatureAccess(profile) {
     const tier = normalizeTier(profile?.subscription_tier);
     const isLegacy = isLegacyProfile(profile);
     return {
-      hasPlusAccess: !isLegacy && ["plus", "pro_v2", "business_v2"].includes(tier),
+      hasPlusAccess:
+        !isLegacy && ["plus", "pro_v2", "business_v2"].includes(tier),
       hasProAccess: isLegacy
         ? ["pro", "business"].includes(tier)
         : ["pro_v2", "business_v2"].includes(tier),
@@ -177,27 +200,40 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   function sanitizeListingPreferences(preferences = []) {
-    const normalized = preferences.flatMap((pref) => (
-      pref === "smoke_pet_free" ? ["pet_free_home", "smoke_free_home"] : [pref]
-    ));
-    return [...new Set(normalized)].filter((pref) => LISTING_PREF_IDS.has(pref));
+    const normalized = preferences.flatMap((pref) =>
+      pref === "smoke_pet_free" ? ["pet_free_home", "smoke_free_home"] : [pref],
+    );
+    return [...new Set(normalized)].filter((pref) =>
+      LISTING_PREF_IDS.has(pref),
+    );
   }
 
   function hasUnlimitedPhoneUploads(profile, tier, isSubscribed) {
-    return Number(profile?.pack_credits || 0) > 0 || isSubscribed || ["starter", "pro", "business"].includes(tier);
+    // Monthly cap applies only to free users; subscriptions and legacy plans are unlimited.
+    return Boolean(isSubscribed) || isLegacyProfile(profile);
   }
 
-  function renderPhoneUploadUsage(profile = null, tier = "free", isSubscribed = false) {
+  function renderPhoneUploadUsage(
+    profile = null,
+    tier = "free",
+    isSubscribed = false,
+  ) {
     const used = Number(profile?.phone_uploads_this_month || 0);
+    const packCredits = Number(profile?.pack_credits || 0);
     const unlimited = hasUnlimitedPhoneUploads(profile, tier, isSubscribed);
+
     if (phoneUploadUsed) phoneUploadUsed.textContent = used;
-    if (phoneUploadLimit) phoneUploadLimit.textContent = unlimited ? "∞" : PHONE_UPLOAD_MONTHLY_LIMIT;
-    if (phoneUploadBar) {
-      phoneUploadBar.style.width = unlimited
-        ? "100%"
-        : `${Math.min(100, (used / PHONE_UPLOAD_MONTHLY_LIMIT) * 100)}%`;
-      phoneUploadBar.classList.toggle("unlimited", unlimited);
-    }
+    if (phoneUploadLimit)
+      phoneUploadLimit.textContent = unlimited
+        ? "∞"
+        : packCredits > 0
+          ? packCredits
+          : PHONE_UPLOAD_MONTHLY_LIMIT;
+
+    const denom = packCredits > 0 ? packCredits : PHONE_UPLOAD_MONTHLY_LIMIT;
+    if (phoneUploadBar)
+      phoneUploadBar.style.width = `${Math.min(100, (used / Math.max(1, denom)) * 100)}%`;
+    if (phoneUploadBar) phoneUploadBar.classList.toggle("unlimited", unlimited);
     if (phoneUsageRow) phoneUsageRow.classList.toggle("hidden", unlimited);
   }
 
@@ -245,9 +281,15 @@ document.addEventListener("DOMContentLoaded", () => {
 
   function hideAllPlanViews() {
     const ids = [
-      "creditsBlock", "legacyMeters", "exhaustedWall",
-      "freeActionsArea", "upgradeArea", "paidPlanView",
-      "legacyMigrateBanner", "downgradeBanner", "profileSyncNote",
+      "creditsBlock",
+      "legacyMeters",
+      "exhaustedWall",
+      "freeActionsArea",
+      "upgradeArea",
+      "paidPlanView",
+      "legacyMigrateBanner",
+      "downgradeBanner",
+      "profileSyncNote",
     ];
     ids.forEach((id) => {
       const el = document.getElementById(id);
@@ -260,9 +302,14 @@ document.addEventListener("DOMContentLoaded", () => {
     if (!renewalDate) return;
     if (rawEnd) {
       const dt = new Date(rawEnd);
-      renewalDate.innerHTML = `Active until: <strong>${dt.toLocaleDateString(undefined, {
-        year: "numeric", month: "short", day: "numeric",
-      })}</strong>`;
+      renewalDate.innerHTML = `Active until: <strong>${dt.toLocaleDateString(
+        undefined,
+        {
+          year: "numeric",
+          month: "short",
+          day: "numeric",
+        },
+      )}</strong>`;
     } else {
       renewalDate.innerHTML = `<strong>Active subscription</strong>`;
     }
@@ -277,18 +324,24 @@ document.addEventListener("DOMContentLoaded", () => {
     const normalizedPending = normalizeTier(pendingTier);
     const newCap = ROLLOVER_CAPS[normalizedPending] ?? 0;
     const dateStr = profile.current_period_end
-      ? new Date(profile.current_period_end).toLocaleDateString(undefined, { month: "long", day: "numeric" })
+      ? new Date(profile.current_period_end).toLocaleDateString(undefined, {
+          month: "long",
+          day: "numeric",
+        })
       : "your next billing date";
 
     const currentTier = normalizeTier(profile.subscription_tier || "free");
     const currentFeatures = TIER_FEATURES[currentTier] || [];
     const pendingFeatures = TIER_FEATURES[normalizedPending] || [];
-    const lostFeatures = currentFeatures.filter((f) => !pendingFeatures.includes(f));
+    const lostFeatures = currentFeatures.filter(
+      (f) => !pendingFeatures.includes(f),
+    );
 
     let text = `Plan changes ${dateStr}. Up to ${newCap} banked credits carry over; the rest expire.`;
     if (lostFeatures.length > 0) {
       const shown = lostFeatures.slice(0, 3).join(", ");
-      const more = lostFeatures.length > 3 ? ` +${lostFeatures.length - 3} more` : "";
+      const more =
+        lostFeatures.length > 3 ? ` +${lostFeatures.length - 3} more` : "";
       text += ` You'll lose: ${shown}${more}.`;
     }
 
@@ -313,7 +366,12 @@ document.addEventListener("DOMContentLoaded", () => {
     if (legacyBanner) legacyBanner.classList.remove("hidden");
   }
 
-  function renderFreeWithCredits(profile, totalCredits, subCredits, packCredits) {
+  function renderFreeWithCredits(
+    profile,
+    totalCredits,
+    subCredits,
+    packCredits,
+  ) {
     const creditsBlock = document.getElementById("creditsBlock");
     if (creditsBlock) creditsBlock.classList.remove("hidden");
 
@@ -373,9 +431,10 @@ document.addEventListener("DOMContentLoaded", () => {
 
       const resetBadge = document.getElementById("resetBadge");
       if (resetBadge && cycleEnd) {
-        const daysLeft = Math.max(0, Math.ceil(
-          (new Date(cycleEnd) - new Date()) / (1000 * 60 * 60 * 24)
-        ));
+        const daysLeft = Math.max(
+          0,
+          Math.ceil((new Date(cycleEnd) - new Date()) / (1000 * 60 * 60 * 24)),
+        );
         resetBadge.textContent = `resets ${daysLeft}d`;
         resetBadge.classList.remove("hidden");
       }
@@ -387,7 +446,8 @@ document.addEventListener("DOMContentLoaded", () => {
     if (rolloverRow) {
       if (rolloverCap > 0 && rolloverCredits > 0) {
         rolloverRow.classList.remove("hidden");
-        if (rolloverVal) rolloverVal.textContent = `${rolloverCredits} / ${rolloverCap}`;
+        if (rolloverVal)
+          rolloverVal.textContent = `${rolloverCredits} / ${rolloverCap}`;
       } else {
         rolloverRow.classList.add("hidden");
       }
@@ -426,12 +486,16 @@ document.addEventListener("DOMContentLoaded", () => {
     if (splitBlock) splitBlock.classList.add("hidden");
     const rolloverRow = document.getElementById("rolloverRow");
     if (rolloverRow) rolloverRow.classList.add("hidden");
-    if (listingsEl) listingsEl.textContent = profile.api_calls_this_month ?? "—";
+    if (listingsEl)
+      listingsEl.textContent = profile.api_calls_this_month ?? "—";
     const syncNote = document.getElementById("profileSyncNote");
     if (syncNote) syncNote.classList.remove("hidden");
     const freeActionsArea = document.getElementById("freeActionsArea");
     if (freeActionsArea) freeActionsArea.classList.remove("hidden");
-    console.warn("Profile missing credit fields; rendered free fallback state.", profile);
+    console.warn(
+      "Profile missing credit fields; rendered free fallback state.",
+      profile,
+    );
   }
 
   // --- UI RENDERING ---
@@ -463,9 +527,10 @@ document.addEventListener("DOMContentLoaded", () => {
     const status = profile.subscription_status || "free";
 
     // Infer legacy from is_legacy_plan field; fall back to tier name for older cached profiles
-    const isLegacy = profile.is_legacy_plan !== undefined
-      ? !!profile.is_legacy_plan
-      : ["starter", "pro", "business"].includes(tier);
+    const isLegacy =
+      profile.is_legacy_plan !== undefined
+        ? !!profile.is_legacy_plan
+        : ["starter", "pro", "business"].includes(tier);
 
     const isNewSubscribed = status === "active" && !isLegacy && tier !== "free";
     const isPhoneUploadUnlimited = isLegacy
@@ -524,7 +589,8 @@ document.addEventListener("DOMContentLoaded", () => {
 
     if (monthlyCallsUsed)
       monthlyCallsUsed.textContent = `${displayMonthlyUsed} / ${monthlyTotal}`;
-    if (monthlyProgressBar) monthlyProgressBar.style.width = `${monthlyPercent}%`;
+    if (monthlyProgressBar)
+      monthlyProgressBar.style.width = `${monthlyPercent}%`;
   }
 
   // --- DATA & STATE MANAGEMENT ---
@@ -553,7 +619,10 @@ document.addEventListener("DOMContentLoaded", () => {
       if (!refreshProfile || !user) return;
       chrome.runtime.sendMessage({ type: "AUTH_UPDATED" }, (resp) => {
         if (chrome.runtime.lastError) {
-          console.warn("Unable to refresh auth state:", chrome.runtime.lastError.message);
+          console.warn(
+            "Unable to refresh auth state:",
+            chrome.runtime.lastError.message,
+          );
           return;
         }
         if (resp?.user || resp?.profile) {
@@ -571,9 +640,12 @@ document.addEventListener("DOMContentLoaded", () => {
 
   async function getPackPurchasesCount() {
     return new Promise((resolve) => {
-      chrome.runtime.sendMessage({ type: "GET_PACK_PURCHASES_COUNT" }, (resp) => {
-        resolve(resp?.count ?? 0);
-      });
+      chrome.runtime.sendMessage(
+        { type: "GET_PACK_PURCHASES_COUNT" },
+        (resp) => {
+          resolve(resp?.count ?? 0);
+        },
+      );
     });
   }
 
@@ -782,7 +854,9 @@ document.addEventListener("DOMContentLoaded", () => {
         applyTrustNoteLocalization(selectedLanguage);
       } else {
         const browserLanguage = (navigator.language || "en").slice(0, 2);
-        applyTrustNoteLocalization(browserLanguage === "cs" ? "cz" : browserLanguage);
+        applyTrustNoteLocalization(
+          browserLanguage === "cs" ? "cz" : browserLanguage,
+        );
       }
     });
     const toggleDropdown = (show) => {
@@ -846,25 +920,40 @@ document.addEventListener("DOMContentLoaded", () => {
       if ((result.listingPreferences || []).join("|") !== saved.join("|")) {
         chrome.storage.local.set({ listingPreferences: saved });
       }
-      prefsSettingsGrid.querySelectorAll('input[type="checkbox"]').forEach((input) => {
-        input.checked = saved.includes(input.value);
-      });
+      prefsSettingsGrid
+        .querySelectorAll('input[type="checkbox"]')
+        .forEach((input) => {
+          input.checked = saved.includes(input.value);
+        });
     });
 
     prefsSettingsGrid.addEventListener("change", (event) => {
       const target = event.target;
-      if (!(target instanceof HTMLInputElement) || target.type !== "checkbox" || target.disabled) return;
+      if (
+        !(target instanceof HTMLInputElement) ||
+        target.type !== "checkbox" ||
+        target.disabled
+      )
+        return;
 
       const checked = Array.from(
         prefsSettingsGrid.querySelectorAll('input[type="checkbox"]:checked'),
       ).map((input) => input.value);
-      chrome.storage.local.set({ listingPreferences: sanitizeListingPreferences(checked) });
+      chrome.storage.local.set({
+        listingPreferences: sanitizeListingPreferences(checked),
+      });
     });
   }
 
   function setupSettings() {
     chrome.storage.local.get(
-      ["tone", "useEmojis", "useBulletPoints", "userProfile", "listingPreferences"],
+      [
+        "tone",
+        "useEmojis",
+        "useBulletPoints",
+        "userProfile",
+        "listingPreferences",
+      ],
       (result) => {
         const profile = result.userProfile || {};
         const { hasPlusAccess, hasProAccess } = getFeatureAccess(profile);
@@ -1052,11 +1141,15 @@ document.addEventListener("DOMContentLoaded", () => {
     }
     const buyPackExhaustedBtn = document.getElementById("buyPackExhaustedBtn");
     if (buyPackExhaustedBtn) {
-      buyPackExhaustedBtn.addEventListener("click", () => handleBuyPack(buyPackExhaustedBtn));
+      buyPackExhaustedBtn.addEventListener("click", () =>
+        handleBuyPack(buyPackExhaustedBtn),
+      );
     }
 
     // See plans link in exhausted wall
-    const seePlansExhaustedLink = document.getElementById("seePlansExhaustedLink");
+    const seePlansExhaustedLink = document.getElementById(
+      "seePlansExhaustedLink",
+    );
     if (seePlansExhaustedLink) {
       seePlansExhaustedLink.addEventListener("click", handleViewAllPlans);
     }
@@ -1138,14 +1231,20 @@ document.addEventListener("DOMContentLoaded", () => {
         refreshSettingsAccess();
       }
       if (changes.listingPreferences && prefsSettingsGrid) {
-        const saved = sanitizeListingPreferences(changes.listingPreferences.newValue || []);
-        prefsSettingsGrid.querySelectorAll('input[type="checkbox"]').forEach((input) => {
-          input.checked = saved.includes(input.value);
-        });
+        const saved = sanitizeListingPreferences(
+          changes.listingPreferences.newValue || [],
+        );
+        prefsSettingsGrid
+          .querySelectorAll('input[type="checkbox"]')
+          .forEach((input) => {
+            input.checked = saved.includes(input.value);
+          });
       }
     });
 
-    window.addEventListener("focus", () => updateFromStorage({ refreshProfile: true }));
+    window.addEventListener("focus", () =>
+      updateFromStorage({ refreshProfile: true }),
+    );
 
     updateFromStorage({ refreshProfile: true });
   }
