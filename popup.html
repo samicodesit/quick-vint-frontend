@@ -886,20 +886,6 @@
       margin-bottom: 12px;
     }
 
-    .info-note {
-      background-color: #fffbeb;
-      border: 1px solid #fcd34d;
-      color: #92400e;
-      padding: 10px 12px;
-      border-radius: 8px;
-      font-size: 11px;
-      margin-bottom: 16px;
-      line-height: 1.4;
-      display: flex;
-      align-items: flex-start;
-      gap: 8px;
-    }
-
     .upgrade-note {
       background: linear-gradient(135deg, #f0f4ff 0%, #fef3f2 100%);
       border: 1px solid #c7d2fe;
@@ -1714,6 +1700,20 @@
 
       <div id="settingsView">
         <h4 class="section-title">Preferences</h4>
+        <div id="settingsUpsellNote" class="upgrade-note" style="display: none;">
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none"
+            stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+            style="flex-shrink: 0; margin-top: 2px;">
+            <circle cx="12" cy="12" r="10"></circle>
+            <line x1="12" y1="8" x2="12" y2="12"></line>
+            <line x1="12" y1="16" x2="12.01" y2="16"></line>
+          </svg>
+          <div>
+            <strong id="settingsUpsellTitle">Unlock more controls</strong>
+            <div id="settingsUpsellText">Upgrade to use locked settings.</div>
+            <a href="#" class="upgrade-link" id="settingsUpsellLink">View Plans →</a>
+          </div>
+        </div>
 
           <div class="settings-card">
             <div class="setting-row">
@@ -1783,33 +1783,6 @@
             </div>
           </div>
 
-          <div class="info-note" style="display: none;">
-            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none"
-              stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
-              style="flex-shrink: 0; margin-top: 1px;">
-              <circle cx="12" cy="12" r="10"></circle>
-              <line x1="12" y1="16" x2="12" y2="12"></line>
-              <line x1="12" y1="8" x2="12.01" y2="8"></line>
-            </svg>
-            <span><strong>Free Early Access:</strong> These features are currently free to test, but will soon be
-              exclusive to
-              <strong>Pro & Business</strong> plans only.</span>
-          </div>
-
-          <div class="upgrade-note" style="display: none;">
-            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none"
-              stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
-              style="flex-shrink: 0; margin-top: 2px;">
-              <circle cx="12" cy="12" r="10"></circle>
-              <line x1="12" y1="8" x2="12" y2="12"></line>
-              <line x1="12" y1="16" x2="12.01" y2="16"></line>
-            </svg>
-            <div>
-              <strong>Tone & emoji</strong> unlock on Pro and Business.
-              <a href="#" class="upgrade-link" id="settingsUpgradeLink">View Plans →</a>
-            </div>
-          </div>
-
           <div class="settings-card">
             <div class="pref-card-header">
               <div>
@@ -1821,19 +1794,6 @@
 
             <div id="prefsSettingsGrid" class="prefs-grid"></div>
 
-            <div id="prefsSettingsUpgradeNote" class="upgrade-note" style="display: none; margin-top: 12px; margin-bottom: 0;">
-              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none"
-                stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
-                style="flex-shrink: 0; margin-top: 2px;">
-                <circle cx="12" cy="12" r="10"></circle>
-                <line x1="12" y1="8" x2="12" y2="12"></line>
-                <line x1="12" y1="16" x2="12.01" y2="16"></line>
-              </svg>
-              <div>
-                <strong>Listing Preferences</strong> unlock on Plus and above.
-                <a href="#" class="upgrade-link" id="prefsUpgradeLink">View Plans →</a>
-              </div>
-            </div>
           </div>
 
         <div style="margin-top: auto;">

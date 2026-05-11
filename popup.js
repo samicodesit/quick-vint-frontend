@@ -118,9 +118,10 @@ document.addEventListener("DOMContentLoaded", () => {
   const emojiToggle = document.getElementById("emojiToggle");
   const formatOptions = document.querySelectorAll('input[name="format"]');
   const prefsSettingsGrid = document.getElementById("prefsSettingsGrid");
-  const prefsSettingsUpgradeNote = document.getElementById(
-    "prefsSettingsUpgradeNote",
-  );
+  const settingsUpsellNote = document.getElementById("settingsUpsellNote");
+  const settingsUpsellTitle = document.getElementById("settingsUpsellTitle");
+  const settingsUpsellText = document.getElementById("settingsUpsellText");
+  const settingsUpsellLink = document.getElementById("settingsUpsellLink");
   const phoneUploadUsed = document.getElementById("phoneUploadUsed");
   const phoneUploadLimit = document.getElementById("phoneUploadLimit");
   const phoneUploadBar = document.getElementById("phoneUploadBar");
@@ -1033,8 +1034,6 @@ document.addEventListener("DOMContentLoaded", () => {
 
   function updateSettingsAccess({ hasPlusAccess, hasProAccess }) {
     const emojiContainer = document.querySelector(".toggle-container");
-    const infoNote = document.querySelector(".info-note");
-    const upgradeNote = document.querySelector(".upgrade-note");
 
     if (hasProAccess) {
       toneOptions.forEach((radio) => {
@@ -1046,8 +1045,6 @@ document.addEventListener("DOMContentLoaded", () => {
         emojiToggle.disabled = false;
         if (emojiContainer) emojiContainer.classList.remove("locked");
       }
-      if (infoNote) infoNote.style.display = "none";
-      if (upgradeNote) upgradeNote.style.display = "none";
     } else {
       toneOptions.forEach((radio) => {
         if (radio.value !== "standard") {
@@ -1060,8 +1057,6 @@ document.addEventListener("DOMContentLoaded", () => {
         emojiToggle.disabled = true;
         if (emojiContainer) emojiContainer.classList.add("locked");
       }
-      if (infoNote) infoNote.style.display = "none";
-      if (upgradeNote) upgradeNote.style.display = "flex";
     }
 
     if (prefsSettingsGrid) {
@@ -1074,8 +1069,26 @@ document.addEventListener("DOMContentLoaded", () => {
       });
     }
 
-    if (prefsSettingsUpgradeNote) {
-      prefsSettingsUpgradeNote.style.display = hasPlusAccess ? "none" : "flex";
+    if (settingsUpsellNote) {
+      const needsPlus = !hasPlusAccess;
+      const needsPro = !hasProAccess;
+      settingsUpsellNote.style.display =
+        needsPlus || needsPro ? "flex" : "none";
+      if (settingsUpsellTitle && settingsUpsellText) {
+        if (needsPlus && needsPro) {
+          settingsUpsellTitle.textContent = "Unlock listing controls";
+          settingsUpsellText.textContent =
+            "Plus unlocks Listing Preferences. Pro unlocks tone and emoji controls.";
+        } else if (needsPlus) {
+          settingsUpsellTitle.textContent = "Unlock Listing Preferences";
+          settingsUpsellText.textContent =
+            "Plus and above can add saved trust notes to future generations.";
+        } else {
+          settingsUpsellTitle.textContent = "Unlock tone and emoji";
+          settingsUpsellText.textContent =
+            "Pro and Business plans can change tone and add relevant emojis.";
+        }
+      }
     }
   }
 
@@ -1202,13 +1215,8 @@ document.addEventListener("DOMContentLoaded", () => {
       });
     }
 
-    const settingsUpgradeLink = document.getElementById("settingsUpgradeLink");
-    if (settingsUpgradeLink) {
-      settingsUpgradeLink.addEventListener("click", handleViewAllPlans);
-    }
-    const prefsUpgradeLink = document.getElementById("prefsUpgradeLink");
-    if (prefsUpgradeLink) {
-      prefsUpgradeLink.addEventListener("click", handleViewAllPlans);
+    if (settingsUpsellLink) {
+      settingsUpsellLink.addEventListener("click", handleViewAllPlans);
     }
     if (emailInput) {
       emailInput.addEventListener("keydown", (e) => {

@@ -39,7 +39,10 @@
   const RIGHT_PANEL_WIDTH = 300;
   const BATCH_LANGS_STORAGE_KEY = "batchLanguages";
   const MEASUREMENT_HINT_KEY = "quickvintMeasurementHintLastShownAt";
+  const COMPLETENESS_DISMISSED_KEY = "quickvintCompletenessNeverShow";
   const MEASUREMENT_HINT_INTERVAL_MS = 7 * 24 * 60 * 60 * 1000;
+  const PROFILE_REFRESH_INTERVAL_MS = 5 * 60 * 1000;
+  const PROFILE_REFRESH_MIN_INTERVAL_MS = 60 * 1000;
 
   const LISTING_PREFS = [
     { id: "pet_free_home", label: "Pet-free home" },
@@ -48,24 +51,24 @@
   const LISTING_PREF_IDS = new Set(LISTING_PREFS.map((pref) => pref.id));
 
   const BATCH_LANGS = [
+    { code: "en", flag: "🇬🇧", name: "English", domain: "vinted.co.uk" },
     { code: "fr", flag: "🇫🇷", name: "Français", domain: "vinted.fr" },
     { code: "de", flag: "🇩🇪", name: "Deutsch", domain: "vinted.de" },
     { code: "nl", flag: "🇳🇱", name: "Nederlands", domain: "vinted.nl" },
     { code: "es", flag: "🇪🇸", name: "Español", domain: "vinted.es" },
+    { code: "pl", flag: "🇵🇱", name: "Polski", domain: "vinted.pl" },
     { code: "it", flag: "🇮🇹", name: "Italiano", domain: "vinted.it" },
     { code: "pt", flag: "🇵🇹", name: "Português", domain: "vinted.pt" },
-    { code: "pl", flag: "🇵🇱", name: "Polski", domain: "vinted.pl" },
-    { code: "cz", flag: "🇨🇿", name: "Čeština", domain: "vinted.cz" },
-    { code: "sk", flag: "🇸🇰", name: "Slovenčina", domain: "vinted.sk" },
     { code: "sv", flag: "🇸🇪", name: "Svenska", domain: "vinted.se" },
     { code: "da", flag: "🇩🇰", name: "Dansk", domain: "vinted.dk" },
+    { code: "cz", flag: "🇨🇿", name: "Čeština", domain: "vinted.cz" },
+    { code: "sk", flag: "🇸🇰", name: "Slovenčina", domain: "vinted.sk" },
     { code: "fi", flag: "🇫🇮", name: "Suomeksi", domain: "vinted.fi" },
     { code: "hu", flag: "🇭🇺", name: "Magyar", domain: "vinted.hu" },
     { code: "lt", flag: "🇱🇹", name: "Lietuvių", domain: "vinted.lt" },
     { code: "ro", flag: "🇷🇴", name: "Română", domain: "vinted.ro" },
     { code: "el", flag: "🇬🇷", name: "Ελληνικά", domain: "vinted.gr" },
     { code: "hr", flag: "🇭🇷", name: "Hrvatski", domain: "vinted.hr" },
-    { code: "en", flag: "🇬🇧", name: "English", domain: "vinted.co.uk" },
   ];
 
   const UI_COPY = {
@@ -77,7 +80,8 @@
       multiLangEmpty: "Select languages",
       multiLangSelected: (count) =>
         `${count} language${count > 1 ? "s" : ""} selected`,
-      generateAll: "Generate all",
+      generateAll: "Generate selected",
+      viewPlans: "View plans",
       refineTitle: "Refine Description",
       refineSubtitle: "Generate a new version from the same photos.",
       refineDetailed: "Detailed",
@@ -87,6 +91,7 @@
       refining: "Refining...",
       completenessTitle: "Listing Completeness",
       completenessSubtitle: "Updates as you fill the listing.",
+      neverShowAgain: "Never show again",
       titleCheck: (count) => `Title: ${count}/100 chars`,
       titleTip: "Add a clear title before publishing",
       descriptionCheck: (count) => `Description: ${count} chars`,
@@ -110,7 +115,8 @@
       multiLangEmpty: "Sélectionnez des langues",
       multiLangSelected: (count) =>
         `${count} langue${count > 1 ? "s" : ""} sélectionnée${count > 1 ? "s" : ""}`,
-      generateAll: "Tout générer",
+      generateAll: "Générer la sélection",
+      viewPlans: "Voir les offres",
       refineTitle: "Affiner la description",
       refineSubtitle: "Générer une nouvelle version avec les mêmes photos.",
       refineDetailed: "Détaillée",
@@ -120,6 +126,7 @@
       refining: "Affinage...",
       completenessTitle: "Complétude de l'annonce",
       completenessSubtitle: "Se met à jour pendant la saisie.",
+      neverShowAgain: "Ne plus afficher",
       titleCheck: (count) => `Titre : ${count}/100 caractères`,
       titleTip: "Ajoutez un titre clair avant de publier",
       descriptionCheck: (count) => `Description : ${count} caractères`,
@@ -141,7 +148,8 @@
       multiLangEmpty: "Sprachen auswählen",
       multiLangSelected: (count) =>
         `${count} Sprache${count > 1 ? "n" : ""} ausgewählt`,
-      generateAll: "Alle generieren",
+      generateAll: "Auswahl generieren",
+      viewPlans: "Tarife ansehen",
       refineTitle: "Beschreibung verfeinern",
       refineSubtitle: "Neue Version mit denselben Fotos erstellen.",
       refineDetailed: "Detailliert",
@@ -151,6 +159,7 @@
       refining: "Verfeinern...",
       completenessTitle: "Anzeigenvollständigkeit",
       completenessSubtitle: "Aktualisiert sich beim Ausfüllen.",
+      neverShowAgain: "Nicht mehr anzeigen",
       titleCheck: (count) => `Titel: ${count}/100 Zeichen`,
       titleTip: "Füge vor dem Veröffentlichen einen klaren Titel hinzu",
       descriptionCheck: (count) => `Beschreibung: ${count} Zeichen`,
@@ -174,7 +183,8 @@
       multiLangEmpty: "Selecteer talen",
       multiLangSelected: (count) =>
         `${count} taal${count > 1 ? "en" : ""} geselecteerd`,
-      generateAll: "Alles genereren",
+      generateAll: "Selectie genereren",
+      viewPlans: "Bekijk plannen",
       refineTitle: "Beschrijving verfijnen",
       refineSubtitle: "Maak een nieuwe versie met dezelfde foto's.",
       refineDetailed: "Gedetailleerd",
@@ -184,6 +194,7 @@
       refining: "Verfijnen...",
       completenessTitle: "Listingvolledigheid",
       completenessSubtitle: "Wordt bijgewerkt terwijl je invult.",
+      neverShowAgain: "Nooit meer tonen",
       titleCheck: (count) => `Titel: ${count}/100 tekens`,
       titleTip: "Voeg een duidelijke titel toe voordat je publiceert",
       descriptionCheck: (count) => `Beschrijving: ${count} tekens`,
@@ -225,6 +236,10 @@
   let completenessUpdateTimeout = null;
   let completenessListenersBound = false;
   let completenessMutationObserver = null;
+  let isCompletenessDismissed = false;
+  let completenessPreferenceLoaded = false;
+  let lastProfileRefreshAt = 0;
+  let profileRefreshInFlight = false;
 
   // --- HELPER FUNCTIONS ---
 
@@ -348,6 +363,35 @@
     });
   }
 
+  async function openPricingPage() {
+    const tab = window.open("about:blank", "_blank");
+    const pricingUrl = await getPricingUrl();
+    if (tab) {
+      tab.location.href = pricingUrl;
+    } else {
+      window.open(pricingUrl, "_blank", "noopener,noreferrer");
+    }
+  }
+
+  function renderUpgradeCta(container, message) {
+    if (!container) return;
+    container.replaceChildren();
+    const text = document.createElement("span");
+    text.className = "qv-locked-msg-text";
+    text.textContent = message;
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "qv-mini-upgrade-btn";
+    button.textContent = `${t("viewPlans")} →`;
+    button.addEventListener("click", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      openPricingPage();
+    });
+    container.appendChild(text);
+    container.appendChild(button);
+  }
+
   async function sendMessage(message) {
     return new Promise((resolve) => {
       chrome.runtime.sendMessage(message, resolve);
@@ -420,7 +464,7 @@
       if (title) title.textContent = t("multiLangTitle");
       if (subtitle) subtitle.textContent = t("multiLangSubtitle");
       if (note) note.textContent = t("multiLangNote");
-      if (locked) locked.textContent = t("multiLangLocked");
+      if (locked) renderUpgradeCta(locked, t("multiLangLocked"));
       if (generateAll) generateAll.textContent = t("generateAll");
     }
 
@@ -440,7 +484,7 @@
         if (label) label.textContent = t(key);
       });
       const locked = document.getElementById("qv-regen-locked-msg");
-      if (locked) locked.textContent = t("refineLocked");
+      if (locked) renderUpgradeCta(locked, t("refineLocked"));
     }
 
     if (completenessPanel) {
@@ -450,8 +494,12 @@
       const subtitle = completenessPanel.querySelector(
         "[data-i18n='completenessSubtitle']",
       );
+      const neverShow = completenessPanel.querySelector(
+        "[data-i18n='neverShowAgain']",
+      );
       if (title) title.textContent = t("completenessTitle");
       if (subtitle) subtitle.textContent = t("completenessSubtitle");
+      if (neverShow) neverShow.textContent = t("neverShowAgain");
       updateCompletenessUI();
     }
     updateBatchLangFooter();
@@ -659,6 +707,40 @@
     });
   }
 
+  async function applyAccessState() {
+    await loadAccessLevel();
+    updateFeaturePanelAccess();
+    updateMultiLangPanelAccess();
+    updateResultPanelAccess();
+    updateGenerateModeLabel();
+  }
+
+  async function refreshProfileAndAccess({ force = false } = {}) {
+    if (profileRefreshInFlight) return;
+    if (!isAuthenticated) return;
+
+    const now = Date.now();
+    if (!force && now - lastProfileRefreshAt < PROFILE_REFRESH_MIN_INTERVAL_MS) {
+      return;
+    }
+
+    profileRefreshInFlight = true;
+    lastProfileRefreshAt = now;
+    try {
+      const response = await sendMessage({ type: "AUTH_UPDATED" });
+      if (response?.profile) {
+        await applyAccessState();
+      } else if (response?.user === null) {
+        isAuthenticated = false;
+        updateButtonUI();
+      }
+    } catch (error) {
+      console.warn("QuickVint profile refresh failed:", error);
+    } finally {
+      profileRefreshInFlight = false;
+    }
+  }
+
   // --- FEATURE PANEL (Preferences) ---
 
   function createFeaturePanel() {
@@ -700,8 +782,8 @@
     const lockedMsgPrefs = document.createElement("div");
     lockedMsgPrefs.className = "qv-locked-msg";
     lockedMsgPrefs.id = "qv-prefs-locked-msg";
-    lockedMsgPrefs.textContent = "Available on Plus";
     lockedMsgPrefs.style.display = hasPlusAccess ? "none" : "flex";
+    renderUpgradeCta(lockedMsgPrefs, "Available on Plus");
 
     const suggestRow = document.createElement("div");
     suggestRow.className = "qv-suggest-row";
@@ -785,9 +867,12 @@
         <div class="qv-disclosure-body">
           <div class="qv-mode-note" id="qv-mode-note" data-i18n="multiLangNote">${t("multiLangNote")}</div>
           <div class="qv-lang-pills" id="qv-lang-pills"></div>
-          <div class="qv-locked-msg" id="qv-ml-locked-msg">${t("multiLangLocked")}</div>
+          <div class="qv-locked-msg" id="qv-ml-locked-msg"></div>
           <div class="qv-multilang-footer">
-            <span class="qv-lang-counter" id="qv-lang-counter">${t("multiLangEmpty")}</span>
+            <div class="qv-lang-action-copy">
+              <span class="qv-lang-counter" id="qv-lang-counter">${t("multiLangEmpty")}</span>
+              <span class="qv-lang-action-help">Uses current photos and settings</span>
+            </div>
             <button class="qv-gen-all-btn" id="qv-gen-all-btn" disabled>${t("generateAll")}</button>
           </div>
           <div class="qv-lang-results" id="qv-lang-results"></div>
@@ -809,7 +894,10 @@
 
     const lockedMsg = panel.querySelector("#qv-ml-locked-msg");
     const footer = panel.querySelector(".qv-multilang-footer");
-    if (lockedMsg) lockedMsg.style.display = hasProAccess ? "none" : "flex";
+    if (lockedMsg) {
+      renderUpgradeCta(lockedMsg, t("multiLangLocked"));
+      lockedMsg.style.display = hasProAccess ? "none" : "flex";
+    }
     if (footer) footer.style.display = hasProAccess ? "" : "none";
 
     return panel;
@@ -972,8 +1060,10 @@
       }
     });
     const prefsLockedMsg = document.getElementById("qv-prefs-locked-msg");
-    if (prefsLockedMsg)
+    if (prefsLockedMsg) {
+      renderUpgradeCta(prefsLockedMsg, "Available on Plus");
       prefsLockedMsg.style.display = hasPlusAccess ? "none" : "flex";
+    }
   }
 
   function closeFeaturePanel() {
@@ -998,7 +1088,10 @@
       }
     });
     const mlLockedMsg = multiLangPanel.querySelector("#qv-ml-locked-msg");
-    if (mlLockedMsg) mlLockedMsg.style.display = hasProAccess ? "none" : "flex";
+    if (mlLockedMsg) {
+      renderUpgradeCta(mlLockedMsg, t("multiLangLocked"));
+      mlLockedMsg.style.display = hasProAccess ? "none" : "flex";
+    }
 
     const mlFooter = multiLangPanel.querySelector(".qv-multilang-footer");
     if (mlFooter) mlFooter.style.display = hasProAccess ? "" : "none";
@@ -1075,7 +1168,10 @@
       }
     });
     const lockedMsg = document.getElementById("qv-regen-locked-msg");
-    if (lockedMsg) lockedMsg.style.display = hasPlusAccess ? "none" : "flex";
+    if (lockedMsg) {
+      renderUpgradeCta(lockedMsg, t("refineLocked"));
+      lockedMsg.style.display = hasPlusAccess ? "none" : "flex";
+    }
   }
 
   function setRefineButtonsBusy(busy, activeStyle = null) {
@@ -1120,9 +1216,13 @@
           <button class="qv-regen-btn${hasPlusAccess ? "" : " locked"}" id="qv-regen-short"
             ${hasPlusAccess ? "" : "disabled"}><span>${t("refineShort")}</span></button>
         </div>
-        <div class="qv-locked-msg qv-regen-locked-msg" id="qv-regen-locked-msg" style="display:${hasPlusAccess ? "none" : "flex"}">${t("refineLocked")}</div>
+        <div class="qv-locked-msg qv-regen-locked-msg" id="qv-regen-locked-msg" style="display:${hasPlusAccess ? "none" : "flex"}"></div>
       </div>
     `;
+    renderUpgradeCta(
+      panel.querySelector("#qv-regen-locked-msg"),
+      t("refineLocked"),
+    );
 
     return panel;
   }
@@ -1146,9 +1246,18 @@
             <div class="qv-score-bar-fill" id="qv-score-bar-fill" style="width:0%"></div>
           </div>
           <div class="qv-checks-list" id="qv-checks-list"></div>
+          <button type="button" class="qv-completeness-dismiss" id="qv-completeness-dismiss" data-i18n="neverShowAgain">${t("neverShowAgain")}</button>
         </div>
       </details>
     `;
+    const dismissBtn = panel.querySelector("#qv-completeness-dismiss");
+    if (dismissBtn) {
+      dismissBtn.addEventListener("click", () => {
+        isCompletenessDismissed = true;
+        chrome.storage.local.set({ [COMPLETENESS_DISMISSED_KEY]: true });
+        panel.style.display = "none";
+      });
+    }
     return panel;
   }
 
@@ -1237,7 +1346,7 @@
   }
 
   function updateCompletenessUI() {
-    if (!completenessPanel) return;
+    if (!completenessPanel || isCompletenessDismissed) return;
     const { score, total, checks } = runCompletenessCheck();
     const pct = Math.round((score / total) * 100);
     const colorClass = pct >= 75 ? "good" : pct >= 50 ? "medium" : "low";
@@ -1296,6 +1405,7 @@
   }
 
   function scheduleCompletenessUpdate() {
+    if (isCompletenessDismissed) return;
     if (completenessUpdateTimeout) {
       clearTimeout(completenessUpdateTimeout);
     }
@@ -1646,11 +1756,10 @@
       isAuthenticated = !!data.supabaseSession?.access_token;
       updateButtonUI();
       if (isAuthenticated) {
-        loadAccessLevel().then(() => {
-          updateFeaturePanelAccess();
-          updateMultiLangPanelAccess();
+        applyAccessState().then(() => {
           restorePrefState();
           restoreBatchLangState();
+          refreshProfileAndAccess({ force: true });
         });
       }
     });
@@ -1660,14 +1769,10 @@
     if (changes.supabaseSession) {
       isAuthenticated = !!changes.supabaseSession.newValue?.access_token;
       updateButtonUI();
+      if (isAuthenticated) refreshProfileAndAccess({ force: true });
     }
     if (changes.userProfile) {
-      loadAccessLevel().then(() => {
-        updateFeaturePanelAccess();
-        updateMultiLangPanelAccess();
-        updateResultPanelAccess();
-        updateGenerateModeLabel();
-      });
+      applyAccessState();
     }
     if (changes.selectedLanguage) {
       currentUiLanguage = normalizeUiLanguage(
@@ -1675,6 +1780,16 @@
       );
       refreshLocalizedFeatureText();
       updateGenerateModeLabel();
+    }
+    if (changes[COMPLETENESS_DISMISSED_KEY]) {
+      isCompletenessDismissed =
+        changes[COMPLETENESS_DISMISSED_KEY].newValue === true;
+      if (completenessPanel) {
+        completenessPanel.style.display = isCompletenessDismissed
+          ? "none"
+          : "block";
+      }
+      if (!isCompletenessDismissed) scheduleCompletenessUpdate();
     }
   });
 
@@ -2671,12 +2786,40 @@
         color: #9ca3af;
         display: flex;
         align-items: center;
-        gap: 5px;
+        justify-content: space-between;
+        gap: 6px;
         margin-top: 8px;
         padding: 5px 8px;
         background: #f9fafb;
         border-radius: 6px;
         border: 1px dashed #e5e7eb;
+      }
+      .qv-locked-msg-text {
+        min-width: 0;
+        flex: 1 1 auto;
+      }
+      .qv-mini-upgrade-btn {
+        display: inline-flex !important;
+        align-items: center;
+        justify-content: flex-end;
+        flex: 0 0 auto;
+        width: auto !important;
+        min-width: 0 !important;
+        max-width: max-content;
+        border: none;
+        background: transparent;
+        color: #4338ca;
+        padding: 0;
+        font-size: 10px;
+        font-weight: 700;
+        cursor: pointer;
+        white-space: nowrap;
+        font-family: inherit;
+        text-decoration: none;
+      }
+      .qv-mini-upgrade-btn:hover {
+        color: #312e81;
+        text-decoration: underline;
       }
 
       .qv-suggest-row {
@@ -2747,6 +2890,9 @@
         flex-wrap: wrap;
         gap: 6px;
         margin-bottom: 10px;
+        max-height: 158px;
+        overflow-y: auto;
+        padding-right: 2px;
       }
       .qv-lang-pill {
         display: flex;
@@ -2782,20 +2928,35 @@
       }
 
       .qv-multilang-footer {
+        position: sticky;
+        bottom: -14px;
         display: flex;
         align-items: center;
         justify-content: space-between;
         gap: 8px;
-        margin-top: 4px;
-        padding-top: 8px;
+        margin: 4px -14px -14px;
+        padding: 9px 14px 10px;
         border-top: 1px solid #f3f4f6;
+        background: rgba(255, 255, 255, 0.96);
+        backdrop-filter: blur(8px);
+      }
+      .qv-lang-action-copy {
+        min-width: 0;
+        display: flex;
+        flex-direction: column;
+        gap: 1px;
       }
       .qv-lang-counter {
-        font-size: 11.5px;
-        color: #6b7280;
+        font-size: 12px;
+        color: #374151;
+        font-weight: 700;
+      }
+      .qv-lang-action-help {
+        font-size: 10.5px;
+        color: #9ca3af;
       }
       .qv-gen-all-btn {
-        padding: 7px 14px;
+        padding: 8px 13px;
         background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
         color: white;
         border: none;
@@ -2983,6 +3144,22 @@
         white-space: nowrap;
         margin-top: 2px;
       }
+
+      .qv-completeness-dismiss {
+        margin-top: 10px;
+        padding: 0;
+        border: none;
+        background: transparent;
+        color: #6b7280;
+        font-size: 11px;
+        font-weight: 600;
+        cursor: pointer;
+        text-decoration: underline;
+        font-family: inherit;
+      }
+      .qv-completeness-dismiss:hover {
+        color: #374151;
+      }
     `;
     document.head.appendChild(style);
   }
@@ -3077,7 +3254,11 @@
     if (generateModeBtn) generateModeBtn.style.display = "inline-flex";
     if (phoneBtn) phoneBtn.style.display = "inline-flex";
     if (prefsToggleBtn) prefsToggleBtn.style.display = "inline-flex";
-    if (completenessPanel) {
+    if (
+      completenessPanel &&
+      completenessPreferenceLoaded &&
+      !isCompletenessDismissed
+    ) {
       completenessPanel.style.display = "block";
       updateCompletenessUI();
     }
@@ -3795,6 +3976,12 @@
   function init() {
     injectStylesheet();
     loadUiLanguage().then(refreshLocalizedFeatureText);
+    chrome.storage.local.get([COMPLETENESS_DISMISSED_KEY], (data) => {
+      isCompletenessDismissed = data[COMPLETENESS_DISMISSED_KEY] === true;
+      completenessPreferenceLoaded = true;
+      updateButtonUI();
+      if (!isCompletenessDismissed) scheduleCompletenessUpdate();
+    });
     initializeAuthState();
     document.addEventListener("click", (event) => {
       const target = event.target;
@@ -3818,6 +4005,14 @@
     });
     window.addEventListener("resize", positionFloatingTools);
     window.addEventListener("scroll", positionFloatingTools, true);
+    window.addEventListener("focus", () => refreshProfileAndAccess());
+    document.addEventListener("visibilitychange", () => {
+      if (document.visibilityState === "visible") refreshProfileAndAccess();
+    });
+    setInterval(
+      () => refreshProfileAndAccess(),
+      PROFILE_REFRESH_INTERVAL_MS,
+    );
     startInjectionObserver();
   }
 
