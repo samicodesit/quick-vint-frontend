@@ -209,33 +209,30 @@ document.addEventListener("DOMContentLoaded", () => {
     );
   }
 
-  function hasUnlimitedPhoneUploads(profile, tier, isSubscribed) {
-    // Monthly cap applies only to free users; subscriptions and legacy plans are unlimited.
-    return Boolean(isSubscribed) || isLegacyProfile(profile);
-  }
-
-  function renderPhoneUploadUsage(
-    profile = null,
-    tier = "free",
-    isSubscribed = false,
-  ) {
-    const used = Number(profile?.phone_uploads_this_month || 0);
+  function renderPhoneUploadUsage(profile = null, isSubscribed = false) {
     const packCredits = Number(profile?.pack_credits || 0);
-    const unlimited = hasUnlimitedPhoneUploads(profile, tier, isSubscribed);
+    // Only show phone limits for free users with no pack credits.
+    // Pack users and subscribed users should not see misleading "this month" labels.
+    const shouldShow = !isSubscribed && packCredits === 0;
 
+    if (phoneUsageRow) phoneUsageRow.classList.toggle("hidden", !shouldShow);
+
+    // Exit early if not showing the row
+    if (!shouldShow) return;
+
+    // Display usage for free users with no packs
+    const used = Number(profile?.phone_uploads_this_month || 0);
     if (phoneUploadUsed) phoneUploadUsed.textContent = used;
     if (phoneUploadLimit)
-      phoneUploadLimit.textContent = unlimited
-        ? "∞"
-        : packCredits > 0
-          ? packCredits
-          : PHONE_UPLOAD_MONTHLY_LIMIT;
+      phoneUploadLimit.textContent = PHONE_UPLOAD_MONTHLY_LIMIT;
 
-    const denom = packCredits > 0 ? packCredits : PHONE_UPLOAD_MONTHLY_LIMIT;
-    if (phoneUploadBar)
-      phoneUploadBar.style.width = `${Math.min(100, (used / Math.max(1, denom)) * 100)}%`;
-    if (phoneUploadBar) phoneUploadBar.classList.toggle("unlimited", unlimited);
-    if (phoneUsageRow) phoneUsageRow.classList.toggle("hidden", unlimited);
+    if (phoneUploadBar) {
+      const percent = Math.min(
+        100,
+        (used / Math.max(1, PHONE_UPLOAD_MONTHLY_LIMIT)) * 100,
+      );
+      phoneUploadBar.style.width = `${percent}%`;
+    }
   }
 
   function setLoading(button, isLoading, defaultText) {
@@ -561,7 +558,7 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     renderDowngradeBanner(profile);
-    renderPhoneUploadUsage(profile, tier, isPhoneUploadUnlimited);
+    renderPhoneUploadUsage(profile, isPhoneUploadUnlimited);
 
     document.body.dataset.view = "signed-in";
   }
