@@ -21,6 +21,7 @@
     mediaAddPhotosButton:
       '[data-testid="add-photos-icon-button"], button[aria-label="Add photos"]',
     fileInput: 'input[type="file"]',
+    measurementsSection: 'label[for="measurements"]',
   };
   const WAND_ICON_SVG = `<svg fill="#ffffff" viewBox="0 0 512 512" version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink"> <path d="M454.321,219.727l-38.766-51.947l20.815-61.385c2.046-6.032,0.489-12.704-4.015-17.208 c-4.504-4.504-11.175-6.061-17.208-4.015l-61.384,20.815l-51.951-38.766c-5.103-3.809-11.929-4.392-17.605-1.499 c-5.676,2.893-9.217,8.755-9.136,15.125l0.829,64.815l-52.923,37.426c-5.201,3.678-7.863,9.989-6.867,16.282 c0.996,6.291,5.479,11.471,11.561,13.363l43.844,13.63L14.443,483.432c-6.535,6.534-6.535,17.131,0,23.666s17.131,6.535,23.666,0 l257.073-257.072l13.629,43.843c2.172,6.986,8.638,11.768,15.984,11.768c5.375,0,10.494-2.595,13.66-7.072l37.426-52.923 l64.815,0.828c6.322,0.051,12.233-3.462,15.125-9.136S458.131,224.833,454.321,219.727z"></path> <polygon points="173.373,67.274 160.014,42.848 146.656,67.274 122.23,80.632 146.656,93.992 160.014,118.417 173.373,93.992 197.799,80.632 "></polygon> <polygon points="362.946,384.489 352.14,364.731 341.335,384.489 321.577,395.294 341.335,406.1 352.14,425.856 362.946,406.1 382.703,395.294 "></polygon> <polygon points="378.142,19.757 367.337,0 356.531,19.757 336.774,30.563 356.531,41.369 367.337,61.126 378.142,41.369 397.9,30.563 "></polygon> <polygon points="490.635,142.513 484.167,130.689 477.701,142.513 465.876,148.979 477.701,155.446 484.167,167.27 490.635,155.446 502.458,148.979 "></polygon> <polygon points="492.626,294.117 465.876,301.951 439.128,294.117 446.962,320.865 439.128,347.615 465.876,339.781 492.626,347.615 484.791,320.865 "></polygon> </svg>`;
   const PHONE_ICON_SVG = `<svg fill="#ffffff" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M17 1.01L7 1c-1.1 0-2 .9-2 2v18c0 1.1.9 2 2 2h10c1.1 0 2-.9 2-2V3c0-1.1-.9-1.99-2-1.99zM17 19H7V5h10v14z"/></svg>`;
@@ -106,7 +107,9 @@
 
   function isLegacyProfile(profile) {
     if (profile?.is_legacy_plan !== undefined) return !!profile.is_legacy_plan;
-    return ["starter", "pro", "business"].includes(normalizeTier(profile?.subscription_tier));
+    return ["starter", "pro", "business"].includes(
+      normalizeTier(profile?.subscription_tier),
+    );
   }
 
   function showToast(message, type = "error", action = null, autoHide = true) {
@@ -234,16 +237,23 @@
   }
 
   function sanitizeListingPreferences(preferences = []) {
-    const normalized = preferences.flatMap((pref) => (
-      pref === "smoke_pet_free" ? ["pet_free_home", "smoke_free_home"] : [pref]
-    ));
-    return [...new Set(normalized)].filter((pref) => LISTING_PREF_IDS.has(pref));
+    const normalized = preferences.flatMap((pref) =>
+      pref === "smoke_pet_free" ? ["pet_free_home", "smoke_free_home"] : [pref],
+    );
+    return [...new Set(normalized)].filter((pref) =>
+      LISTING_PREF_IDS.has(pref),
+    );
   }
 
   function getLangMeta(code) {
-    return BATCH_LANGS.find((lang) => lang.code === code)
-      || BATCH_LANGS.find((lang) => lang.code === "en")
-      || { code: "en", name: "English", flag: "" };
+    return (
+      BATCH_LANGS.find((lang) => lang.code === code) ||
+      BATCH_LANGS.find((lang) => lang.code === "en") || {
+        code: "en",
+        name: "English",
+        flag: "",
+      }
+    );
   }
 
   function formatLangCode(code) {
@@ -298,12 +308,12 @@
     if (label && !isBusy) label.textContent = "Generate";
     if (generateModeBtn) {
       const selectedCount = selectedBatchLangs.size;
-      generateModeBtn.textContent = selectedCount > 0
-        ? `Multi ${selectedCount}`
-        : "Multi-lang";
-      generateModeBtn.title = selectedCount > 0
-        ? `Single: ${lang.name}. Multi-language set: ${selectedCount} selected.`
-        : `Single output language: ${lang.name}. Click for multi-language options.`;
+      generateModeBtn.textContent =
+        selectedCount > 0 ? `Multi ${selectedCount}` : "Multi-lang";
+      generateModeBtn.title =
+        selectedCount > 0
+          ? `Single: ${lang.name}. Multi-language set: ${selectedCount} selected.`
+          : `Single output language: ${lang.name}. Click for multi-language options.`;
     }
   }
 
@@ -597,7 +607,9 @@
     document.querySelectorAll("#qv-pref-list input:checked").forEach((cb) => {
       checked.push(cb.value);
     });
-    chrome.storage.local.set({ listingPreferences: sanitizeListingPreferences(checked) });
+    chrome.storage.local.set({
+      listingPreferences: sanitizeListingPreferences(checked),
+    });
   }
 
   function restorePrefState() {
@@ -622,7 +634,10 @@
       );
       if (multiLangPanel) {
         multiLangPanel.querySelectorAll(".qv-lang-pill").forEach((pill) => {
-          pill.classList.toggle("selected", selectedBatchLangs.has(pill.dataset.code));
+          pill.classList.toggle(
+            "selected",
+            selectedBatchLangs.has(pill.dataset.code),
+          );
         });
       }
       updateBatchLangFooter();
@@ -638,7 +653,9 @@
       selectedBatchLangs.add(code);
       pillEl.classList.add("selected");
     }
-    chrome.storage.local.set({ [BATCH_LANGS_STORAGE_KEY]: [...selectedBatchLangs] });
+    chrome.storage.local.set({
+      [BATCH_LANGS_STORAGE_KEY]: [...selectedBatchLangs],
+    });
     updateBatchLangFooter();
     updateGenerateModeLabel();
   }
@@ -648,9 +665,10 @@
     const btn = document.getElementById("qv-gen-all-btn");
     const n = selectedBatchLangs.size;
     if (counter) {
-      counter.textContent = n === 0
-        ? "Select languages to generate at once"
-        : `Selected: ${n} language${n > 1 ? "s" : ""} → ${n} credit${n > 1 ? "s" : ""}`;
+      counter.textContent =
+        n === 0
+          ? "Select languages to generate at once"
+          : `Selected: ${n} language${n > 1 ? "s" : ""} → ${n} credit${n > 1 ? "s" : ""}`;
     }
     if (btn) btn.disabled = n === 0 || isBusy;
   }
@@ -711,12 +729,14 @@
     card.replaceChildren(header, titleEl, descEl);
 
     copyBtn.onclick = () => {
-      navigator.clipboard.writeText(`${title || ""}\n\n${description || ""}`).then(() => {
-        copyBtn.textContent = "Copied!";
-        setTimeout(() => {
-          copyBtn.textContent = "Copy";
-        }, 1500);
-      });
+      navigator.clipboard
+        .writeText(`${title || ""}\n\n${description || ""}`)
+        .then(() => {
+          copyBtn.textContent = "Copied!";
+          setTimeout(() => {
+            copyBtn.textContent = "Copy";
+          }, 1500);
+        });
     };
   }
 
@@ -741,7 +761,8 @@
       }
     });
     const prefsLockedMsg = document.getElementById("qv-prefs-locked-msg");
-    if (prefsLockedMsg) prefsLockedMsg.style.display = hasPlusAccess ? "none" : "flex";
+    if (prefsLockedMsg)
+      prefsLockedMsg.style.display = hasPlusAccess ? "none" : "flex";
   }
 
   function closeFeaturePanel() {
@@ -775,19 +796,30 @@
   }
 
   function positionFloatingTools() {
-    const anchor = generateTools || document.querySelector(SELECTORS.description);
+    const anchor =
+      generateTools || document.querySelector(SELECTORS.description);
     if (!anchor) return;
     const rect = anchor.getBoundingClientRect();
     const anchorLeft = rect.left || 12;
     const anchorBottom = rect.bottom || 80;
-    const panelLeft = Math.max(12, Math.min(window.innerWidth - 340, anchorLeft));
-    const panelTop = Math.max(12, Math.min(window.innerHeight - 440, anchorBottom + 8));
+    const panelLeft = Math.max(
+      12,
+      Math.min(window.innerWidth - 340, anchorLeft),
+    );
+    const panelTop = Math.max(
+      12,
+      Math.min(window.innerHeight - 440, anchorBottom + 8),
+    );
     [multiLangPanel, resultPanel, completenessPanel].forEach((panel) => {
       if (!panel) return;
       panel.style.left = `${panelLeft}px`;
       panel.style.top = `${panelTop}px`;
     });
-    if (resultPanel && completenessPanel && resultPanel.style.display !== "none") {
+    if (
+      resultPanel &&
+      completenessPanel &&
+      resultPanel.style.display !== "none"
+    ) {
       const resultHeight = resultPanel.offsetHeight || 150;
       completenessPanel.style.top = `${Math.min(window.innerHeight - 190, panelTop + resultHeight + 8)}px`;
     }
@@ -812,7 +844,8 @@
       if (hasPlusAccess) {
         btn.classList.remove("locked");
         btn.disabled = false;
-        if (lastImageUrls.length) btn.onclick = () => onRegenClick(style, lastImageUrls);
+        if (lastImageUrls.length)
+          btn.onclick = () => onRegenClick(style, lastImageUrls);
       } else {
         btn.classList.add("locked");
         btn.disabled = true;
@@ -831,9 +864,10 @@
       btn.classList.toggle("loading", busy && style === activeStyle);
       const label = btn.querySelector("span");
       if (label) {
-        label.textContent = busy && style === activeStyle
-          ? "Refining..."
-          : style.charAt(0).toUpperCase() + style.slice(1);
+        label.textContent =
+          busy && style === activeStyle
+            ? "Refining..."
+            : style.charAt(0).toUpperCase() + style.slice(1);
       }
     });
   }
@@ -921,11 +955,37 @@
       tip: "Add a fuller description before publishing",
     });
 
+    const hashtags = (desc.match(/#[A-Za-z0-9_]+/g) || []).length;
+    checks.push({
+      pass: hashtags >= 3,
+      label: `Hashtags: ${hashtags} found`,
+      tip: "Use at least 3 hashtags to improve discovery",
+    });
+
     checks.push({
       pass: photoCount >= 3,
       label: `Photos: ${photoCount} uploaded`,
       tip: "Add at least 3 photos",
     });
+
+    const measurementSection = document.querySelector(
+      SELECTORS.measurementsSection,
+    );
+    if (measurementSection) {
+      const measurementInputs = Array.from(
+        measurementSection.querySelectorAll("input"),
+      ).filter((input) => !input.disabled && input.type !== "hidden");
+      if (measurementInputs.length > 0) {
+        const filledMeasurements = measurementInputs.filter(
+          (input) => input.value.trim().length > 0,
+        ).length;
+        checks.push({
+          pass: filledMeasurements > 0,
+          label: `Measurements: ${filledMeasurements}/${measurementInputs.length} filled`,
+          tip: "Add at least one measurement so buyers can compare sizes",
+        });
+      }
+    }
 
     const score = checks.filter((c) => c.pass).length;
     return { score, total: checks.length, checks };
@@ -1032,15 +1092,23 @@
         useBulletPoints = true,
         listingPreferences = [],
       } = await chrome.storage.local.get([
-        "selectedLanguage", "tone", "useEmojis", "useBulletPoints", "listingPreferences",
+        "selectedLanguage",
+        "tone",
+        "useEmojis",
+        "useBulletPoints",
+        "listingPreferences",
       ]);
       const selectedLanguage = storedLanguage === "cs" ? "cz" : storedLanguage;
       const { access_token } = await sendMessage({ type: "GET_ACCESS_TOKEN" });
-      if (!access_token) throw new Error("Session expired. Please sign in again.");
+      if (!access_token)
+        throw new Error("Session expired. Please sign in again.");
 
       const response = await fetch(`${API_BASE}/api/generate`, {
         method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${access_token}` },
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${access_token}`,
+        },
         body: JSON.stringify({
           imageUrls: urls,
           languageCode: selectedLanguage,
@@ -1048,15 +1116,24 @@
           useEmojis,
           useBulletPoints,
           regenStyle: style || undefined,
-        listingPreferences: hasPlusAccess ? sanitizeListingPreferences(listingPreferences) : [],
+          listingPreferences: hasPlusAccess
+            ? sanitizeListingPreferences(listingPreferences)
+            : [],
         }),
       });
 
-      if (response.status === 401) { isAuthenticated = false; showToast("Session expired.", "error"); return; }
+      if (response.status === 401) {
+        isAuthenticated = false;
+        showToast("Session expired.", "error");
+        return;
+      }
       if (response.status === 429 || response.status === 402) {
         const errData = await response.json();
         const pricingUrl = await getPricingUrl();
-        showToast(errData.error || "Credit limit reached.", "error", { text: "Upgrade Plan", url: pricingUrl });
+        showToast(errData.error || "Credit limit reached.", "error", {
+          text: "Upgrade Plan",
+          url: pricingUrl,
+        });
         return;
       }
       if (!response.ok) {
@@ -1066,7 +1143,10 @@
 
       const { title, description, measurementAdvice } = await response.json();
       const titleInput = document.querySelector(SELECTORS.title);
-      if (titleInput) { titleInput.value = title; titleInput.dispatchEvent(new Event("input", { bubbles: true })); }
+      if (titleInput) {
+        titleInput.value = title;
+        titleInput.dispatchEvent(new Event("input", { bubbles: true }));
+      }
       setTextareaValue(description);
 
       await maybeShowMeasurementAdvice(measurementAdvice);
@@ -1093,20 +1173,21 @@
     let imageUrlsForBatch = lastImageUrls;
 
     const btn = document.getElementById("qv-gen-all-btn");
-    if (btn) { btn.disabled = true; btn.textContent = "⏳ Generating…"; }
+    if (btn) {
+      btn.disabled = true;
+      btn.textContent = "⏳ Generating…";
+    }
 
     const langResults = document.getElementById("qv-lang-results");
     if (langResults) langResults.replaceChildren();
 
     try {
       if (imageUrlsForBatch.length === 0) {
-        const rawImageUrls = Array.from(document.querySelectorAll(SELECTORS.images))
-          .map((img) => img.src)
-          .filter(Boolean);
-        if (!rawImageUrls.length) {
+        const imageUrls = getUploadedImageUrls();
+        if (!imageUrls.length) {
           throw new Error("Upload photos first, then generate.");
         }
-        imageUrlsForBatch = await compressImages(rawImageUrls);
+        imageUrlsForBatch = await compressImages(imageUrls);
         lastImageUrls = imageUrlsForBatch;
       }
 
@@ -1115,11 +1196,18 @@
         useEmojis,
         useBulletPoints = true,
         listingPreferences = [],
-      } = await chrome.storage.local.get(["tone", "useEmojis", "useBulletPoints", "listingPreferences"]);
+      } = await chrome.storage.local.get([
+        "tone",
+        "useEmojis",
+        "useBulletPoints",
+        "listingPreferences",
+      ]);
       const { access_token } = await sendMessage({ type: "GET_ACCESS_TOKEN" });
       if (!access_token) throw new Error("Session expired.");
 
-      const langList = BATCH_LANGS.filter((l) => selectedBatchLangs.has(l.code));
+      const langList = BATCH_LANGS.filter((l) =>
+        selectedBatchLangs.has(l.code),
+      );
       const langDescriptions = [];
 
       for (const lang of langList) {
@@ -1135,14 +1223,19 @@
         try {
           const response = await fetch(`${API_BASE}/api/generate`, {
             method: "POST",
-            headers: { "Content-Type": "application/json", Authorization: `Bearer ${access_token}` },
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${access_token}`,
+            },
             body: JSON.stringify({
               imageUrls: imageUrlsForBatch,
               languageCode: lang.code,
               tone,
               useEmojis,
               useBulletPoints,
-              listingPreferences: hasPlusAccess ? sanitizeListingPreferences(listingPreferences) : [],
+              listingPreferences: hasPlusAccess
+                ? sanitizeListingPreferences(listingPreferences)
+                : [],
             }),
           });
 
@@ -1155,19 +1248,23 @@
           if (response.status === 429 || response.status === 402) {
             const errData = await response.json().catch(() => ({}));
             const pricingUrl = await getPricingUrl();
-            showToast(
-              errData.error || "Credit limit reached.",
-              "error",
-              { text: "Upgrade Plan", url: pricingUrl },
-            );
+            showToast(errData.error || "Credit limit reached.", "error", {
+              text: "Upgrade Plan",
+              url: pricingUrl,
+            });
             if (card) {
-              renderLangError(card, lang, errData.error || "Credit limit reached");
+              renderLangError(
+                card,
+                lang,
+                errData.error || "Credit limit reached",
+              );
             }
             break;
           }
           if (!response.ok) {
             const err = await response.json().catch(() => ({}));
-            if (card) renderLangError(card, lang, err.error || "Generation failed");
+            if (card)
+              renderLangError(card, lang, err.error || "Generation failed");
             continue;
           }
 
@@ -1188,7 +1285,10 @@
       isBusy = false;
       updateButtonUI();
       updateBatchLangFooter();
-      if (btn) { btn.disabled = selectedBatchLangs.size === 0; btn.textContent = "Generate All"; }
+      if (btn) {
+        btn.disabled = selectedBatchLangs.size === 0;
+        btn.textContent = "Generate All";
+      }
     }
   }
 
@@ -1198,8 +1298,14 @@
     if (!input || !btn) return;
 
     const text = input.value.trim();
-    if (text.length < 5) { showToast("Please enter at least 5 characters.", "error"); return; }
-    if (text.length > 200) { showToast("Suggestion must be under 200 characters.", "error"); return; }
+    if (text.length < 5) {
+      showToast("Please enter at least 5 characters.", "error");
+      return;
+    }
+    if (text.length > 200) {
+      showToast("Suggestion must be under 200 characters.", "error");
+      return;
+    }
 
     btn.disabled = true;
     btn.textContent = "Sending…";
@@ -1210,7 +1316,10 @@
 
       const response = await fetch(`${API_BASE}/api/suggestions`, {
         method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${access_token}` },
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${access_token}`,
+        },
         body: JSON.stringify({ suggestion: text }),
       });
 
@@ -1218,8 +1327,14 @@
 
       input.value = "";
       btn.textContent = "✓ Sent!";
-      setTimeout(() => { btn.textContent = "Send"; btn.disabled = false; }, 2000);
-      showToast("Thanks! Your suggestion has been sent to the AutoLister team.", "success");
+      setTimeout(() => {
+        btn.textContent = "Send";
+        btn.disabled = false;
+      }, 2000);
+      showToast(
+        "Thanks! Your suggestion has been sent to the AutoLister team.",
+        "success",
+      );
     } catch (err) {
       btn.textContent = "Send";
       btn.disabled = false;
@@ -2749,7 +2864,9 @@
       ? batchData[BATCH_LANGS_STORAGE_KEY]
       : [...selectedBatchLangs];
     selectedBatchLangs = new Set(
-      savedBatchLangs.filter((code) => BATCH_LANGS.some((lang) => lang.code === code)),
+      savedBatchLangs.filter((code) =>
+        BATCH_LANGS.some((lang) => lang.code === code),
+      ),
     );
 
     const languageOptions = [
@@ -2846,21 +2963,29 @@
     function updatePhoneMultiState() {
       if (multiCount) {
         const count = selectedBatchLangs.size;
-        multiCount.textContent = count === 0
-          ? "No languages selected"
-          : `${count} language${count > 1 ? "s" : ""} selected`;
+        multiCount.textContent =
+          count === 0
+            ? "No languages selected"
+            : `${count} language${count > 1 ? "s" : ""} selected`;
       }
       if (generateBtnModal) {
         const mode = generateBtnModal.dataset.mode || "single";
-        generateBtnModal.disabled = mode === "multi" && (!hasProAccess || selectedBatchLangs.size === 0);
-        const actionLabel = generateBtnModal.querySelector(".qv-phone-action-label");
+        generateBtnModal.disabled =
+          mode === "multi" && (!hasProAccess || selectedBatchLangs.size === 0);
+        const actionLabel = generateBtnModal.querySelector(
+          ".qv-phone-action-label",
+        );
         if (actionLabel) {
-          actionLabel.textContent = mode === "multi" ? "Done + Generate Multi" : "Done + Generate";
+          actionLabel.textContent =
+            mode === "multi" ? "Done + Generate Multi" : "Done + Generate";
         }
       }
       if (phoneLangPills) {
         phoneLangPills.querySelectorAll(".phone-lang-pill").forEach((pill) => {
-          pill.classList.toggle("selected", selectedBatchLangs.has(pill.dataset.code));
+          pill.classList.toggle(
+            "selected",
+            selectedBatchLangs.has(pill.dataset.code),
+          );
         });
       }
     }
@@ -2886,9 +3011,13 @@
       button.addEventListener("click", () => {
         if (button.disabled) return;
         const mode = button.dataset.mode || "single";
-        modeButtons.forEach((btn) => btn.classList.toggle("active", btn === button));
-        if (singlePanel) singlePanel.style.display = mode === "single" ? "flex" : "none";
-        if (multiPanel) multiPanel.style.display = mode === "multi" ? "block" : "none";
+        modeButtons.forEach((btn) =>
+          btn.classList.toggle("active", btn === button),
+        );
+        if (singlePanel)
+          singlePanel.style.display = mode === "single" ? "flex" : "none";
+        if (multiPanel)
+          multiPanel.style.display = mode === "multi" ? "block" : "none";
         if (generateBtnModal) generateBtnModal.dataset.mode = mode;
         updatePhoneMultiState();
       });
@@ -2899,7 +3028,8 @@
     modal.querySelector(".close-x").addEventListener("click", closeModal);
     modal.querySelector(".close-btn").addEventListener("click", closeModal);
     modal.querySelector(".generate-btn").addEventListener("click", () => {
-      const mode = modal.querySelector(".generate-btn")?.dataset.mode || "single";
+      const mode =
+        modal.querySelector(".generate-btn")?.dataset.mode || "single";
       closeModal();
       // Trigger generate after a brief delay to ensure modal cleanup completes
       setTimeout(() => {
@@ -2989,7 +3119,10 @@
           for (const file of data.files) {
             if (!downloadedFiles.has(file.name)) {
               downloadedFiles.add(file.name);
-              const didImport = await downloadAndInjectImage(file.url, file.name);
+              const didImport = await downloadAndInjectImage(
+                file.url,
+                file.name,
+              );
               if (didImport) {
                 newFilesCount++;
                 importedFileCount++;
@@ -3125,21 +3258,27 @@
       const compressedImages = await compressImages(imageUrls);
       lastImageUrls = compressedImages;
 
-      const response = await fetchWithTimeout(`${API_BASE}/api/generate`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${access_token}`,
+      const response = await fetchWithTimeout(
+        `${API_BASE}/api/generate`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${access_token}`,
+          },
+          body: JSON.stringify({
+            imageUrls: compressedImages,
+            languageCode: selectedLanguage,
+            tone,
+            useEmojis,
+            useBulletPoints,
+            listingPreferences: hasPlusAccess
+              ? sanitizeListingPreferences(listingPreferences)
+              : [],
+          }),
         },
-        body: JSON.stringify({
-          imageUrls: compressedImages,
-          languageCode: selectedLanguage,
-          tone,
-          useEmojis,
-          useBulletPoints,
-          listingPreferences: hasPlusAccess ? sanitizeListingPreferences(listingPreferences) : [],
-        }),
-      }, 90000);
+        90000,
+      );
 
       if (response.status === 401) {
         isAuthenticated = false;
@@ -3178,9 +3317,10 @@
       await maybeShowMeasurementAdvice(measurementAdvice);
     } catch (err) {
       console.error("AutoLister AI Error:", err);
-      const message = err.name === "AbortError"
-        ? "Generation timed out. Please try again."
-        : err.message || "An unexpected error occurred.";
+      const message =
+        err.name === "AbortError"
+          ? "Generation timed out. Please try again."
+          : err.message || "An unexpected error occurred.";
       showToast(message, "error");
       isBusy = false;
       updateButtonUI();
@@ -3212,17 +3352,26 @@
       const descEl = document.querySelector(SELECTORS.description);
       if (!titleEl || !descEl) return false;
 
-      [FEATURE_PANEL_ID, RESULT_PANEL_ID, MULTILANG_PANEL_ID, COMPLETENESS_PANEL_ID].forEach((id) => {
+      [
+        FEATURE_PANEL_ID,
+        RESULT_PANEL_ID,
+        MULTILANG_PANEL_ID,
+        COMPLETENESS_PANEL_ID,
+      ].forEach((id) => {
         document.getElementById(id)?.remove();
       });
 
       const titleDescriptionCard =
-        document.querySelector('[data-testid="title"]')?.closest(".web_ui__Card__card")
-        || document.querySelector('[data-testid="description"]')?.closest(".web_ui__Card__card")
-        || titleEl.closest(".web_ui__Card__card")
-        || descEl.closest(".web_ui__Card__card")
-        || titleEl.closest('label[data-testid="title"]')?.parentElement
-        || titleEl.parentElement;
+        document
+          .querySelector('[data-testid="title"]')
+          ?.closest(".web_ui__Card__card") ||
+        document
+          .querySelector('[data-testid="description"]')
+          ?.closest(".web_ui__Card__card") ||
+        titleEl.closest(".web_ui__Card__card") ||
+        descEl.closest(".web_ui__Card__card") ||
+        titleEl.closest('label[data-testid="title"]')?.parentElement ||
+        titleEl.parentElement;
 
       const btnContainer = document.createElement("div");
       btnContainer.id = GENERATE_TOOLS_ID;
@@ -3256,7 +3405,10 @@
       btnContainer.appendChild(signInBtn);
 
       if (titleDescriptionCard?.parentNode) {
-        titleDescriptionCard.parentNode.insertBefore(btnContainer, titleDescriptionCard);
+        titleDescriptionCard.parentNode.insertBefore(
+          btnContainer,
+          titleDescriptionCard,
+        );
       } else {
         document.body.appendChild(btnContainer);
       }
@@ -3321,10 +3473,20 @@
     document.addEventListener("click", (event) => {
       const target = event.target;
       if (!(target instanceof Element)) return;
-      if (featurePanel && prefsToggleBtn && !featurePanel.contains(target) && !prefsToggleBtn.contains(target)) {
+      if (
+        featurePanel &&
+        prefsToggleBtn &&
+        !featurePanel.contains(target) &&
+        !prefsToggleBtn.contains(target)
+      ) {
         closeFeaturePanel();
       }
-      if (multiLangPanel && generateModeBtn && !multiLangPanel.contains(target) && !generateModeBtn.contains(target)) {
+      if (
+        multiLangPanel &&
+        generateModeBtn &&
+        !multiLangPanel.contains(target) &&
+        !generateModeBtn.contains(target)
+      ) {
         toggleMultiLangPanel(false);
       }
     });
