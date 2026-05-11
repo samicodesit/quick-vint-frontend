@@ -990,11 +990,8 @@ document.addEventListener("DOMContentLoaded", () => {
           }
         }
 
-        const savedPrefs = result.listingPreferences || [];
-        if (!hasPlusAccess && savedPrefs.length > 0) {
-          chrome.storage.local.set({ listingPreferences: [] });
-        }
-
+        // Preserve saved listing preference state for downgrade/cancellation.
+        // Preferences remain stored but become inactive/locked until upgrade.
         updateSettingsAccess({ hasPlusAccess, hasProAccess });
       },
     );
@@ -1065,7 +1062,6 @@ document.addEventListener("DOMContentLoaded", () => {
         if (!input) return;
         option.classList.toggle("locked", !hasPlusAccess);
         input.disabled = !hasPlusAccess;
-        if (!hasPlusAccess) input.checked = false;
       });
     }
 
