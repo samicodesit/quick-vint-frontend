@@ -47,7 +47,6 @@
     const elements = {
       "success-title": "welcomeTitle",
       "success-subtitle": "welcomeSubtitle",
-      "vinted-redirect": "vintedButton",
       "view-plans": "viewPlansButton",
       "close-tab": "closeTabButton",
       "features-title": "featuresTitle",
@@ -57,9 +56,6 @@
       "feature-4": "feature4",
       "upgrade-title": "upgradeTitle",
       "upgrade-description": "upgradeDescription",
-      "starter-features": "starterFeatures",
-      "pro-features": "proFeatures",
-      "business-features": "businessFeatures",
       "privacy-link": "privacyLink",
       "terms-link": "termsLink",
     };
@@ -67,12 +63,7 @@
     Object.entries(elements).forEach(([elementId, textKey]) => {
       const element = document.getElementById(elementId);
       if (element && localization.texts[textKey]) {
-        if (
-          elementId.includes("features") ||
-          elementId === "starter-features" ||
-          elementId === "pro-features" ||
-          elementId === "business-features"
-        ) {
+        if (elementId.includes("features")) {
           element.innerHTML = localization.texts[textKey];
         } else {
           element.textContent = localization.texts[textKey];
@@ -348,16 +339,6 @@
 
     // Apply localization first (above the fold priority)
     localizeContent(currentLocalization);
-
-    // Initialize Vinted redirect
-    const vintedBtn = document.getElementById("vinted-redirect");
-    if (vintedBtn) {
-      const vintedUrl = `https://www.${currentLocalization.domain}/items/new`;
-      vintedBtn.onclick = () => {
-        window.open(vintedUrl, "_blank");
-        setTimeout(() => window.close(), 800);
-      };
-    }
 
     // Initialize view plans button
     const plansBtn = document.getElementById("view-plans");
