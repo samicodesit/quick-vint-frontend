@@ -11,7 +11,8 @@
   const SELECTORS = {
     title: 'input[data-testid="title--input"]',
     description: 'textarea[data-testid="description--input"]',
-    mediaGrid: '[data-testid="media-upload-grid"], [data-testid="media-select-grid"]',
+    mediaGrid:
+      '[data-testid="media-upload-grid"], [data-testid="media-select-grid"]',
     mediaPhotoBox: ".photo-box",
     mediaImageWrapper: '[data-testid^="image-wrapper-"]',
     mediaImage:
@@ -34,6 +35,8 @@
   const GENERATE_MODE_BTN_ID = "quickvint-generate-mode-btn";
   const PREFS_TOGGLE_BTN_ID = "quickvint-prefs-toggle";
   const PREFS_DOCK_ID = "quickvint-prefs-dock";
+  const RIGHT_PANEL_OFFSET = 16;
+  const RIGHT_PANEL_WIDTH = 300;
   const BATCH_LANGS_STORAGE_KEY = "batchLanguages";
   const MEASUREMENT_HINT_KEY = "quickvintMeasurementHintLastShownAt";
   const MEASUREMENT_HINT_INTERVAL_MS = 7 * 24 * 60 * 60 * 1000;
@@ -65,6 +68,139 @@
     { code: "en", flag: "🇬🇧", name: "English", domain: "vinted.co.uk" },
   ];
 
+  const UI_COPY = {
+    en: {
+      multiLangTitle: "Multi-language",
+      multiLangSubtitle: "Generate this listing in several languages.",
+      multiLangNote: "Select languages. Each language uses 1 credit.",
+      multiLangLocked: "Available on Pro.",
+      multiLangEmpty: "Select languages",
+      multiLangSelected: (count) =>
+        `${count} language${count > 1 ? "s" : ""} selected`,
+      generateAll: "Generate all",
+      refineTitle: "Refine Description",
+      refineSubtitle: "Generate a new version from the same photos.",
+      refineDetailed: "Detailed",
+      refineCasual: "Casual",
+      refineShort: "Short",
+      refineLocked: "Refine options are available on Plus.",
+      refining: "Refining...",
+      completenessTitle: "Listing Completeness",
+      completenessSubtitle: "Updates as you fill the listing.",
+      titleCheck: (count) => `Title: ${count}/100 chars`,
+      titleTip: "Add a clear title before publishing",
+      descriptionCheck: (count) => `Description: ${count} chars`,
+      descriptionTip: "Add a fuller description before publishing",
+      hashtagsCheck: (count) => `Hashtags: ${count} found`,
+      hashtagsTip: "Use at least 3 hashtags to improve discovery",
+      photosCheck: (count) => `Photos: ${count} uploaded`,
+      photosTip: "Add at least 3 photos",
+      measurementsCheck: (filled, total) =>
+        `Measurements: ${filled}/${total} filled`,
+      measurementsTip:
+        "Add at least one measurement so buyers can compare sizes",
+      upgradeForTips: "Upgrade for tips",
+    },
+    fr: {
+      multiLangTitle: "Multilingue",
+      multiLangSubtitle: "Générer cette annonce en plusieurs langues.",
+      multiLangNote:
+        "Sélectionnez les langues. Chaque langue utilise 1 crédit.",
+      multiLangLocked: "Disponible avec Pro.",
+      multiLangEmpty: "Sélectionnez des langues",
+      multiLangSelected: (count) =>
+        `${count} langue${count > 1 ? "s" : ""} sélectionnée${count > 1 ? "s" : ""}`,
+      generateAll: "Tout générer",
+      refineTitle: "Affiner la description",
+      refineSubtitle: "Générer une nouvelle version avec les mêmes photos.",
+      refineDetailed: "Détaillée",
+      refineCasual: "Décontractée",
+      refineShort: "Courte",
+      refineLocked: "Les options d'affinage sont disponibles avec Plus.",
+      refining: "Affinage...",
+      completenessTitle: "Complétude de l'annonce",
+      completenessSubtitle: "Se met à jour pendant la saisie.",
+      titleCheck: (count) => `Titre : ${count}/100 caractères`,
+      titleTip: "Ajoutez un titre clair avant de publier",
+      descriptionCheck: (count) => `Description : ${count} caractères`,
+      descriptionTip: "Ajoutez une description plus complète avant de publier",
+      hashtagsCheck: (count) => `Hashtags : ${count} trouvés`,
+      hashtagsTip: "Utilisez au moins 3 hashtags pour améliorer la visibilité",
+      photosCheck: (count) => `Photos : ${count} ajoutées`,
+      photosTip: "Ajoutez au moins 3 photos",
+      measurementsCheck: (filled, total) =>
+        `Mesures : ${filled}/${total} remplies`,
+      measurementsTip: "Ajoutez au moins une mesure pour aider les acheteurs",
+      upgradeForTips: "Passez à Pro pour les conseils",
+    },
+    de: {
+      multiLangTitle: "Mehrsprachig",
+      multiLangSubtitle: "Erstelle dieses Angebot in mehreren Sprachen.",
+      multiLangNote: "Sprachen auswählen. Jede Sprache nutzt 1 Credit.",
+      multiLangLocked: "Verfügbar mit Pro.",
+      multiLangEmpty: "Sprachen auswählen",
+      multiLangSelected: (count) =>
+        `${count} Sprache${count > 1 ? "n" : ""} ausgewählt`,
+      generateAll: "Alle generieren",
+      refineTitle: "Beschreibung verfeinern",
+      refineSubtitle: "Neue Version mit denselben Fotos erstellen.",
+      refineDetailed: "Detailliert",
+      refineCasual: "Locker",
+      refineShort: "Kurz",
+      refineLocked: "Verfeinerungen sind mit Plus verfügbar.",
+      refining: "Verfeinern...",
+      completenessTitle: "Anzeigenvollständigkeit",
+      completenessSubtitle: "Aktualisiert sich beim Ausfüllen.",
+      titleCheck: (count) => `Titel: ${count}/100 Zeichen`,
+      titleTip: "Füge vor dem Veröffentlichen einen klaren Titel hinzu",
+      descriptionCheck: (count) => `Beschreibung: ${count} Zeichen`,
+      descriptionTip:
+        "Füge vor dem Veröffentlichen eine vollständigere Beschreibung hinzu",
+      hashtagsCheck: (count) => `Hashtags: ${count} gefunden`,
+      hashtagsTip: "Nutze mindestens 3 Hashtags für bessere Sichtbarkeit",
+      photosCheck: (count) => `Fotos: ${count} hochgeladen`,
+      photosTip: "Füge mindestens 3 Fotos hinzu",
+      measurementsCheck: (filled, total) =>
+        `Maße: ${filled}/${total} ausgefüllt`,
+      measurementsTip:
+        "Füge mindestens ein Maß hinzu, damit Käufer Größen vergleichen können",
+      upgradeForTips: "Upgrade für Tipps",
+    },
+    nl: {
+      multiLangTitle: "Meertalig",
+      multiLangSubtitle: "Genereer deze listing in meerdere talen.",
+      multiLangNote: "Selecteer talen. Elke taal gebruikt 1 credit.",
+      multiLangLocked: "Beschikbaar met Pro.",
+      multiLangEmpty: "Selecteer talen",
+      multiLangSelected: (count) =>
+        `${count} taal${count > 1 ? "en" : ""} geselecteerd`,
+      generateAll: "Alles genereren",
+      refineTitle: "Beschrijving verfijnen",
+      refineSubtitle: "Maak een nieuwe versie met dezelfde foto's.",
+      refineDetailed: "Gedetailleerd",
+      refineCasual: "Casual",
+      refineShort: "Kort",
+      refineLocked: "Verfijnopties zijn beschikbaar met Plus.",
+      refining: "Verfijnen...",
+      completenessTitle: "Listingvolledigheid",
+      completenessSubtitle: "Wordt bijgewerkt terwijl je invult.",
+      titleCheck: (count) => `Titel: ${count}/100 tekens`,
+      titleTip: "Voeg een duidelijke titel toe voordat je publiceert",
+      descriptionCheck: (count) => `Beschrijving: ${count} tekens`,
+      descriptionTip:
+        "Voeg een volledigere beschrijving toe voordat je publiceert",
+      hashtagsCheck: (count) => `Hashtags: ${count} gevonden`,
+      hashtagsTip: "Gebruik minstens 3 hashtags voor betere vindbaarheid",
+      photosCheck: (count) => `Foto's: ${count} geüpload`,
+      photosTip: "Voeg minstens 3 foto's toe",
+      measurementsCheck: (filled, total) =>
+        `Afmetingen: ${filled}/${total} ingevuld`,
+      measurementsTip:
+        "Voeg minstens één afmeting toe zodat kopers maten kunnen vergelijken",
+      upgradeForTips: "Upgrade voor tips",
+    },
+  };
+
   // --- STATE ---
   let generateBtn = null;
   let phoneBtn = null;
@@ -85,6 +221,10 @@
   let completenessPanel = null;
   let lastImageUrls = [];
   let selectedBatchLangs = new Set();
+  let currentUiLanguage = "en";
+  let completenessUpdateTimeout = null;
+  let completenessListenersBound = false;
+  let completenessMutationObserver = null;
 
   // --- HELPER FUNCTIONS ---
 
@@ -233,7 +373,11 @@
 
   function appendDescriptionsToTextarea(descriptions) {
     if (!descriptions.length) return;
-    setTextareaValue(descriptions.join("\n\n"));
+    // Format descriptions with clear separators for readability
+    const formatted = descriptions
+      .filter((desc) => desc && desc.length > 0)
+      .join("\n\n━━━━━━━━━━━\n\n");
+    setTextareaValue(formatted);
   }
 
   function sanitizeListingPreferences(preferences = []) {
@@ -243,6 +387,74 @@
     return [...new Set(normalized)].filter((pref) =>
       LISTING_PREF_IDS.has(pref),
     );
+  }
+
+  function normalizeUiLanguage(code) {
+    const normalized = code === "cs" ? "cz" : code || "en";
+    return UI_COPY[normalized] ? normalized : "en";
+  }
+
+  function t(key, ...args) {
+    const copy = UI_COPY[currentUiLanguage] || UI_COPY.en;
+    const value = copy[key] ?? UI_COPY.en[key] ?? key;
+    return typeof value === "function" ? value(...args) : value;
+  }
+
+  async function loadUiLanguage() {
+    const { selectedLanguage = "en" } =
+      await chrome.storage.local.get("selectedLanguage");
+    currentUiLanguage = normalizeUiLanguage(selectedLanguage);
+  }
+
+  function refreshLocalizedFeatureText() {
+    if (multiLangPanel) {
+      const title = multiLangPanel.querySelector(
+        "[data-i18n='multiLangTitle']",
+      );
+      const subtitle = multiLangPanel.querySelector(
+        "[data-i18n='multiLangSubtitle']",
+      );
+      const note = multiLangPanel.querySelector("[data-i18n='multiLangNote']");
+      const locked = multiLangPanel.querySelector("#qv-ml-locked-msg");
+      const generateAll = multiLangPanel.querySelector("#qv-gen-all-btn");
+      if (title) title.textContent = t("multiLangTitle");
+      if (subtitle) subtitle.textContent = t("multiLangSubtitle");
+      if (note) note.textContent = t("multiLangNote");
+      if (locked) locked.textContent = t("multiLangLocked");
+      if (generateAll) generateAll.textContent = t("generateAll");
+    }
+
+    if (resultPanel) {
+      const title = resultPanel.querySelector("[data-i18n='refineTitle']");
+      const subtitle = resultPanel.querySelector(
+        "[data-i18n='refineSubtitle']",
+      );
+      if (title) title.textContent = t("refineTitle");
+      if (subtitle) subtitle.textContent = t("refineSubtitle");
+      [
+        ["detailed", "refineDetailed"],
+        ["casual", "refineCasual"],
+        ["short", "refineShort"],
+      ].forEach(([style, key]) => {
+        const label = document.querySelector(`#qv-regen-${style} span`);
+        if (label) label.textContent = t(key);
+      });
+      const locked = document.getElementById("qv-regen-locked-msg");
+      if (locked) locked.textContent = t("refineLocked");
+    }
+
+    if (completenessPanel) {
+      const title = completenessPanel.querySelector(
+        "[data-i18n='completenessTitle']",
+      );
+      const subtitle = completenessPanel.querySelector(
+        "[data-i18n='completenessSubtitle']",
+      );
+      if (title) title.textContent = t("completenessTitle");
+      if (subtitle) subtitle.textContent = t("completenessSubtitle");
+      updateCompletenessUI();
+    }
+    updateBatchLangFooter();
   }
 
   function getLangMeta(code) {
@@ -539,6 +751,7 @@
       btn.classList.toggle("active", nextOpen);
       const details = featurePanel.querySelector("details");
       if (details) details.open = nextOpen;
+      positionCompletenessPanel();
     });
     return btn;
   }
@@ -564,18 +777,18 @@
       <details class="qv-disclosure">
         <summary class="qv-disclosure-summary">
           <span class="qv-disclosure-title-wrap">
-            <span class="qv-section-title">Generation Language</span>
-            <span class="qv-disclosure-subtitle" id="qv-single-lang-note">Single generation uses popup output language</span>
+            <span class="qv-section-title" data-i18n="multiLangTitle">${t("multiLangTitle")}</span>
+            <span class="qv-disclosure-subtitle" data-i18n="multiLangSubtitle">${t("multiLangSubtitle")}</span>
           </span>
           <span class="qv-tier-badge pro">Pro</span>
         </summary>
         <div class="qv-disclosure-body">
-          <div class="qv-mode-note" id="qv-mode-note">Use Generate for the selected output language, or select languages below for multi-generation. Each language uses 1 credit.</div>
+          <div class="qv-mode-note" id="qv-mode-note" data-i18n="multiLangNote">${t("multiLangNote")}</div>
           <div class="qv-lang-pills" id="qv-lang-pills"></div>
-          <div class="qv-locked-msg" id="qv-ml-locked-msg">Available on Pro</div>
+          <div class="qv-locked-msg" id="qv-ml-locked-msg">${t("multiLangLocked")}</div>
           <div class="qv-multilang-footer">
-            <span class="qv-lang-counter" id="qv-lang-counter">Select languages to generate at once</span>
-            <button class="qv-gen-all-btn" id="qv-gen-all-btn" disabled>Generate All</button>
+            <span class="qv-lang-counter" id="qv-lang-counter">${t("multiLangEmpty")}</span>
+            <button class="qv-gen-all-btn" id="qv-gen-all-btn" disabled>${t("generateAll")}</button>
           </div>
           <div class="qv-lang-results" id="qv-lang-results"></div>
         </div>
@@ -666,9 +879,7 @@
     const n = selectedBatchLangs.size;
     if (counter) {
       counter.textContent =
-        n === 0
-          ? "Select languages to generate at once"
-          : `Selected: ${n} language${n > 1 ? "s" : ""} → ${n} credit${n > 1 ? "s" : ""}`;
+        n === 0 ? t("multiLangEmpty") : t("multiLangSelected", n);
     }
     if (btn) btn.disabled = n === 0 || isBusy;
   }
@@ -768,6 +979,7 @@
   function closeFeaturePanel() {
     if (featurePanel) featurePanel.classList.remove("visible");
     if (prefsToggleBtn) prefsToggleBtn.classList.remove("active");
+    positionCompletenessPanel();
   }
 
   function updateMultiLangPanelAccess() {
@@ -795,34 +1007,44 @@
     if (genAllBtn) genAllBtn.disabled = selectedBatchLangs.size === 0 || isBusy;
   }
 
+  function getClampedPanelTop(anchorTop, panelHeight = 430) {
+    return Math.max(
+      12,
+      Math.min(window.innerHeight - panelHeight - 12, anchorTop),
+    );
+  }
+
   function positionFloatingTools() {
-    const anchor =
-      generateTools || document.querySelector(SELECTORS.description);
-    if (!anchor) return;
-    const rect = anchor.getBoundingClientRect();
-    const anchorLeft = rect.left || 12;
-    const anchorBottom = rect.bottom || 80;
-    const panelLeft = Math.max(
-      12,
-      Math.min(window.innerWidth - 340, anchorLeft),
-    );
-    const panelTop = Math.max(
-      12,
-      Math.min(window.innerHeight - 440, anchorBottom + 8),
-    );
-    [multiLangPanel, resultPanel, completenessPanel].forEach((panel) => {
+    const top = `${(generateTools?.offsetHeight || 36) + 8}px`;
+    [multiLangPanel, resultPanel].forEach((panel) => {
       if (!panel) return;
-      panel.style.left = `${panelLeft}px`;
-      panel.style.top = `${panelTop}px`;
+      panel.style.left = "0";
+      panel.style.top = top;
     });
-    if (
-      resultPanel &&
-      completenessPanel &&
-      resultPanel.style.display !== "none"
-    ) {
-      const resultHeight = resultPanel.offsetHeight || 150;
-      completenessPanel.style.top = `${Math.min(window.innerHeight - 190, panelTop + resultHeight + 8)}px`;
+    positionCompletenessPanel();
+  }
+
+  function positionCompletenessPanel() {
+    if (!completenessPanel) return;
+
+    const panelWidth = featurePanel?.offsetWidth || RIGHT_PANEL_WIDTH;
+    const featureRect = featurePanel?.getBoundingClientRect();
+    const left = featureRect
+      ? featureRect.left
+      : Math.max(12, window.innerWidth - panelWidth - RIGHT_PANEL_OFFSET);
+    const panelHeight = completenessPanel.offsetHeight || 220;
+    let top = 226;
+
+    if (featurePanel?.classList.contains("visible") && featureRect) {
+      top = featureRect.bottom + 8;
+      if (top + panelHeight > window.innerHeight - 12) {
+        top = featureRect.top - panelHeight - 8;
+      }
     }
+
+    completenessPanel.style.left = `${left}px`;
+    completenessPanel.style.width = `${panelWidth}px`;
+    completenessPanel.style.top = `${getClampedPanelTop(top, panelHeight)}px`;
   }
 
   function toggleMultiLangPanel(forceOpen) {
@@ -866,15 +1088,14 @@
       if (label) {
         label.textContent =
           busy && style === activeStyle
-            ? "Refining..."
-            : style.charAt(0).toUpperCase() + style.slice(1);
+            ? t("refining")
+            : t(`refine${style.charAt(0).toUpperCase() + style.slice(1)}`);
       }
     });
   }
 
   function closeResultPanel() {
     if (resultPanel) resultPanel.style.display = "none";
-    if (completenessPanel) completenessPanel.style.display = "none";
   }
 
   // --- RESULT PANEL (Smart Re-Gen) ---
@@ -887,19 +1108,19 @@
     panel.innerHTML = `
       <div class="qv-section">
         <div class="qv-section-header">
-          <span class="qv-section-title">Refine Description</span>
+          <span class="qv-section-title" data-i18n="refineTitle">${t("refineTitle")}</span>
           <button type="button" class="qv-panel-close-btn" id="qv-close-result-panel" aria-label="Dismiss">×</button>
         </div>
-        <div class="qv-section-subtitle">Generate a new version from the same photos.</div>
+        <div class="qv-section-subtitle" data-i18n="refineSubtitle">${t("refineSubtitle")}</div>
         <div class="qv-regen-buttons">
           <button class="qv-regen-btn${hasPlusAccess ? "" : " locked"}" id="qv-regen-detailed"
-            ${hasPlusAccess ? "" : "disabled"}><span>Detailed</span><small>More buyer detail</small></button>
+            ${hasPlusAccess ? "" : "disabled"}><span>${t("refineDetailed")}</span></button>
           <button class="qv-regen-btn${hasPlusAccess ? "" : " locked"}" id="qv-regen-casual"
-            ${hasPlusAccess ? "" : "disabled"}><span>Casual</span><small>Warmer tone</small></button>
+            ${hasPlusAccess ? "" : "disabled"}><span>${t("refineCasual")}</span></button>
           <button class="qv-regen-btn${hasPlusAccess ? "" : " locked"}" id="qv-regen-short"
-            ${hasPlusAccess ? "" : "disabled"}><span>Short</span><small>More concise</small></button>
+            ${hasPlusAccess ? "" : "disabled"}><span>${t("refineShort")}</span></button>
         </div>
-        <div class="qv-locked-msg qv-regen-locked-msg" id="qv-regen-locked-msg" style="display:${hasPlusAccess ? "none" : "flex"}">Refine options are available on Plus.</div>
+        <div class="qv-locked-msg qv-regen-locked-msg" id="qv-regen-locked-msg" style="display:${hasPlusAccess ? "none" : "flex"}">${t("refineLocked")}</div>
       </div>
     `;
 
@@ -915,8 +1136,8 @@
       <details class="qv-disclosure">
         <summary class="qv-disclosure-summary">
           <span class="qv-disclosure-title-wrap">
-            <span class="qv-section-title">Listing Completeness</span>
-            <span class="qv-disclosure-subtitle">Checks only fields visible on this page</span>
+            <span class="qv-section-title" data-i18n="completenessTitle">${t("completenessTitle")}</span>
+            <span class="qv-disclosure-subtitle" data-i18n="completenessSubtitle">${t("completenessSubtitle")}</span>
           </span>
           <span class="qv-score-badge" id="qv-score-badge">—/3</span>
         </summary>
@@ -944,28 +1165,28 @@
     const titleLen = title.length;
     checks.push({
       pass: titleLen >= 20,
-      label: `Title: ${titleLen}/100 chars`,
-      tip: "Add a clear title before publishing",
+      label: t("titleCheck", titleLen),
+      tip: t("titleTip"),
     });
 
     const descLen = desc.length;
     checks.push({
       pass: descLen >= 80,
-      label: `Description: ${descLen} chars`,
-      tip: "Add a fuller description before publishing",
+      label: t("descriptionCheck", descLen),
+      tip: t("descriptionTip"),
     });
 
     const hashtags = (desc.match(/#[A-Za-z0-9_]+/g) || []).length;
     checks.push({
       pass: hashtags >= 3,
-      label: `Hashtags: ${hashtags} found`,
-      tip: "Use at least 3 hashtags to improve discovery",
+      label: t("hashtagsCheck", hashtags),
+      tip: t("hashtagsTip"),
     });
 
     checks.push({
       pass: photoCount >= 3,
-      label: `Photos: ${photoCount} uploaded`,
-      tip: "Add at least 3 photos",
+      label: t("photosCheck", photoCount),
+      tip: t("photosTip"),
     });
 
     const measurementSection = document.querySelector(
@@ -981,8 +1202,12 @@
         ).length;
         checks.push({
           pass: filledMeasurements > 0,
-          label: `Measurements: ${filledMeasurements}/${measurementInputs.length} filled`,
-          tip: "Add at least one measurement so buyers can compare sizes",
+          label: t(
+            "measurementsCheck",
+            filledMeasurements,
+            measurementInputs.length,
+          ),
+          tip: t("measurementsTip"),
         });
       }
     }
@@ -1012,6 +1237,7 @@
   }
 
   function updateCompletenessUI() {
+    if (!completenessPanel) return;
     const { score, total, checks } = runCompletenessCheck();
     const pct = Math.round((score / total) * 100);
     const colorClass = pct >= 75 ? "good" : pct >= 50 ? "medium" : "low";
@@ -1058,7 +1284,7 @@
         const upgradeWrapper = document.createElement("div");
         const upgrade = document.createElement("span");
         upgrade.className = "qv-check-upgrade";
-        upgrade.textContent = "Upgrade for tips";
+        upgrade.textContent = t("upgradeForTips");
         upgradeWrapper.appendChild(upgrade);
         body.appendChild(upgradeWrapper);
       }
@@ -1066,6 +1292,75 @@
       item.appendChild(iconEl);
       item.appendChild(body);
       list.appendChild(item);
+    });
+  }
+
+  function scheduleCompletenessUpdate() {
+    if (completenessUpdateTimeout) {
+      clearTimeout(completenessUpdateTimeout);
+    }
+    completenessUpdateTimeout = setTimeout(() => {
+      completenessUpdateTimeout = null;
+      updateCompletenessUI();
+      positionFloatingTools();
+    }, 120);
+  }
+
+  function bindCompletenessObservers() {
+    if (completenessListenersBound) return;
+    completenessListenersBound = true;
+
+    document.addEventListener("input", (event) => {
+      const target = event.target;
+      if (!(target instanceof Element)) return;
+      if (
+        target.matches(SELECTORS.title) ||
+        target.matches(SELECTORS.description) ||
+        !!target.closest(SELECTORS.measurementsSection)
+      ) {
+        scheduleCompletenessUpdate();
+      }
+    });
+
+    document.addEventListener("change", (event) => {
+      const target = event.target;
+      if (!(target instanceof Element)) return;
+      if (
+        target.matches(SELECTORS.title) ||
+        target.matches(SELECTORS.description) ||
+        !!target.closest(SELECTORS.measurementsSection) ||
+        target.matches(SELECTORS.fileInput)
+      ) {
+        scheduleCompletenessUpdate();
+      }
+    });
+
+    completenessMutationObserver = new MutationObserver((mutations) => {
+      const shouldUpdate = mutations.some((mutation) => {
+        if (!(mutation.target instanceof Element)) return false;
+        const targetMatches =
+          mutation.target.matches(SELECTORS.mediaGrid) ||
+          !!mutation.target.closest(SELECTORS.mediaGrid) ||
+          mutation.target.matches(SELECTORS.measurementsSection) ||
+          !!mutation.target.closest(SELECTORS.measurementsSection);
+        const nodeMatches = [...mutation.addedNodes, ...mutation.removedNodes]
+          .filter((node) => node instanceof Element)
+          .some(
+            (node) =>
+              node.matches(SELECTORS.mediaGrid) ||
+              !!node.closest(SELECTORS.mediaGrid) ||
+              !!node.querySelector(SELECTORS.mediaGrid) ||
+              node.matches(SELECTORS.measurementsSection) ||
+              !!node.closest(SELECTORS.measurementsSection) ||
+              !!node.querySelector(SELECTORS.measurementsSection),
+          );
+        return targetMatches || nodeMatches;
+      });
+      if (shouldUpdate) scheduleCompletenessUpdate();
+    });
+    completenessMutationObserver.observe(document.body, {
+      childList: true,
+      subtree: true,
     });
   }
 
@@ -1270,7 +1565,9 @@
 
           const { title, description } = await response.json();
           if (card) renderLangSuccess(card, lang, title, description);
-          langDescriptions.push(`${lang.name}\n${description || ""}`.trim());
+          // Format as: 【Language Name】\ndescription\nFLAG-FLAG-FLAG
+          const formattedLang = `【${lang.flag} ${lang.name}】\n${description || ""}`;
+          langDescriptions.push(formattedLang);
         } catch (e) {
           const card = document.getElementById(`qv-result-${lang.code}`);
           if (card) renderLangError(card, lang, e.message);
@@ -1287,7 +1584,7 @@
       updateBatchLangFooter();
       if (btn) {
         btn.disabled = selectedBatchLangs.size === 0;
-        btn.textContent = "Generate All";
+        btn.textContent = t("generateAll");
       }
     }
   }
@@ -1372,7 +1669,13 @@
         updateGenerateModeLabel();
       });
     }
-    if (changes.selectedLanguage) updateGenerateModeLabel();
+    if (changes.selectedLanguage) {
+      currentUiLanguage = normalizeUiLanguage(
+        changes.selectedLanguage.newValue,
+      );
+      refreshLocalizedFeatureText();
+      updateGenerateModeLabel();
+    }
   });
 
   // --- UI ---
@@ -2056,8 +2359,8 @@
       .qv-floating-panel {
         position: fixed;
         top: 72px;
-        right: 16px;
-        width: min(360px, calc(100vw - 40px));
+        right: ${RIGHT_PANEL_OFFSET}px;
+        width: min(${RIGHT_PANEL_WIDTH}px, calc(100vw - ${RIGHT_PANEL_OFFSET * 2}px));
         z-index: 2147482992;
         opacity: 0;
         transform: translateY(-6px) scale(0.98);
@@ -2073,7 +2376,7 @@
       #${PREFS_DOCK_ID} {
         position: fixed;
         top: 184px;
-        right: 16px;
+        right: ${RIGHT_PANEL_OFFSET}px;
         z-index: 2147483000;
         display: none;
         width: auto;
@@ -2150,7 +2453,9 @@
       }
 
       .qv-popover-panel {
-        position: fixed;
+        position: absolute;
+        left: 0;
+        top: calc(100% + 8px);
         width: min(330px, calc(100vw - 24px));
         max-height: min(430px, calc(100vh - 96px));
         overflow: auto;
@@ -2163,7 +2468,11 @@
 
       .qv-aftergen-panel,
       .qv-completeness-popover {
-        width: min(300px, calc(100vw - 24px));
+        width: min(${RIGHT_PANEL_WIDTH}px, calc(100vw - ${RIGHT_PANEL_OFFSET * 2}px));
+      }
+
+      .qv-completeness-popover {
+        position: fixed;
       }
 
       #${GENERATE_MODE_BTN_ID} {
@@ -2563,7 +2872,7 @@
       }
       .qv-regen-btn {
         min-width: 0;
-        padding: 9px 6px;
+        padding: 8px 6px;
         border: 1px solid #e5e7eb;
         background: white;
         border-radius: 8px;
@@ -2580,22 +2889,13 @@
         align-items: center;
         justify-content: center;
         line-height: 1.2;
-        min-height: 52px;
-      }
-      .qv-regen-btn small {
-        display: block;
-        color: #6b7280;
-        font-size: 10.5px;
-        font-weight: 500;
+        min-height: 38px;
       }
       .qv-regen-btn:hover:not(.locked) {
         border-color: #4f46e5;
         color: #4f46e5;
         background: #eef2ff;
         transform: translateY(-1px);
-      }
-      .qv-regen-btn:hover:not(.locked) small {
-        color: #4338ca;
       }
       .qv-regen-btn.locked {
         opacity: 0.4;
@@ -2777,6 +3077,10 @@
     if (generateModeBtn) generateModeBtn.style.display = "inline-flex";
     if (phoneBtn) phoneBtn.style.display = "inline-flex";
     if (prefsToggleBtn) prefsToggleBtn.style.display = "inline-flex";
+    if (completenessPanel) {
+      completenessPanel.style.display = "block";
+      updateCompletenessUI();
+    }
     if (prefsDock) prefsDock.classList.add("visible");
     positionFloatingTools();
 
@@ -3403,6 +3707,8 @@
 
       btnContainer.appendChild(toolsWrapper);
       btnContainer.appendChild(signInBtn);
+      btnContainer.appendChild(resultPanel);
+      btnContainer.appendChild(multiLangPanel);
 
       if (titleDescriptionCard?.parentNode) {
         titleDescriptionCard.parentNode.insertBefore(
@@ -3413,8 +3719,6 @@
         document.body.appendChild(btnContainer);
       }
       document.body.appendChild(featurePanel);
-      document.body.appendChild(resultPanel);
-      document.body.appendChild(multiLangPanel);
       document.body.appendChild(completenessPanel);
       restorePrefState();
       restoreBatchLangState();
@@ -3422,6 +3726,8 @@
       updateMultiLangPanelAccess();
       updateButtonUI();
       positionFloatingTools();
+      bindCompletenessObservers();
+      scheduleCompletenessUpdate();
 
       // Wire up suggestion submit
       const suggestBtn = document.getElementById("qv-suggest-btn");
@@ -3453,13 +3759,32 @@
   }
 
   function startInjectionObserver() {
-    injectButton();
+    let injected = injectButton();
+    let pending = false;
+
+    const runInjection = () => {
+      pending = false;
+      const toolbarMissing = !document.getElementById(BTN_ID);
+      if (toolbarMissing || !injected) {
+        injected = injectButton();
+      }
+      if (injected) {
+        scheduleCompletenessUpdate();
+      }
+    };
+
     const pollInterval = setInterval(() => {
-      injectButton();
+      if (injected && document.getElementById(BTN_ID)) {
+        clearInterval(pollInterval);
+        return;
+      }
+      runInjection();
     }, 1000);
 
     const observer = new MutationObserver(() => {
-      injectButton();
+      if (pending) return;
+      pending = true;
+      setTimeout(runInjection, 150);
     });
 
     observer.observe(document.body, { childList: true, subtree: true });
@@ -3469,6 +3794,7 @@
 
   function init() {
     injectStylesheet();
+    loadUiLanguage().then(refreshLocalizedFeatureText);
     initializeAuthState();
     document.addEventListener("click", (event) => {
       const target = event.target;
