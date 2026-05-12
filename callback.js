@@ -47,7 +47,6 @@
     const elements = {
       "success-title": "welcomeTitle",
       "success-subtitle": "welcomeSubtitle",
-      "vinted-redirect": "vintedButton",
       "view-plans": "viewPlansButton",
       "close-tab": "closeTabButton",
       "features-title": "featuresTitle",
@@ -57,9 +56,6 @@
       "feature-4": "feature4",
       "upgrade-title": "upgradeTitle",
       "upgrade-description": "upgradeDescription",
-      "starter-features": "starterFeatures",
-      "pro-features": "proFeatures",
-      "business-features": "businessFeatures",
       "privacy-link": "privacyLink",
       "terms-link": "termsLink",
     };
@@ -67,12 +63,7 @@
     Object.entries(elements).forEach(([elementId, textKey]) => {
       const element = document.getElementById(elementId);
       if (element && localization.texts[textKey]) {
-        if (
-          elementId.includes("features") ||
-          elementId === "starter-features" ||
-          elementId === "pro-features" ||
-          elementId === "business-features"
-        ) {
+        if (elementId.includes("features")) {
           element.innerHTML = localization.texts[textKey];
         } else {
           element.textContent = localization.texts[textKey];
@@ -165,58 +156,6 @@
     }
     // Default to detected language for new users
     return detectCountryAndLocalization();
-  }
-
-  async function handlePlanSelection(planTier) {
-    if (!userSession?.user?.email) {
-      alert("Please wait for authentication to complete before upgrading.");
-      return;
-    }
-
-    const planCard = document.querySelector(`[data-plan="${planTier}"]`);
-    const originalContent = planCard.innerHTML;
-
-    // Show loading state
-    planCard.innerHTML = `
-      <div class="checkout-loading-container">
-        <div class="checkout-spinner"></div>
-        <div class="checkout-loading-text">Opening checkout...</div>
-      </div>
-    `;
-
-    try {
-      const response = await fetch(
-        "https://quick-vint.vercel.app/api/stripe/create-checkout",
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            email: userSession.user.email,
-            tier: planTier,
-          }),
-        },
-      );
-
-      const data = await response.json();
-
-      if (response.ok && data.url) {
-        window.open(data.url, "_blank");
-        // Restore original content after short delay
-        setTimeout(() => {
-          planCard.innerHTML = originalContent;
-        }, 2000);
-      } else {
-        throw new Error(data.error || "Failed to create checkout session");
-      }
-    } catch (error) {
-      console.error("Checkout error:", error);
-      alert(
-        "Unable to open checkout. Please try upgrading through the extension or contact support.",
-      );
-      planCard.innerHTML = originalContent;
-    }
   }
 
   async function checkAndCustomizeForExistingSubscriber() {
@@ -401,16 +340,6 @@
     // Apply localization first (above the fold priority)
     localizeContent(currentLocalization);
 
-    // Initialize Vinted redirect
-    const vintedBtn = document.getElementById("vinted-redirect");
-    if (vintedBtn) {
-      const vintedUrl = `https://www.${currentLocalization.domain}/items/new`;
-      vintedBtn.onclick = () => {
-        window.open(vintedUrl, "_blank");
-        setTimeout(() => window.close(), 800);
-      };
-    }
-
     // Initialize view plans button
     const plansBtn = document.getElementById("view-plans");
     if (plansBtn) {
@@ -447,16 +376,6 @@
         }
       };
     }
-
-    // Initialize plan card click handlers
-    const starterCard = document.getElementById("starter-card");
-    const proCard = document.getElementById("pro-card");
-    const businessCard = document.getElementById("business-card");
-
-    if (starterCard) starterCard.onclick = () => handlePlanSelection("starter");
-    if (proCard) proCard.onclick = () => handlePlanSelection("pro");
-    if (businessCard)
-      businessCard.onclick = () => handlePlanSelection("business");
 
     // Initialize close tab button
     const closeTabBtn = document.getElementById("close-tab");

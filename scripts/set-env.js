@@ -13,6 +13,13 @@ const path = require('path');
 
 const PROD_URL = 'https://quick-vint.vercel.app';
 const LOCAL_URL = 'http://localhost:5000';
+const STAGING_URL = 'https://quick-vint-git-new-pricing-ahmed-samis-projects-e6ef0336.vercel.app';
+
+const KNOWN_API_BASE_URLS = [
+    PROD_URL,
+    LOCAL_URL,
+    STAGING_URL,
+];
 
 // Files to process (relative to project root)
 const FILES_TO_PROCESS = [
@@ -53,9 +60,19 @@ function replaceInFile(filePath, fromUrl, toUrl) {
 
     const content = fs.readFileSync(fullPath, 'utf8');
 
-    // Reset any known dev URLs to production first, then replace with target
-    let newContent = content.split(LOCAL_URL).join(PROD_URL);
-    newContent = newContent.split(fromUrl).join(toUrl);
+    const urlsToReplace = new Set(KNOWN_API_BASE_URLS);
+    if (fromUrl) urlsToReplace.add(fromUrl);
+
+    let newContent = content;
+    for (const url of urlsToReplace) {
+        newContent = newContent.split(url).join(toUrl);
+    }
+
+    // Vercel preview deployments include the project/name slug in the host.
+    newContent = newContent.replace(
+        /https:\/\/quick-vint-[a-z0-9-]+\.vercel\.app/g,
+        toUrl
+    );
 
     fs.writeFileSync(fullPath, newContent, 'utf8');
 }
@@ -79,4 +96,4 @@ if (require.main === module) {
     main();
 }
 
-module.exports = { getApiBaseUrl, replaceInFile, PROD_URL };
+module.exports = { getApiBaseUrl, replaceInFile, PROD_URL, LOCAL_URL, STAGING_URL };

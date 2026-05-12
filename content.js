@@ -11,7 +11,8 @@
   const SELECTORS = {
     title: 'input[data-testid="title--input"]',
     description: 'textarea[data-testid="description--input"]',
-    mediaGrid: '[data-testid="media-upload-grid"], [data-testid="media-select-grid"]',
+    mediaGrid:
+      '[data-testid="media-upload-grid"], [data-testid="media-select-grid"]',
     mediaPhotoBox: ".photo-box",
     mediaImageWrapper: '[data-testid^="image-wrapper-"]',
     mediaImage:
@@ -21,20 +22,256 @@
     mediaAddPhotosButton:
       '[data-testid="add-photos-icon-button"], button[aria-label="Add photos"]',
     fileInput: 'input[type="file"]',
+    measurementsSection: 'label[for="measurements"]',
   };
   const WAND_ICON_SVG = `<svg fill="#ffffff" viewBox="0 0 512 512" version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink"> <path d="M454.321,219.727l-38.766-51.947l20.815-61.385c2.046-6.032,0.489-12.704-4.015-17.208 c-4.504-4.504-11.175-6.061-17.208-4.015l-61.384,20.815l-51.951-38.766c-5.103-3.809-11.929-4.392-17.605-1.499 c-5.676,2.893-9.217,8.755-9.136,15.125l0.829,64.815l-52.923,37.426c-5.201,3.678-7.863,9.989-6.867,16.282 c0.996,6.291,5.479,11.471,11.561,13.363l43.844,13.63L14.443,483.432c-6.535,6.534-6.535,17.131,0,23.666s17.131,6.535,23.666,0 l257.073-257.072l13.629,43.843c2.172,6.986,8.638,11.768,15.984,11.768c5.375,0,10.494-2.595,13.66-7.072l37.426-52.923 l64.815,0.828c6.322,0.051,12.233-3.462,15.125-9.136S458.131,224.833,454.321,219.727z"></path> <polygon points="173.373,67.274 160.014,42.848 146.656,67.274 122.23,80.632 146.656,93.992 160.014,118.417 173.373,93.992 197.799,80.632 "></polygon> <polygon points="362.946,384.489 352.14,364.731 341.335,384.489 321.577,395.294 341.335,406.1 352.14,425.856 362.946,406.1 382.703,395.294 "></polygon> <polygon points="378.142,19.757 367.337,0 356.531,19.757 336.774,30.563 356.531,41.369 367.337,61.126 378.142,41.369 397.9,30.563 "></polygon> <polygon points="490.635,142.513 484.167,130.689 477.701,142.513 465.876,148.979 477.701,155.446 484.167,167.27 490.635,155.446 502.458,148.979 "></polygon> <polygon points="492.626,294.117 465.876,301.951 439.128,294.117 446.962,320.865 439.128,347.615 465.876,339.781 492.626,347.615 484.791,320.865 "></polygon> </svg>`;
   const PHONE_ICON_SVG = `<svg fill="#ffffff" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M17 1.01L7 1c-1.1 0-2 .9-2 2v18c0 1.1.9 2 2 2h10c1.1 0 2-.9 2-2V3c0-1.1-.9-1.99-2-1.99zM17 19H7V5h10v14z"/></svg>`;
+
+  const FEATURE_PANEL_ID = "quickvint-feature-panel";
+  const RESULT_PANEL_ID = "quickvint-result-panel";
+  const MULTILANG_PANEL_ID = "quickvint-multilang-panel";
+  const COMPLETENESS_PANEL_ID = "quickvint-completeness-panel";
+  const GENERATE_TOOLS_ID = "quickvint-generate-tools";
+  const GENERATE_MODE_BTN_ID = "quickvint-generate-mode-btn";
+  const PREFS_TOGGLE_BTN_ID = "quickvint-prefs-toggle";
+  const PREFS_DOCK_ID = "quickvint-prefs-dock";
+  const RIGHT_PANEL_OFFSET = 16;
+  const RIGHT_PANEL_WIDTH = 300;
+  const BATCH_LANGS_STORAGE_KEY = "batchLanguages";
+  const BATCH_TITLE_LANG_STORAGE_KEY = "batchTitleLanguage";
+  const MEASUREMENT_HINT_KEY = "quickvintMeasurementHintLastShownAt";
+  const COMPLETENESS_DISMISSED_KEY = "quickvintCompletenessNeverShow";
+  const MEASUREMENT_HINT_INTERVAL_MS = 7 * 24 * 60 * 60 * 1000;
+  const PROFILE_REFRESH_INTERVAL_MS = 5 * 60 * 1000;
+  const PROFILE_REFRESH_MIN_INTERVAL_MS = 60 * 1000;
+
+  const LISTING_PREFS = [
+    { id: "pet_free_home", label: "Pet-free home" },
+    { id: "smoke_free_home", label: "Smoke-free home" },
+  ];
+  const LISTING_PREF_IDS = new Set(LISTING_PREFS.map((pref) => pref.id));
+
+  const BATCH_LANGS = [
+    { code: "en", flag: "🇬🇧", name: "English", domain: "vinted.co.uk" },
+    { code: "fr", flag: "🇫🇷", name: "Français", domain: "vinted.fr" },
+    { code: "de", flag: "🇩🇪", name: "Deutsch", domain: "vinted.de" },
+    { code: "nl", flag: "🇳🇱", name: "Nederlands", domain: "vinted.nl" },
+    { code: "es", flag: "🇪🇸", name: "Español", domain: "vinted.es" },
+    { code: "pl", flag: "🇵🇱", name: "Polski", domain: "vinted.pl" },
+    { code: "it", flag: "🇮🇹", name: "Italiano", domain: "vinted.it" },
+    { code: "pt", flag: "🇵🇹", name: "Português", domain: "vinted.pt" },
+    { code: "sv", flag: "🇸🇪", name: "Svenska", domain: "vinted.se" },
+    { code: "da", flag: "🇩🇰", name: "Dansk", domain: "vinted.dk" },
+    { code: "cz", flag: "🇨🇿", name: "Čeština", domain: "vinted.cz" },
+    { code: "sk", flag: "🇸🇰", name: "Slovenčina", domain: "vinted.sk" },
+    { code: "fi", flag: "🇫🇮", name: "Suomeksi", domain: "vinted.fi" },
+    { code: "hu", flag: "🇭🇺", name: "Magyar", domain: "vinted.hu" },
+    { code: "lt", flag: "🇱🇹", name: "Lietuvių", domain: "vinted.lt" },
+    { code: "ro", flag: "🇷🇴", name: "Română", domain: "vinted.ro" },
+    { code: "el", flag: "🇬🇷", name: "Ελληνικά", domain: "vinted.gr" },
+    { code: "hr", flag: "🇭🇷", name: "Hrvatski", domain: "vinted.hr" },
+  ];
+
+  const UI_COPY = {
+    en: {
+      multiLangTitle: "Multi-language",
+      multiLangSubtitle: "Generate this listing in several languages.",
+      multiLangNote: "Choose description languages, then pick one title language.",
+      multiLangLocked: "Available on Pro.",
+      multiLangEmpty: "Select languages",
+      multiLangSelected: (count) =>
+        `${count} language${count > 1 ? "s" : ""} selected`,
+      generateAll: "Generate selected",
+      viewPlans: "View plans",
+      refineTitle: "Refine Description",
+      refineSubtitle: "Generate a new version from the same photos.",
+      refineDetailed: "Detailed",
+      refineCasual: "Casual",
+      refineShort: "Short",
+      refineLocked: "Refine options are available on Plus.",
+      refining: "Refining...",
+      completenessTitle: "Listing Completeness",
+      completenessSubtitle: "Updates as you fill the listing.",
+      neverShowAgain: "Never show again",
+      titleCheck: (count) => `Title: ${count}/100 chars`,
+      titleTip: "Add a clear title before publishing",
+      descriptionCheck: (count) => `Description: ${count} chars`,
+      descriptionTip: "Add a fuller description before publishing",
+      hashtagsCheck: (count) => `Hashtags: ${count} found`,
+      hashtagsTip: "Use at least 3 hashtags to improve discovery",
+      photosCheck: (count) => `Photos: ${count} uploaded`,
+      photosTip: "Add at least 3 photos",
+      measurementsCheck: (filled, total) =>
+        `Measurements: ${filled}/${total} filled`,
+      measurementsTip:
+        "Add at least one measurement so buyers can compare sizes",
+      upgradeForTips: "Upgrade for tips",
+    },
+    fr: {
+      multiLangTitle: "Multilingue",
+      multiLangSubtitle: "Générer cette annonce en plusieurs langues.",
+      multiLangNote:
+        "Choisissez les langues de description, puis une langue pour le titre.",
+      multiLangLocked: "Disponible avec Pro.",
+      multiLangEmpty: "Sélectionnez des langues",
+      multiLangSelected: (count) =>
+        `${count} langue${count > 1 ? "s" : ""} sélectionnée${count > 1 ? "s" : ""}`,
+      generateAll: "Générer la sélection",
+      viewPlans: "Voir les offres",
+      refineTitle: "Affiner la description",
+      refineSubtitle: "Générer une nouvelle version avec les mêmes photos.",
+      refineDetailed: "Détaillée",
+      refineCasual: "Décontractée",
+      refineShort: "Courte",
+      refineLocked: "Les options d'affinage sont disponibles avec Plus.",
+      refining: "Affinage...",
+      completenessTitle: "Complétude de l'annonce",
+      completenessSubtitle: "Se met à jour pendant la saisie.",
+      neverShowAgain: "Ne plus afficher",
+      titleCheck: (count) => `Titre : ${count}/100 caractères`,
+      titleTip: "Ajoutez un titre clair avant de publier",
+      descriptionCheck: (count) => `Description : ${count} caractères`,
+      descriptionTip: "Ajoutez une description plus complète avant de publier",
+      hashtagsCheck: (count) => `Hashtags : ${count} trouvés`,
+      hashtagsTip: "Utilisez au moins 3 hashtags pour améliorer la visibilité",
+      photosCheck: (count) => `Photos : ${count} ajoutées`,
+      photosTip: "Ajoutez au moins 3 photos",
+      measurementsCheck: (filled, total) =>
+        `Mesures : ${filled}/${total} remplies`,
+      measurementsTip: "Ajoutez au moins une mesure pour aider les acheteurs",
+      upgradeForTips: "Passez à Pro pour les conseils",
+    },
+    de: {
+      multiLangTitle: "Mehrsprachig",
+      multiLangSubtitle: "Erstelle dieses Angebot in mehreren Sprachen.",
+      multiLangNote:
+        "Wähle Beschreibungssprachen und dann eine Titelsprache.",
+      multiLangLocked: "Verfügbar mit Pro.",
+      multiLangEmpty: "Sprachen auswählen",
+      multiLangSelected: (count) =>
+        `${count} Sprache${count > 1 ? "n" : ""} ausgewählt`,
+      generateAll: "Auswahl generieren",
+      viewPlans: "Tarife ansehen",
+      refineTitle: "Beschreibung verfeinern",
+      refineSubtitle: "Neue Version mit denselben Fotos erstellen.",
+      refineDetailed: "Detailliert",
+      refineCasual: "Locker",
+      refineShort: "Kurz",
+      refineLocked: "Verfeinerungen sind mit Plus verfügbar.",
+      refining: "Verfeinern...",
+      completenessTitle: "Anzeigenvollständigkeit",
+      completenessSubtitle: "Aktualisiert sich beim Ausfüllen.",
+      neverShowAgain: "Nicht mehr anzeigen",
+      titleCheck: (count) => `Titel: ${count}/100 Zeichen`,
+      titleTip: "Füge vor dem Veröffentlichen einen klaren Titel hinzu",
+      descriptionCheck: (count) => `Beschreibung: ${count} Zeichen`,
+      descriptionTip:
+        "Füge vor dem Veröffentlichen eine vollständigere Beschreibung hinzu",
+      hashtagsCheck: (count) => `Hashtags: ${count} gefunden`,
+      hashtagsTip: "Nutze mindestens 3 Hashtags für bessere Sichtbarkeit",
+      photosCheck: (count) => `Fotos: ${count} hochgeladen`,
+      photosTip: "Füge mindestens 3 Fotos hinzu",
+      measurementsCheck: (filled, total) =>
+        `Maße: ${filled}/${total} ausgefüllt`,
+      measurementsTip:
+        "Füge mindestens ein Maß hinzu, damit Käufer Größen vergleichen können",
+      upgradeForTips: "Upgrade für Tipps",
+    },
+    nl: {
+      multiLangTitle: "Meertalig",
+      multiLangSubtitle: "Genereer deze listing in meerdere talen.",
+      multiLangNote:
+        "Kies beschrijvingstalen en daarna een titel-taal.",
+      multiLangLocked: "Beschikbaar met Pro.",
+      multiLangEmpty: "Selecteer talen",
+      multiLangSelected: (count) =>
+        `${count} taal${count > 1 ? "en" : ""} geselecteerd`,
+      generateAll: "Selectie genereren",
+      viewPlans: "Bekijk plannen",
+      refineTitle: "Beschrijving verfijnen",
+      refineSubtitle: "Maak een nieuwe versie met dezelfde foto's.",
+      refineDetailed: "Gedetailleerd",
+      refineCasual: "Casual",
+      refineShort: "Kort",
+      refineLocked: "Verfijnopties zijn beschikbaar met Plus.",
+      refining: "Verfijnen...",
+      completenessTitle: "Listingvolledigheid",
+      completenessSubtitle: "Wordt bijgewerkt terwijl je invult.",
+      neverShowAgain: "Nooit meer tonen",
+      titleCheck: (count) => `Titel: ${count}/100 tekens`,
+      titleTip: "Voeg een duidelijke titel toe voordat je publiceert",
+      descriptionCheck: (count) => `Beschrijving: ${count} tekens`,
+      descriptionTip:
+        "Voeg een volledigere beschrijving toe voordat je publiceert",
+      hashtagsCheck: (count) => `Hashtags: ${count} gevonden`,
+      hashtagsTip: "Gebruik minstens 3 hashtags voor betere vindbaarheid",
+      photosCheck: (count) => `Foto's: ${count} geüpload`,
+      photosTip: "Voeg minstens 3 foto's toe",
+      measurementsCheck: (filled, total) =>
+        `Afmetingen: ${filled}/${total} ingevuld`,
+      measurementsTip:
+        "Voeg minstens één afmeting toe zodat kopers maten kunnen vergelijken",
+      upgradeForTips: "Upgrade voor tips",
+    },
+  };
 
   // --- STATE ---
   let generateBtn = null;
   let phoneBtn = null;
   let signInBtn = null;
+  let generateTools = null;
+  let generateModeBtn = null;
+  let prefsToggleBtn = null;
+  let prefsDock = null;
   let isBusy = false;
   let isAuthenticated = false;
   let pollInterval = null;
   let downloadedFiles = new Set();
+  let phoneUploadedPreviews = new Map();
+  let phoneSyncInProgress = false;
+  let hasPlusAccess = false;
+  let hasProAccess = false;
+  let featurePanel = null;
+  let resultPanel = null;
+  let multiLangPanel = null;
+  let completenessPanel = null;
+  let lastImageUrls = [];
+  let selectedBatchLangs = new Set();
+  let titleLanguageSelectRequest = 0;
+  let currentUiLanguage = "en";
+  let completenessUpdateTimeout = null;
+  let completenessListenersBound = false;
+  let completenessMutationObserver = null;
+  let isCompletenessDismissed = false;
+  let completenessPreferenceLoaded = false;
+  let lastProfileRefreshAt = 0;
+  let profileRefreshInFlight = false;
 
   // --- HELPER FUNCTIONS ---
+
+  function normalizeTier(tier) {
+    if (!tier) return "free";
+    const map = {
+      unlimited_monthly: "starter",
+      unlimited_annual: "starter",
+      starter: "starter",
+      pro: "pro",
+      business: "business",
+      free: "free",
+      starter_v2: "starter_v2",
+      plus: "plus",
+      pro_v2: "pro_v2",
+      business_v2: "business_v2",
+    };
+    return map[tier] || "free";
+  }
+
+  function isLegacyProfile(profile) {
+    if (profile?.is_legacy_plan !== undefined) return !!profile.is_legacy_plan;
+    return ["starter", "pro", "business"].includes(
+      normalizeTier(profile?.subscription_tier),
+    );
+  }
 
   function showToast(message, type = "error", action = null, autoHide = true) {
     let toast = document.getElementById("quickvint-toast");
@@ -44,19 +281,38 @@
       document.body.appendChild(toast);
     }
 
-    const icon = type === "success" ? "✅" : type === "info" ? "ℹ️" : "⚠️";
-    let messageHtml = `<span>${message}</span>`;
+    const iconText = type === "success" ? "✅" : type === "info" ? "ℹ️" : "⚠️";
+    const icon = document.createElement("span");
+    icon.className = "toast-icon";
+    icon.textContent = iconText;
+
+    const content = document.createElement("div");
+    content.className = "toast-content";
+
+    const messageText = document.createElement("span");
+    messageText.textContent = message;
+    content.appendChild(messageText);
 
     if (action && action.text && action.url) {
-      messageHtml += `<a href="${action.url}" target="_blank" style="margin-left: 12px; color: inherit; text-decoration: underline; font-weight: 700; white-space: nowrap;">${action.text} &rarr;</a>`;
+      const actionLink = document.createElement("a");
+      actionLink.href = action.url;
+      actionLink.target = "_blank";
+      actionLink.rel = "noopener noreferrer";
+      actionLink.style.marginLeft = "12px";
+      actionLink.style.color = "inherit";
+      actionLink.style.textDecoration = "underline";
+      actionLink.style.fontWeight = "700";
+      actionLink.style.whiteSpace = "nowrap";
+      actionLink.textContent = `${action.text} →`;
+      content.appendChild(actionLink);
     }
 
-    // Updated HTML structure with close button
-    toast.innerHTML = `
-      <span class="toast-icon">${icon}</span>
-      <div class="toast-content">${messageHtml}</div>
-      <button class="toast-close" aria-label="Close">×</button>
-    `;
+    const closeButton = document.createElement("button");
+    closeButton.className = "toast-close";
+    closeButton.setAttribute("aria-label", "Close");
+    closeButton.textContent = "×";
+
+    toast.replaceChildren(icon, content, closeButton);
 
     toast.className = type;
     toast.style.visibility = "visible"; // Ensure it's visible for the transition
@@ -113,10 +369,243 @@
     });
   }
 
+  async function openPricingPage() {
+    const tab = window.open("about:blank", "_blank");
+    const pricingUrl = await getPricingUrl();
+    if (tab) {
+      tab.location.href = pricingUrl;
+    } else {
+      window.open(pricingUrl, "_blank", "noopener,noreferrer");
+    }
+  }
+
+  function renderUpgradeCta(container, message) {
+    if (!container) return;
+    container.replaceChildren();
+    const text = document.createElement("span");
+    text.className = "qv-locked-msg-text";
+    text.textContent = message;
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "qv-mini-upgrade-btn";
+    button.textContent = `${t("viewPlans")} →`;
+    button.addEventListener("click", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      openPricingPage();
+    });
+    container.appendChild(text);
+    container.appendChild(button);
+  }
+
   async function sendMessage(message) {
     return new Promise((resolve) => {
       chrome.runtime.sendMessage(message, resolve);
     });
+  }
+
+  async function fetchWithTimeout(url, options = {}, timeoutMs = 90000) {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), timeoutMs);
+    try {
+      return await fetch(url, { ...options, signal: controller.signal });
+    } finally {
+      clearTimeout(timeout);
+    }
+  }
+
+  function setTextareaValue(value) {
+    const descInput = document.querySelector(SELECTORS.description);
+    if (!descInput) return;
+    descInput.value = value;
+    descInput.dispatchEvent(new Event("input", { bubbles: true }));
+  }
+
+  function setTitleValue(value) {
+    const titleInput = document.querySelector(SELECTORS.title);
+    if (!titleInput) return;
+    titleInput.value = value || "";
+    titleInput.dispatchEvent(new Event("input", { bubbles: true }));
+  }
+
+  function appendDescriptionsToTextarea(descriptions) {
+    if (!descriptions.length) return;
+    const formatted = descriptions
+      .filter((desc) => desc && desc.length > 0)
+      .join("\n\n━━━━━━━━━━━\n\n");
+    setTextareaValue(formatted);
+  }
+
+  function formatBatchDescription(lang, description) {
+    return `[${lang.name}]\n${description || ""}`.trim();
+  }
+
+  function sanitizeListingPreferences(preferences = []) {
+    const normalized = preferences.flatMap((pref) =>
+      pref === "smoke_pet_free" ? ["pet_free_home", "smoke_free_home"] : [pref],
+    );
+    return [...new Set(normalized)].filter((pref) =>
+      LISTING_PREF_IDS.has(pref),
+    );
+  }
+
+  function normalizeUiLanguage(code) {
+    const normalized = code === "cs" ? "cz" : code || "en";
+    return UI_COPY[normalized] ? normalized : "en";
+  }
+
+  function t(key, ...args) {
+    const copy = UI_COPY[currentUiLanguage] || UI_COPY.en;
+    const value = copy[key] ?? UI_COPY.en[key] ?? key;
+    return typeof value === "function" ? value(...args) : value;
+  }
+
+  async function loadUiLanguage() {
+    const { selectedLanguage = "en" } =
+      await chrome.storage.local.get("selectedLanguage");
+    currentUiLanguage = normalizeUiLanguage(selectedLanguage);
+  }
+
+  function refreshLocalizedFeatureText() {
+    if (multiLangPanel) {
+      const title = multiLangPanel.querySelector(
+        "[data-i18n='multiLangTitle']",
+      );
+      const subtitle = multiLangPanel.querySelector(
+        "[data-i18n='multiLangSubtitle']",
+      );
+      const note = multiLangPanel.querySelector("[data-i18n='multiLangNote']");
+      const locked = multiLangPanel.querySelector("#qv-ml-locked-msg");
+      const generateAll = multiLangPanel.querySelector("#qv-gen-all-btn");
+      if (title) title.textContent = t("multiLangTitle");
+      if (subtitle) subtitle.textContent = t("multiLangSubtitle");
+      if (note) note.textContent = t("multiLangNote");
+      if (locked) renderUpgradeCta(locked, t("multiLangLocked"));
+      if (generateAll) generateAll.textContent = t("generateAll");
+    }
+
+    if (resultPanel) {
+      const title = resultPanel.querySelector("[data-i18n='refineTitle']");
+      const subtitle = resultPanel.querySelector(
+        "[data-i18n='refineSubtitle']",
+      );
+      if (title) title.textContent = t("refineTitle");
+      if (subtitle) subtitle.textContent = t("refineSubtitle");
+      [
+        ["detailed", "refineDetailed"],
+        ["casual", "refineCasual"],
+        ["short", "refineShort"],
+      ].forEach(([style, key]) => {
+        const label = document.querySelector(`#qv-regen-${style} span`);
+        if (label) label.textContent = t(key);
+      });
+      const locked = document.getElementById("qv-regen-locked-msg");
+      if (locked) renderUpgradeCta(locked, t("refineLocked"));
+    }
+
+    if (completenessPanel) {
+      const title = completenessPanel.querySelector(
+        "[data-i18n='completenessTitle']",
+      );
+      const subtitle = completenessPanel.querySelector(
+        "[data-i18n='completenessSubtitle']",
+      );
+      const neverShow = completenessPanel.querySelector(
+        "[data-i18n='neverShowAgain']",
+      );
+      if (title) title.textContent = t("completenessTitle");
+      if (subtitle) subtitle.textContent = t("completenessSubtitle");
+      if (neverShow) neverShow.textContent = t("neverShowAgain");
+      updateCompletenessUI();
+    }
+    updateBatchLangFooter();
+  }
+
+  function getLangMeta(code) {
+    return (
+      BATCH_LANGS.find((lang) => lang.code === code) ||
+      BATCH_LANGS.find((lang) => lang.code === "en") || {
+        code: "en",
+        name: "English",
+        flag: "",
+      }
+    );
+  }
+
+  function formatLangCode(code) {
+    return (code || "en").toUpperCase();
+  }
+
+  function getFlagCountryCode(code) {
+    const map = {
+      en: "gb",
+      fr: "fr",
+      de: "de",
+      nl: "nl",
+      es: "es",
+      it: "it",
+      pt: "pt",
+      pl: "pl",
+      cz: "cz",
+      sk: "sk",
+      sv: "se",
+      da: "dk",
+      fi: "fi",
+      hu: "hu",
+      lt: "lt",
+      ro: "ro",
+      el: "gr",
+      hr: "hr",
+    };
+    return map[code] || "gb";
+  }
+
+  function createFlagImage(code, alt = "") {
+    const img = document.createElement("img");
+    img.className = "qv-lang-flag";
+    img.src = `https://flagcdn.com/w40/${getFlagCountryCode(code)}.png`;
+    img.alt = alt;
+    img.loading = "lazy";
+    return img;
+  }
+
+  async function updateGenerateModeLabel() {
+    if (!generateBtn) return;
+    const { selectedLanguage: storedLanguage = "en" } =
+      await chrome.storage.local.get("selectedLanguage");
+    const selectedLanguage = storedLanguage === "cs" ? "cz" : storedLanguage;
+    const label = generateBtn.querySelector(".label");
+    const flag = generateBtn.querySelector(".qv-output-flag");
+    const lang = getLangMeta(selectedLanguage);
+    if (flag) {
+      flag.src = `https://flagcdn.com/w40/${getFlagCountryCode(selectedLanguage)}.png`;
+      flag.alt = lang.name;
+    }
+    if (label && !isBusy) label.textContent = "Generate";
+    if (generateModeBtn) {
+      const selectedCount = selectedBatchLangs.size;
+      generateModeBtn.textContent =
+        selectedCount > 0 ? `Multi ${selectedCount}` : "Multi-lang";
+      generateModeBtn.title =
+        selectedCount > 0
+          ? `Single: ${lang.name}. Multi-language set: ${selectedCount} selected.`
+          : `Single output language: ${lang.name}. Click for multi-language options.`;
+    }
+  }
+
+  async function maybeShowMeasurementAdvice(message) {
+    const trimmed = message?.trim();
+    if (!trimmed) return;
+
+    const data = await chrome.storage.local.get([MEASUREMENT_HINT_KEY]);
+    const lastShownAt = Number(data[MEASUREMENT_HINT_KEY] || 0);
+    const now = Date.now();
+    if (lastShownAt && now - lastShownAt < MEASUREMENT_HINT_INTERVAL_MS) return;
+
+    chrome.storage.local.set({ [MEASUREMENT_HINT_KEY]: now });
+    setTimeout(() => {
+      showToast(trimmed, "info", null, true);
+    }, 300);
   }
 
   /**
@@ -130,9 +619,13 @@
     return new Promise((resolve, reject) => {
       const img = new Image();
       img.crossOrigin = "anonymous";
+      const timeout = setTimeout(() => {
+        reject(new Error(`Image compression timed out: ${imageUrl}`));
+      }, 15000);
 
       img.onload = () => {
         try {
+          clearTimeout(timeout);
           // Calculate new dimensions while maintaining aspect ratio
           let width = img.width;
           let height = img.height;
@@ -163,6 +656,7 @@
       };
 
       img.onerror = () => {
+        clearTimeout(timeout);
         reject(new Error(`Failed to load image: ${imageUrl}`));
       };
 
@@ -170,23 +664,27 @@
     });
   }
 
+  function nextFrame() {
+    return new Promise((resolve) => requestAnimationFrame(() => resolve()));
+  }
+
   /**
-   * Compresses multiple images in parallel with error handling.
+   * Compresses multiple images with small UI yields between canvas work.
    * @param {string[]} imageUrls - Array of image URLs
    * @returns {Promise<string[]>} Array of compressed base64 images
    */
   async function compressImages(imageUrls) {
-    const compressionPromises = imageUrls.map(async (url) => {
+    const compressed = [];
+    for (const url of imageUrls) {
       try {
-        return await compressImage(url);
+        compressed.push(await compressImage(url));
       } catch (error) {
         console.warn(`Failed to compress image ${url}:`, error);
-        // Return original URL as fallback if compression fails
-        return url;
+        compressed.push(url);
       }
-    });
-
-    return Promise.all(compressionPromises);
+      await nextFrame();
+    }
+    return compressed;
   }
 
   function getUploadedImageUrls() {
@@ -204,12 +702,1180 @@
       });
   }
 
+  // --- TIER ACCESS ---
+
+  async function loadAccessLevel() {
+    return new Promise((resolve) => {
+      chrome.storage.local.get(["userProfile"], (data) => {
+        const tier = normalizeTier(data.userProfile?.subscription_tier);
+        const isLegacy = isLegacyProfile(data.userProfile);
+        if (isLegacy) {
+          // Legacy users keep their original feature set instead of inheriting
+          // new Plus-only features.
+          hasPlusAccess = false;
+          hasProAccess = ["pro", "business"].includes(tier);
+        } else {
+          hasPlusAccess = ["plus", "pro_v2", "business_v2"].includes(tier);
+          hasProAccess = ["pro_v2", "business_v2"].includes(tier);
+        }
+        resolve();
+      });
+    });
+  }
+
+  async function applyAccessState() {
+    await loadAccessLevel();
+    updateFeaturePanelAccess();
+    updateMultiLangPanelAccess();
+    updateResultPanelAccess();
+    updateGenerateModeLabel();
+  }
+
+  async function refreshProfileAndAccess({ force = false } = {}) {
+    if (profileRefreshInFlight) return;
+    if (!isAuthenticated) return;
+
+    const now = Date.now();
+    if (
+      !force &&
+      now - lastProfileRefreshAt < PROFILE_REFRESH_MIN_INTERVAL_MS
+    ) {
+      return;
+    }
+
+    profileRefreshInFlight = true;
+    lastProfileRefreshAt = now;
+    try {
+      const response = await sendMessage({ type: "AUTH_UPDATED" });
+      if (response?.profile) {
+        await applyAccessState();
+      } else if (response?.user === null) {
+        isAuthenticated = false;
+        updateButtonUI();
+      }
+    } catch (error) {
+      console.warn("QuickVint profile refresh failed:", error);
+    } finally {
+      profileRefreshInFlight = false;
+    }
+  }
+
+  // --- FEATURE PANEL (Preferences) ---
+
+  function createFeaturePanel() {
+    const panel = document.createElement("div");
+    panel.id = FEATURE_PANEL_ID;
+    panel.className = "qv-floating-panel";
+
+    const prefsSection = document.createElement("details");
+    prefsSection.className = "qv-disclosure";
+
+    const prefsHeader = document.createElement("summary");
+    prefsHeader.className = "qv-disclosure-summary";
+    prefsHeader.innerHTML = `
+      <span class="qv-disclosure-title-wrap">
+        <span class="qv-section-title">Listing Preferences</span>
+        <span class="qv-disclosure-subtitle">Small trust notes added to future generations</span>
+      </span>
+      <span class="qv-tier-badge plus">Plus</span>
+    `;
+
+    const prefsBody = document.createElement("div");
+    prefsBody.className = "qv-disclosure-body";
+
+    const prefList = document.createElement("div");
+    prefList.className = "qv-pref-list";
+    prefList.id = "qv-pref-list";
+
+    LISTING_PREFS.forEach((pref) => {
+      const item = document.createElement("label");
+      item.className = "qv-pref-item" + (hasPlusAccess ? "" : " locked");
+      item.dataset.prefId = pref.id;
+      item.innerHTML = `<input type="checkbox" value="${pref.id}" ${hasPlusAccess ? "" : "disabled"}> ${pref.label}`;
+      if (hasPlusAccess) {
+        item.querySelector("input").onchange = savePrefState;
+      }
+      prefList.appendChild(item);
+    });
+
+    const lockedMsgPrefs = document.createElement("div");
+    lockedMsgPrefs.className = "qv-locked-msg";
+    lockedMsgPrefs.id = "qv-prefs-locked-msg";
+    lockedMsgPrefs.style.display = hasPlusAccess ? "none" : "flex";
+    renderUpgradeCta(lockedMsgPrefs, "Available on Plus");
+
+    const suggestRow = document.createElement("div");
+    suggestRow.className = "qv-suggest-row";
+    suggestRow.innerHTML = `
+      <div class="qv-suggest-copy">
+        <span class="qv-suggest-title">Missing an option?</span>
+        <span class="qv-suggest-help">Send one preference idea.</span>
+      </div>
+      <div class="qv-suggest-controls">
+        <input type="text" class="qv-suggest-input" id="qv-suggest-input"
+          placeholder="Request another option" maxlength="200">
+        <button class="qv-suggest-btn" id="qv-suggest-btn">Send</button>
+      </div>
+    `;
+
+    const footerRow = document.createElement("div");
+    footerRow.className = "qv-panel-footer";
+    footerRow.innerHTML = `
+      <button type="button" class="qv-panel-link-btn" id="qv-open-full-settings">Popup settings</button>
+    `;
+
+    prefsBody.appendChild(prefList);
+    prefsBody.appendChild(lockedMsgPrefs);
+    prefsBody.appendChild(suggestRow);
+    prefsBody.appendChild(footerRow);
+    prefsSection.appendChild(prefsHeader);
+    prefsSection.appendChild(prefsBody);
+
+    panel.appendChild(prefsSection);
+
+    return panel;
+  }
+
+  function createPrefsToggleButton() {
+    const btn = document.createElement("button");
+    btn.id = PREFS_TOGGLE_BTN_ID;
+    btn.type = "button";
+    btn.className = "qv-inline-control-btn";
+    btn.innerHTML = `
+      <span class="qv-inline-control-label">Preferences</span>
+      <span class="qv-tier-badge plus">Plus</span>
+    `;
+    btn.addEventListener("click", () => {
+      if (!featurePanel) return;
+      const nextOpen = !featurePanel.classList.contains("visible");
+      featurePanel.classList.toggle("visible", nextOpen);
+      btn.classList.toggle("active", nextOpen);
+      const details = featurePanel.querySelector("details");
+      if (details) details.open = nextOpen;
+      requestAnimationFrame(positionCompletenessPanel);
+    });
+    return btn;
+  }
+
+  function createPrefsDock() {
+    const dock = document.createElement("div");
+    dock.id = PREFS_DOCK_ID;
+
+    prefsToggleBtn = createPrefsToggleButton();
+    featurePanel = createFeaturePanel();
+
+    dock.appendChild(prefsToggleBtn);
+    dock.appendChild(featurePanel);
+    return dock;
+  }
+
+  function createMultiLangPanel() {
+    const panel = document.createElement("div");
+    panel.id = MULTILANG_PANEL_ID;
+    panel.className = "qv-popover-panel";
+    panel.style.display = "none";
+    panel.innerHTML = `
+      <details class="qv-disclosure">
+        <summary class="qv-disclosure-summary">
+          <span class="qv-disclosure-title-wrap">
+            <span class="qv-section-title" data-i18n="multiLangTitle">${t("multiLangTitle")}</span>
+            <span class="qv-disclosure-subtitle" data-i18n="multiLangSubtitle">${t("multiLangSubtitle")}</span>
+          </span>
+          <span class="qv-summary-actions">
+            <span class="qv-tier-badge pro">Pro</span>
+            <button type="button" class="qv-panel-close-btn qv-multilang-close" aria-label="Close multi-language panel">×</button>
+          </span>
+        </summary>
+        <div class="qv-disclosure-body">
+          <div class="qv-mode-note" id="qv-mode-note" data-i18n="multiLangNote">${t("multiLangNote")}</div>
+          <div class="qv-lang-pills" id="qv-lang-pills"></div>
+          <label class="qv-title-lang-row" for="qv-title-lang-select">
+            <span>Title language</span>
+            <select id="qv-title-lang-select" disabled>
+              <option value="">Select languages first</option>
+            </select>
+          </label>
+          <div class="qv-locked-msg" id="qv-ml-locked-msg"></div>
+          <div class="qv-multilang-footer">
+            <div class="qv-lang-action-copy">
+              <span class="qv-lang-counter" id="qv-lang-counter">${t("multiLangEmpty")}</span>
+              <span class="qv-lang-action-help">Uses current photos and settings</span>
+            </div>
+            <button class="qv-gen-all-btn" id="qv-gen-all-btn" disabled>${t("generateAll")}</button>
+          </div>
+          <div class="qv-lang-results" id="qv-lang-results"></div>
+        </div>
+      </details>
+    `;
+
+    const langPills = panel.querySelector("#qv-lang-pills");
+    BATCH_LANGS.forEach((lang) => {
+      const pill = document.createElement("button");
+      pill.type = "button";
+      pill.className = "qv-lang-pill" + (hasProAccess ? "" : " disabled");
+      pill.dataset.code = lang.code;
+      pill.appendChild(createFlagImage(lang.code, lang.name));
+      pill.appendChild(document.createTextNode(lang.name));
+      pill.disabled = !hasProAccess;
+      langPills.appendChild(pill);
+    });
+
+    const lockedMsg = panel.querySelector("#qv-ml-locked-msg");
+    const footer = panel.querySelector(".qv-multilang-footer");
+    if (lockedMsg) {
+      renderUpgradeCta(lockedMsg, t("multiLangLocked"));
+      lockedMsg.style.display = hasProAccess ? "none" : "flex";
+    }
+    if (footer) footer.style.display = hasProAccess ? "" : "none";
+
+    const closeBtn = panel.querySelector(".qv-multilang-close");
+    if (closeBtn) {
+      closeBtn.addEventListener("click", (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        toggleMultiLangPanel(false);
+      });
+    }
+
+    const titleLangSelect = panel.querySelector("#qv-title-lang-select");
+    if (titleLangSelect) {
+      titleLangSelect.addEventListener("change", (event) => {
+        const code = event.target.value;
+        if (code && selectedBatchLangs.has(code)) {
+          chrome.storage.local.set({ [BATCH_TITLE_LANG_STORAGE_KEY]: code });
+        }
+      });
+    }
+
+    return panel;
+  }
+
+  function savePrefState() {
+    const checked = [];
+    document.querySelectorAll("#qv-pref-list input:checked").forEach((cb) => {
+      checked.push(cb.value);
+    });
+    chrome.storage.local.set({
+      listingPreferences: sanitizeListingPreferences(checked),
+    });
+  }
+
+  function restorePrefState() {
+    chrome.storage.local.get(["listingPreferences"], (data) => {
+      const saved = sanitizeListingPreferences(data.listingPreferences || []);
+      if ((data.listingPreferences || []).join("|") !== saved.join("|")) {
+        chrome.storage.local.set({ listingPreferences: saved });
+      }
+      document.querySelectorAll("#qv-pref-list input").forEach((cb) => {
+        cb.checked = saved.includes(cb.value);
+      });
+    });
+  }
+
+  function restoreBatchLangState() {
+    chrome.storage.local.get([BATCH_LANGS_STORAGE_KEY], (data) => {
+      const saved = Array.isArray(data[BATCH_LANGS_STORAGE_KEY])
+        ? data[BATCH_LANGS_STORAGE_KEY]
+        : [];
+      selectedBatchLangs = new Set(
+        saved.filter((code) => BATCH_LANGS.some((lang) => lang.code === code)),
+      );
+      if (multiLangPanel) {
+        multiLangPanel.querySelectorAll(".qv-lang-pill").forEach((pill) => {
+          pill.classList.toggle(
+            "selected",
+            selectedBatchLangs.has(pill.dataset.code),
+          );
+        });
+      }
+      updateBatchLangFooter();
+      updateGenerateModeLabel();
+    });
+  }
+
+  function toggleBatchLang(code, pillEl) {
+    if (selectedBatchLangs.has(code)) {
+      selectedBatchLangs.delete(code);
+      pillEl.classList.remove("selected");
+    } else {
+      selectedBatchLangs.add(code);
+      pillEl.classList.add("selected");
+    }
+    chrome.storage.local.set({
+      [BATCH_LANGS_STORAGE_KEY]: [...selectedBatchLangs],
+    });
+    updateBatchLangFooter();
+    updateGenerateModeLabel();
+  }
+
+  function getSelectedBatchLangList() {
+    return BATCH_LANGS.filter((lang) => selectedBatchLangs.has(lang.code));
+  }
+
+  function updateTitleLanguageSelect() {
+    const select = document.getElementById("qv-title-lang-select");
+    if (!select) return;
+
+    const requestId = ++titleLanguageSelectRequest;
+    const selectedLangs = getSelectedBatchLangList();
+
+    if (selectedLangs.length === 0) {
+      select.replaceChildren();
+      const option = document.createElement("option");
+      option.value = "";
+      option.textContent = "Select languages first";
+      select.appendChild(option);
+      select.value = "";
+      select.disabled = true;
+      return;
+    }
+
+    chrome.storage.local.get([BATCH_TITLE_LANG_STORAGE_KEY], (data) => {
+      if (requestId !== titleLanguageSelectRequest) return;
+
+      select.replaceChildren();
+      const savedCode = data[BATCH_TITLE_LANG_STORAGE_KEY];
+      const titleCode = selectedBatchLangs.has(savedCode)
+        ? savedCode
+        : selectedLangs[0].code;
+
+      selectedLangs.forEach((lang) => {
+        const option = document.createElement("option");
+        option.value = lang.code;
+        option.textContent = lang.name;
+        select.appendChild(option);
+      });
+
+      select.disabled = isBusy || !hasProAccess;
+      select.value = titleCode;
+      if (titleCode !== savedCode) {
+        chrome.storage.local.set({ [BATCH_TITLE_LANG_STORAGE_KEY]: titleCode });
+      }
+    });
+  }
+
+  function updateBatchLangFooter() {
+    const counter = document.getElementById("qv-lang-counter");
+    const btn = document.getElementById("qv-gen-all-btn");
+    const n = selectedBatchLangs.size;
+    if (counter) {
+      counter.textContent =
+        n === 0 ? t("multiLangEmpty") : t("multiLangSelected", n);
+    }
+    if (btn) btn.disabled = n < 2 || isBusy;
+    updateTitleLanguageSelect();
+  }
+
+  function createLangResultName(lang) {
+    const name = document.createElement("div");
+    name.className = "qv-lang-result-name";
+    name.appendChild(createFlagImage(lang.code, lang.name));
+    name.appendChild(document.createTextNode(lang.name));
+    return name;
+  }
+
+  function createLangStatus(text, color) {
+    const status = document.createElement("div");
+    status.style.fontSize = "11.5px";
+    status.style.color = color;
+    status.style.marginTop = "6px";
+    status.textContent = text;
+    return status;
+  }
+
+  function renderLangLoading(card, lang) {
+    card.replaceChildren(
+      createLangResultName(lang),
+      createLangStatus("Generating...", "#9ca3af"),
+    );
+    card.classList.add("loading");
+    card.classList.remove("done", "error");
+  }
+
+  function renderLangError(card, lang, message) {
+    card.replaceChildren(
+      createLangResultName(lang),
+      createLangStatus(`Error: ${message || "Generation failed"}`, "#dc2626"),
+    );
+    card.classList.remove("loading", "done");
+    card.classList.add("error");
+  }
+
+  function renderLangSuccess(card, lang) {
+    card.replaceChildren(
+      createLangResultName(lang),
+      createLangStatus("Added to description", "#059669"),
+    );
+    card.classList.remove("loading");
+    card.classList.add("done");
+  }
+
+  function scrollMultiLangPanelToBottom() {
+    if (!multiLangPanel) return;
+    requestAnimationFrame(() => {
+      multiLangPanel.scrollTo({
+        top: multiLangPanel.scrollHeight,
+        behavior: "smooth",
+      });
+    });
+  }
+
+  function updateFeaturePanelAccess() {
+    if (!featurePanel) return;
+
+    // Preferences
+    featurePanel.querySelectorAll(".qv-pref-item").forEach((item) => {
+      const cb = item.querySelector("input");
+      if (hasPlusAccess) {
+        item.classList.remove("locked");
+        if (cb) {
+          cb.disabled = false;
+          cb.onchange = savePrefState;
+        }
+      } else {
+        item.classList.add("locked");
+        if (cb) {
+          cb.disabled = true;
+          cb.onchange = null;
+        }
+      }
+    });
+    const prefsLockedMsg = document.getElementById("qv-prefs-locked-msg");
+    if (prefsLockedMsg) {
+      renderUpgradeCta(prefsLockedMsg, "Available on Plus");
+      prefsLockedMsg.style.display = hasPlusAccess ? "none" : "flex";
+    }
+  }
+
+  function closeFeaturePanel() {
+    if (featurePanel) featurePanel.classList.remove("visible");
+    if (prefsToggleBtn) prefsToggleBtn.classList.remove("active");
+    requestAnimationFrame(positionCompletenessPanel);
+  }
+
+  function updateMultiLangPanelAccess() {
+    if (!multiLangPanel) return;
+
+    multiLangPanel.querySelectorAll(".qv-lang-pill").forEach((pill) => {
+      if (hasProAccess) {
+        pill.classList.remove("disabled");
+        pill.disabled = false;
+        const code = pill.dataset.code;
+        pill.onclick = () => toggleBatchLang(code, pill);
+      } else {
+        pill.classList.add("disabled");
+        pill.disabled = true;
+        pill.onclick = null;
+      }
+    });
+    const mlLockedMsg = multiLangPanel.querySelector("#qv-ml-locked-msg");
+    if (mlLockedMsg) {
+      renderUpgradeCta(mlLockedMsg, t("multiLangLocked"));
+      mlLockedMsg.style.display = hasProAccess ? "none" : "flex";
+    }
+
+    const mlFooter = multiLangPanel.querySelector(".qv-multilang-footer");
+    if (mlFooter) mlFooter.style.display = hasProAccess ? "" : "none";
+
+    const genAllBtn = document.getElementById("qv-gen-all-btn");
+    if (genAllBtn) genAllBtn.disabled = selectedBatchLangs.size < 2 || isBusy;
+    updateTitleLanguageSelect();
+  }
+
+  function getClampedPanelTop(anchorTop, panelHeight = 430) {
+    return Math.max(
+      12,
+      Math.min(window.innerHeight - panelHeight - 12, anchorTop),
+    );
+  }
+
+  function positionFloatingTools() {
+    const top = `${(generateTools?.offsetHeight || 36) + 8}px`;
+    [multiLangPanel, resultPanel].forEach((panel) => {
+      if (!panel) return;
+      panel.style.left = "0";
+      panel.style.top = top;
+    });
+    positionCompletenessPanel();
+  }
+
+  function positionCompletenessPanel() {
+    if (!completenessPanel) return;
+
+    const panelWidth = featurePanel?.offsetWidth || RIGHT_PANEL_WIDTH;
+    const featureRect = featurePanel?.getBoundingClientRect();
+    const left = featureRect
+      ? featureRect.left
+      : Math.max(12, window.innerWidth - panelWidth - RIGHT_PANEL_OFFSET);
+    const panelHeight = completenessPanel.offsetHeight || 220;
+    let top = 226;
+    let stackedBelowPrefs = false;
+
+    if (featurePanel?.classList.contains("visible") && featureRect) {
+      top = featureRect.bottom + 10;
+      stackedBelowPrefs = true;
+    }
+
+    completenessPanel.style.left = `${left}px`;
+    completenessPanel.style.width = `${panelWidth}px`;
+    completenessPanel.style.top = stackedBelowPrefs
+      ? `${Math.max(12, top)}px`
+      : `${getClampedPanelTop(top, panelHeight)}px`;
+    completenessPanel.style.maxHeight = stackedBelowPrefs
+      ? `${Math.max(120, window.innerHeight - top - 12)}px`
+      : "";
+  }
+
+  function toggleMultiLangPanel(forceOpen) {
+    if (!multiLangPanel) return;
+    const nextOpen = forceOpen ?? multiLangPanel.style.display === "none";
+    multiLangPanel.style.display = nextOpen ? "block" : "none";
+    if (generateModeBtn) generateModeBtn.classList.toggle("active", nextOpen);
+    const details = multiLangPanel.querySelector("details");
+    if (details) details.open = true;
+    if (nextOpen) positionFloatingTools();
+  }
+
+  function updateResultPanelAccess() {
+    if (!resultPanel) return;
+    const STYLES = ["detailed", "casual", "short"];
+    STYLES.forEach((style) => {
+      const btn = document.getElementById(`qv-regen-${style}`);
+      if (!btn) return;
+      if (hasPlusAccess) {
+        btn.classList.remove("locked");
+        btn.disabled = false;
+        if (lastImageUrls.length)
+          btn.onclick = () => onRegenClick(style, lastImageUrls);
+      } else {
+        btn.classList.add("locked");
+        btn.disabled = true;
+        btn.onclick = null;
+      }
+    });
+    const lockedMsg = document.getElementById("qv-regen-locked-msg");
+    if (lockedMsg) {
+      renderUpgradeCta(lockedMsg, t("refineLocked"));
+      lockedMsg.style.display = hasPlusAccess ? "none" : "flex";
+    }
+  }
+
+  function setRefineButtonsBusy(busy, activeStyle = null) {
+    ["detailed", "casual", "short"].forEach((style) => {
+      const btn = document.getElementById(`qv-regen-${style}`);
+      if (!btn) return;
+      btn.disabled = busy || !hasPlusAccess;
+      btn.classList.toggle("loading", busy && style === activeStyle);
+      const label = btn.querySelector("span");
+      if (label) {
+        label.textContent =
+          busy && style === activeStyle
+            ? t("refining")
+            : t(`refine${style.charAt(0).toUpperCase() + style.slice(1)}`);
+      }
+    });
+  }
+
+  function closeResultPanel() {
+    if (resultPanel) resultPanel.style.display = "none";
+  }
+
+  // --- RESULT PANEL (Smart Re-Gen) ---
+
+  function createResultPanel() {
+    const panel = document.createElement("div");
+    panel.id = RESULT_PANEL_ID;
+    panel.className = "qv-popover-panel qv-aftergen-panel";
+    panel.style.display = "none";
+    panel.innerHTML = `
+      <div class="qv-section">
+        <div class="qv-section-header">
+          <span class="qv-section-title" data-i18n="refineTitle">${t("refineTitle")}</span>
+          <button type="button" class="qv-panel-close-btn" id="qv-close-result-panel" aria-label="Dismiss">×</button>
+        </div>
+        <div class="qv-section-subtitle" data-i18n="refineSubtitle">${t("refineSubtitle")}</div>
+        <div class="qv-regen-buttons">
+          <button class="qv-regen-btn${hasPlusAccess ? "" : " locked"}" id="qv-regen-detailed"
+            ${hasPlusAccess ? "" : "disabled"}><span>${t("refineDetailed")}</span></button>
+          <button class="qv-regen-btn${hasPlusAccess ? "" : " locked"}" id="qv-regen-casual"
+            ${hasPlusAccess ? "" : "disabled"}><span>${t("refineCasual")}</span></button>
+          <button class="qv-regen-btn${hasPlusAccess ? "" : " locked"}" id="qv-regen-short"
+            ${hasPlusAccess ? "" : "disabled"}><span>${t("refineShort")}</span></button>
+        </div>
+        <div class="qv-locked-msg qv-regen-locked-msg" id="qv-regen-locked-msg" style="display:${hasPlusAccess ? "none" : "flex"}"></div>
+      </div>
+    `;
+    renderUpgradeCta(
+      panel.querySelector("#qv-regen-locked-msg"),
+      t("refineLocked"),
+    );
+
+    return panel;
+  }
+
+  function createCompletenessPanel() {
+    const panel = document.createElement("div");
+    panel.id = COMPLETENESS_PANEL_ID;
+    panel.className = "qv-popover-panel qv-completeness-popover";
+    panel.style.display = "none";
+    panel.innerHTML = `
+      <details class="qv-disclosure">
+        <summary class="qv-disclosure-summary">
+          <span class="qv-disclosure-title-wrap">
+            <span class="qv-section-title" data-i18n="completenessTitle">${t("completenessTitle")}</span>
+            <span class="qv-disclosure-subtitle" data-i18n="completenessSubtitle">${t("completenessSubtitle")}</span>
+          </span>
+          <span class="qv-summary-actions">
+            <span class="qv-score-badge" id="qv-score-badge">—/3</span>
+            <span class="qv-summary-chevron" aria-hidden="true"></span>
+          </span>
+        </summary>
+        <div class="qv-disclosure-body">
+          <div class="qv-score-bar-bg">
+            <div class="qv-score-bar-fill" id="qv-score-bar-fill" style="width:0%"></div>
+          </div>
+          <div class="qv-checks-list" id="qv-checks-list"></div>
+          <button type="button" class="qv-completeness-dismiss" id="qv-completeness-dismiss" data-i18n="neverShowAgain">${t("neverShowAgain")}</button>
+        </div>
+      </details>
+    `;
+    const dismissBtn = panel.querySelector("#qv-completeness-dismiss");
+    if (dismissBtn) {
+      dismissBtn.addEventListener("click", () => {
+        isCompletenessDismissed = true;
+        chrome.storage.local.set({ [COMPLETENESS_DISMISSED_KEY]: true });
+        panel.style.display = "none";
+      });
+    }
+    return panel;
+  }
+
+  function runCompletenessCheck() {
+    const titleEl = document.querySelector(SELECTORS.title);
+    const descEl = document.querySelector(SELECTORS.description);
+
+    const title = titleEl?.value || "";
+    const desc = descEl?.value || "";
+    const photoCount = getUploadedImageUrls().length;
+
+    const checks = [];
+
+    const titleLen = title.length;
+    checks.push({
+      pass: titleLen >= 20,
+      label: t("titleCheck", titleLen),
+      tip: t("titleTip"),
+    });
+
+    const descLen = desc.length;
+    checks.push({
+      pass: descLen >= 80,
+      label: t("descriptionCheck", descLen),
+      tip: t("descriptionTip"),
+    });
+
+    const hashtags = (desc.match(/#[A-Za-z0-9_]+/g) || []).length;
+    checks.push({
+      pass: hashtags >= 3,
+      label: t("hashtagsCheck", hashtags),
+      tip: t("hashtagsTip"),
+    });
+
+    checks.push({
+      pass: photoCount >= 3,
+      label: t("photosCheck", photoCount),
+      tip: t("photosTip"),
+    });
+
+    const measurementSection = document.querySelector(
+      SELECTORS.measurementsSection,
+    );
+    if (measurementSection) {
+      const measurementInputs = Array.from(
+        measurementSection.querySelectorAll("input"),
+      ).filter((input) => !input.disabled && input.type !== "hidden");
+      if (measurementInputs.length > 0) {
+        const filledMeasurements = measurementInputs.filter(
+          (input) => input.value.trim().length > 0,
+        ).length;
+        checks.push({
+          pass: filledMeasurements > 0,
+          label: t(
+            "measurementsCheck",
+            filledMeasurements,
+            measurementInputs.length,
+          ),
+          tip: t("measurementsTip"),
+        });
+      }
+    }
+
+    const score = checks.filter((c) => c.pass).length;
+    return { score, total: checks.length, checks };
+  }
+
+  function showResultPanel(imageUrls) {
+    if (!resultPanel) return;
+    resultPanel.style.display = "block";
+    positionFloatingTools();
+    if (completenessPanel) {
+      completenessPanel.style.display = "block";
+      const details = completenessPanel.querySelector("details");
+      if (details) details.open = false;
+    }
+
+    // Wire directional regen buttons (Plus+ only) and update their locked state
+    updateResultPanelAccess();
+
+    const closeBtn = document.getElementById("qv-close-result-panel");
+    if (closeBtn) closeBtn.onclick = closeResultPanel;
+
+    // Run completeness check
+    updateCompletenessUI();
+  }
+
+  function updateCompletenessUI() {
+    if (!completenessPanel || isCompletenessDismissed) return;
+    const { score, total, checks } = runCompletenessCheck();
+    const pct = Math.round((score / total) * 100);
+    const colorClass = pct >= 75 ? "good" : pct >= 50 ? "medium" : "low";
+
+    const badge = document.getElementById("qv-score-badge");
+    if (badge) {
+      badge.textContent = `${score}/${total}`;
+      badge.className = `qv-score-badge ${colorClass}`;
+    }
+
+    const bar = document.getElementById("qv-score-bar-fill");
+    if (bar) {
+      bar.style.width = `${pct}%`;
+      bar.className = `qv-score-bar-fill ${colorClass}`;
+    }
+
+    const list = document.getElementById("qv-checks-list");
+    if (!list) return;
+    list.replaceChildren();
+
+    checks.forEach((check) => {
+      const item = document.createElement("div");
+      item.className = "qv-check-item";
+
+      const icon = check.pass ? "✓" : "!";
+      const iconEl = document.createElement("span");
+      iconEl.className = "qv-check-icon";
+      iconEl.textContent = icon;
+
+      const body = document.createElement("div");
+      body.className = "qv-check-body";
+
+      const label = document.createElement("span");
+      label.className = "qv-check-label" + (check.pass ? "" : " warn");
+      label.textContent = check.label;
+      body.appendChild(label);
+
+      if (!check.pass && hasProAccess) {
+        const tip = document.createElement("div");
+        tip.className = "qv-check-tip";
+        tip.textContent = check.tip;
+        body.appendChild(tip);
+      } else if (!check.pass) {
+        const upgradeWrapper = document.createElement("div");
+        const upgrade = document.createElement("span");
+        upgrade.className = "qv-check-upgrade";
+        upgrade.textContent = t("upgradeForTips");
+        upgradeWrapper.appendChild(upgrade);
+        body.appendChild(upgradeWrapper);
+      }
+
+      item.appendChild(iconEl);
+      item.appendChild(body);
+      list.appendChild(item);
+    });
+  }
+
+  function scheduleCompletenessUpdate() {
+    if (isCompletenessDismissed) return;
+    if (completenessUpdateTimeout) {
+      clearTimeout(completenessUpdateTimeout);
+    }
+    completenessUpdateTimeout = setTimeout(() => {
+      completenessUpdateTimeout = null;
+      updateCompletenessUI();
+      positionFloatingTools();
+    }, 120);
+  }
+
+  function bindCompletenessObservers() {
+    if (completenessListenersBound) return;
+    completenessListenersBound = true;
+
+    document.addEventListener("input", (event) => {
+      const target = event.target;
+      if (!(target instanceof Element)) return;
+      if (
+        target.matches(SELECTORS.title) ||
+        target.matches(SELECTORS.description) ||
+        !!target.closest(SELECTORS.measurementsSection)
+      ) {
+        scheduleCompletenessUpdate();
+      }
+    });
+
+    document.addEventListener("change", (event) => {
+      const target = event.target;
+      if (!(target instanceof Element)) return;
+      if (
+        target.matches(SELECTORS.title) ||
+        target.matches(SELECTORS.description) ||
+        !!target.closest(SELECTORS.measurementsSection) ||
+        target.matches(SELECTORS.fileInput)
+      ) {
+        scheduleCompletenessUpdate();
+      }
+    });
+
+    completenessMutationObserver = new MutationObserver((mutations) => {
+      const shouldUpdate = mutations.some((mutation) => {
+        if (!(mutation.target instanceof Element)) return false;
+        const targetMatches =
+          mutation.target.matches(SELECTORS.mediaGrid) ||
+          !!mutation.target.closest(SELECTORS.mediaGrid) ||
+          mutation.target.matches(SELECTORS.measurementsSection) ||
+          !!mutation.target.closest(SELECTORS.measurementsSection);
+        const nodeMatches = [...mutation.addedNodes, ...mutation.removedNodes]
+          .filter((node) => node instanceof Element)
+          .some(
+            (node) =>
+              node.matches(SELECTORS.mediaGrid) ||
+              !!node.closest(SELECTORS.mediaGrid) ||
+              !!node.querySelector(SELECTORS.mediaGrid) ||
+              node.matches(SELECTORS.measurementsSection) ||
+              !!node.closest(SELECTORS.measurementsSection) ||
+              !!node.querySelector(SELECTORS.measurementsSection),
+          );
+        return targetMatches || nodeMatches;
+      });
+      if (shouldUpdate) scheduleCompletenessUpdate();
+    });
+    completenessMutationObserver.observe(document.body, {
+      childList: true,
+      subtree: true,
+    });
+  }
+
+  // --- REGEN & BATCH GENERATE ---
+
+  async function onRegenClick(style, imageUrls) {
+    const urls = imageUrls || lastImageUrls;
+    if (isBusy) return;
+    if (!urls.length) {
+      showToast("No images to re-generate from.", "error");
+      return;
+    }
+
+    isBusy = true;
+    updateButtonUI();
+    updateBatchLangFooter();
+    setRefineButtonsBusy(true, style);
+
+    try {
+      const {
+        selectedLanguage: storedLanguage = "en",
+        tone = "standard",
+        useEmojis,
+        useBulletPoints = true,
+        listingPreferences = [],
+      } = await chrome.storage.local.get([
+        "selectedLanguage",
+        "tone",
+        "useEmojis",
+        "useBulletPoints",
+        "listingPreferences",
+      ]);
+      const selectedLanguage = storedLanguage === "cs" ? "cz" : storedLanguage;
+      const { access_token } = await sendMessage({ type: "GET_ACCESS_TOKEN" });
+      if (!access_token)
+        throw new Error("Session expired. Please sign in again.");
+
+      const response = await fetch(`${API_BASE}/api/generate`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${access_token}`,
+        },
+        body: JSON.stringify({
+          imageUrls: urls,
+          languageCode: selectedLanguage,
+          tone,
+          useEmojis,
+          useBulletPoints,
+          regenStyle: style || undefined,
+          listingPreferences: hasPlusAccess
+            ? sanitizeListingPreferences(listingPreferences)
+            : [],
+        }),
+      });
+
+      if (response.status === 401) {
+        isAuthenticated = false;
+        showToast("Session expired.", "error");
+        return;
+      }
+      if (response.status === 429 || response.status === 402) {
+        const errData = await response.json();
+        const pricingUrl = await getPricingUrl();
+        showToast(errData.error || "Credit limit reached.", "error", {
+          text: "Upgrade Plan",
+          url: pricingUrl,
+        });
+        return;
+      }
+      if (!response.ok) {
+        const { error } = await response.json().catch(() => ({}));
+        throw new Error(error || `HTTP ${response.status}`);
+      }
+
+      const { title, description, measurementAdvice } = await response.json();
+      setTitleValue(title);
+      setTextareaValue(description);
+
+      await maybeShowMeasurementAdvice(measurementAdvice);
+
+      setTimeout(() => updateCompletenessUI(), 100);
+    } catch (err) {
+      showToast(err.message || "Generation failed.", "error");
+    } finally {
+      isBusy = false;
+      updateButtonUI();
+      updateBatchLangFooter();
+      setRefineButtonsBusy(false);
+      updateResultPanelAccess();
+    }
+  }
+
+  async function onGenerateAllClick() {
+    if (!hasProAccess || selectedBatchLangs.size < 2) return;
+    if (isBusy) return;
+    isBusy = true;
+    updateButtonUI();
+    updateBatchLangFooter();
+
+    let imageUrlsForBatch = lastImageUrls;
+
+    const btn = document.getElementById("qv-gen-all-btn");
+    if (btn) {
+      btn.disabled = true;
+      btn.textContent = "Generating...";
+      btn.classList.add("loading");
+    }
+
+    const langResults = document.getElementById("qv-lang-results");
+    if (langResults) langResults.replaceChildren();
+
+    try {
+      if (imageUrlsForBatch.length === 0) {
+        const imageUrls = getUploadedImageUrls();
+        if (!imageUrls.length) {
+          throw new Error("Upload photos first, then generate.");
+        }
+        imageUrlsForBatch = await compressImages(imageUrls);
+        lastImageUrls = imageUrlsForBatch;
+      }
+
+      const {
+        batchTitleLanguage,
+        tone = "standard",
+        useEmojis,
+        useBulletPoints = true,
+        listingPreferences = [],
+      } = await chrome.storage.local.get([
+        BATCH_TITLE_LANG_STORAGE_KEY,
+        "tone",
+        "useEmojis",
+        "useBulletPoints",
+        "listingPreferences",
+      ]);
+      const { access_token } = await sendMessage({ type: "GET_ACCESS_TOKEN" });
+      if (!access_token) throw new Error("Session expired.");
+
+      const langList = getSelectedBatchLangList();
+      const titleLanguageCode = selectedBatchLangs.has(batchTitleLanguage)
+        ? batchTitleLanguage
+        : langList[0]?.code;
+      if (langList.length < 2) throw new Error("Choose at least two languages.");
+      if (!titleLanguageCode) throw new Error("Choose a title language.");
+      if (titleLanguageCode !== batchTitleLanguage) {
+        chrome.storage.local.set({
+          [BATCH_TITLE_LANG_STORAGE_KEY]: titleLanguageCode,
+        });
+        updateTitleLanguageSelect();
+      }
+
+      setGenerateBusyLabel("Generating translations...");
+      if (btn) btn.textContent = "Generating translations...";
+
+      if (langResults) {
+        langList.forEach((lang) => {
+          const loadingCard = document.createElement("div");
+          loadingCard.className = "qv-lang-result-card";
+          loadingCard.id = `qv-result-${lang.code}`;
+          renderLangLoading(loadingCard, lang);
+          langResults.appendChild(loadingCard);
+        });
+        scrollMultiLangPanelToBottom();
+      }
+
+      const response = await fetch(`${API_BASE}/api/generate`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${access_token}`,
+        },
+        body: JSON.stringify({
+          imageUrls: imageUrlsForBatch,
+          languageCodes: langList.map((lang) => lang.code),
+          titleLanguage: titleLanguageCode,
+          tone,
+          useEmojis,
+          useBulletPoints,
+          listingPreferences: hasPlusAccess
+            ? sanitizeListingPreferences(listingPreferences)
+            : [],
+        }),
+      });
+
+      if (response.status === 401) {
+        isAuthenticated = false;
+        throw new Error("Session expired.");
+      }
+      if (response.status === 429 || response.status === 402) {
+        const errData = await response.json().catch(() => ({}));
+        const pricingUrl = await getPricingUrl();
+        showToast(errData.error || "Credit limit reached.", "error", {
+          text: "Upgrade Plan",
+          url: pricingUrl,
+        });
+        langList.forEach((lang) => {
+          const card = document.getElementById(`qv-result-${lang.code}`);
+          if (card)
+            renderLangError(card, lang, errData.error || "Credit limit reached");
+        });
+        return;
+      }
+      if (!response.ok) {
+        const err = await response.json().catch(() => ({}));
+        throw new Error(err.error || "Generation failed");
+      }
+
+      const { title, measurementAdvice, results = [] } = await response.json();
+      setTitleValue(title);
+
+      const resultsByCode = new Map(
+        results
+          .filter((result) => result?.languageCode)
+          .map((result) => [result.languageCode, result]),
+      );
+      const langDescriptions = [];
+
+      langList.forEach((lang) => {
+        const card = document.getElementById(`qv-result-${lang.code}`);
+        const result = resultsByCode.get(lang.code);
+        if (result?.description) {
+          if (card) renderLangSuccess(card, lang);
+          langDescriptions.push(formatBatchDescription(lang, result.description));
+        } else if (card) {
+          renderLangError(card, lang, "Skipped by model");
+        }
+      });
+
+      appendDescriptionsToTextarea(langDescriptions);
+      await maybeShowMeasurementAdvice(measurementAdvice);
+      scrollMultiLangPanelToBottom();
+      setTimeout(() => updateCompletenessUI(), 100);
+    } catch (err) {
+      getSelectedBatchLangList().forEach((lang) => {
+        const card = document.getElementById(`qv-result-${lang.code}`);
+        if (card?.classList.contains("loading")) {
+          renderLangError(card, lang, err.message || "Generation failed");
+        }
+      });
+      scrollMultiLangPanelToBottom();
+      showToast(err.message || "Batch generation failed.", "error");
+    } finally {
+      isBusy = false;
+      updateButtonUI();
+      updateBatchLangFooter();
+      if (btn) {
+        btn.disabled = selectedBatchLangs.size < 2;
+        btn.classList.remove("loading");
+        btn.textContent = t("generateAll");
+      }
+    }
+  }
+
+  async function onSubmitSuggestion() {
+    const input = document.getElementById("qv-suggest-input");
+    const btn = document.getElementById("qv-suggest-btn");
+    if (!input || !btn) return;
+
+    const text = input.value.trim();
+    if (text.length < 5) {
+      showToast("Please enter at least 5 characters.", "error");
+      return;
+    }
+    if (text.length > 200) {
+      showToast("Suggestion must be under 200 characters.", "error");
+      return;
+    }
+
+    btn.disabled = true;
+    btn.textContent = "Sending…";
+
+    try {
+      const { access_token } = await sendMessage({ type: "GET_ACCESS_TOKEN" });
+      if (!access_token) throw new Error("Session expired.");
+
+      const response = await fetch(`${API_BASE}/api/suggestions`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${access_token}`,
+        },
+        body: JSON.stringify({ suggestion: text }),
+      });
+
+      if (!response.ok) throw new Error("Server error");
+
+      input.value = "";
+      btn.textContent = "✓ Sent!";
+      setTimeout(() => {
+        btn.textContent = "Send";
+        btn.disabled = false;
+      }, 2000);
+      showToast(
+        "Thanks! Your suggestion has been sent to the AutoLister team.",
+        "success",
+      );
+    } catch (err) {
+      btn.textContent = "Send";
+      btn.disabled = false;
+      showToast("Failed to send suggestion. Please try again.", "error");
+    }
+  }
+
   // --- AUTHENTICATION & STATE SYNC ---
 
   function initializeAuthState() {
-    chrome.storage.local.get("supabaseSession", ({ supabaseSession }) => {
-      isAuthenticated = !!supabaseSession?.access_token;
+    chrome.storage.local.get(["supabaseSession", "userProfile"], (data) => {
+      isAuthenticated = !!data.supabaseSession?.access_token;
       updateButtonUI();
+      if (isAuthenticated) {
+        applyAccessState().then(() => {
+          restorePrefState();
+          restoreBatchLangState();
+          refreshProfileAndAccess({ force: true });
+        });
+      }
     });
   }
 
@@ -217,6 +1883,27 @@
     if (changes.supabaseSession) {
       isAuthenticated = !!changes.supabaseSession.newValue?.access_token;
       updateButtonUI();
+      if (isAuthenticated) refreshProfileAndAccess({ force: true });
+    }
+    if (changes.userProfile) {
+      applyAccessState();
+    }
+    if (changes.selectedLanguage) {
+      currentUiLanguage = normalizeUiLanguage(
+        changes.selectedLanguage.newValue,
+      );
+      refreshLocalizedFeatureText();
+      updateGenerateModeLabel();
+    }
+    if (changes[COMPLETENESS_DISMISSED_KEY]) {
+      isCompletenessDismissed =
+        changes[COMPLETENESS_DISMISSED_KEY].newValue === true;
+      if (completenessPanel) {
+        completenessPanel.style.display = isCompletenessDismissed
+          ? "none"
+          : "block";
+      }
+      if (!isCompletenessDismissed) scheduleCompletenessUpdate();
     }
   });
 
@@ -227,6 +1914,8 @@
     style.textContent = `
       #${BTN_ID}, #${PHONE_BTN_ID} {
         display: none;
+        width: auto;
+        flex: 0 0 auto;
         align-items: center;
         justify-content: center;
         padding: 8px 16px;
@@ -246,7 +1935,8 @@
 
       #${SIGN_IN_BTN_ID} {
         display: none;
-        width: 100%;
+        width: auto;
+        min-width: 220px;
         margin-top: 10px;
         padding: 14px 24px;
         background: linear-gradient(135deg, rgb(79, 70, 229) 0%, rgb(67, 56, 202) 100%);
@@ -335,6 +2025,71 @@
         height: 16px;
         margin-right: 6px;
       }
+
+      .qv-output-flag,
+      .qv-lang-flag {
+        width: 18px;
+        height: 13px;
+        border-radius: 2px;
+        object-fit: cover;
+        flex: 0 0 auto;
+        box-shadow: 0 0 0 1px rgba(15, 23, 42, 0.1);
+      }
+
+      #${BTN_ID} .qv-output-flag {
+        margin-right: 6px;
+      }
+
+      .qv-btn-spinner {
+        display: none;
+        width: 15px;
+        height: 15px;
+        border-radius: 999px;
+        border: 2px solid rgba(255,255,255,0.45);
+        border-top-color: #ffffff;
+        animation: qvSpin 0.75s linear infinite;
+        flex: 0 0 auto;
+        margin-right: 6px;
+      }
+
+      .qv-btn-spinner.visible {
+        display: inline-block;
+      }
+
+      .qv-gen-all-btn.loading,
+      .qv-regen-btn.loading,
+      #${MODAL_ID} .generate-btn.loading {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        flex-direction: row;
+        gap: 7px;
+      }
+
+      .qv-gen-all-btn.loading::before,
+      .qv-regen-btn.loading::before,
+      #${MODAL_ID} .generate-btn.loading::before {
+        content: "";
+        width: 14px;
+        height: 14px;
+        border-radius: 999px;
+        border: 2px solid rgba(255,255,255,0.45);
+        border-top-color: #ffffff;
+        animation: qvSpin 0.75s linear infinite;
+      }
+
+      .qv-regen-btn.loading::before {
+        border-color: rgba(79,70,229,0.25);
+        border-top-color: #4f46e5;
+      }
+
+      #${MODAL_ID} .generate-btn.loading .icon {
+        display: none !important;
+      }
+
+      @keyframes qvSpin {
+        to { transform: rotate(360deg); }
+      }
       
       /* Modal Styles */
       #${MODAL_ID} {
@@ -365,11 +2120,13 @@
       
       #${MODAL_ID} .modal-content {
         background: white;
-        padding: 40px;
-        border-radius: 24px;
+        padding: 28px;
+        border-radius: 16px;
         text-align: center;
-        max-width: 380px;
+        max-width: 440px;
         width: 90%;
+        max-height: calc(100vh - 40px);
+        overflow: auto;
         box-shadow: 0 20px 60px -10px rgba(0, 0, 0, 0.3);
         animation: slideUp 0.3s ease-out;
         position: relative;
@@ -430,11 +2187,11 @@
       #${MODAL_ID} .subtitle {
         font-size: 14px;
         color: #6b7280;
-        margin: 0 0 32px 0;
+        margin: 0 0 18px 0;
       }
       
       #${MODAL_ID} .qr-container {
-        margin: 0 auto 24px;
+        margin: 0 auto 16px;
         padding: 12px;
         background: white;
         border-radius: 20px;
@@ -451,7 +2208,7 @@
       }
       
       #${MODAL_ID} .instruction {
-        margin: 0 0 24px 0;
+        margin: 0 0 14px 0;
         color: #4b5563;
         font-size: 14px;
         line-height: 1.5;
@@ -461,7 +2218,7 @@
         display: flex;
         gap: 12px;
         justify-content: center;
-        margin-top: 32px;
+        margin-top: 18px;
       }
       
       #${MODAL_ID} .close-btn, #${MODAL_ID} .generate-btn {
@@ -485,6 +2242,9 @@
         background: #4f46e5;
         color: white;
         box-shadow: 0 4px 12px rgba(79, 70, 229, 0.25);
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
       }
       
       #${MODAL_ID} .close-btn:hover {
@@ -496,6 +2256,13 @@
         background: #4338ca;
         transform: translateY(-1px);
         box-shadow: 0 6px 16px rgba(79, 70, 229, 0.35);
+      }
+
+      #${MODAL_ID} .generate-btn:disabled {
+        background: #9ca3af;
+        cursor: not-allowed;
+        transform: none;
+        box-shadow: none;
       }
       
       #${MODAL_ID} .status {
@@ -525,6 +2292,71 @@
         border-radius: 50%;
         animation: pulse 1.5s ease-in-out infinite;
       }
+
+      #${MODAL_ID} .status.ready {
+        color: #047857;
+        background: #ecfdf5;
+        border-color: #bbf7d0;
+        font-weight: 700;
+      }
+
+      #${MODAL_ID} .status.syncing {
+        color: #4338ca;
+        background: #eef2ff;
+        border-color: #c7d2fe;
+        font-weight: 700;
+      }
+
+      #${MODAL_ID} .status.syncing::before {
+        content: "";
+        width: 13px;
+        height: 13px;
+        border-radius: 999px;
+        border: 2px solid rgba(79,70,229,0.25);
+        border-top-color: #4f46e5;
+        animation: qvSpin 0.75s linear infinite;
+      }
+
+      #${MODAL_ID} .phone-upload-preview {
+        display: none;
+        grid-template-columns: repeat(5, 42px);
+        justify-content: center;
+        gap: 7px;
+        margin: 12px 0 6px;
+      }
+
+      #${MODAL_ID} .phone-upload-preview.visible {
+        display: grid;
+      }
+
+      #${MODAL_ID} .phone-thumb {
+        width: 42px;
+        height: 42px;
+        border-radius: 8px;
+        object-fit: cover;
+        border: 2px solid #ffffff;
+        box-shadow: 0 4px 12px rgba(15, 23, 42, 0.18);
+        animation: qvThumbIn 0.2s ease forwards;
+      }
+
+      #${MODAL_ID} .phone-thumb-extra {
+        width: 42px;
+        height: 42px;
+        border-radius: 8px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        background: #eef2ff;
+        color: #3730a3;
+        font-size: 12px;
+        font-weight: 800;
+        border: 1px solid #c7d2fe;
+      }
+
+      @keyframes qvThumbIn {
+        from { opacity: 0; transform: scale(0.86); }
+        to { opacity: 1; transform: scale(1); }
+      }
       
       @keyframes pulse {
         0%, 100% { opacity: 1; }
@@ -532,10 +2364,109 @@
       }
       
       #${MODAL_ID} .language-selector {
-        margin: 0 0 20px;
+        margin: 0 0 14px;
         display: flex;
         justify-content: center;
         position: relative;
+      }
+
+      #${MODAL_ID} .phone-gen-mode {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 6px;
+        margin: 0 0 12px;
+        padding: 3px;
+        border: 1px solid #e5e7eb;
+        border-radius: 10px;
+        background: #f9fafb;
+      }
+
+      #${MODAL_ID} .phone-mode-btn {
+        border: none;
+        border-radius: 8px;
+        background: transparent;
+        color: #4b5563;
+        padding: 8px 10px;
+        font-size: 12.5px;
+        font-weight: 700;
+        cursor: pointer;
+      }
+
+      #${MODAL_ID} .phone-mode-btn.active {
+        background: #ffffff;
+        color: #4338ca;
+        box-shadow: 0 1px 4px rgba(15, 23, 42, 0.08);
+      }
+
+      #${MODAL_ID} .phone-mode-btn:disabled {
+        opacity: 0.45;
+        cursor: not-allowed;
+      }
+
+      #${MODAL_ID} .phone-multi-language {
+        margin: 0 0 14px;
+        padding: 10px;
+        border: 1px solid #e5e7eb;
+        border-radius: 10px;
+        background: #ffffff;
+        text-align: left;
+      }
+
+      #${MODAL_ID} .phone-multi-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+        margin-bottom: 8px;
+        font-size: 12px;
+        font-weight: 700;
+        color: #374151;
+      }
+
+      #${MODAL_ID} .phone-lang-pills {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+        max-height: 112px;
+        overflow: auto;
+      }
+
+      #${MODAL_ID} .phone-lang-pill {
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+        padding: 5px 8px;
+        border: 1px solid #e5e7eb;
+        border-radius: 999px;
+        background: #ffffff;
+        color: #374151;
+        font-size: 11.5px;
+        font-weight: 600;
+        cursor: pointer;
+      }
+
+      #${MODAL_ID} .phone-lang-pill.selected {
+        border-color: #4f46e5;
+        background: #eef2ff;
+        color: #3730a3;
+      }
+
+      #${MODAL_ID} .phone-lang-pill:disabled {
+        opacity: 0.45;
+        cursor: not-allowed;
+      }
+
+      #${MODAL_ID} .phone-lang-pill .qv-lang-flag {
+        width: 16px;
+        height: 12px;
+        border-radius: 2px;
+      }
+
+      #${MODAL_ID} .phone-multi-note {
+        margin-top: 8px;
+        color: #6b7280;
+        font-size: 11px;
+        line-height: 1.35;
       }
       
       #${MODAL_ID} .language-select-wrapper {
@@ -682,6 +2613,852 @@
       #quickvint-toast.error .toast-icon { text-shadow: 0 0 10px rgba(220, 38, 38, 0.5); }
       #quickvint-toast.success .toast-icon { text-shadow: 0 0 10px rgba(5, 150, 105, 0.5); }
       #quickvint-toast.info .toast-icon { text-shadow: 0 0 10px rgba(8, 145, 178, 0.5); }
+
+      /* ═══ QuickVint Feature Panels ═══════════════════════════════ */
+      #${FEATURE_PANEL_ID},
+      #${PREFS_DOCK_ID},
+      #${RESULT_PANEL_ID},
+      #${MULTILANG_PANEL_ID},
+      #${COMPLETENESS_PANEL_ID} {
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        font-size: 13px;
+        color: #1f2937;
+      }
+
+      .qv-panel-shell {
+        margin-top: 10px;
+      }
+
+      #${GENERATE_TOOLS_ID} {
+        position: relative;
+        z-index: 9;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        flex-wrap: wrap;
+        margin-top: 10px;
+        padding: 0;
+        pointer-events: auto;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      }
+
+      #${GENERATE_TOOLS_ID} #${BTN_ID},
+      #${GENERATE_TOOLS_ID} #${PHONE_BTN_ID},
+      #${GENERATE_TOOLS_ID} #${GENERATE_MODE_BTN_ID},
+      #${GENERATE_TOOLS_ID} #${PREFS_TOGGLE_BTN_ID} {
+        display: inline-flex;
+      }
+
+      #${GENERATE_TOOLS_ID} #${SIGN_IN_BTN_ID} {
+        display: none;
+      }
+
+      #${GENERATE_TOOLS_ID} .qv-toolbar {
+        display: inline-flex !important;
+        align-items: center;
+        gap: 7px !important;
+        padding: 0;
+        border: none;
+        border-radius: 0;
+        background: transparent;
+        box-shadow: none;
+        max-width: 100%;
+        overflow-x: auto;
+      }
+
+      #${GENERATE_TOOLS_ID} .qv-toolbar > button {
+        min-height: 36px;
+        border-radius: 8px !important;
+        margin: 0;
+        box-shadow: 0 4px 12px rgba(15, 23, 42, 0.08) !important;
+      }
+
+      #${GENERATE_TOOLS_ID} .qv-toolbar > button + button {
+        margin-left: 0;
+      }
+
+      #${GENERATE_TOOLS_ID} #${BTN_ID} {
+        font-weight: 700;
+        padding-left: 14px;
+        padding-right: 14px;
+      }
+
+      #${GENERATE_TOOLS_ID} #${GENERATE_MODE_BTN_ID},
+      #${GENERATE_TOOLS_ID} #${PREFS_TOGGLE_BTN_ID} {
+        border: 1px solid #dbe4ff;
+        background: #ffffff;
+        color: #3730a3;
+      }
+
+      #${GENERATE_TOOLS_ID} #${GENERATE_MODE_BTN_ID}:hover,
+      #${GENERATE_TOOLS_ID} #${PREFS_TOGGLE_BTN_ID}:hover {
+        background: #eef2ff;
+        border-color: #a5b4fc;
+      }
+
+      #${GENERATE_TOOLS_ID} #${PHONE_BTN_ID} {
+        padding-left: 13px;
+        padding-right: 13px;
+      }
+
+      #${GENERATE_TOOLS_ID} #${PREFS_TOGGLE_BTN_ID} {
+        min-width: 122px;
+      }
+
+      .qv-floating-panel {
+        position: fixed;
+        top: 72px;
+        right: ${RIGHT_PANEL_OFFSET}px;
+        width: min(${RIGHT_PANEL_WIDTH}px, calc(100vw - ${RIGHT_PANEL_OFFSET * 2}px));
+        z-index: 2147482992;
+        opacity: 0;
+        transform: translateY(-6px) scale(0.98);
+        pointer-events: none;
+        transition: opacity 0.22s ease, transform 0.22s ease;
+      }
+      .qv-floating-panel.visible {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+        pointer-events: auto;
+      }
+
+      #${PREFS_DOCK_ID} {
+        position: fixed;
+        top: 184px;
+        right: ${RIGHT_PANEL_OFFSET}px;
+        z-index: 2147483000;
+        display: none;
+        width: auto;
+        height: 34px;
+        pointer-events: none;
+      }
+      #${PREFS_DOCK_ID}.visible {
+        display: block;
+      }
+      #${PREFS_DOCK_ID} > * {
+        pointer-events: auto;
+      }
+
+      .qv-inline-control-btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 6px;
+        min-width: 116px;
+        height: 34px;
+        padding: 0 12px;
+        border: 1px solid #dbe4ff;
+        border-radius: 8px;
+        background: #ffffff;
+        color: #374151;
+        font-size: 12px;
+        font-weight: 600;
+        cursor: pointer;
+        transition: all 0.18s ease;
+        white-space: nowrap;
+        box-shadow: 0 10px 28px rgba(15, 23, 42, 0.12);
+      }
+      .qv-inline-control-btn::before {
+        content: "+";
+        width: 16px;
+        height: 16px;
+        border-radius: 50%;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        background: #eef2ff;
+        color: #3730a3;
+        font-size: 14px;
+        font-weight: 800;
+        line-height: 1;
+      }
+      .qv-inline-control-btn:hover,
+      .qv-inline-control-btn.active {
+        border-color: #a5b4fc;
+        background: #eef2ff;
+        color: #3730a3;
+        box-shadow: 0 8px 24px rgba(79,70,229,0.12);
+      }
+      .qv-inline-control-label {
+        position: static;
+        width: auto;
+        height: auto;
+        overflow: visible;
+        clip: auto;
+      }
+      .qv-inline-control-btn .qv-tier-badge {
+        position: static;
+        padding: 1px 5px;
+        font-size: 9px;
+      }
+
+      .qv-section {
+        background: #fff;
+        border: 1px solid #e5e7eb;
+        border-radius: 10px;
+        padding: 12px 14px;
+        margin-top: 10px;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+      }
+
+      .qv-popover-panel {
+        position: absolute;
+        left: 0;
+        top: calc(100% + 8px);
+        width: min(330px, calc(100vw - 24px));
+        max-height: min(430px, calc(100vh - 96px));
+        overflow: auto;
+        z-index: 2147482991;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        font-size: 13px;
+        color: #1f2937;
+        filter: drop-shadow(0 18px 30px rgba(15, 23, 42, 0.14));
+      }
+
+      .qv-aftergen-panel,
+      .qv-completeness-popover {
+        width: min(${RIGHT_PANEL_WIDTH}px, calc(100vw - ${RIGHT_PANEL_OFFSET * 2}px));
+      }
+
+      .qv-completeness-popover {
+        position: fixed;
+        transition: top 0.2s ease, left 0.2s ease;
+      }
+
+      #${GENERATE_MODE_BTN_ID} {
+        display: none;
+        align-items: center;
+        justify-content: center;
+        min-width: 94px;
+        height: 36px;
+        padding: 0 10px;
+        border: 1px solid #dbe4ff;
+        border-radius: 8px;
+        background: #ffffff;
+        color: #3730a3;
+        font-size: 12px;
+        font-weight: 700;
+        cursor: pointer;
+        box-shadow: rgba(0, 0, 0, 0.08) 0px 2px 4px;
+        white-space: nowrap;
+      }
+      #${GENERATE_MODE_BTN_ID}::before {
+        content: "🌐";
+        margin-right: 5px;
+        font-family: "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif;
+      }
+
+      #${GENERATE_MODE_BTN_ID}:hover,
+      #${GENERATE_MODE_BTN_ID}.active {
+        background: #eef2ff;
+        border-color: #a5b4fc;
+      }
+
+      .qv-disclosure {
+        background: #fff;
+        border: 1px solid #e5e7eb;
+        border-radius: 10px;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+        overflow: hidden;
+        transition: box-shadow 0.2s ease, border-color 0.2s ease;
+      }
+      .qv-disclosure[open] {
+        box-shadow: 0 4px 14px rgba(0,0,0,0.06);
+        border-color: #dbe4ff;
+      }
+      .qv-disclosure-summary {
+        list-style: none;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        padding: 12px 14px;
+        cursor: pointer;
+        transition: background-color 0.16s ease;
+      }
+      .qv-disclosure-summary:hover {
+        background: #f9fafb;
+      }
+      .qv-mode-note {
+        margin: 10px 0;
+        padding: 8px 10px;
+        border-radius: 8px;
+        background: #f8fafc;
+        border: 1px solid #e5e7eb;
+        color: #4b5563;
+        font-size: 11.5px;
+        line-height: 1.35;
+      }
+      .qv-disclosure-summary::-webkit-details-marker {
+        display: none;
+      }
+      .qv-summary-actions {
+        display: inline-flex;
+        align-items: center;
+        gap: 9px;
+        flex: 0 0 auto;
+      }
+      .qv-summary-chevron {
+        width: 8px;
+        height: 8px;
+        border-right: 2px solid #6b7280;
+        border-bottom: 2px solid #6b7280;
+        transform: rotate(45deg) translateY(-1px);
+        transition: transform 0.18s ease, border-color 0.18s ease;
+      }
+      .qv-disclosure[open] .qv-summary-chevron {
+        transform: rotate(225deg) translateY(-1px);
+        border-color: #4f46e5;
+      }
+      .qv-disclosure-title-wrap {
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+        min-width: 0;
+      }
+      .qv-disclosure-subtitle {
+        font-size: 11.5px;
+        color: #6b7280;
+      }
+      .qv-disclosure-body {
+        padding: 0 14px 14px;
+        border-top: 1px solid #f3f4f6;
+        animation: qvPanelBodyIn 0.18s ease;
+      }
+
+      @keyframes qvPanelBodyIn {
+        from { opacity: 0; transform: translateY(-4px); }
+        to { opacity: 1; transform: translateY(0); }
+      }
+
+      .qv-panel-footer {
+        display: flex;
+        justify-content: flex-end;
+        margin-top: 8px;
+        padding-top: 8px;
+        border-top: 1px solid #f3f4f6;
+      }
+      .qv-panel-link-btn {
+        background: #ffffff;
+        border: 1px solid #dbe4ff;
+        border-radius: 7px;
+        color: #4338ca;
+        font-size: 11.5px;
+        font-weight: 700;
+        cursor: pointer;
+        padding: 6px 9px;
+      }
+      .qv-panel-link-btn:hover {
+        background: #eef2ff;
+      }
+
+      .qv-section-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 4px;
+      }
+
+      .qv-section-title {
+        font-size: 12.5px;
+        font-weight: 700;
+        color: #1f2937;
+      }
+
+      .qv-section-subtitle {
+        font-size: 11.5px;
+        color: #6b7280;
+        margin: 0 0 10px;
+      }
+
+      .qv-panel-close-btn {
+        width: 24px;
+        height: 24px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        border: 1px solid #e5e7eb;
+        border-radius: 6px;
+        background: #ffffff;
+        color: #6b7280;
+        font-size: 18px;
+        line-height: 1;
+        cursor: pointer;
+        padding: 0;
+        font-family: inherit;
+      }
+      .qv-panel-close-btn:hover {
+        background: #f9fafb;
+        color: #111827;
+      }
+      .qv-multilang-close {
+        width: 22px;
+        height: 22px;
+        font-size: 16px;
+        border-radius: 999px;
+      }
+      .qv-tier-badge {
+        font-size: 10px;
+        font-weight: 700;
+        padding: 2px 7px;
+        border-radius: 10px;
+        letter-spacing: 0.02em;
+      }
+      .qv-tier-badge.plus {
+        background: #ede9fe;
+        color: #7c3aed;
+        border: 1px solid #ddd6fe;
+      }
+      .qv-tier-badge.pro {
+        background: #fef3c7;
+        color: #92400e;
+        border: 1px solid #fcd34d;
+      }
+
+      /* Listing Preferences */
+      .qv-pref-list {
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+        margin-bottom: 2px;
+      }
+      .qv-pref-item {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 5px 4px;
+        border-radius: 6px;
+        cursor: pointer;
+        transition: background 0.15s;
+        font-size: 12.5px;
+        color: #374151;
+        user-select: none;
+      }
+      .qv-pref-item:hover:not(.locked) { background: #f9fafb; }
+      .qv-pref-item input[type="checkbox"] {
+        width: 14px;
+        height: 14px;
+        cursor: pointer;
+        accent-color: #4f46e5;
+        flex-shrink: 0;
+        margin: 0;
+      }
+      .qv-pref-item.locked {
+        opacity: 0.45;
+        cursor: not-allowed;
+        pointer-events: none;
+      }
+
+      .qv-locked-msg {
+        font-size: 11px;
+        color: #9ca3af;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 6px;
+        margin-top: 8px;
+        padding: 5px 8px;
+        background: #f9fafb;
+        border-radius: 6px;
+        border: 1px dashed #e5e7eb;
+      }
+      .qv-locked-msg-text {
+        min-width: 0;
+        flex: 1 1 auto;
+      }
+      .qv-mini-upgrade-btn {
+        display: inline-flex !important;
+        align-items: center;
+        justify-content: flex-end;
+        flex: 0 0 auto;
+        width: auto !important;
+        min-width: 0 !important;
+        max-width: max-content;
+        border: none;
+        background: transparent;
+        color: #4338ca;
+        padding: 0;
+        font-size: 10px;
+        font-weight: 700;
+        cursor: pointer;
+        white-space: nowrap;
+        font-family: inherit;
+        text-decoration: none;
+      }
+      .qv-mini-upgrade-btn:hover {
+        color: #312e81;
+        text-decoration: underline;
+      }
+
+      .qv-suggest-row {
+        display: grid;
+        gap: 8px;
+        margin-top: 10px;
+        padding: 10px;
+        border-top: 1px solid #f3f4f6;
+        border: 1px solid #eef2ff;
+        border-radius: 8px;
+        background: #f8faff;
+      }
+      .qv-suggest-copy {
+        display: flex;
+        justify-content: space-between;
+        gap: 8px;
+        align-items: baseline;
+      }
+      .qv-suggest-title {
+        font-size: 12px;
+        font-weight: 700;
+        color: #1f2937;
+      }
+      .qv-suggest-help {
+        font-size: 11px;
+        color: #6b7280;
+      }
+      .qv-suggest-controls {
+        display: flex;
+        gap: 6px;
+      }
+      .qv-suggest-input {
+        flex: 1;
+        padding: 7px 10px;
+        border: 1px solid #d1d5db;
+        border-radius: 7px;
+        font-size: 12px;
+        color: #374151;
+        background: #f9fafb;
+        outline: none;
+        font-family: inherit;
+        transition: border-color 0.2s, background 0.2s;
+      }
+      .qv-suggest-input:focus {
+        border-color: #4f46e5;
+        background: #fff;
+        box-shadow: 0 0 0 2px rgba(79,70,229,0.08);
+      }
+      .qv-suggest-btn {
+        padding: 7px 12px;
+        background: #4f46e5;
+        color: white;
+        border: none;
+        border-radius: 7px;
+        font-size: 11.5px;
+        font-weight: 600;
+        cursor: pointer;
+        white-space: nowrap;
+        transition: background 0.2s;
+        font-family: inherit;
+      }
+      .qv-suggest-btn:hover { background: #4338ca; }
+      .qv-suggest-btn:disabled { background: #9ca3af; cursor: not-allowed; }
+
+      /* Multi-Language Batch */
+      .qv-lang-pills {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+        margin-bottom: 10px;
+        max-height: 158px;
+        overflow-y: auto;
+        padding-right: 2px;
+      }
+      .qv-lang-pill {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        padding: 5px 11px;
+        border: 1px solid #e5e7eb;
+        border-radius: 20px;
+        font-size: 12px;
+        color: #374151;
+        cursor: pointer;
+        transition: background-color 0.18s ease, border-color 0.18s ease, color 0.18s ease, transform 0.18s ease;
+        user-select: none;
+        background: #fff;
+        font-family: inherit;
+        line-height: 1.2;
+        appearance: none;
+      }
+      .qv-lang-pill:hover:not(.disabled) {
+        border-color: #4f46e5;
+        color: #4f46e5;
+        background: #eef2ff;
+        transform: translateY(-1px);
+      }
+      .qv-lang-pill.selected {
+        background: #4f46e5;
+        border-color: #4f46e5;
+        color: white;
+      }
+      .qv-lang-pill.disabled {
+        opacity: 0.4;
+        cursor: not-allowed;
+        pointer-events: none;
+      }
+
+      .qv-title-lang-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+        margin-top: 10px;
+        padding: 8px 10px;
+        border: 1px solid #e5e7eb;
+        border-radius: 8px;
+        background: #f9fafb;
+        color: #374151;
+        font-size: 12px;
+        font-weight: 700;
+      }
+
+      .qv-title-lang-row select {
+        width: auto;
+        max-width: 150px;
+        min-width: 120px;
+        appearance: none;
+        padding: 6px 28px 6px 10px;
+        border: 1px solid #d1d5db;
+        border-radius: 6px;
+        background-color: white;
+        background-image: url("data:image/svg+xml,%3Csvg width='14' height='14' viewBox='0 0 20 20' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M5.5 7.5L10 12L14.5 7.5' stroke='%236B7280' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+        background-repeat: no-repeat;
+        background-position: right 8px center;
+        color: #111827;
+        font: inherit;
+        font-weight: 600;
+      }
+
+      .qv-multilang-footer {
+        position: sticky;
+        bottom: -14px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+        margin: 4px -14px -14px;
+        padding: 9px 14px 10px;
+        border-top: 1px solid #f3f4f6;
+        background: rgba(255, 255, 255, 0.96);
+        backdrop-filter: blur(8px);
+      }
+      .qv-lang-action-copy {
+        min-width: 0;
+        display: flex;
+        flex-direction: column;
+        gap: 1px;
+      }
+      .qv-lang-counter {
+        font-size: 12px;
+        color: #374151;
+        font-weight: 700;
+      }
+      .qv-lang-action-help {
+        font-size: 10.5px;
+        color: #9ca3af;
+      }
+      .qv-gen-all-btn {
+        width: auto !important;
+        flex: 0 0 auto;
+        padding: 8px 13px;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        border: none;
+        border-radius: 7px;
+        font-size: 12px;
+        font-weight: 600;
+        cursor: pointer;
+        transition: all 0.2s;
+        white-space: nowrap;
+        font-family: inherit;
+      }
+      .qv-gen-all-btn:hover { transform: translateY(-1px); box-shadow: 0 4px 10px rgba(102,126,234,0.3); }
+      .qv-gen-all-btn:disabled { background: #9ca3af; cursor: not-allowed; transform: none; box-shadow: none; }
+
+      .qv-lang-results {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        margin-top: 10px;
+      }
+      .qv-lang-result-card {
+        background: #f9fafb;
+        border: 1px solid #e5e7eb;
+        border-radius: 8px;
+        padding: 10px 12px;
+        opacity: 0;
+        transform: translateY(6px);
+        animation: qvSlideIn 0.18s ease forwards;
+        transition: border-color 0.2s ease, background-color 0.2s ease, transform 0.2s ease;
+      }
+      .qv-lang-result-card.loading {
+        background: #f8faff;
+        border-color: #c7d2fe;
+      }
+      .qv-lang-result-card.done {
+        background: #f0fdf4;
+        border-color: #bbf7d0;
+      }
+      .qv-lang-result-card.error {
+        background: #fef2f2;
+        border-color: #fecaca;
+      }
+      @keyframes qvSlideIn {
+        to {
+          opacity: 1;
+          transform: translateY(0);
+        }
+      }
+      .qv-lang-result-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 6px;
+      }
+      .qv-lang-result-name {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        font-size: 12px;
+        font-weight: 700;
+        color: #374151;
+      }
+
+      /* Result Panel: Smart Re-Gen */
+      .qv-regen-buttons {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 7px;
+        margin-bottom: 6px;
+      }
+      .qv-regen-btn {
+        min-width: 0;
+        padding: 8px 6px;
+        border: 1px solid #e5e7eb;
+        background: white;
+        border-radius: 8px;
+        font-size: 12px;
+        font-weight: 600;
+        color: #374151;
+        cursor: pointer;
+        transition: all 0.15s;
+        text-align: center;
+        font-family: inherit;
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+        align-items: center;
+        justify-content: center;
+        line-height: 1.2;
+        min-height: 38px;
+      }
+      .qv-regen-btn:hover:not(.locked) {
+        border-color: #4f46e5;
+        color: #4f46e5;
+        background: #eef2ff;
+        transform: translateY(-1px);
+      }
+      .qv-regen-btn.locked {
+        opacity: 0.4;
+        cursor: not-allowed;
+        background: #f9fafb;
+      }
+      .qv-regen-btn:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+        transform: none;
+      }
+      .qv-regen-btn.loading {
+        opacity: 1;
+        border-color: #c7d2fe;
+        background: #eef2ff;
+        color: #4338ca;
+      }
+
+      .qv-credit-note { font-size: 11px; color: #9ca3af; }
+
+      .qv-regen-locked-msg {
+        margin-top: 8px;
+        justify-content: center;
+      }
+
+      /* Result Panel: Completeness Check */
+      .qv-completeness-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 8px;
+      }
+      .qv-score-badge {
+        font-size: 11px;
+        font-weight: 700;
+        padding: 2px 9px;
+        border-radius: 10px;
+        background: #4f46e5;
+        color: white;
+      }
+      .qv-score-badge.good { background: #059669; }
+      .qv-score-badge.medium { background: #d97706; }
+      .qv-score-badge.low { background: #dc2626; }
+
+      .qv-score-bar-bg {
+        height: 5px;
+        background: #f3f4f6;
+        border-radius: 3px;
+        overflow: hidden;
+        margin-bottom: 10px;
+      }
+      .qv-score-bar-fill {
+        height: 100%;
+        background: linear-gradient(90deg, #4f46e5, #7c3aed);
+        border-radius: 3px;
+        transition: width 0.5s ease;
+      }
+      .qv-score-bar-fill.good { background: linear-gradient(90deg, #059669, #10b981); }
+      .qv-score-bar-fill.medium { background: linear-gradient(90deg, #d97706, #f59e0b); }
+      .qv-score-bar-fill.low { background: linear-gradient(90deg, #dc2626, #f87171); }
+
+      .qv-checks-list { display: flex; flex-direction: column; gap: 5px; }
+      .qv-check-item {
+        display: flex;
+        align-items: flex-start;
+        gap: 7px;
+        font-size: 12px;
+        line-height: 1.4;
+      }
+      .qv-check-icon { flex-shrink: 0; width: 16px; text-align: center; line-height: 1.5; }
+      .qv-check-body { flex: 1; }
+      .qv-check-label { color: #374151; }
+      .qv-check-label.warn { color: #6b7280; }
+      .qv-check-tip { font-size: 11px; color: #6b7280; margin-top: 1px; }
+      .qv-check-upgrade {
+        display: inline-flex;
+        align-items: center;
+        gap: 3px;
+        font-size: 10.5px;
+        color: #9ca3af;
+        background: #f9fafb;
+        border: 1px solid #e5e7eb;
+        border-radius: 4px;
+        padding: 1px 6px;
+        white-space: nowrap;
+        margin-top: 2px;
+      }
+
+      .qv-completeness-dismiss {
+        margin-top: 10px;
+        padding: 0;
+        border: none;
+        background: transparent;
+        color: #6b7280;
+        font-size: 11px;
+        font-weight: 600;
+        cursor: pointer;
+        text-decoration: underline;
+        font-family: inherit;
+      }
+      .qv-completeness-dismiss:hover {
+        color: #374151;
+      }
     `;
     document.head.appendChild(style);
   }
@@ -690,10 +3467,25 @@
     const btn = document.createElement("button");
     btn.id = BTN_ID;
     btn.innerHTML = `
+        <span class="qv-btn-spinner" aria-hidden="true"></span>
         <span class="icon">${WAND_ICON_SVG}</span>
+        <img class="qv-output-flag" src="https://flagcdn.com/w40/gb.png" alt="English">
         <span class="label">Generate</span>
     `;
     btn.addEventListener("click", onGenerateClick);
+    return btn;
+  }
+
+  function createGenerateModeButton() {
+    const btn = document.createElement("button");
+    btn.id = GENERATE_MODE_BTN_ID;
+    btn.type = "button";
+    btn.textContent = "Multi-lang";
+    btn.addEventListener("click", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      toggleMultiLangPanel();
+    });
     return btn;
   }
 
@@ -712,9 +3504,11 @@
   function createSignInComponent() {
     const btn = document.createElement("button");
     btn.id = SIGN_IN_BTN_ID;
+    btn.style.minWidth = "220px";
+    btn.style.width = "auto";
     btn.innerHTML = `
         ${WAND_ICON_SVG}
-        <span>Sign in to enable AI Tools</span>
+        <span>Sign in to AutoLister</span>
         <span>(Click here)</span>
     `;
 
@@ -727,22 +3521,45 @@
   }
 
   function updateButtonUI() {
-    // If not authenticated, show premium sign-in button and hide others
+    // If not authenticated, hide tools and show the sign-in CTA button.
     if (!isAuthenticated) {
-      if (signInBtn) signInBtn.style.display = "flex";
+      if (signInBtn) signInBtn.style.display = "inline-flex";
+      if (generateTools) generateTools.style.display = "none";
       if (generateBtn) generateBtn.style.display = "none";
+      if (generateModeBtn) generateModeBtn.style.display = "none";
       if (phoneBtn) phoneBtn.style.display = "none";
+      if (prefsToggleBtn) prefsToggleBtn.style.display = "none";
+      if (prefsDock) prefsDock.classList.remove("visible");
+      closeFeaturePanel();
+      if (resultPanel) resultPanel.style.display = "none";
+      if (multiLangPanel) multiLangPanel.style.display = "none";
+      if (completenessPanel) completenessPanel.style.display = "none";
+      positionFloatingTools();
       return;
     }
 
     // Authenticated state
     if (signInBtn) signInBtn.style.display = "none";
-    if (generateBtn) generateBtn.style.display = "flex";
-    if (phoneBtn) phoneBtn.style.display = "flex";
+    if (generateTools) generateTools.style.display = "flex";
+    if (generateBtn) generateBtn.style.display = "inline-flex";
+    if (generateModeBtn) generateModeBtn.style.display = "inline-flex";
+    if (phoneBtn) phoneBtn.style.display = "inline-flex";
+    if (prefsToggleBtn) prefsToggleBtn.style.display = "inline-flex";
+    if (
+      completenessPanel &&
+      completenessPreferenceLoaded &&
+      !isCompletenessDismissed
+    ) {
+      completenessPanel.style.display = "block";
+      updateCompletenessUI();
+    }
+    if (prefsDock) prefsDock.classList.add("visible");
+    positionFloatingTools();
 
     if (!generateBtn) return;
     const label = generateBtn.querySelector(".label");
     const icon = generateBtn.querySelector(".icon");
+    const spinner = generateBtn.querySelector(".qv-btn-spinner");
 
     if (phoneBtn) {
       phoneBtn.disabled = false;
@@ -755,30 +3572,54 @@
     if (isBusy) {
       generateBtn.disabled = true;
       icon.style.display = "none";
-      label.textContent = "⏳ Generating…";
+      if (spinner) spinner.classList.add("visible");
+      const flag = generateBtn.querySelector(".qv-output-flag");
+      if (flag) flag.style.display = "none";
+      label.textContent = "Generating...";
       generateBtn.style.cursor = "progress";
       generateBtn.style.backgroundColor = "#6b7280";
+      if (generateModeBtn) generateModeBtn.disabled = true;
+      if (phoneBtn) phoneBtn.disabled = true;
+      if (prefsToggleBtn) prefsToggleBtn.disabled = true;
     } else {
       generateBtn.disabled = false;
       icon.style.display = "inline-block";
-      label.textContent = "Generate";
+      if (spinner) spinner.classList.remove("visible");
+      const flag = generateBtn.querySelector(".qv-output-flag");
+      if (flag) flag.style.display = "inline-block";
       generateBtn.style.backgroundColor = "#4f46e5";
       generateBtn.style.cursor = "pointer";
+      if (generateModeBtn) generateModeBtn.disabled = false;
+      if (phoneBtn) phoneBtn.disabled = false;
+      if (prefsToggleBtn) prefsToggleBtn.disabled = false;
+      updateGenerateModeLabel();
     }
   }
 
-  function setButtonSuccessState() {
+  function setGenerateBusyLabel(text) {
+    const label = generateBtn?.querySelector(".label");
+    if (label) label.textContent = text;
+  }
+
+  function setButtonSuccessState(imageUrls) {
     if (!generateBtn) return;
     const label = generateBtn.querySelector(".label");
     const icon = generateBtn.querySelector(".icon");
+    const flag = generateBtn.querySelector(".qv-output-flag");
+    const spinner = generateBtn.querySelector(".qv-btn-spinner");
     if (!label || !icon) return;
 
     icon.style.display = "none";
-    label.textContent = "✅ Done";
+    if (flag) flag.style.display = "none";
+    if (spinner) spinner.classList.remove("visible");
+    label.textContent = "Done";
 
     setTimeout(() => {
       isBusy = false;
       updateButtonUI();
+      updateBatchLangFooter();
+      // Show result panel after DOM settles so completeness check reads fresh values
+      setTimeout(() => showResultPanel(imageUrls || lastImageUrls), 50);
     }, 2000);
   }
 
@@ -798,15 +3639,28 @@
     const uploadUrl = `${PHONE_UPLOAD_PAGE}?s=${sessionId}`;
 
     // Get saved language preference
-    const { selectedLanguage = "en" } =
+    const { selectedLanguage: storedLanguage = "en" } =
       await chrome.storage.local.get("selectedLanguage");
+    const selectedLanguage = storedLanguage === "cs" ? "cz" : storedLanguage;
+    if (selectedLanguage !== storedLanguage) {
+      chrome.storage.local.set({ selectedLanguage });
+    }
+    const batchData = await chrome.storage.local.get([BATCH_LANGS_STORAGE_KEY]);
+    const savedBatchLangs = Array.isArray(batchData[BATCH_LANGS_STORAGE_KEY])
+      ? batchData[BATCH_LANGS_STORAGE_KEY]
+      : [...selectedBatchLangs];
+    selectedBatchLangs = new Set(
+      savedBatchLangs.filter((code) =>
+        BATCH_LANGS.some((lang) => lang.code === code),
+      ),
+    );
 
     const languageOptions = [
       { code: "en", name: "English" },
       { code: "fr", name: "Français" },
       { code: "nl", name: "Nederlands" },
       { code: "da", name: "Dansk" },
-      { code: "cs", name: "Čeština" },
+      { code: "cz", name: "Čeština" },
       { code: "sk", name: "Slovenčina" },
       { code: "sv", name: "Svenska" },
       { code: "de", name: "Deutsch" },
@@ -836,7 +3690,6 @@
         <button class="close-x" aria-label="Close">&times;</button>
         <div class="modal-header">
           <h3>📱 Upload from Phone</h3>
-          <span class="feature-pill">NEW · Free to test</span>
         </div>
         <p class="subtitle">Scan with your camera app</p>
         <div class="qr-container">
@@ -845,23 +3698,33 @@
           )}" alt="QR Code" />
         </div>
         <p class="instruction">Photos will appear in this listing automatically</p>
-        <div class="language-selector">
+        <div class="phone-gen-mode" role="group" aria-label="Generation mode">
+          <button type="button" class="phone-mode-btn active" data-mode="single">Single language</button>
+          <button type="button" class="phone-mode-btn" data-mode="multi" ${hasProAccess ? "" : "disabled"}>Multi-lang</button>
+        </div>
+        <div class="language-selector" id="phone-single-language">
           <div class="language-select-wrapper">
             <select class="language-select" id="modal-language-select">
               ${optionsHTML}
             </select>
           </div>
         </div>
+        <div class="phone-multi-language" id="phone-multi-language" style="display:none;">
+          <div class="phone-multi-header">
+            <span id="phone-multi-count">No languages selected</span>
+            <span class="qv-tier-badge pro">Pro</span>
+          </div>
+          <div class="phone-lang-pills" id="phone-lang-pills"></div>
+          <div class="phone-multi-note" id="phone-multi-note">Choose languages once; your selection is saved for next time. Each language uses 1 credit.</div>
+        </div>
         <div class="status waiting">Waiting for photos from phone...</div>
+        <div class="phone-upload-preview" id="phone-upload-preview" aria-live="polite"></div>
         <div class="modal-buttons">
           <button class="close-btn">Done</button>
-          <button class="generate-btn">
+          <button class="generate-btn" data-mode="single">
             <span class="icon" style="width: 14px; height: 14px; display: inline-block; margin-right: 6px;">${WAND_ICON_SVG}</span>
-            Done + Generate
+            <span class="qv-phone-action-label">Done + Generate</span>
           </button>
-        </div>
-        <div class="disclaimer">
-          <strong>Note:</strong> This feature will soon be available exclusively to Pro & Business plans.
         </div>
       </div>
     `;
@@ -877,13 +3740,95 @@
       });
     }
 
+    const generateBtnModal = modal.querySelector(".generate-btn");
+    const singlePanel = modal.querySelector("#phone-single-language");
+    const multiPanel = modal.querySelector("#phone-multi-language");
+    const multiCount = modal.querySelector("#phone-multi-count");
+    const modeButtons = modal.querySelectorAll(".phone-mode-btn");
+    const phoneLangPills = modal.querySelector("#phone-lang-pills");
+    function updatePhoneMultiState() {
+      if (multiCount) {
+        const count = selectedBatchLangs.size;
+        multiCount.textContent =
+          count === 0
+            ? "No languages selected"
+            : count === 1
+              ? "Select one more language"
+            : `${count} language${count > 1 ? "s" : ""} selected`;
+      }
+      if (generateBtnModal) {
+        const mode = generateBtnModal.dataset.mode || "single";
+        const actionLabel = generateBtnModal.querySelector(
+          ".qv-phone-action-label",
+        );
+        if (actionLabel) {
+          actionLabel.textContent =
+            mode === "multi" ? "Done + Generate Multi" : "Done + Generate";
+        }
+        updatePhoneModalStatus();
+      }
+      if (phoneLangPills) {
+        phoneLangPills.querySelectorAll(".phone-lang-pill").forEach((pill) => {
+          pill.classList.toggle(
+            "selected",
+            selectedBatchLangs.has(pill.dataset.code),
+          );
+        });
+      }
+    }
+
+    if (phoneLangPills) {
+      BATCH_LANGS.forEach((lang) => {
+        const pill = document.createElement("button");
+        pill.type = "button";
+        pill.className = "phone-lang-pill";
+        pill.dataset.code = lang.code;
+        pill.appendChild(createFlagImage(lang.code, lang.name));
+        pill.appendChild(document.createTextNode(lang.name));
+        pill.disabled = !hasProAccess;
+        pill.addEventListener("click", () => {
+          toggleBatchLang(lang.code, pill);
+          updatePhoneMultiState();
+        });
+        phoneLangPills.appendChild(pill);
+      });
+    }
+
+    modeButtons.forEach((button) => {
+      button.addEventListener("click", () => {
+        if (button.disabled) return;
+        const mode = button.dataset.mode || "single";
+        modeButtons.forEach((btn) =>
+          btn.classList.toggle("active", btn === button),
+        );
+        if (singlePanel)
+          singlePanel.style.display = mode === "single" ? "flex" : "none";
+        if (multiPanel)
+          multiPanel.style.display = mode === "multi" ? "block" : "none";
+        if (generateBtnModal) generateBtnModal.dataset.mode = mode;
+        updatePhoneMultiState();
+      });
+    });
+    updatePhoneMultiState();
+    updatePhoneModalStatus();
+
     // Close button handlers
     modal.querySelector(".close-x").addEventListener("click", closeModal);
     modal.querySelector(".close-btn").addEventListener("click", closeModal);
-    modal.querySelector(".generate-btn").addEventListener("click", () => {
+    modal.querySelector(".generate-btn").addEventListener("click", (event) => {
+      if (event.currentTarget.disabled) return;
+      event.currentTarget.classList.add("loading");
+      event.currentTarget.disabled = true;
+      const mode = event.currentTarget.dataset.mode || "single";
       closeModal();
       // Trigger generate after a brief delay to ensure modal cleanup completes
-      setTimeout(() => onGenerateClick(), 100);
+      setTimeout(() => {
+        if (mode === "multi") {
+          onGenerateAllClick();
+        } else {
+          onGenerateClick();
+        }
+      }, 100);
     });
 
     // Close when clicking outside modal (on backdrop)
@@ -894,6 +3839,74 @@
     });
 
     return modal;
+  }
+
+  function renderPhoneUploadPreviews() {
+    const phonePreview = document.querySelector(
+      `#${MODAL_ID} #phone-upload-preview`,
+    );
+    if (!phonePreview) return;
+
+    phonePreview.replaceChildren();
+    const previews = [...phoneUploadedPreviews.values()];
+    phonePreview.classList.toggle("visible", previews.length > 0);
+
+    previews.slice(0, 4).forEach((src) => {
+      const img = document.createElement("img");
+      img.className = "phone-thumb";
+      img.src = src;
+      img.alt = "Uploaded photo";
+      phonePreview.appendChild(img);
+    });
+
+    if (previews.length > 4) {
+      const extra = document.createElement("span");
+      extra.className = "phone-thumb-extra";
+      extra.textContent = `+${previews.length - 4}`;
+      phonePreview.appendChild(extra);
+    }
+  }
+
+  function updatePhoneModalStatus() {
+    const modal = document.getElementById(MODAL_ID);
+    if (!modal) return;
+
+    const statusEl = modal.querySelector(".status");
+    const generateBtnModal = modal.querySelector(".generate-btn");
+    const total = downloadedFiles.size;
+
+    if (statusEl) {
+      if (phoneSyncInProgress) {
+        statusEl.className = "status syncing";
+        statusEl.textContent =
+          total > 0
+            ? `Importing photos... ${total} ready`
+            : "Importing photos...";
+      } else if (total > 0) {
+        statusEl.className = "status ready";
+        statusEl.textContent = `✓ ${total} photo${total !== 1 ? "s" : ""} ready to generate`;
+      } else {
+        statusEl.className = "status waiting";
+        statusEl.textContent = "Waiting for photos from phone...";
+      }
+    }
+
+    renderPhoneUploadPreviews();
+
+    if (generateBtnModal) {
+      const mode = generateBtnModal.dataset.mode || "single";
+      const hasPhotos = downloadedFiles.size > 0;
+      generateBtnModal.disabled =
+        !hasPhotos ||
+        phoneSyncInProgress ||
+        (mode === "multi" && (!hasProAccess || selectedBatchLangs.size < 2));
+      generateBtnModal.classList.toggle("loading", phoneSyncInProgress);
+      generateBtnModal.title = !hasPhotos
+        ? "Upload photos from your phone first"
+        : phoneSyncInProgress
+          ? "Importing photos..."
+          : "";
+    }
   }
 
   function closeModal() {
@@ -908,6 +3921,8 @@
       pollInterval = null;
     }
     downloadedFiles.clear();
+    phoneUploadedPreviews.clear();
+    phoneSyncInProgress = false;
 
     // Notify server to clean up session and delete files
     if (sessionId && chrome.runtime?.id) {
@@ -935,7 +3950,7 @@
   }
 
   function startPolling(sessionId) {
-    const statusEl = document.querySelector(`#${MODAL_ID} .status`);
+    updatePhoneModalStatus();
 
     pollInterval = setInterval(async () => {
       try {
@@ -957,38 +3972,35 @@
           typeof response.data === "string"
             ? JSON.parse(response.data)
             : response.data;
-        if (data.files && data.files.length > 0) {
-          let newFilesCount = 0;
+        const newFiles = (data.files || []).filter(
+          (file) => !downloadedFiles.has(file.name),
+        );
 
-          for (const file of data.files) {
-            if (!downloadedFiles.has(file.name)) {
+        if (newFiles.length > 0) {
+          phoneSyncInProgress = true;
+          updatePhoneModalStatus();
+
+          for (const file of newFiles) {
+            const didImport = await downloadAndInjectImage(
+              file.url,
+              file.name,
+            );
+            if (didImport) {
               downloadedFiles.add(file.name);
-              newFilesCount++;
-              await downloadAndInjectImage(file.url, file.name);
+              phoneUploadedPreviews.set(file.name, file.url);
+              updatePhoneModalStatus();
             }
           }
 
-          // Update status with total count
-          if (statusEl) {
-            const total = downloadedFiles.size;
-            statusEl.className = "status";
-            statusEl.textContent = `✓ ${total} file${
-              total !== 1 ? "s" : ""
-            } added. Ready for more...`;
-          }
+          phoneSyncInProgress = false;
+          updatePhoneModalStatus();
         } else {
-          // No files yet, show waiting message
-          if (statusEl && downloadedFiles.size === 0) {
-            statusEl.className = "status waiting";
-            statusEl.textContent = "Waiting for photos from phone...";
-          } else if (statusEl && downloadedFiles.size > 0) {
-            statusEl.className = "status";
-            statusEl.textContent = `✓ ${downloadedFiles.size} file${
-              downloadedFiles.size !== 1 ? "s" : ""
-            } added. Ready for more...`;
-          }
+          phoneSyncInProgress = false;
+          updatePhoneModalStatus();
         }
       } catch (err) {
+        phoneSyncInProgress = false;
+        updatePhoneModalStatus();
         console.error("Polling error:", err);
       }
     }, 3000);
@@ -1040,15 +4052,17 @@
         fileInput.files = dataTransfer.files;
         fileInput.dispatchEvent(new Event("change", { bubbles: true }));
 
-        const statusEl = document.querySelector(`#${MODAL_ID} .status`);
-        if (statusEl) statusEl.textContent = "Image uploaded!";
+        return true;
       }
+      return false;
     } catch (err) {
       console.error("Error downloading image:", err);
+      return false;
     }
   }
 
   async function onGenerateClick() {
+    if (isBusy) return;
     if (!isAuthenticated) {
       chrome.runtime.sendMessage({ type: "OPEN_POPUP" });
       return;
@@ -1063,19 +4077,24 @@
 
     isBusy = true;
     updateButtonUI();
+    updateBatchLangFooter();
+    await nextFrame();
 
     try {
       const {
-        selectedLanguage = "en",
+        selectedLanguage: storedLanguage = "en",
         tone = "standard",
         useEmojis,
         useBulletPoints = true,
+        listingPreferences = [],
       } = await chrome.storage.local.get([
         "selectedLanguage",
         "tone",
         "useEmojis",
         "useBulletPoints",
+        "listingPreferences",
       ]);
+      const selectedLanguage = storedLanguage === "cs" ? "cz" : storedLanguage;
       const { access_token } = await sendMessage({ type: "GET_ACCESS_TOKEN" });
 
       if (!access_token) {
@@ -1084,23 +4103,30 @@
         );
       }
 
-      // Compress images before sending to API to reduce token usage
       const compressedImages = await compressImages(imageUrls);
+      lastImageUrls = compressedImages;
 
-      const response = await fetch(`${API_BASE}/api/generate`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${access_token}`,
+      const response = await fetchWithTimeout(
+        `${API_BASE}/api/generate`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${access_token}`,
+          },
+          body: JSON.stringify({
+            imageUrls: compressedImages,
+            languageCode: selectedLanguage,
+            tone,
+            useEmojis,
+            useBulletPoints,
+            listingPreferences: hasPlusAccess
+              ? sanitizeListingPreferences(listingPreferences)
+              : [],
+          }),
         },
-        body: JSON.stringify({
-          imageUrls: compressedImages,
-          languageCode: selectedLanguage,
-          tone,
-          useEmojis,
-          useBulletPoints,
-        }),
-      });
+        90000,
+      );
 
       if (response.status === 401) {
         isAuthenticated = false;
@@ -1109,11 +4135,11 @@
         updateButtonUI();
         return;
       }
-      if (response.status === 429) {
+      if (response.status === 429 || response.status === 402) {
         const errData = await response.json();
         const pricingUrl = await getPricingUrl();
         showToast(
-          errData.error || "You have exceeded your daily/monthly usage limit.",
+          errData.error || "You have exceeded your usage limit.",
           "error",
           { text: "Upgrade Plan", url: pricingUrl },
         );
@@ -1127,89 +4153,177 @@
       }
 
       const { title, description, measurementAdvice } = await response.json();
-      const titleInput = document.querySelector(SELECTORS.title);
-      const descInput = document.querySelector(SELECTORS.description);
+      setTitleValue(title);
+      setTextareaValue(description);
 
-      if (titleInput) {
-        titleInput.value = title;
-        titleInput.dispatchEvent(new Event("input", { bubbles: true }));
-      }
-      if (descInput) {
-        descInput.value = description;
-        descInput.dispatchEvent(new Event("input", { bubbles: true }));
-      }
-
-      setButtonSuccessState();
-
-      // Show measurement advice if available
-      if (measurementAdvice && measurementAdvice.trim()) {
-        setTimeout(() => {
-          showToast(measurementAdvice, "info", null, false);
-        }, 300);
-      }
+      setButtonSuccessState(compressedImages);
+      await maybeShowMeasurementAdvice(measurementAdvice);
     } catch (err) {
       console.error("AutoLister AI Error:", err);
-      showToast(err.message || "An unexpected error occurred.", "error");
+      const message =
+        err.name === "AbortError"
+          ? "Generation timed out. Please try again."
+          : err.message || "An unexpected error occurred.";
+      showToast(message, "error");
       isBusy = false;
       updateButtonUI();
+      updateBatchLangFooter();
     }
   }
 
   // --- INJECTION & OBSERVATION LOGIC ---
 
   function injectButton() {
-    const existingBtn = document.getElementById(BTN_ID);
-    if (existingBtn) {
-      generateBtn = existingBtn;
-      phoneBtn = document.getElementById(PHONE_BTN_ID);
-      signInBtn = document.getElementById(SIGN_IN_BTN_ID);
-      updateButtonUI();
-      return true;
-    }
+    try {
+      const existingBtn = document.getElementById(BTN_ID);
+      if (existingBtn) {
+        generateBtn = existingBtn;
+        generateTools = document.getElementById(GENERATE_TOOLS_ID);
+        generateModeBtn = document.getElementById(GENERATE_MODE_BTN_ID);
+        phoneBtn = document.getElementById(PHONE_BTN_ID);
+        signInBtn = document.getElementById(SIGN_IN_BTN_ID);
+        prefsToggleBtn = document.getElementById(PREFS_TOGGLE_BTN_ID);
+        prefsDock = document.getElementById(PREFS_DOCK_ID);
+        featurePanel = document.getElementById(FEATURE_PANEL_ID);
+        resultPanel = document.getElementById(RESULT_PANEL_ID);
+        multiLangPanel = document.getElementById(MULTILANG_PANEL_ID);
+        completenessPanel = document.getElementById(COMPLETENESS_PANEL_ID);
+        return true;
+      }
 
-    const titleEl = document.querySelector(SELECTORS.title);
-    if (!titleEl) return false;
+      const titleEl = document.querySelector(SELECTORS.title);
+      const descEl = document.querySelector(SELECTORS.description);
+      if (!titleEl || !descEl) return false;
 
-    const container = titleEl.closest("div");
-    if (container && container.parentNode) {
+      [
+        FEATURE_PANEL_ID,
+        RESULT_PANEL_ID,
+        MULTILANG_PANEL_ID,
+        COMPLETENESS_PANEL_ID,
+      ].forEach((id) => {
+        document.getElementById(id)?.remove();
+      });
+
+      const titleDescriptionCard =
+        document
+          .querySelector('[data-testid="title"]')
+          ?.closest(".web_ui__Card__card") ||
+        document
+          .querySelector('[data-testid="description"]')
+          ?.closest(".web_ui__Card__card") ||
+        titleEl.closest(".web_ui__Card__card") ||
+        descEl.closest(".web_ui__Card__card") ||
+        titleEl.closest('label[data-testid="title"]')?.parentElement ||
+        titleEl.parentElement;
+
       const btnContainer = document.createElement("div");
-      // Container for tool buttons and the sign-in component, spaced below the title.
-      btnContainer.style.marginTop = "20px";
+      btnContainer.id = GENERATE_TOOLS_ID;
+      btnContainer.style.margin = "0 0 10px";
+      btnContainer.style.display = "flex";
 
-      // Wrapper for tools (Generate + Phone)
       const toolsWrapper = document.createElement("div");
+      toolsWrapper.className = "qv-toolbar";
       toolsWrapper.style.display = "flex";
       toolsWrapper.style.alignItems = "center";
+      toolsWrapper.style.gap = "6px";
+      toolsWrapper.style.flexWrap = "nowrap";
 
       generateBtn = createButton();
+      generateModeBtn = createGenerateModeButton();
       phoneBtn = createPhoneButton();
       signInBtn = createSignInComponent();
+      prefsToggleBtn = createPrefsToggleButton();
+      featurePanel = createFeaturePanel();
 
       toolsWrapper.appendChild(generateBtn);
+      toolsWrapper.appendChild(generateModeBtn);
       toolsWrapper.appendChild(phoneBtn);
+      toolsWrapper.appendChild(prefsToggleBtn);
+
+      resultPanel = createResultPanel();
+      multiLangPanel = createMultiLangPanel();
+      completenessPanel = createCompletenessPanel();
 
       btnContainer.appendChild(toolsWrapper);
       btnContainer.appendChild(signInBtn);
+      btnContainer.appendChild(resultPanel);
+      btnContainer.appendChild(multiLangPanel);
 
-      container.parentNode.insertBefore(btnContainer, container.nextSibling);
+      if (titleDescriptionCard?.parentNode) {
+        titleDescriptionCard.parentNode.insertBefore(
+          btnContainer,
+          titleDescriptionCard,
+        );
+      } else {
+        document.body.appendChild(btnContainer);
+      }
+      document.body.appendChild(featurePanel);
+      document.body.appendChild(completenessPanel);
+      restorePrefState();
+      restoreBatchLangState();
+      updateFeaturePanelAccess();
+      updateMultiLangPanelAccess();
       updateButtonUI();
+      positionFloatingTools();
+      bindCompletenessObservers();
+      scheduleCompletenessUpdate();
+
+      // Wire up suggestion submit
+      const suggestBtn = document.getElementById("qv-suggest-btn");
+      if (suggestBtn) suggestBtn.addEventListener("click", onSubmitSuggestion);
+      const suggestInput = document.getElementById("qv-suggest-input");
+      if (suggestInput) {
+        suggestInput.addEventListener("keydown", (e) => {
+          if (e.key === "Enter") onSubmitSuggestion();
+        });
+      }
+
+      // Wire up Generate All
+      const genAllBtn = document.getElementById("qv-gen-all-btn");
+      if (genAllBtn) genAllBtn.addEventListener("click", onGenerateAllClick);
+
+      const fullSettingsBtn = document.getElementById("qv-open-full-settings");
+      if (fullSettingsBtn) {
+        fullSettingsBtn.addEventListener("click", () => {
+          closeFeaturePanel();
+          chrome.runtime.sendMessage({ type: "OPEN_POPUP" });
+        });
+      }
+
       return true;
+    } catch (error) {
+      console.error("QuickVint injection failed:", error);
+      return false;
     }
-    return false;
   }
 
   function startInjectionObserver() {
-    const pollInterval = setInterval(() => {
-      if (injectButton()) {
-        clearInterval(pollInterval);
+    let injected = injectButton();
+    let pending = false;
+
+    const runInjection = () => {
+      pending = false;
+      const toolbarMissing = !document.getElementById(BTN_ID);
+      if (toolbarMissing || !injected) {
+        injected = injectButton();
       }
-    }, 100);
+      if (injected) {
+        scheduleCompletenessUpdate();
+      }
+    };
+
+    const pollInterval = setInterval(() => {
+      if (injected && document.getElementById(BTN_ID)) {
+        clearInterval(pollInterval);
+        return;
+      }
+      runInjection();
+    }, 1000);
 
     const observer = new MutationObserver(() => {
-      if (injectButton()) {
-        observer.disconnect();
-        clearInterval(pollInterval);
-      }
+      if (pending) return;
+      pending = true;
+      setTimeout(runInjection, 150);
     });
 
     observer.observe(document.body, { childList: true, subtree: true });
@@ -1219,7 +4333,41 @@
 
   function init() {
     injectStylesheet();
+    loadUiLanguage().then(refreshLocalizedFeatureText);
+    chrome.storage.local.get([COMPLETENESS_DISMISSED_KEY], (data) => {
+      isCompletenessDismissed = data[COMPLETENESS_DISMISSED_KEY] === true;
+      completenessPreferenceLoaded = true;
+      updateButtonUI();
+      if (!isCompletenessDismissed) scheduleCompletenessUpdate();
+    });
     initializeAuthState();
+    document.addEventListener("click", (event) => {
+      const target = event.target;
+      if (!(target instanceof Element)) return;
+      if (
+        featurePanel &&
+        prefsToggleBtn &&
+        !featurePanel.contains(target) &&
+        !prefsToggleBtn.contains(target)
+      ) {
+        closeFeaturePanel();
+      }
+      if (
+        multiLangPanel &&
+        generateModeBtn &&
+        !multiLangPanel.contains(target) &&
+        !generateModeBtn.contains(target)
+      ) {
+        toggleMultiLangPanel(false);
+      }
+    });
+    window.addEventListener("resize", positionFloatingTools);
+    window.addEventListener("scroll", positionFloatingTools, true);
+    window.addEventListener("focus", () => refreshProfileAndAccess());
+    document.addEventListener("visibilitychange", () => {
+      if (document.visibilityState === "visible") refreshProfileAndAccess();
+    });
+    setInterval(() => refreshProfileAndAccess(), PROFILE_REFRESH_INTERVAL_MS);
     startInjectionObserver();
   }
 

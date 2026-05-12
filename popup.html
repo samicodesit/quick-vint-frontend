@@ -6,24 +6,33 @@
   <title>AutoLister AI</title>
   <style>
     /* --- Base & General Styles --- */
+    html {
+      width: 320px;
+      max-height: 600px;
+    }
+
     body {
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
         "Inter", sans-serif;
       width: 320px;
+      max-height: 600px;
       padding: 0;
       margin: 0;
       color: #1f2937;
       font-size: 14px;
       background: #f9fafb;
       line-height: 1.5;
+      overflow: hidden;
     }
 
     .popup-container {
       background: #ffffff;
       margin: 0;
-      max-height: 600px;
-      overflow: hidden;
       box-sizing: border-box;
+      position: relative;
+      max-height: 600px;
+      overflow-y: auto;
+      overflow-x: hidden;
     }
 
     .hidden {
@@ -32,20 +41,16 @@
 
     /* --- View Controller --- */
     #messages {
-      grid-area: messages;
+      margin-bottom: 12px;
     }
 
     #loadingView,
     #signedOutView,
     #signedInView,
     #settingsView {
-      grid-area: views;
       width: 100%;
-      height: 100%;
-      opacity: 0;
-      visibility: hidden;
-      pointer-events: none;
-      transition: opacity 0.2s ease;
+      box-sizing: border-box;
+      display: none;
     }
 
     #loadingView {
@@ -56,31 +61,21 @@
 
     /* Loading State */
     body:not([data-view]) #loadingView {
-      opacity: 1;
-      visibility: visible;
-      pointer-events: auto;
+      display: block;
     }
 
     /* Signed Out State */
     body[data-view="signed-out"]:not(.settings-active) #signedOutView {
-      opacity: 1;
-      visibility: visible;
-      pointer-events: auto;
+      display: flex;
     }
 
     /* Signed In State */
     body[data-view="signed-in"]:not(.settings-active) #signedInView {
-      opacity: 1;
-      visibility: visible;
-      pointer-events: auto;
+      display: flex;
     }
 
     /* Settings State */
     body.settings-active #settingsView {
-      opacity: 1;
-      visibility: visible;
-      pointer-events: auto;
-      z-index: 10;
       display: flex;
       flex-direction: column;
     }
@@ -95,12 +90,7 @@
     }
 
     .popup-content {
-      padding: 8px 22px 20px;
-      display: grid;
-      grid-template-rows: auto 1fr;
-      grid-template-areas:
-        "messages"
-        "views";
+      padding: 6px 20px 14px;
     }
 
     /* --- Typography --- */
@@ -147,13 +137,6 @@
       word-break: break-all;
     }
 
-    .poweredByText {
-      text-align: center;
-      font-size: 11px;
-      color: #9ca3af;
-      margin-top: 8px;
-    }
-
     .trust-note {
       margin-top: 10px;
       margin-bottom: 0;
@@ -169,8 +152,9 @@
 
     .renewal-text {
       text-align: center;
-      margin-bottom: 12px;
-      font-size: 13px;
+      margin: 4px 0 8px;
+      font-size: 12px;
+      color: #4b5563;
     }
 
     /* --- Form Elements & Buttons --- */
@@ -230,8 +214,8 @@
     }
 
     .upgradeBtn {
-      margin-bottom: 8px;
-      margin-top: 12px;
+      margin-bottom: 4px;
+      margin-top: 8px;
       background: linear-gradient(135deg, #10b981 0%, #059669 100%);
       font-weight: 700;
     }
@@ -243,7 +227,6 @@
     /* --- Message/Notification Component --- */
     #messages {
       padding: 12px 16px;
-      margin-bottom: 16px;
       border-radius: 8px;
       text-align: center;
       font-size: 13px;
@@ -267,9 +250,9 @@
     /* --- User & Plan Components --- */
     .user-email {
       background: #f3f4f6;
-      padding: 8px 12px;
+      padding: 6px 12px;
       border-radius: 8px;
-      font-size: 13px;
+      font-size: 12px;
       color: #4b5563;
       text-align: center;
       border: 1px solid #e5e7eb;
@@ -279,25 +262,194 @@
     .plan-card {
       background: #ffffff;
       border-radius: 12px;
-      padding: 16px;
+      padding: 10px 12px;
       border: 1px solid #f3f4f6;
       box-shadow: 0 4px 12px rgba(0, 0, 0, 0.04);
-      margin: 5px 0 8px;
+      margin: 4px 0 6px;
     }
 
-    .plan-header {
+    /* Plan header row: plan name + optional badge */
+    .plan-header-row {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      margin-bottom: 8px;
+    }
+
+    .plan-header-text {
       font-size: 16px;
       font-weight: 600;
       color: #1f2937;
-      text-align: center;
-      margin-bottom: 16px;
     }
 
+    .legacy-badge {
+      background: #fef3c7;
+      color: #92400e;
+      border: 1px solid #fcd34d;
+      font-size: 10px;
+      font-weight: 700;
+      padding: 2px 7px;
+      border-radius: 10px;
+      letter-spacing: 0.04em;
+    }
+
+    /* Credits block (new-tier users) */
+    .credits-block {
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+      margin-bottom: 8px;
+    }
+
+    .credits-summary {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      padding: 0;
+      border: 0;
+      border-radius: 0;
+      background: transparent;
+    }
+
+    .credits-eyebrow {
+      display: block;
+      font-size: 11px;
+      font-weight: 600;
+      color: #6b7280;
+      margin: 0;
+    }
+
+    .credits-side-stat {
+      text-align: right;
+      flex-shrink: 0;
+    }
+
+    .credits-side-stat .stat-value {
+      display: block;
+      font-size: 14px;
+      line-height: 1.1;
+    }
+
+    .credits-side-stat .stat-label {
+      display: block;
+      font-size: 11px;
+      line-height: 1.2;
+    }
+
+    .phone-usage-row {
+      margin-top: 8px;
+      padding-top: 8px;
+      border-top: 1px solid #f3f4f6;
+    }
+
+    .phone-usage-label {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 8px;
+      font-size: 11.5px;
+      color: #6b7280;
+      margin-bottom: 5px;
+    }
+
+    .phone-usage-label strong {
+      color: #374151;
+      font-weight: 700;
+    }
+
+    .phone-usage-bar {
+      height: 5px;
+      border-radius: 999px;
+      overflow: hidden;
+      background: #eef2ff;
+    }
+
+    .phone-usage-fill {
+      height: 100%;
+      width: 0%;
+      border-radius: inherit;
+      background: linear-gradient(90deg, #4f46e5, #10b981);
+      transition: width 0.2s ease;
+    }
+
+    .phone-usage-fill.unlimited {
+      background: linear-gradient(90deg, #10b981, #059669);
+    }
+
+    .stat-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+    }
+
+    .stat-label {
+      font-size: 12px;
+      color: #6b7280;
+    }
+
+    .stat-value {
+      font-size: 13px;
+      font-weight: 600;
+      color: #1f2937;
+    }
+
+    .stat-value--big {
+      font-size: 20px;
+      font-weight: 700;
+      color: #111827;
+    }
+
+    .credits-split {
+      padding-left: 2px;
+      display: flex;
+      flex-direction: column;
+      gap: 3px;
+      margin-top: -2px;
+    }
+
+    .split-line {
+      font-size: 12px;
+      color: #6b7280;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      line-height: 1.6;
+    }
+
+    .split-tree {
+      font-family: monospace;
+      color: #d1d5db;
+      font-size: 11px;
+      flex-shrink: 0;
+    }
+
+    .reset-badge {
+      background: #dbeafe;
+      color: #1d4ed8;
+      font-size: 10px;
+      font-weight: 600;
+      padding: 1px 6px;
+      border-radius: 8px;
+      margin-left: 2px;
+      white-space: nowrap;
+    }
+
+    .pack-perm {
+      color: #9ca3af;
+      font-size: 11px;
+    }
+
+    /* Legacy meters */
     .usage-meters {
       display: flex;
       flex-direction: column;
       gap: 14px;
       margin-bottom: 16px;
+      padding: 0;
+      border: 0;
+      background: transparent;
     }
 
     .usage-meter .meter-label {
@@ -326,9 +478,134 @@
     .progress-bar-fill {
       height: 100%;
       width: 0%;
-      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      background: linear-gradient(90deg, #10b981 0%, #2563eb 100%);
       border-radius: 4px;
       transition: width 0.2s ease;
+    }
+
+    /* Free credits exhausted wall */
+    .exhausted-wall {
+      text-align: center;
+      padding: 6px 0 4px;
+    }
+
+    .exhausted-emoji {
+      font-size: 24px;
+      margin: 0 0 6px;
+    }
+
+    .exhausted-title {
+      font-size: 14px;
+      font-weight: 700;
+      color: #111827;
+      margin: 0 0 8px;
+    }
+
+    .exhausted-body {
+      font-size: 12px;
+      color: #6b7280;
+      margin: 0 0 12px;
+      line-height: 1.5;
+    }
+
+    .exhausted-btns {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 10px;
+    }
+
+    .btn-pack {
+      flex: 1;
+      padding: 8px 6px;
+      background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+      color: white;
+      border: none;
+      border-radius: 8px;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      line-height: 1.3;
+      transition: transform 0.15s ease;
+    }
+
+    .btn-pack .btn-sub,
+    .btn-plans .btn-sub {
+      display: block;
+      font-weight: 500;
+      font-size: 10px;
+      opacity: 0.9;
+      margin-top: 1px;
+    }
+
+    .btn-pack:hover {
+      transform: translateY(-1px);
+    }
+
+    .btn-pack:active {
+      transform: translateY(0);
+    }
+
+    .btn-plans {
+      flex: 1;
+      padding: 8px 6px;
+      background: transparent;
+      color: #667eea;
+      border: 1px solid #c7d2fe;
+      border-radius: 8px;
+      font-size: 12px;
+      font-weight: 600;
+      text-align: center;
+      text-decoration: none;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      line-height: 1.3;
+      transition: background-color 0.15s;
+    }
+
+    .btn-plans:hover {
+      background: #eef2ff;
+    }
+
+    .exhausted-note {
+      font-size: 11px;
+      color: #9ca3af;
+      margin: 0;
+    }
+
+    /* Downgrade pending banner */
+    .downgrade-banner {
+      display: flex;
+      gap: 8px;
+      align-items: flex-start;
+      background: #fffbeb;
+      border: 1px solid #fcd34d;
+      color: #92400e;
+      padding: 10px 12px;
+      border-radius: 8px;
+      font-size: 11px;
+      line-height: 1.5;
+      margin-bottom: 10px;
+    }
+
+    .downgrade-text {
+      margin: 0;
+      line-height: 1.5;
+    }
+
+    /* Legacy migrate banner */
+    .legacy-migrate-banner {
+      background: #f0f9ff;
+      border: 1px solid #bae6fd;
+      color: #0369a1;
+      padding: 9px 12px;
+      border-radius: 8px;
+      font-size: 12px;
+      line-height: 1.4;
+      margin-top: 8px;
+      margin-bottom: 4px;
     }
 
     .view-plans-link {
@@ -348,9 +625,89 @@
       text-decoration: underline;
     }
 
+    .free-helper-note {
+      margin: 8px 0 0;
+      font-size: 11px;
+      color: #6b7280;
+      text-align: center;
+      line-height: 1.45;
+    }
+
+    .sync-note {
+      margin: 8px 0 0;
+      padding: 8px 10px;
+      border-radius: 8px;
+      background: #f9fafb;
+      border: 1px solid #e5e7eb;
+      color: #6b7280;
+      font-size: 11px;
+      line-height: 1.4;
+      text-align: center;
+    }
+
+    /* Pack nudge modal */
+    .pack-nudge-modal {
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(17, 24, 39, 0.6);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 50;
+      padding: 16px;
+      box-sizing: border-box;
+    }
+
+    .pack-nudge-card {
+      background: #ffffff;
+      border-radius: 8px;
+      padding: 22px 18px;
+      text-align: center;
+      box-shadow: 0 20px 40px rgba(0, 0, 0, 0.25);
+      width: 100%;
+    }
+
+    .nudge-icon {
+      font-size: 28px;
+      margin: 0 0 8px;
+    }
+
+    .nudge-title {
+      font-size: 16px;
+      font-weight: 700;
+      color: #111827;
+      margin: 0 0 10px;
+    }
+
+    .nudge-body {
+      font-size: 13px;
+      color: #4b5563;
+      margin: 0 0 16px;
+      line-height: 1.55;
+    }
+
+    .just-pack-link {
+      display: block;
+      text-align: center;
+      font-size: 12px;
+      color: #9ca3af;
+      margin-top: 8px;
+      cursor: pointer;
+      text-decoration: none;
+      padding: 4px 0;
+    }
+
+    .just-pack-link:hover {
+      color: #6b7280;
+      text-decoration: underline;
+    }
+
     /* --- Language Dropdown Component --- */
     .language-dropdown {
-      margin-bottom: 20px;
+      margin-bottom: 8px;
       padding: 0 4px;
       position: relative;
       z-index: 10;
@@ -364,7 +721,6 @@
     }
 
     .dropdown-toggle {
-      /* This is a button, but styled differently from .btn */
       cursor: pointer;
       background: #ffffff;
       color: #1f2937;
@@ -499,7 +855,7 @@
       font-size: 9px;
       font-weight: 800;
       padding: 2px 6px;
-      border-radius: 12px;
+      border-radius: 8px;
       box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
       z-index: 25;
       pointer-events: none;
@@ -528,20 +884,6 @@
       border: 1px solid #f3f4f6;
       box-shadow: 0 4px 12px rgba(0, 0, 0, 0.04);
       margin-bottom: 12px;
-    }
-
-    .info-note {
-      background-color: #fffbeb;
-      border: 1px solid #fcd34d;
-      color: #92400e;
-      padding: 10px 12px;
-      border-radius: 8px;
-      font-size: 11px;
-      margin-bottom: 16px;
-      line-height: 1.4;
-      display: flex;
-      align-items: flex-start;
-      gap: 8px;
     }
 
     .upgrade-note {
@@ -776,7 +1118,84 @@
     .setting-divider {
       height: 1px;
       background: #f3f4f6;
-      margin: 16px 0;
+      margin: 12px 0;
+    }
+
+    .prefs-grid {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 8px;
+      margin-top: 12px;
+    }
+
+    .pref-option {
+      position: relative;
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+      padding: 10px;
+      border: 1px solid #e5e7eb;
+      border-radius: 8px;
+      background: #ffffff;
+      cursor: pointer;
+      transition: border-color 0.18s ease, background 0.18s ease;
+    }
+
+    .pref-option:hover:not(.locked) {
+      border-color: #c7d2fe;
+      background: #f8faff;
+    }
+
+    .pref-option.locked {
+      opacity: 0.56;
+      cursor: not-allowed;
+    }
+
+    .pref-option input {
+      margin-top: 2px;
+      accent-color: #4f46e5;
+      flex-shrink: 0;
+    }
+
+    .pref-option-copy {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+      min-width: 0;
+    }
+
+    .pref-option-title {
+      font-size: 12.5px;
+      font-weight: 700;
+      color: #1f2937;
+    }
+
+    .pref-option-subtitle {
+      font-size: 11px;
+      color: #6b7280;
+      line-height: 1.4;
+    }
+
+    .pref-card-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .inline-badge {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      padding: 2px 8px;
+      border-radius: 999px;
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 0.03em;
+      background: #ede9fe;
+      color: #6d28d9;
+      border: 1px solid #ddd6fe;
+      white-space: nowrap;
     }
 
     .toggle-container {
@@ -887,10 +1306,18 @@
     /* --- Auth View Specific Styles --- */
 
     #signedOutView {
-      display: flex;
       flex-direction: column;
       padding: 10px 4px;
-      /* Slight extra padding for the view */
+    }
+
+    #signedInView {
+      flex-direction: column;
+      gap: 10px;
+      padding: 2px 4px 0;
+    }
+
+    #signOutBtn {
+      margin-bottom: 0;
     }
 
     /* Header Styling */
@@ -916,7 +1343,7 @@
       font-size: 20px;
       font-weight: 700;
       color: #111827;
-      letter-spacing: -0.025em;
+      letter-spacing: 0;
     }
 
     .auth-subtitle {
@@ -942,7 +1369,6 @@
       transition: all 0.2s ease;
       box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
       margin-bottom: 0;
-      /* Handled by divider */
     }
 
     .google-btn:hover {
@@ -953,7 +1379,6 @@
 
     .google-btn:active {
       transform: translateY(0);
-      /* Override generic btn transform if needed */
       background-color: #f3f4f6;
     }
 
@@ -1019,7 +1444,6 @@
 
     <main class="popup-content">
       <div id="messages" class="hidden"></div>
-
       <div id="loadingView">
         <p>Loading...</p>
       </div>
@@ -1030,39 +1454,39 @@
           <p class="auth-subtitle">Sign in to AutoLister AI</p>
         </div>
 
-        <button id="googleSignIn" class="google-btn">
-          <svg class="google-icon" viewBox="0 0 24 24" width="18" height="18" xmlns="http://www.w3.org/2000/svg">
-            <g transform="matrix(1, 0, 0, 1, 27.009001, -39.238998)">
-              <path fill="#4285F4"
-                d="M -3.264 51.509 C -3.264 50.719 -3.334 49.969 -3.454 49.239 L -14.754 49.239 L -14.754 53.749 L -8.284 53.749 C -8.574 55.229 -9.424 56.479 -10.684 57.329 L -10.684 60.329 L -6.824 60.329 C -4.564 58.239 -3.264 55.159 -3.264 51.509 Z" />
-              <path fill="#34A853"
-                d="M -14.754 63.239 C -11.514 63.239 -8.804 62.159 -6.824 60.329 L -10.684 57.329 C -11.764 58.049 -13.134 58.489 -14.754 58.489 C -17.884 58.489 -20.534 56.379 -21.484 53.529 L -25.464 53.529 L -25.464 56.619 C -23.494 60.539 -19.444 63.239 -14.754 63.239 Z" />
-              <path fill="#FBBC05"
-                d="M -21.484 53.529 C -21.734 52.809 -21.864 52.039 -21.864 51.239 C -21.864 50.439 -21.724 49.669 -21.484 48.949 L -21.484 45.859 L -25.464 45.859 C -26.284 47.479 -26.754 49.299 -26.754 51.239 C -26.754 53.179 -26.284 54.999 -25.464 56.619 L -21.484 53.529 Z" />
-              <path fill="#EA4335"
-                d="M -14.754 43.989 C -12.984 43.989 -11.404 44.599 -10.154 45.789 L -6.734 42.369 C -8.804 40.429 -11.514 39.239 -14.754 39.239 C -19.444 39.239 -23.494 41.939 -25.464 45.859 L -21.484 48.949 C -20.534 46.099 -17.884 43.989 -14.754 43.989 Z" />
-            </g>
-          </svg>
-          <span>Continue with Google</span>
-        </button>
+          <button id="googleSignIn" class="google-btn">
+            <svg class="google-icon" viewBox="0 0 24 24" width="18" height="18" xmlns="http://www.w3.org/2000/svg">
+              <g transform="matrix(1, 0, 0, 1, 27.009001, -39.238998)">
+                <path fill="#4285F4"
+                  d="M -3.264 51.509 C -3.264 50.719 -3.334 49.969 -3.454 49.239 L -14.754 49.239 L -14.754 53.749 L -8.284 53.749 C -8.574 55.229 -9.424 56.479 -10.684 57.329 L -10.684 60.329 L -6.824 60.329 C -4.564 58.239 -3.264 55.159 -3.264 51.509 Z" />
+                <path fill="#34A853"
+                  d="M -14.754 63.239 C -11.514 63.239 -8.804 62.159 -6.824 60.329 L -10.684 57.329 C -11.764 58.049 -13.134 58.489 -14.754 58.489 C -17.884 58.489 -20.534 56.379 -21.484 53.529 L -25.464 53.529 L -25.464 56.619 C -23.494 60.539 -19.444 63.239 -14.754 63.239 Z" />
+                <path fill="#FBBC05"
+                  d="M -21.484 53.529 C -21.734 52.809 -21.864 52.039 -21.864 51.239 C -21.864 50.439 -21.724 49.669 -21.484 48.949 L -21.484 45.859 L -25.464 45.859 C -26.284 47.479 -26.754 49.299 -26.754 51.239 C -26.754 53.179 -26.284 54.999 -25.464 56.619 L -21.484 53.529 Z" />
+                <path fill="#EA4335"
+                  d="M -14.754 43.989 C -12.984 43.989 -11.404 44.599 -10.154 45.789 L -6.734 42.369 C -8.804 40.429 -11.514 39.239 -14.754 39.239 C -19.444 39.239 -23.494 41.939 -25.464 45.859 L -21.484 48.949 C -20.534 46.099 -17.884 43.989 -14.754 43.989 Z" />
+              </g>
+            </svg>
+            <span>Continue with Google</span>
+          </button>
 
-        <div class="auth-divider">
-          <span>OR</span>
-        </div>
+          <div class="auth-divider">
+            <span>OR</span>
+          </div>
 
-        <label for="emailInput" class="form-label">Email Address</label>
-        <div class="input-wrapper">
-          <input type="email" id="emailInput" name="email" class="form-input with-icon" autocomplete="email"
-            autocorrect="off" autocapitalize="off" spellcheck="false" placeholder="name@example.com" required />
-        </div>
+          <label for="emailInput" class="form-label">Email Address</label>
+          <div class="input-wrapper">
+            <input type="email" id="emailInput" name="email" class="form-input with-icon" autocomplete="email"
+              autocorrect="off" autocapitalize="off" spellcheck="false" placeholder="name@example.com" required />
+          </div>
 
-        <button id="sendMagicLinkBtn" class="btn">Send Magic Link</button>
+          <button id="sendMagicLinkBtn" class="btn">Send Magic Link</button>
 
-        <p class="trust-note">Safe workflow by design: text generation only, no automated mass account actions.</p>
+          <p class="trust-note">Safe workflow by design: text generation only, no automated mass account actions.</p>
 
-        <p class="small-text contact-text">
-          Need help? <a href="mailto:support@autolister.app" class="contact-link">Contact Support</a>
-        </p>
+          <p class="small-text contact-text">
+            Need help? <a href="mailto:support@autolister.app" class="contact-link">Contact Support</a>
+          </p>
       </div>
 
       <div id="signedInView">
@@ -1070,217 +1494,213 @@
           <span id="userEmail"></span>
         </div>
 
-        <div id="subscriptionArea" class="plan-card">
-          <div class="plan-header">
-            <span id="planName">Free Plan</span>
-          </div>
+          <div id="subscriptionArea" class="plan-card">
+            <!-- Plan name + optional legacy badge -->
+            <div class="plan-header-row">
+              <span id="planName" class="plan-header-text">Free</span>
+              <span id="legacyBadge" class="legacy-badge hidden">Legacy</span>
+            </div>
 
-          <div class="usage-meters">
-            <div class="usage-meter">
-              <div class="meter-label">
-                <span>Daily Usage</span>
-                <span id="dailyCallsUsed">0 / 2</span>
+            <!-- Credits block: shown for new-tier users -->
+            <div id="creditsBlock" class="credits-block hidden">
+              <div class="credits-summary">
+                <div>
+                  <span class="credits-eyebrow">Credits remaining</span>
+                  <span id="creditsTotalVal" class="stat-value stat-value--big">—</span>
+                </div>
+                <div class="credits-side-stat">
+                  <span id="listingsVal" class="stat-value">—</span>
+                  <span class="stat-label">listed this month</span>
+                </div>
               </div>
-              <div class="progress-bar-bg">
-                <div id="dailyProgressBar" class="progress-bar-fill"></div>
+              <div id="creditsSplit" class="credits-split hidden">
+                <div class="split-line">
+                  <span class="split-tree">├──</span>
+                  <span id="subCreditVal">0</span>&nbsp;subscription credits&nbsp;<span id="resetBadge" class="reset-badge hidden"></span>
+                </div>
+                <div class="split-line">
+                  <span class="split-tree">└──</span>
+                  <span id="packCreditVal">0</span>&nbsp;pack credits&nbsp;<span class="pack-perm">(permanent)</span>
+                </div>
+              </div>
+              <div id="rolloverRow" class="stat-row hidden">
+                <span class="stat-label">Rollover bank</span>
+                <span id="rolloverVal" class="stat-value">—</span>
               </div>
             </div>
-            <div class="usage-meter">
-              <div class="meter-label">
-                <span>Monthly Usage</span>
-                <span id="monthlyCallsUsed">0 / 8</span>
+            <p id="profileSyncNote" class="sync-note hidden">Refreshing account details…</p>
+            <div class="phone-usage-row">
+              <div class="phone-usage-label">
+                  <span>Phone uploads</span>
+                <strong><span id="phoneUploadUsed">0</span> / <span id="phoneUploadLimit">5</span> this month</strong>
               </div>
-              <div class="progress-bar-bg">
-                <div id="monthlyProgressBar" class="progress-bar-fill"></div>
+              <div class="phone-usage-bar">
+                <div id="phoneUploadBar" class="phone-usage-fill"></div>
               </div>
+            </div>
+
+            <!-- Legacy meters: shown for legacy plan users -->
+            <div id="legacyMeters" class="usage-meters hidden">
+              <div class="usage-meter">
+                <div class="meter-label">
+                  <span>Daily Usage</span>
+                  <span id="dailyCallsUsed">0 / 2</span>
+                </div>
+                <div class="progress-bar-bg">
+                  <div id="dailyProgressBar" class="progress-bar-fill"></div>
+                </div>
+              </div>
+              <div class="usage-meter">
+                <div class="meter-label">
+                  <span>Monthly Usage</span>
+                  <span id="monthlyCallsUsed">0 / 8</span>
+                </div>
+                <div class="progress-bar-bg">
+                  <div id="monthlyProgressBar" class="progress-bar-fill"></div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Free credits exhausted wall -->
+            <div id="exhaustedWall" class="exhausted-wall hidden">
+              <p class="exhausted-emoji">✨</p>
+              <p class="exhausted-title">You've used all your free credits</p>
+              <p class="exhausted-body">You generated 13 listings with AutoLister. To keep going:</p>
+              <div class="exhausted-btns">
+                <button id="buyPackExhaustedBtn" class="btn-pack">
+                  Get 15 credits
+                  <span class="btn-sub">€3.99 one-time</span>
+                </button>
+                <a href="#" id="seePlansExhaustedLink" class="btn-plans">
+                  See plans
+                  <span class="btn-sub">from €5.99/mo</span>
+                </a>
+              </div>
+              <p class="exhausted-note">No commitment needed.</p>
+            </div>
+
+            <!-- Pending downgrade banner -->
+            <div id="downgradeBanner" class="downgrade-banner hidden">
+              <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none"
+                stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+                style="flex-shrink:0;margin-top:1px">
+                <circle cx="12" cy="12" r="10"></circle>
+                <line x1="12" y1="8" x2="12" y2="12"></line>
+                <line x1="12" y1="16" x2="12.01" y2="16"></line>
+              </svg>
+              <p id="downgradeText" class="downgrade-text"></p>
+            </div>
+
+            <!-- Free user actions: get pack or see plans -->
+            <div id="freeActionsArea" class="hidden">
+              <button id="buyPackBtn" class="btn upgradeBtn">Get 15 credits — €3.99</button>
+              <a href="#" id="viewAllPlansLink" class="view-plans-link">See all plans</a>
+              <p class="free-helper-note">One listing uses one credit. Packs never expire; subscriptions reset monthly.</p>
+            </div>
+
+            <!-- New-tier subscribed: upgrade button (hidden for business_v2) -->
+            <div id="upgradeArea" class="hidden">
+              <button id="upgradeBtn" class="btn upgradeBtn"></button>
+            </div>
+
+            <!-- Paid plan view: renewal date + manage button -->
+            <div id="paidPlanView" class="hidden">
+              <p id="renewalDate" class="renewal-text">Active until <strong>—</strong></p>
+              <button id="manageBtn" class="btn">Manage Subscription</button>
+            </div>
+
+            <!-- Legacy users: subtle new-plan migration banner -->
+            <div id="legacyMigrateBanner" class="legacy-migrate-banner hidden">
+              New plans available — rollover credits, no daily limits.
+              <a href="#" id="legacySeePlansLink" class="upgrade-link">See what's new</a>
             </div>
           </div>
 
-          <div id="freePlanView">
-            <button class="btn upgradeBtn" id="upgradeBtn">
-              Upgrade to Starter (€3.99)
-            </button>
-            <a href="#" id="viewAllPlansLink" class="view-plans-link">Compare All Plans</a>
-            <div class="poweredByText">Powered by <strong>Stripe</strong></div>
+          <div class="language-dropdown">
+            <div class="language-label">Output language</div>
+            <button class="dropdown-toggle">Select Language</button>
+            <ul class="dropdown-menu">
+              <li data-value="en">
+                <img src="https://flagcdn.com/w40/gb.png" alt="UK Flag" class="flag-icon" />
+                English
+              </li>
+              <li data-value="fr">
+                <img src="https://flagcdn.com/w40/fr.png" alt="French Flag" class="flag-icon" />
+                Français
+              </li>
+              <li data-value="cz">
+                <img src="https://flagcdn.com/w40/cz.png" alt="Czech Flag" class="flag-icon" />
+                Čeština
+              </li>
+              <li data-value="da">
+                <img src="https://flagcdn.com/w40/dk.png" alt="Danish Flag" class="flag-icon" />
+                Dansk
+              </li>
+              <li data-value="nl">
+                <img src="https://flagcdn.com/w40/nl.png" alt="Dutch Flag" class="flag-icon" />
+                Nederlands
+              </li>
+              <li data-value="de">
+                <img src="https://flagcdn.com/w40/de.png" alt="German Flag" class="flag-icon" />
+                Deutsch
+              </li>
+              <li data-value="el">
+                <img src="https://flagcdn.com/w40/gr.png" alt="Greek Flag" class="flag-icon" />
+                Ελληνικά
+              </li>
+              <li data-value="hr">
+                <img src="https://flagcdn.com/w40/hr.png" alt="Croatian Flag" class="flag-icon" />
+                Hrvatski
+              </li>
+              <li data-value="fi">
+                <img src="https://flagcdn.com/w40/fi.png" alt="Finnish Flag" class="flag-icon" />
+                Suomeksi
+              </li>
+              <li data-value="hu">
+                <img src="https://flagcdn.com/w40/hu.png" alt="Hungarian Flag" class="flag-icon" />
+                Magyar
+              </li>
+              <li data-value="it">
+                <img src="https://flagcdn.com/w40/it.png" alt="Italian Flag" class="flag-icon" />
+                Italiano
+              </li>
+              <li data-value="lt">
+                <img src="https://flagcdn.com/w40/lt.png" alt="Lithuanian Flag" class="flag-icon" />
+                Lietuvių
+              </li>
+              <li data-value="pl">
+                <img src="https://flagcdn.com/w40/pl.png" alt="Polish Flag" class="flag-icon" />
+                Polski
+              </li>
+              <li data-value="pt">
+                <img src="https://flagcdn.com/w40/pt.png" alt="Portuguese Flag" class="flag-icon" />
+                Português
+              </li>
+              <li data-value="ro">
+                <img src="https://flagcdn.com/w40/ro.png" alt="Romanian Flag" class="flag-icon" />
+                Română
+              </li>
+              <li data-value="es">
+                <img src="https://flagcdn.com/w40/es.png" alt="Spanish Flag" class="flag-icon" />
+                Español
+              </li>
+              <li data-value="sk">
+                <img src="https://flagcdn.com/w40/sk.png" alt="Slovak Flag" class="flag-icon" />
+                Slovenčina
+              </li>
+              <li data-value="sv">
+                <img src="https://flagcdn.com/w40/se.png" alt="Swedish Flag" class="flag-icon" />
+                Svenska
+              </li>
+            </ul>
           </div>
-          <div id="paidPlanView" class="hidden">
-            <p id="renewalDate" class="renewal-text">
-              Active until
-              <strong>—</strong>
-            </p>
-            <button id="manageBtn" class="btn">Manage Subscription</button>
-            <a href="#" id="viewAllPlansLinkPaid" class="view-plans-link">Compare All Plans</a>
-          </div>
-
-          <p class="trust-note">Safe workflow by design: text generation only, no automated mass account actions.</p>
-        </div>
-
-        <div class="language-dropdown">
-          <div class="language-label">Generated content language</div>
-          <button class="dropdown-toggle">Select Language</button>
-          <ul class="dropdown-menu">
-            <li data-value="en">
-              <img src="https://flagcdn.com/w40/gb.png" alt="UK Flag" class="flag-icon" />
-              English
-            </li>
-            <li data-value="fr">
-              <img src="https://flagcdn.com/w40/fr.png" alt="French Flag" class="flag-icon" />
-              Français
-            </li>
-            <li data-value="cz">
-              <img src="https://flagcdn.com/w40/cz.png" alt="Czech Flag" class="flag-icon" />
-              Čeština
-            </li>
-            <li data-value="da">
-              <img src="https://flagcdn.com/w40/dk.png" alt="Danish Flag" class="flag-icon" />
-              Dansk
-            </li>
-            <li data-value="nl">
-              <img src="https://flagcdn.com/w40/nl.png" alt="Dutch Flag" class="flag-icon" />
-              Nederlands
-            </li>
-            <li data-value="de">
-              <img src="https://flagcdn.com/w40/de.png" alt="German Flag" class="flag-icon" />
-              Deutsch
-            </li>
-            <li data-value="el">
-              <img src="https://flagcdn.com/w40/gr.png" alt="Greek Flag" class="flag-icon" />
-              Ελληνικά
-            </li>
-            <li data-value="hr">
-              <img src="https://flagcdn.com/w40/hr.png" alt="Croatian Flag" class="flag-icon" />
-              Hrvatski
-            </li>
-            <li data-value="fi">
-              <img src="https://flagcdn.com/w40/fi.png" alt="Finnish Flag" class="flag-icon" />
-              Suomeksi
-            </li>
-            <li data-value="hu">
-              <img src="https://flagcdn.com/w40/hu.png" alt="Hungarian Flag" class="flag-icon" />
-              Magyar
-            </li>
-            <li data-value="it">
-              <img src="https://flagcdn.com/w40/it.png" alt="Italian Flag" class="flag-icon" />
-              Italiano
-            </li>
-            <li data-value="lt">
-              <img src="https://flagcdn.com/w40/lt.png" alt="Lithuanian Flag" class="flag-icon" />
-              Lietuvių
-            </li>
-            <li data-value="pl">
-              <img src="https://flagcdn.com/w40/pl.png" alt="Polish Flag" class="flag-icon" />
-              Polski
-            </li>
-            <li data-value="pt">
-              <img src="https://flagcdn.com/w40/pt.png" alt="Portuguese Flag" class="flag-icon" />
-              Português
-            </li>
-            <li data-value="ro">
-              <img src="https://flagcdn.com/w40/ro.png" alt="Romanian Flag" class="flag-icon" />
-              Română
-            </li>
-            <li data-value="es">
-              <img src="https://flagcdn.com/w40/es.png" alt="Spanish Flag" class="flag-icon" />
-              Español
-            </li>
-            <li data-value="sk">
-              <img src="https://flagcdn.com/w40/sk.png" alt="Slovak Flag" class="flag-icon" />
-              Slovenčina
-            </li>
-          </ul>
-        </div>
 
         <button id="signOutBtn" class="btn btn-secondary">Sign Out</button>
-        <p class="small-text">
-          The "Generate" button appears on Vinted item listing pages.
-        </p>
       </div>
 
       <div id="settingsView">
-        <h4 class="section-title">Settings</h4>
-
-        <div class="settings-card">
-          <div class="setting-row">
-            <div class="setting-label-container">
-              <span class="setting-label">Text format <span class="new-badge">NEW</span></span>
-            </div>
-            <div class="format-buttons-row">
-              <label class="format-option" title="Bullet points">
-                <input type="radio" name="format" value="bullets" checked>
-                <span class="format-chip">
-                  <div class="format-icon">
-                    <div class="format-icon-bullet"><span></span></div>
-                    <div class="format-icon-bullet"><span></span></div>
-                    <div class="format-icon-bullet"><span></span></div>
-                  </div>
-                </span>
-              </label>
-              <label class="format-option" title="Paragraphs">
-                <input type="radio" name="format" value="paragraphs">
-                <span class="format-chip">
-                  <div class="format-icon format-icon-para">
-                    <span></span>
-                    <span></span>
-                    <span></span>
-                    <span></span>
-                  </div>
-                </span>
-              </label>
-            </div>
-          </div>
-
-          <div class="setting-divider"></div>
-
-          <div class="setting-group">
-            <label class="form-label">Description Tone <span class="new-badge">NEW</span></label>
-            <div class="tone-slider">
-              <label class="tone-option">
-                <input type="radio" name="tone" value="standard" checked>
-                <span class="tone-chip">Standard</span>
-              </label>
-              <label class="tone-option">
-                <input type="radio" name="tone" value="friendly">
-                <span class="tone-chip">Friendly</span>
-              </label>
-              <label class="tone-option">
-                <input type="radio" name="tone" value="professional">
-                <span class="tone-chip">Pro</span>
-              </label>
-              <label class="tone-option">
-                <input type="radio" name="tone" value="enthusiastic">
-                <span class="tone-chip">Enthusiastic</span>
-              </label>
-            </div>
-          </div>
-
-          <div class="setting-divider"></div>
-
-          <div class="toggle-container" onclick="document.getElementById('emojiToggle').click()">
-            <div class="toggle-info">
-              <span class="toggle-label">Use Emojis <span class="new-badge">NEW</span></span>
-              <span class="toggle-sublabel">Add relevant emojis to text</span>
-            </div>
-            <label class="toggle-switch" onclick="event.stopPropagation()">
-              <input type="checkbox" id="emojiToggle">
-              <span class="slider"></span>
-            </label>
-          </div>
-        </div>
-
-        <div class="info-note" style="display: none;">
-          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none"
-            stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
-            style="flex-shrink: 0; margin-top: 1px;">
-            <circle cx="12" cy="12" r="10"></circle>
-            <line x1="12" y1="16" x2="12" y2="12"></line>
-            <line x1="12" y1="8" x2="12.01" y2="8"></line>
-          </svg>
-          <span><strong>Free Early Access:</strong> These features are currently free to test, but will soon be
-            exclusive to
-            <strong>Pro & Business</strong> plans only.</span>
-        </div>
-
-        <div class="upgrade-note" style="display: none;">
+        <h4 class="section-title">Preferences</h4>
+        <div id="settingsUpsellNote" class="upgrade-note" style="display: none;">
           <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none"
             stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
             style="flex-shrink: 0; margin-top: 2px;">
@@ -1289,11 +1709,92 @@
             <line x1="12" y1="16" x2="12.01" y2="16"></line>
           </svg>
           <div>
-            <strong>Upgrade to unlock:</strong> Description tone options and emoji enhancement are available on
-            <strong>Pro & Business</strong> plans.
-            <a href="#" class="upgrade-link" id="settingsUpgradeLink">View Plans →</a>
+            <strong id="settingsUpsellTitle">Unlock more controls</strong>
+            <div id="settingsUpsellText">Upgrade to use locked settings.</div>
+            <a href="#" class="upgrade-link" id="settingsUpsellLink">View Plans →</a>
           </div>
         </div>
+
+          <div class="settings-card">
+            <div class="setting-row">
+              <div class="setting-label-container">
+                <span class="setting-label">Text format <span class="new-badge">NEW</span></span>
+              </div>
+              <div class="format-buttons-row">
+                <label class="format-option" title="Bullet points">
+                  <input type="radio" name="format" value="bullets" checked>
+                  <span class="format-chip">
+                    <div class="format-icon">
+                      <div class="format-icon-bullet"><span></span></div>
+                      <div class="format-icon-bullet"><span></span></div>
+                      <div class="format-icon-bullet"><span></span></div>
+                    </div>
+                  </span>
+                </label>
+                <label class="format-option" title="Paragraphs">
+                  <input type="radio" name="format" value="paragraphs">
+                  <span class="format-chip">
+                    <div class="format-icon format-icon-para">
+                      <span></span>
+                      <span></span>
+                      <span></span>
+                      <span></span>
+                    </div>
+                  </span>
+                </label>
+              </div>
+            </div>
+
+            <div class="setting-divider"></div>
+
+            <div class="setting-group">
+              <label class="form-label">Description Tone <span class="new-badge">NEW</span></label>
+              <div class="tone-slider">
+                <label class="tone-option">
+                  <input type="radio" name="tone" value="standard" checked>
+                  <span class="tone-chip">Standard</span>
+                </label>
+                <label class="tone-option">
+                  <input type="radio" name="tone" value="friendly">
+                  <span class="tone-chip">Friendly</span>
+                </label>
+                <label class="tone-option">
+                  <input type="radio" name="tone" value="professional">
+                  <span class="tone-chip">Pro</span>
+                </label>
+                <label class="tone-option">
+                  <input type="radio" name="tone" value="enthusiastic">
+                  <span class="tone-chip">Enthusiastic</span>
+                </label>
+              </div>
+            </div>
+
+            <div class="setting-divider"></div>
+
+            <div class="toggle-container" onclick="document.getElementById('emojiToggle').click()">
+              <div class="toggle-info">
+                <span class="toggle-label">Use Emojis <span class="new-badge">NEW</span></span>
+                <span class="toggle-sublabel">Add relevant emojis to text</span>
+              </div>
+              <label class="toggle-switch" onclick="event.stopPropagation()">
+                <input type="checkbox" id="emojiToggle">
+                <span class="slider"></span>
+              </label>
+            </div>
+          </div>
+
+          <div class="settings-card">
+            <div class="pref-card-header">
+              <div>
+                <label class="form-label" style="margin-bottom:0">Listing Preferences</label>
+                <div class="toggle-sublabel">Choose small trust notes for future generations.</div>
+              </div>
+              <span class="inline-badge">Plus</span>
+            </div>
+
+            <div id="prefsSettingsGrid" class="prefs-grid"></div>
+
+          </div>
 
         <div style="margin-top: auto;">
           <button id="signOutBtnSettings" class="btn btn-secondary">Sign Out</button>
@@ -1303,6 +1804,17 @@
         </div>
       </div>
     </main>
+
+    <!-- Pack nudge modal: shown before third pack purchase, after two prior packs -->
+    <div id="packNudgeModal" class="pack-nudge-modal hidden">
+      <div class="pack-nudge-card">
+        <p class="nudge-icon">💡</p>
+        <p class="nudge-title">Quick math</p>
+        <p id="nudgeBodyText" class="nudge-body"></p>
+        <button id="switchToStarterBtn" class="btn upgradeBtn">Switch to Starter — €5.99/mo</button>
+        <a href="#" id="justPackLink" class="just-pack-link">No thanks, just the pack</a>
+      </div>
+    </div>
   </div>
 
   <script src="lib/supabase.js"></script>
