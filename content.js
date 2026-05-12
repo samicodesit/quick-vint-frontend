@@ -38,6 +38,7 @@
   const RIGHT_PANEL_OFFSET = 16;
   const RIGHT_PANEL_WIDTH = 300;
   const BATCH_LANGS_STORAGE_KEY = "batchLanguages";
+  const BATCH_TITLE_LANG_STORAGE_KEY = "batchTitleLanguage";
   const MEASUREMENT_HINT_KEY = "quickvintMeasurementHintLastShownAt";
   const COMPLETENESS_DISMISSED_KEY = "quickvintCompletenessNeverShow";
   const MEASUREMENT_HINT_INTERVAL_MS = 7 * 24 * 60 * 60 * 1000;
@@ -75,7 +76,7 @@
     en: {
       multiLangTitle: "Multi-language",
       multiLangSubtitle: "Generate this listing in several languages.",
-      multiLangNote: "Select languages. Each language uses 1 credit.",
+      multiLangNote: "Choose description languages, then pick one title language.",
       multiLangLocked: "Available on Pro.",
       multiLangEmpty: "Select languages",
       multiLangSelected: (count) =>
@@ -110,7 +111,7 @@
       multiLangTitle: "Multilingue",
       multiLangSubtitle: "Générer cette annonce en plusieurs langues.",
       multiLangNote:
-        "Sélectionnez les langues. Chaque langue utilise 1 crédit.",
+        "Choisissez les langues de description, puis une langue pour le titre.",
       multiLangLocked: "Disponible avec Pro.",
       multiLangEmpty: "Sélectionnez des langues",
       multiLangSelected: (count) =>
@@ -143,7 +144,8 @@
     de: {
       multiLangTitle: "Mehrsprachig",
       multiLangSubtitle: "Erstelle dieses Angebot in mehreren Sprachen.",
-      multiLangNote: "Sprachen auswählen. Jede Sprache nutzt 1 Credit.",
+      multiLangNote:
+        "Wähle Beschreibungssprachen und dann eine Titelsprache.",
       multiLangLocked: "Verfügbar mit Pro.",
       multiLangEmpty: "Sprachen auswählen",
       multiLangSelected: (count) =>
@@ -178,7 +180,8 @@
     nl: {
       multiLangTitle: "Meertalig",
       multiLangSubtitle: "Genereer deze listing in meerdere talen.",
-      multiLangNote: "Selecteer talen. Elke taal gebruikt 1 credit.",
+      multiLangNote:
+        "Kies beschrijvingstalen en daarna een titel-taal.",
       multiLangLocked: "Beschikbaar met Pro.",
       multiLangEmpty: "Selecteer talen",
       multiLangSelected: (count) =>
@@ -224,6 +227,8 @@
   let isAuthenticated = false;
   let pollInterval = null;
   let downloadedFiles = new Set();
+  let phoneUploadedPreviews = new Map();
+  let phoneSyncInProgress = false;
   let hasPlusAccess = false;
   let hasProAccess = false;
   let featurePanel = null;
@@ -232,6 +237,7 @@
   let completenessPanel = null;
   let lastImageUrls = [];
   let selectedBatchLangs = new Set();
+  let titleLanguageSelectRequest = 0;
   let currentUiLanguage = "en";
   let completenessUpdateTimeout = null;
   let completenessListenersBound = false;
@@ -415,13 +421,23 @@
     descInput.dispatchEvent(new Event("input", { bubbles: true }));
   }
 
+  function setTitleValue(value) {
+    const titleInput = document.querySelector(SELECTORS.title);
+    if (!titleInput) return;
+    titleInput.value = value || "";
+    titleInput.dispatchEvent(new Event("input", { bubbles: true }));
+  }
+
   function appendDescriptionsToTextarea(descriptions) {
     if (!descriptions.length) return;
-    // Format descriptions with clear separators for readability
     const formatted = descriptions
       .filter((desc) => desc && desc.length > 0)
       .join("\n\n━━━━━━━━━━━\n\n");
     setTextareaValue(formatted);
+  }
+
+  function formatBatchDescription(lang, description) {
+    return `[${lang.name}]\n${description || ""}`.trim();
   }
 
   function sanitizeListingPreferences(preferences = []) {
@@ -836,7 +852,7 @@
       btn.classList.toggle("active", nextOpen);
       const details = featurePanel.querySelector("details");
       if (details) details.open = nextOpen;
-      positionCompletenessPanel();
+      requestAnimationFrame(positionCompletenessPanel);
     });
     return btn;
   }
@@ -865,11 +881,20 @@
             <span class="qv-section-title" data-i18n="multiLangTitle">${t("multiLangTitle")}</span>
             <span class="qv-disclosure-subtitle" data-i18n="multiLangSubtitle">${t("multiLangSubtitle")}</span>
           </span>
-          <span class="qv-tier-badge pro">Pro</span>
+          <span class="qv-summary-actions">
+            <span class="qv-tier-badge pro">Pro</span>
+            <button type="button" class="qv-panel-close-btn qv-multilang-close" aria-label="Close multi-language panel">×</button>
+          </span>
         </summary>
         <div class="qv-disclosure-body">
           <div class="qv-mode-note" id="qv-mode-note" data-i18n="multiLangNote">${t("multiLangNote")}</div>
           <div class="qv-lang-pills" id="qv-lang-pills"></div>
+          <label class="qv-title-lang-row" for="qv-title-lang-select">
+            <span>Title language</span>
+            <select id="qv-title-lang-select" disabled>
+              <option value="">Select languages first</option>
+            </select>
+          </label>
           <div class="qv-locked-msg" id="qv-ml-locked-msg"></div>
           <div class="qv-multilang-footer">
             <div class="qv-lang-action-copy">
@@ -902,6 +927,25 @@
       lockedMsg.style.display = hasProAccess ? "none" : "flex";
     }
     if (footer) footer.style.display = hasProAccess ? "" : "none";
+
+    const closeBtn = panel.querySelector(".qv-multilang-close");
+    if (closeBtn) {
+      closeBtn.addEventListener("click", (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        toggleMultiLangPanel(false);
+      });
+    }
+
+    const titleLangSelect = panel.querySelector("#qv-title-lang-select");
+    if (titleLangSelect) {
+      titleLangSelect.addEventListener("change", (event) => {
+        const code = event.target.value;
+        if (code && selectedBatchLangs.has(code)) {
+          chrome.storage.local.set({ [BATCH_TITLE_LANG_STORAGE_KEY]: code });
+        }
+      });
+    }
 
     return panel;
   }
@@ -964,6 +1008,52 @@
     updateGenerateModeLabel();
   }
 
+  function getSelectedBatchLangList() {
+    return BATCH_LANGS.filter((lang) => selectedBatchLangs.has(lang.code));
+  }
+
+  function updateTitleLanguageSelect() {
+    const select = document.getElementById("qv-title-lang-select");
+    if (!select) return;
+
+    const requestId = ++titleLanguageSelectRequest;
+    const selectedLangs = getSelectedBatchLangList();
+
+    if (selectedLangs.length === 0) {
+      select.replaceChildren();
+      const option = document.createElement("option");
+      option.value = "";
+      option.textContent = "Select languages first";
+      select.appendChild(option);
+      select.value = "";
+      select.disabled = true;
+      return;
+    }
+
+    chrome.storage.local.get([BATCH_TITLE_LANG_STORAGE_KEY], (data) => {
+      if (requestId !== titleLanguageSelectRequest) return;
+
+      select.replaceChildren();
+      const savedCode = data[BATCH_TITLE_LANG_STORAGE_KEY];
+      const titleCode = selectedBatchLangs.has(savedCode)
+        ? savedCode
+        : selectedLangs[0].code;
+
+      selectedLangs.forEach((lang) => {
+        const option = document.createElement("option");
+        option.value = lang.code;
+        option.textContent = lang.name;
+        select.appendChild(option);
+      });
+
+      select.disabled = isBusy || !hasProAccess;
+      select.value = titleCode;
+      if (titleCode !== savedCode) {
+        chrome.storage.local.set({ [BATCH_TITLE_LANG_STORAGE_KEY]: titleCode });
+      }
+    });
+  }
+
   function updateBatchLangFooter() {
     const counter = document.getElementById("qv-lang-counter");
     const btn = document.getElementById("qv-gen-all-btn");
@@ -972,13 +1062,15 @@
       counter.textContent =
         n === 0 ? t("multiLangEmpty") : t("multiLangSelected", n);
     }
-    if (btn) btn.disabled = n === 0 || isBusy;
+    if (btn) btn.disabled = n < 2 || isBusy;
+    updateTitleLanguageSelect();
   }
 
   function createLangResultName(lang) {
     const name = document.createElement("div");
     name.className = "qv-lang-result-name";
-    name.textContent = `${lang.flag} ${lang.name}`;
+    name.appendChild(createFlagImage(lang.code, lang.name));
+    name.appendChild(document.createTextNode(lang.name));
     return name;
   }
 
@@ -996,6 +1088,8 @@
       createLangResultName(lang),
       createLangStatus("Generating...", "#9ca3af"),
     );
+    card.classList.add("loading");
+    card.classList.remove("done", "error");
   }
 
   function renderLangError(card, lang, message) {
@@ -1003,43 +1097,27 @@
       createLangResultName(lang),
       createLangStatus(`Error: ${message || "Generation failed"}`, "#dc2626"),
     );
+    card.classList.remove("loading", "done");
+    card.classList.add("error");
   }
 
-  function renderLangSuccess(card, lang, title, description) {
-    const header = document.createElement("div");
-    header.className = "qv-lang-result-header";
+  function renderLangSuccess(card, lang) {
+    card.replaceChildren(
+      createLangResultName(lang),
+      createLangStatus("Added to description", "#059669"),
+    );
+    card.classList.remove("loading");
+    card.classList.add("done");
+  }
 
-    const name = document.createElement("span");
-    name.className = "qv-lang-result-name";
-    name.textContent = `${lang.flag} ${lang.name}`;
-
-    const copyBtn = document.createElement("button");
-    copyBtn.className = "qv-copy-btn";
-    copyBtn.textContent = "Copy";
-
-    header.appendChild(name);
-    header.appendChild(copyBtn);
-
-    const titleEl = document.createElement("div");
-    titleEl.className = "qv-lang-result-title";
-    titleEl.textContent = title || "";
-
-    const descEl = document.createElement("div");
-    descEl.className = "qv-lang-result-desc";
-    descEl.textContent = description || "";
-
-    card.replaceChildren(header, titleEl, descEl);
-
-    copyBtn.onclick = () => {
-      navigator.clipboard
-        .writeText(`${title || ""}\n\n${description || ""}`)
-        .then(() => {
-          copyBtn.textContent = "Copied!";
-          setTimeout(() => {
-            copyBtn.textContent = "Copy";
-          }, 1500);
-        });
-    };
+  function scrollMultiLangPanelToBottom() {
+    if (!multiLangPanel) return;
+    requestAnimationFrame(() => {
+      multiLangPanel.scrollTo({
+        top: multiLangPanel.scrollHeight,
+        behavior: "smooth",
+      });
+    });
   }
 
   function updateFeaturePanelAccess() {
@@ -1072,7 +1150,7 @@
   function closeFeaturePanel() {
     if (featurePanel) featurePanel.classList.remove("visible");
     if (prefsToggleBtn) prefsToggleBtn.classList.remove("active");
-    positionCompletenessPanel();
+    requestAnimationFrame(positionCompletenessPanel);
   }
 
   function updateMultiLangPanelAccess() {
@@ -1100,7 +1178,8 @@
     if (mlFooter) mlFooter.style.display = hasProAccess ? "" : "none";
 
     const genAllBtn = document.getElementById("qv-gen-all-btn");
-    if (genAllBtn) genAllBtn.disabled = selectedBatchLangs.size === 0 || isBusy;
+    if (genAllBtn) genAllBtn.disabled = selectedBatchLangs.size < 2 || isBusy;
+    updateTitleLanguageSelect();
   }
 
   function getClampedPanelTop(anchorTop, panelHeight = 430) {
@@ -1130,17 +1209,21 @@
       : Math.max(12, window.innerWidth - panelWidth - RIGHT_PANEL_OFFSET);
     const panelHeight = completenessPanel.offsetHeight || 220;
     let top = 226;
+    let stackedBelowPrefs = false;
 
     if (featurePanel?.classList.contains("visible") && featureRect) {
-      top = featureRect.bottom + 8;
-      if (top + panelHeight > window.innerHeight - 12) {
-        top = featureRect.top - panelHeight - 8;
-      }
+      top = featureRect.bottom + 10;
+      stackedBelowPrefs = true;
     }
 
     completenessPanel.style.left = `${left}px`;
     completenessPanel.style.width = `${panelWidth}px`;
-    completenessPanel.style.top = `${getClampedPanelTop(top, panelHeight)}px`;
+    completenessPanel.style.top = stackedBelowPrefs
+      ? `${Math.max(12, top)}px`
+      : `${getClampedPanelTop(top, panelHeight)}px`;
+    completenessPanel.style.maxHeight = stackedBelowPrefs
+      ? `${Math.max(120, window.innerHeight - top - 12)}px`
+      : "";
   }
 
   function toggleMultiLangPanel(forceOpen) {
@@ -1242,7 +1325,10 @@
             <span class="qv-section-title" data-i18n="completenessTitle">${t("completenessTitle")}</span>
             <span class="qv-disclosure-subtitle" data-i18n="completenessSubtitle">${t("completenessSubtitle")}</span>
           </span>
-          <span class="qv-score-badge" id="qv-score-badge">—/3</span>
+          <span class="qv-summary-actions">
+            <span class="qv-score-badge" id="qv-score-badge">—/3</span>
+            <span class="qv-summary-chevron" aria-hidden="true"></span>
+          </span>
         </summary>
         <div class="qv-disclosure-body">
           <div class="qv-score-bar-bg">
@@ -1550,11 +1636,7 @@
       }
 
       const { title, description, measurementAdvice } = await response.json();
-      const titleInput = document.querySelector(SELECTORS.title);
-      if (titleInput) {
-        titleInput.value = title;
-        titleInput.dispatchEvent(new Event("input", { bubbles: true }));
-      }
+      setTitleValue(title);
       setTextareaValue(description);
 
       await maybeShowMeasurementAdvice(measurementAdvice);
@@ -1572,7 +1654,7 @@
   }
 
   async function onGenerateAllClick() {
-    if (!hasProAccess || selectedBatchLangs.size === 0) return;
+    if (!hasProAccess || selectedBatchLangs.size < 2) return;
     if (isBusy) return;
     isBusy = true;
     updateButtonUI();
@@ -1583,7 +1665,8 @@
     const btn = document.getElementById("qv-gen-all-btn");
     if (btn) {
       btn.disabled = true;
-      btn.textContent = "⏳ Generating…";
+      btn.textContent = "Generating...";
+      btn.classList.add("loading");
     }
 
     const langResults = document.getElementById("qv-lang-results");
@@ -1600,11 +1683,13 @@
       }
 
       const {
+        batchTitleLanguage,
         tone = "standard",
         useEmojis,
         useBulletPoints = true,
         listingPreferences = [],
       } = await chrome.storage.local.get([
+        BATCH_TITLE_LANG_STORAGE_KEY,
         "tone",
         "useEmojis",
         "useBulletPoints",
@@ -1613,90 +1698,116 @@
       const { access_token } = await sendMessage({ type: "GET_ACCESS_TOKEN" });
       if (!access_token) throw new Error("Session expired.");
 
-      const langList = BATCH_LANGS.filter((l) =>
-        selectedBatchLangs.has(l.code),
-      );
-      const langDescriptions = [];
+      const langList = getSelectedBatchLangList();
+      const titleLanguageCode = selectedBatchLangs.has(batchTitleLanguage)
+        ? batchTitleLanguage
+        : langList[0]?.code;
+      if (langList.length < 2) throw new Error("Choose at least two languages.");
+      if (!titleLanguageCode) throw new Error("Choose a title language.");
+      if (titleLanguageCode !== batchTitleLanguage) {
+        chrome.storage.local.set({
+          [BATCH_TITLE_LANG_STORAGE_KEY]: titleLanguageCode,
+        });
+        updateTitleLanguageSelect();
+      }
 
-      for (const lang of langList) {
-        // Show loading card
-        if (langResults) {
+      setGenerateBusyLabel("Generating translations...");
+      if (btn) btn.textContent = "Generating translations...";
+
+      if (langResults) {
+        langList.forEach((lang) => {
           const loadingCard = document.createElement("div");
           loadingCard.className = "qv-lang-result-card";
           loadingCard.id = `qv-result-${lang.code}`;
           renderLangLoading(loadingCard, lang);
           langResults.appendChild(loadingCard);
-        }
-
-        try {
-          const response = await fetch(`${API_BASE}/api/generate`, {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              Authorization: `Bearer ${access_token}`,
-            },
-            body: JSON.stringify({
-              imageUrls: imageUrlsForBatch,
-              languageCode: lang.code,
-              tone,
-              useEmojis,
-              useBulletPoints,
-              listingPreferences: hasPlusAccess
-                ? sanitizeListingPreferences(listingPreferences)
-                : [],
-            }),
-          });
-
-          const card = document.getElementById(`qv-result-${lang.code}`);
-          if (response.status === 401) {
-            isAuthenticated = false;
-            showToast("Session expired.", "error");
-            break;
-          }
-          if (response.status === 429 || response.status === 402) {
-            const errData = await response.json().catch(() => ({}));
-            const pricingUrl = await getPricingUrl();
-            showToast(errData.error || "Credit limit reached.", "error", {
-              text: "Upgrade Plan",
-              url: pricingUrl,
-            });
-            if (card) {
-              renderLangError(
-                card,
-                lang,
-                errData.error || "Credit limit reached",
-              );
-            }
-            break;
-          }
-          if (!response.ok) {
-            const err = await response.json().catch(() => ({}));
-            if (card)
-              renderLangError(card, lang, err.error || "Generation failed");
-            continue;
-          }
-
-          const { title, description } = await response.json();
-          if (card) renderLangSuccess(card, lang, title, description);
-          // Format as: 【Language Name】\ndescription\nFLAG-FLAG-FLAG
-          const formattedLang = `【${lang.flag} ${lang.name}】\n${description || ""}`;
-          langDescriptions.push(formattedLang);
-        } catch (e) {
-          const card = document.getElementById(`qv-result-${lang.code}`);
-          if (card) renderLangError(card, lang, e.message);
-        }
+        });
+        scrollMultiLangPanelToBottom();
       }
 
+      const response = await fetch(`${API_BASE}/api/generate`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${access_token}`,
+        },
+        body: JSON.stringify({
+          imageUrls: imageUrlsForBatch,
+          languageCodes: langList.map((lang) => lang.code),
+          titleLanguage: titleLanguageCode,
+          tone,
+          useEmojis,
+          useBulletPoints,
+          listingPreferences: hasPlusAccess
+            ? sanitizeListingPreferences(listingPreferences)
+            : [],
+        }),
+      });
+
+      if (response.status === 401) {
+        isAuthenticated = false;
+        throw new Error("Session expired.");
+      }
+      if (response.status === 429 || response.status === 402) {
+        const errData = await response.json().catch(() => ({}));
+        const pricingUrl = await getPricingUrl();
+        showToast(errData.error || "Credit limit reached.", "error", {
+          text: "Upgrade Plan",
+          url: pricingUrl,
+        });
+        langList.forEach((lang) => {
+          const card = document.getElementById(`qv-result-${lang.code}`);
+          if (card)
+            renderLangError(card, lang, errData.error || "Credit limit reached");
+        });
+        return;
+      }
+      if (!response.ok) {
+        const err = await response.json().catch(() => ({}));
+        throw new Error(err.error || "Generation failed");
+      }
+
+      const { title, measurementAdvice, results = [] } = await response.json();
+      setTitleValue(title);
+
+      const resultsByCode = new Map(
+        results
+          .filter((result) => result?.languageCode)
+          .map((result) => [result.languageCode, result]),
+      );
+      const langDescriptions = [];
+
+      langList.forEach((lang) => {
+        const card = document.getElementById(`qv-result-${lang.code}`);
+        const result = resultsByCode.get(lang.code);
+        if (result?.description) {
+          if (card) renderLangSuccess(card, lang);
+          langDescriptions.push(formatBatchDescription(lang, result.description));
+        } else if (card) {
+          renderLangError(card, lang, "Skipped by model");
+        }
+      });
+
       appendDescriptionsToTextarea(langDescriptions);
+      await maybeShowMeasurementAdvice(measurementAdvice);
+      scrollMultiLangPanelToBottom();
       setTimeout(() => updateCompletenessUI(), 100);
     } catch (err) {
+      getSelectedBatchLangList().forEach((lang) => {
+        const card = document.getElementById(`qv-result-${lang.code}`);
+        if (card?.classList.contains("loading")) {
+          renderLangError(card, lang, err.message || "Generation failed");
+        }
+      });
+      scrollMultiLangPanelToBottom();
       showToast(err.message || "Batch generation failed.", "error");
     } finally {
       isBusy = false;
       updateButtonUI();
       updateBatchLangFooter();
       if (btn) {
-        btn.disabled = selectedBatchLangs.size === 0;
+        btn.disabled = selectedBatchLangs.size < 2;
+        btn.classList.remove("loading");
         btn.textContent = t("generateAll");
       }
     }
@@ -1928,6 +2039,57 @@
       #${BTN_ID} .qv-output-flag {
         margin-right: 6px;
       }
+
+      .qv-btn-spinner {
+        display: none;
+        width: 15px;
+        height: 15px;
+        border-radius: 999px;
+        border: 2px solid rgba(255,255,255,0.45);
+        border-top-color: #ffffff;
+        animation: qvSpin 0.75s linear infinite;
+        flex: 0 0 auto;
+        margin-right: 6px;
+      }
+
+      .qv-btn-spinner.visible {
+        display: inline-block;
+      }
+
+      .qv-gen-all-btn.loading,
+      .qv-regen-btn.loading,
+      #${MODAL_ID} .generate-btn.loading {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        flex-direction: row;
+        gap: 7px;
+      }
+
+      .qv-gen-all-btn.loading::before,
+      .qv-regen-btn.loading::before,
+      #${MODAL_ID} .generate-btn.loading::before {
+        content: "";
+        width: 14px;
+        height: 14px;
+        border-radius: 999px;
+        border: 2px solid rgba(255,255,255,0.45);
+        border-top-color: #ffffff;
+        animation: qvSpin 0.75s linear infinite;
+      }
+
+      .qv-regen-btn.loading::before {
+        border-color: rgba(79,70,229,0.25);
+        border-top-color: #4f46e5;
+      }
+
+      #${MODAL_ID} .generate-btn.loading .icon {
+        display: none !important;
+      }
+
+      @keyframes qvSpin {
+        to { transform: rotate(360deg); }
+      }
       
       /* Modal Styles */
       #${MODAL_ID} {
@@ -2080,6 +2242,9 @@
         background: #4f46e5;
         color: white;
         box-shadow: 0 4px 12px rgba(79, 70, 229, 0.25);
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
       }
       
       #${MODAL_ID} .close-btn:hover {
@@ -2126,6 +2291,71 @@
         background: currentColor;
         border-radius: 50%;
         animation: pulse 1.5s ease-in-out infinite;
+      }
+
+      #${MODAL_ID} .status.ready {
+        color: #047857;
+        background: #ecfdf5;
+        border-color: #bbf7d0;
+        font-weight: 700;
+      }
+
+      #${MODAL_ID} .status.syncing {
+        color: #4338ca;
+        background: #eef2ff;
+        border-color: #c7d2fe;
+        font-weight: 700;
+      }
+
+      #${MODAL_ID} .status.syncing::before {
+        content: "";
+        width: 13px;
+        height: 13px;
+        border-radius: 999px;
+        border: 2px solid rgba(79,70,229,0.25);
+        border-top-color: #4f46e5;
+        animation: qvSpin 0.75s linear infinite;
+      }
+
+      #${MODAL_ID} .phone-upload-preview {
+        display: none;
+        grid-template-columns: repeat(5, 42px);
+        justify-content: center;
+        gap: 7px;
+        margin: 12px 0 6px;
+      }
+
+      #${MODAL_ID} .phone-upload-preview.visible {
+        display: grid;
+      }
+
+      #${MODAL_ID} .phone-thumb {
+        width: 42px;
+        height: 42px;
+        border-radius: 8px;
+        object-fit: cover;
+        border: 2px solid #ffffff;
+        box-shadow: 0 4px 12px rgba(15, 23, 42, 0.18);
+        animation: qvThumbIn 0.2s ease forwards;
+      }
+
+      #${MODAL_ID} .phone-thumb-extra {
+        width: 42px;
+        height: 42px;
+        border-radius: 8px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        background: #eef2ff;
+        color: #3730a3;
+        font-size: 12px;
+        font-weight: 800;
+        border: 1px solid #c7d2fe;
+      }
+
+      @keyframes qvThumbIn {
+        from { opacity: 0; transform: scale(0.86); }
+        to { opacity: 1; transform: scale(1); }
       }
       
       @keyframes pulse {
@@ -2592,6 +2822,7 @@
 
       .qv-completeness-popover {
         position: fixed;
+        transition: top 0.2s ease, left 0.2s ease;
       }
 
       #${GENERATE_MODE_BTN_ID} {
@@ -2643,6 +2874,10 @@
         gap: 12px;
         padding: 12px 14px;
         cursor: pointer;
+        transition: background-color 0.16s ease;
+      }
+      .qv-disclosure-summary:hover {
+        background: #f9fafb;
       }
       .qv-mode-note {
         margin: 10px 0;
@@ -2657,6 +2892,24 @@
       .qv-disclosure-summary::-webkit-details-marker {
         display: none;
       }
+      .qv-summary-actions {
+        display: inline-flex;
+        align-items: center;
+        gap: 9px;
+        flex: 0 0 auto;
+      }
+      .qv-summary-chevron {
+        width: 8px;
+        height: 8px;
+        border-right: 2px solid #6b7280;
+        border-bottom: 2px solid #6b7280;
+        transform: rotate(45deg) translateY(-1px);
+        transition: transform 0.18s ease, border-color 0.18s ease;
+      }
+      .qv-disclosure[open] .qv-summary-chevron {
+        transform: rotate(225deg) translateY(-1px);
+        border-color: #4f46e5;
+      }
       .qv-disclosure-title-wrap {
         display: flex;
         flex-direction: column;
@@ -2670,6 +2923,12 @@
       .qv-disclosure-body {
         padding: 0 14px 14px;
         border-top: 1px solid #f3f4f6;
+        animation: qvPanelBodyIn 0.18s ease;
+      }
+
+      @keyframes qvPanelBodyIn {
+        from { opacity: 0; transform: translateY(-4px); }
+        to { opacity: 1; transform: translateY(0); }
       }
 
       .qv-panel-footer {
@@ -2732,7 +2991,12 @@
         background: #f9fafb;
         color: #111827;
       }
-
+      .qv-multilang-close {
+        width: 22px;
+        height: 22px;
+        font-size: 16px;
+        border-radius: 999px;
+      }
       .qv-tier-badge {
         font-size: 10px;
         font-weight: 700;
@@ -2908,7 +3172,7 @@
         font-size: 12px;
         color: #374151;
         cursor: pointer;
-        transition: all 0.15s;
+        transition: background-color 0.18s ease, border-color 0.18s ease, color 0.18s ease, transform 0.18s ease;
         user-select: none;
         background: #fff;
         font-family: inherit;
@@ -2919,6 +3183,7 @@
         border-color: #4f46e5;
         color: #4f46e5;
         background: #eef2ff;
+        transform: translateY(-1px);
       }
       .qv-lang-pill.selected {
         background: #4f46e5;
@@ -2929,6 +3194,38 @@
         opacity: 0.4;
         cursor: not-allowed;
         pointer-events: none;
+      }
+
+      .qv-title-lang-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+        margin-top: 10px;
+        padding: 8px 10px;
+        border: 1px solid #e5e7eb;
+        border-radius: 8px;
+        background: #f9fafb;
+        color: #374151;
+        font-size: 12px;
+        font-weight: 700;
+      }
+
+      .qv-title-lang-row select {
+        width: auto;
+        max-width: 150px;
+        min-width: 120px;
+        appearance: none;
+        padding: 6px 28px 6px 10px;
+        border: 1px solid #d1d5db;
+        border-radius: 6px;
+        background-color: white;
+        background-image: url("data:image/svg+xml,%3Csvg width='14' height='14' viewBox='0 0 20 20' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M5.5 7.5L10 12L14.5 7.5' stroke='%236B7280' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+        background-repeat: no-repeat;
+        background-position: right 8px center;
+        color: #111827;
+        font: inherit;
+        font-weight: 600;
       }
 
       .qv-multilang-footer {
@@ -2960,6 +3257,8 @@
         color: #9ca3af;
       }
       .qv-gen-all-btn {
+        width: auto !important;
+        flex: 0 0 auto;
         padding: 8px 13px;
         background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
         color: white;
@@ -2986,6 +3285,28 @@
         border: 1px solid #e5e7eb;
         border-radius: 8px;
         padding: 10px 12px;
+        opacity: 0;
+        transform: translateY(6px);
+        animation: qvSlideIn 0.18s ease forwards;
+        transition: border-color 0.2s ease, background-color 0.2s ease, transform 0.2s ease;
+      }
+      .qv-lang-result-card.loading {
+        background: #f8faff;
+        border-color: #c7d2fe;
+      }
+      .qv-lang-result-card.done {
+        background: #f0fdf4;
+        border-color: #bbf7d0;
+      }
+      .qv-lang-result-card.error {
+        background: #fef2f2;
+        border-color: #fecaca;
+      }
+      @keyframes qvSlideIn {
+        to {
+          opacity: 1;
+          transform: translateY(0);
+        }
       }
       .qv-lang-result-header {
         display: flex;
@@ -2994,38 +3315,12 @@
         margin-bottom: 6px;
       }
       .qv-lang-result-name {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
         font-size: 12px;
         font-weight: 700;
         color: #374151;
-      }
-      .qv-copy-btn {
-        padding: 3px 9px;
-        background: transparent;
-        color: #4f46e5;
-        border: 1px solid #c7d2fe;
-        border-radius: 5px;
-        font-size: 11px;
-        font-weight: 600;
-        cursor: pointer;
-        transition: all 0.15s;
-        font-family: inherit;
-      }
-      .qv-copy-btn:hover { background: #eef2ff; }
-      .qv-lang-result-title {
-        font-size: 12px;
-        font-weight: 600;
-        color: #1f2937;
-        margin-bottom: 3px;
-      }
-      .qv-lang-result-desc {
-        font-size: 11.5px;
-        color: #4b5563;
-        line-height: 1.5;
-        white-space: pre-wrap;
-        max-height: 80px;
-        overflow: hidden;
-        mask-image: linear-gradient(to bottom, black 60%, transparent);
-        -webkit-mask-image: linear-gradient(to bottom, black 60%, transparent);
       }
 
       /* Result Panel: Smart Re-Gen */
@@ -3172,6 +3467,7 @@
     const btn = document.createElement("button");
     btn.id = BTN_ID;
     btn.innerHTML = `
+        <span class="qv-btn-spinner" aria-hidden="true"></span>
         <span class="icon">${WAND_ICON_SVG}</span>
         <img class="qv-output-flag" src="https://flagcdn.com/w40/gb.png" alt="English">
         <span class="label">Generate</span>
@@ -3263,6 +3559,7 @@
     if (!generateBtn) return;
     const label = generateBtn.querySelector(".label");
     const icon = generateBtn.querySelector(".icon");
+    const spinner = generateBtn.querySelector(".qv-btn-spinner");
 
     if (phoneBtn) {
       phoneBtn.disabled = false;
@@ -3275,6 +3572,7 @@
     if (isBusy) {
       generateBtn.disabled = true;
       icon.style.display = "none";
+      if (spinner) spinner.classList.add("visible");
       const flag = generateBtn.querySelector(".qv-output-flag");
       if (flag) flag.style.display = "none";
       label.textContent = "Generating...";
@@ -3286,6 +3584,7 @@
     } else {
       generateBtn.disabled = false;
       icon.style.display = "inline-block";
+      if (spinner) spinner.classList.remove("visible");
       const flag = generateBtn.querySelector(".qv-output-flag");
       if (flag) flag.style.display = "inline-block";
       generateBtn.style.backgroundColor = "#4f46e5";
@@ -3297,15 +3596,22 @@
     }
   }
 
+  function setGenerateBusyLabel(text) {
+    const label = generateBtn?.querySelector(".label");
+    if (label) label.textContent = text;
+  }
+
   function setButtonSuccessState(imageUrls) {
     if (!generateBtn) return;
     const label = generateBtn.querySelector(".label");
     const icon = generateBtn.querySelector(".icon");
     const flag = generateBtn.querySelector(".qv-output-flag");
+    const spinner = generateBtn.querySelector(".qv-btn-spinner");
     if (!label || !icon) return;
 
     icon.style.display = "none";
     if (flag) flag.style.display = "none";
+    if (spinner) spinner.classList.remove("visible");
     label.textContent = "Done";
 
     setTimeout(() => {
@@ -3412,6 +3718,7 @@
           <div class="phone-multi-note" id="phone-multi-note">Choose languages once; your selection is saved for next time. Each language uses 1 credit.</div>
         </div>
         <div class="status waiting">Waiting for photos from phone...</div>
+        <div class="phone-upload-preview" id="phone-upload-preview" aria-live="polite"></div>
         <div class="modal-buttons">
           <button class="close-btn">Done</button>
           <button class="generate-btn" data-mode="single">
@@ -3439,19 +3746,18 @@
     const multiCount = modal.querySelector("#phone-multi-count");
     const modeButtons = modal.querySelectorAll(".phone-mode-btn");
     const phoneLangPills = modal.querySelector("#phone-lang-pills");
-
     function updatePhoneMultiState() {
       if (multiCount) {
         const count = selectedBatchLangs.size;
         multiCount.textContent =
           count === 0
             ? "No languages selected"
+            : count === 1
+              ? "Select one more language"
             : `${count} language${count > 1 ? "s" : ""} selected`;
       }
       if (generateBtnModal) {
         const mode = generateBtnModal.dataset.mode || "single";
-        generateBtnModal.disabled =
-          mode === "multi" && (!hasProAccess || selectedBatchLangs.size === 0);
         const actionLabel = generateBtnModal.querySelector(
           ".qv-phone-action-label",
         );
@@ -3459,6 +3765,7 @@
           actionLabel.textContent =
             mode === "multi" ? "Done + Generate Multi" : "Done + Generate";
         }
+        updatePhoneModalStatus();
       }
       if (phoneLangPills) {
         phoneLangPills.querySelectorAll(".phone-lang-pill").forEach((pill) => {
@@ -3503,13 +3810,16 @@
       });
     });
     updatePhoneMultiState();
+    updatePhoneModalStatus();
 
     // Close button handlers
     modal.querySelector(".close-x").addEventListener("click", closeModal);
     modal.querySelector(".close-btn").addEventListener("click", closeModal);
-    modal.querySelector(".generate-btn").addEventListener("click", () => {
-      const mode =
-        modal.querySelector(".generate-btn")?.dataset.mode || "single";
+    modal.querySelector(".generate-btn").addEventListener("click", (event) => {
+      if (event.currentTarget.disabled) return;
+      event.currentTarget.classList.add("loading");
+      event.currentTarget.disabled = true;
+      const mode = event.currentTarget.dataset.mode || "single";
       closeModal();
       // Trigger generate after a brief delay to ensure modal cleanup completes
       setTimeout(() => {
@@ -3531,6 +3841,74 @@
     return modal;
   }
 
+  function renderPhoneUploadPreviews() {
+    const phonePreview = document.querySelector(
+      `#${MODAL_ID} #phone-upload-preview`,
+    );
+    if (!phonePreview) return;
+
+    phonePreview.replaceChildren();
+    const previews = [...phoneUploadedPreviews.values()];
+    phonePreview.classList.toggle("visible", previews.length > 0);
+
+    previews.slice(0, 4).forEach((src) => {
+      const img = document.createElement("img");
+      img.className = "phone-thumb";
+      img.src = src;
+      img.alt = "Uploaded photo";
+      phonePreview.appendChild(img);
+    });
+
+    if (previews.length > 4) {
+      const extra = document.createElement("span");
+      extra.className = "phone-thumb-extra";
+      extra.textContent = `+${previews.length - 4}`;
+      phonePreview.appendChild(extra);
+    }
+  }
+
+  function updatePhoneModalStatus() {
+    const modal = document.getElementById(MODAL_ID);
+    if (!modal) return;
+
+    const statusEl = modal.querySelector(".status");
+    const generateBtnModal = modal.querySelector(".generate-btn");
+    const total = downloadedFiles.size;
+
+    if (statusEl) {
+      if (phoneSyncInProgress) {
+        statusEl.className = "status syncing";
+        statusEl.textContent =
+          total > 0
+            ? `Importing photos... ${total} ready`
+            : "Importing photos...";
+      } else if (total > 0) {
+        statusEl.className = "status ready";
+        statusEl.textContent = `✓ ${total} photo${total !== 1 ? "s" : ""} ready to generate`;
+      } else {
+        statusEl.className = "status waiting";
+        statusEl.textContent = "Waiting for photos from phone...";
+      }
+    }
+
+    renderPhoneUploadPreviews();
+
+    if (generateBtnModal) {
+      const mode = generateBtnModal.dataset.mode || "single";
+      const hasPhotos = downloadedFiles.size > 0;
+      generateBtnModal.disabled =
+        !hasPhotos ||
+        phoneSyncInProgress ||
+        (mode === "multi" && (!hasProAccess || selectedBatchLangs.size < 2));
+      generateBtnModal.classList.toggle("loading", phoneSyncInProgress);
+      generateBtnModal.title = !hasPhotos
+        ? "Upload photos from your phone first"
+        : phoneSyncInProgress
+          ? "Importing photos..."
+          : "";
+    }
+  }
+
   function closeModal() {
     const modal = document.getElementById(MODAL_ID);
     const sessionId = modal?.dataset?.sessionId;
@@ -3543,6 +3921,8 @@
       pollInterval = null;
     }
     downloadedFiles.clear();
+    phoneUploadedPreviews.clear();
+    phoneSyncInProgress = false;
 
     // Notify server to clean up session and delete files
     if (sessionId && chrome.runtime?.id) {
@@ -3570,7 +3950,7 @@
   }
 
   function startPolling(sessionId) {
-    const statusEl = document.querySelector(`#${MODAL_ID} .status`);
+    updatePhoneModalStatus();
 
     pollInterval = setInterval(async () => {
       try {
@@ -3592,45 +3972,35 @@
           typeof response.data === "string"
             ? JSON.parse(response.data)
             : response.data;
-        if (data.files && data.files.length > 0) {
-          let newFilesCount = 0;
-          let importedFileCount = 0;
+        const newFiles = (data.files || []).filter(
+          (file) => !downloadedFiles.has(file.name),
+        );
 
-          for (const file of data.files) {
-            if (!downloadedFiles.has(file.name)) {
+        if (newFiles.length > 0) {
+          phoneSyncInProgress = true;
+          updatePhoneModalStatus();
+
+          for (const file of newFiles) {
+            const didImport = await downloadAndInjectImage(
+              file.url,
+              file.name,
+            );
+            if (didImport) {
               downloadedFiles.add(file.name);
-              const didImport = await downloadAndInjectImage(
-                file.url,
-                file.name,
-              );
-              if (didImport) {
-                newFilesCount++;
-                importedFileCount++;
-              }
+              phoneUploadedPreviews.set(file.name, file.url);
+              updatePhoneModalStatus();
             }
           }
 
-          // Update status with total count
-          if (statusEl) {
-            const total = downloadedFiles.size;
-            statusEl.className = "status";
-            statusEl.textContent = `✓ ${total} file${
-              total !== 1 ? "s" : ""
-            } added. Ready for more...`;
-          }
+          phoneSyncInProgress = false;
+          updatePhoneModalStatus();
         } else {
-          // No files yet, show waiting message
-          if (statusEl && downloadedFiles.size === 0) {
-            statusEl.className = "status waiting";
-            statusEl.textContent = "Waiting for photos from phone...";
-          } else if (statusEl && downloadedFiles.size > 0) {
-            statusEl.className = "status";
-            statusEl.textContent = `✓ ${downloadedFiles.size} file${
-              downloadedFiles.size !== 1 ? "s" : ""
-            } added. Ready for more...`;
-          }
+          phoneSyncInProgress = false;
+          updatePhoneModalStatus();
         }
       } catch (err) {
+        phoneSyncInProgress = false;
+        updatePhoneModalStatus();
         console.error("Polling error:", err);
       }
     }, 3000);
@@ -3682,8 +4052,6 @@
         fileInput.files = dataTransfer.files;
         fileInput.dispatchEvent(new Event("change", { bubbles: true }));
 
-        const statusEl = document.querySelector(`#${MODAL_ID} .status`);
-        if (statusEl) statusEl.textContent = "Image uploaded!";
         return true;
       }
       return false;
@@ -3785,12 +4153,7 @@
       }
 
       const { title, description, measurementAdvice } = await response.json();
-      const titleInput = document.querySelector(SELECTORS.title);
-
-      if (titleInput) {
-        titleInput.value = title;
-        titleInput.dispatchEvent(new Event("input", { bubbles: true }));
-      }
+      setTitleValue(title);
       setTextareaValue(description);
 
       setButtonSuccessState(compressedImages);
