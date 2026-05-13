@@ -1,6 +1,6 @@
 document.addEventListener("DOMContentLoaded", () => {
   // --- CONSTANTS & CONFIGURATION ---
-  const API_BASE = "https://quick-vint.vercel.app";
+  const API_BASE = "https://autolister.app";
   const SUPABASE_URL = "https://jqloiovdwjaornnfvmyu.supabase.co";
   const SUPABASE_ANON_KEY =
     "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImpxbG9pb3Zkd2phb3JubmZ2bXl1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDgyMDgzMzIsImV4cCI6MjA2Mzc4NDMzMn0.iFtkUorY1UqK8zamnwgjB-yhsXe0bJAA8YFm22bzc3A";
@@ -347,7 +347,7 @@ document.addEventListener("DOMContentLoaded", () => {
       };
       const token = encodeUserData(userData);
       if (token) {
-        const url = `https://quick-vint.vercel.app/pricing?token=${token}`;
+        const url = `https://autolister.app/pricing?token=${token}`;
         window.open(url, "_blank");
       }
     });

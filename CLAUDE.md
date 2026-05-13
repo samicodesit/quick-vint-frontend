@@ -63,7 +63,7 @@ This is a Chrome Extension that must be loaded manually for development:
 - Injected into all Vinted new listing pages (matches `*://*.vinted.*/items/new*`)
 - Creates "Generate" and "Phone" buttons near the title input
 - Handles image compression using Canvas API before sending to backend
-- Communicates with backend API at `https://quick-vint.vercel.app/api/generate`
+- Communicates with backend API at `https://autolister.app/api/generate`
 - Polls for phone-uploaded images via `PROXY_FETCH` messages to background
 
 **background.js** (Service Worker)
@@ -121,7 +121,7 @@ This is a Chrome Extension that must be loaded manually for development:
   - URL: `https://jqloiovdwjaornnfvmyu.supabase.co`
   - Handles magic link auth, session management
 
-- **Backend API** (`https://quick-vint.vercel.app`):
+- **Backend API** (`https://autolister.app`):
   - `POST /api/generate` - Generate listing from images
   - `POST /api/auth/magic-link` - Request magic link email
   - `POST /api/stripe/create-checkout` - Create Stripe checkout session

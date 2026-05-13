@@ -6,7 +6,7 @@
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
     "build": "node scripts/set-env.js && terser content.js -o content.min.js --compress --mangle",
-    "build:prod": "API_BASE_URL=https://quick-vint.vercel.app node scripts/set-env.js && terser content.js -o content.min.js --compress --mangle",
+    "build:prod": "API_BASE_URL=https://autolister.app node scripts/set-env.js && terser content.js -o content.min.js --compress --mangle",
     "build:local": "API_BASE_URL=http://localhost:5000 node scripts/set-env.js && terser content.js -o content.min.js --compress --mangle",
     "prepare": "npm run build",
     "package": "node build.js",

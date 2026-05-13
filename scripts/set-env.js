@@ -5,13 +5,14 @@
  * Usage: node scripts/set-env.js
  *
  * Reads API_BASE_URL from process.env or .env file
- * Replaces all hardcoded "https://quick-vint.vercel.app" with the configured value
+ * Replaces hardcoded production/local API URLs with the configured value
  */
 
 const fs = require('fs');
 const path = require('path');
 
-const PROD_URL = 'https://quick-vint.vercel.app';
+const PROD_URL = 'https://autolister.app';
+const LEGACY_PROD_URL = 'https://quick-vint.vercel.app';
 const LOCAL_URL = 'http://localhost:5000';
 
 // Files to process (relative to project root)
@@ -53,8 +54,9 @@ function replaceInFile(filePath, fromUrl, toUrl) {
 
     const content = fs.readFileSync(fullPath, 'utf8');
 
-    // Reset any known dev URLs to production first, then replace with target
+    // Reset any known legacy/dev URLs to production first, then replace with target
     let newContent = content.split(LOCAL_URL).join(PROD_URL);
+    newContent = newContent.split(LEGACY_PROD_URL).join(PROD_URL);
     newContent = newContent.split(fromUrl).join(toUrl);
 
     fs.writeFileSync(fullPath, newContent, 'utf8');

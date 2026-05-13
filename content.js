@@ -4,8 +4,8 @@
   const PHONE_BTN_ID = "quickvint-phone-btn";
   const SIGN_IN_BTN_ID = "quickvint-signin-btn";
   const MODAL_ID = "quickvint-phone-modal";
-  const API_BASE = "https://quick-vint.vercel.app";
-  const PHONE_API_BASE = "https://quick-vint.vercel.app";
+  const API_BASE = "https://autolister.app";
+  const PHONE_API_BASE = "https://autolister.app";
   const PHONE_UPLOAD_PAGE = `${PHONE_API_BASE}/phone-upload`;
   const PHONE_UPLOAD_API = `${PHONE_API_BASE}/api/phone-upload`;
   const SELECTORS = {
@@ -104,10 +104,10 @@
           };
           // Simple base64 encode
           const token = btoa(JSON.stringify(userData));
-          resolve(`https://quick-vint.vercel.app/pricing?token=${token}`);
+          resolve(`https://autolister.app/pricing?token=${token}`);
         } catch (e) {
           console.error("Error building pricing URL:", e);
-          resolve("https://quick-vint.vercel.app/pricing");
+          resolve("https://autolister.app/pricing");
         }
       });
     });

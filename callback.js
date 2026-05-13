@@ -186,7 +186,7 @@
 
     try {
       const response = await fetch(
-        "https://quick-vint.vercel.app/api/stripe/create-checkout",
+        "https://autolister.app/api/stripe/create-checkout",
         {
           method: "POST",
           headers: {
@@ -225,7 +225,7 @@
     try {
       // Check if user has an active subscription by calling your backend
       const response = await fetch(
-        "https://quick-vint.vercel.app/api/check-subscription",
+        "https://autolister.app/api/check-subscription",
         {
           method: "POST",
           headers: {
@@ -353,7 +353,7 @@
         try {
           const token = btoa(JSON.stringify(userData));
           window.open(
-            `https://quick-vint.vercel.app/pricing?token=${encodeURIComponent(
+            `https://autolister.app/pricing?token=${encodeURIComponent(
               token,
             )}`,
             "_blank",
@@ -368,7 +368,7 @@
             lang: userData.lang,
           });
           window.open(
-            `https://quick-vint.vercel.app/pricing?${params.toString()}`,
+            `https://autolister.app/pricing?${params.toString()}`,
             "_blank",
           );
         }
@@ -426,7 +426,7 @@
         try {
           const token = btoa(JSON.stringify(userData));
           window.open(
-            `https://quick-vint.vercel.app/pricing?token=${encodeURIComponent(
+            `https://autolister.app/pricing?token=${encodeURIComponent(
               token,
             )}`,
             "_blank",
@@ -441,7 +441,7 @@
             lang: userData.lang,
           });
           window.open(
-            `https://quick-vint.vercel.app/pricing?${params.toString()}`,
+            `https://autolister.app/pricing?${params.toString()}`,
             "_blank",
           );
         }
