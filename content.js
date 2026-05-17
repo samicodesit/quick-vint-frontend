@@ -8,6 +8,7 @@
   const PHONE_API_BASE = "https://autolister.app";
   const PHONE_UPLOAD_PAGE = `${PHONE_API_BASE}/phone-upload`;
   const PHONE_UPLOAD_API = `${PHONE_API_BASE}/api/phone-upload`;
+  const MAX_PHONE_UPLOAD_PREVIEWS = 7;
   const SELECTORS = {
     title: 'input[data-testid="title--input"]',
     description: 'textarea[data-testid="description--input"]',
@@ -20,7 +21,8 @@
     mediaRotateButton: '[data-testid^="media-select-grid-rotate-button-"]',
     mediaAddPhotosButton:
       '[data-testid="add-photos-icon-button"], button[aria-label="Add photos"]',
-    fileInput: 'input[type="file"]',
+    fileInput:
+      '[data-testid="media-upload"] input[data-testid="add-photos-input"][type="file"], input[data-testid="add-photos-input"][type="file"], input[type="file"][name="photos"]',
   };
   const WAND_ICON_SVG = `<svg fill="#ffffff" viewBox="0 0 512 512" version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink"> <path d="M454.321,219.727l-38.766-51.947l20.815-61.385c2.046-6.032,0.489-12.704-4.015-17.208 c-4.504-4.504-11.175-6.061-17.208-4.015l-61.384,20.815l-51.951-38.766c-5.103-3.809-11.929-4.392-17.605-1.499 c-5.676,2.893-9.217,8.755-9.136,15.125l0.829,64.815l-52.923,37.426c-5.201,3.678-7.863,9.989-6.867,16.282 c0.996,6.291,5.479,11.471,11.561,13.363l43.844,13.63L14.443,483.432c-6.535,6.534-6.535,17.131,0,23.666s17.131,6.535,23.666,0 l257.073-257.072l13.629,43.843c2.172,6.986,8.638,11.768,15.984,11.768c5.375,0,10.494-2.595,13.66-7.072l37.426-52.923 l64.815,0.828c6.322,0.051,12.233-3.462,15.125-9.136S458.131,224.833,454.321,219.727z"></path> <polygon points="173.373,67.274 160.014,42.848 146.656,67.274 122.23,80.632 146.656,93.992 160.014,118.417 173.373,93.992 197.799,80.632 "></polygon> <polygon points="362.946,384.489 352.14,364.731 341.335,384.489 321.577,395.294 341.335,406.1 352.14,425.856 362.946,406.1 382.703,395.294 "></polygon> <polygon points="378.142,19.757 367.337,0 356.531,19.757 336.774,30.563 356.531,41.369 367.337,61.126 378.142,41.369 397.9,30.563 "></polygon> <polygon points="490.635,142.513 484.167,130.689 477.701,142.513 465.876,148.979 477.701,155.446 484.167,167.27 490.635,155.446 502.458,148.979 "></polygon> <polygon points="492.626,294.117 465.876,301.951 439.128,294.117 446.962,320.865 439.128,347.615 465.876,339.781 492.626,347.615 484.791,320.865 "></polygon> </svg>`;
   const PHONE_ICON_SVG = `<svg fill="#ffffff" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M17 1.01L7 1c-1.1 0-2 .9-2 2v18c0 1.1.9 2 2 2h10c1.1 0 2-.9 2-2V3c0-1.1-.9-1.99-2-1.99zM17 19H7V5h10v14z"/></svg>`;
@@ -33,6 +35,13 @@
   let isAuthenticated = false;
   let pollInterval = null;
   let downloadedFiles = new Set();
+  let pendingPhoneFiles = new Set();
+  let isPhoneUploadPollInFlight = false;
+  let activePhoneUploadSessionId = null;
+  let phoneUploadPreviewUrls = [];
+  let displayedPhoneUploadPreviewCount = 0;
+  let phoneUploadPreviewTimer = null;
+  let phoneUploadAutoCloseTimer = null;
 
   // --- HELPER FUNCTIONS ---
 
@@ -204,6 +213,12 @@
       });
   }
 
+  function getVisibleUploadedPhotoCount() {
+    const grid = document.querySelector(SELECTORS.mediaGrid);
+    if (!grid) return getUploadedImageUrls().length;
+    return grid.querySelectorAll(SELECTORS.mediaPhotoBox).length;
+  }
+
   // --- AUTHENTICATION & STATE SYNC ---
 
   function initializeAuthState() {
@@ -365,11 +380,13 @@
       
       #${MODAL_ID} .modal-content {
         background: white;
-        padding: 40px;
-        border-radius: 24px;
+        padding: 32px;
+        border-radius: 20px;
         text-align: center;
-        max-width: 380px;
+        max-width: 430px;
         width: 90%;
+        max-height: calc(100vh - 32px);
+        overflow-y: auto;
         box-shadow: 0 20px 60px -10px rgba(0, 0, 0, 0.3);
         animation: slideUp 0.3s ease-out;
         position: relative;
@@ -443,7 +460,7 @@
         border: 1px solid #f3f4f6;
       }
       
-      #${MODAL_ID} img {
+      #${MODAL_ID} #qr-code {
         display: block;
         border-radius: 12px;
         width: 180px;
@@ -530,6 +547,107 @@
         0%, 100% { opacity: 1; }
         50% { opacity: 0.4; }
       }
+
+      #${MODAL_ID} .phone-previews {
+        height: 50px;
+        margin: 0 0 14px;
+        padding: 8px 10px;
+        background: #f9fafb;
+        border: 1px solid #eef0f3;
+        border-radius: 12px;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        overflow: hidden;
+      }
+
+      #${MODAL_ID} .preview-header {
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        align-items: center;
+        flex: 0 0 54px;
+        color: #374151;
+        font-size: 11px;
+        font-weight: 700;
+        line-height: 1.2;
+      }
+
+      #${MODAL_ID} .preview-extra {
+        color: #6b7280;
+        font-weight: 600;
+        margin-top: 3px;
+      }
+
+      #${MODAL_ID} .preview-grid {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        min-width: 0;
+        flex: 1;
+        overflow: hidden;
+      }
+
+      #${MODAL_ID} .preview-empty {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        color: #6b7280;
+        font-size: 12px;
+        font-weight: 600;
+        white-space: nowrap;
+      }
+
+      #${MODAL_ID} .preview-pulse {
+        width: 28px;
+        height: 28px;
+        border-radius: 8px;
+        background: linear-gradient(90deg, #eef2ff 0%, #f8fafc 45%, #eef2ff 100%);
+        background-size: 200% 100%;
+        border: 1px solid #e0e7ff;
+        animation: previewShimmer 1.4s ease-in-out infinite;
+      }
+
+      #${MODAL_ID} .preview-dot {
+        width: 5px;
+        height: 5px;
+        border-radius: 999px;
+        background: #818cf8;
+        animation: pulse 1.4s ease-in-out infinite;
+      }
+
+      @keyframes previewShimmer {
+        0% { background-position: 100% 0; }
+        100% { background-position: -100% 0; }
+      }
+
+      #${MODAL_ID} .preview-thumb {
+        flex: 0 0 32px;
+        width: 32px;
+        height: 32px;
+        object-fit: cover;
+        border-radius: 6px;
+        border: 1px solid #e5e7eb;
+        background: white;
+        opacity: 0;
+        transform: translateY(4px) scale(0.96);
+        animation: previewIn 0.22s ease-out forwards;
+      }
+
+      #${MODAL_ID} .preview-more {
+        flex: 0 0 auto;
+        color: #6b7280;
+        font-size: 12px;
+        font-weight: 700;
+        padding: 0 2px;
+      }
+
+      @keyframes previewIn {
+        to {
+          opacity: 1;
+          transform: translateY(0) scale(1);
+        }
+      }
       
       #${MODAL_ID} .language-selector {
         margin: 0 0 20px;
@@ -544,22 +662,23 @@
         max-width: 240px;
       }
       
-      #${MODAL_ID} .language-select-wrapper::before {
-        content: '🌐';
+      #${MODAL_ID} .modal-flag-icon {
         position: absolute;
         left: 12px;
         top: 50%;
         transform: translateY(-50%);
-        font-size: 14px;
         pointer-events: none;
         z-index: 1;
-        filter: grayscale(100%);
-        opacity: 0.6;
+        width: 20px;
+        height: 14px;
+        border-radius: 2px;
+        object-fit: cover;
+        box-shadow: 0 0 0 1px rgba(17, 24, 39, 0.08);
       }
       
       #${MODAL_ID} .language-select {
         width: 100%;
-        padding: 10px 36px 10px 36px;
+        padding: 10px 36px 10px 42px;
         border: 1px solid #e5e7eb;
         border-radius: 12px;
         background: #f9fafb;
@@ -800,33 +919,38 @@
     // Get saved language preference
     const { selectedLanguage = "en" } =
       await chrome.storage.local.get("selectedLanguage");
+    const selectedModalLanguage =
+      selectedLanguage === "cs" ? "cz" : selectedLanguage;
 
     const languageOptions = [
-      { code: "en", name: "English" },
-      { code: "fr", name: "Français" },
-      { code: "nl", name: "Nederlands" },
-      { code: "da", name: "Dansk" },
-      { code: "cs", name: "Čeština" },
-      { code: "sk", name: "Slovenčina" },
-      { code: "sv", name: "Svenska" },
-      { code: "de", name: "Deutsch" },
-      { code: "el", name: "Ελληνικά" },
-      { code: "hr", name: "Hrvatski" },
-      { code: "fi", name: "Suomeksi" },
-      { code: "hu", name: "Magyar" },
-      { code: "it", name: "Italiano" },
-      { code: "lt", name: "Lietuvių" },
-      { code: "pl", name: "Polski" },
-      { code: "pt", name: "Português" },
-      { code: "ro", name: "Română" },
-      { code: "es", name: "Español" },
+      { code: "en", name: "English", flag: "gb", flagAlt: "UK Flag" },
+      { code: "fr", name: "Français", flag: "fr", flagAlt: "French Flag" },
+      { code: "cz", name: "Čeština", flag: "cz", flagAlt: "Czech Flag" },
+      { code: "da", name: "Dansk", flag: "dk", flagAlt: "Danish Flag" },
+      { code: "nl", name: "Nederlands", flag: "nl", flagAlt: "Dutch Flag" },
+      { code: "de", name: "Deutsch", flag: "de", flagAlt: "German Flag" },
+      { code: "el", name: "Ελληνικά", flag: "gr", flagAlt: "Greek Flag" },
+      { code: "hr", name: "Hrvatski", flag: "hr", flagAlt: "Croatian Flag" },
+      { code: "fi", name: "Suomeksi", flag: "fi", flagAlt: "Finnish Flag" },
+      { code: "hu", name: "Magyar", flag: "hu", flagAlt: "Hungarian Flag" },
+      { code: "it", name: "Italiano", flag: "it", flagAlt: "Italian Flag" },
+      { code: "lt", name: "Lietuvių", flag: "lt", flagAlt: "Lithuanian Flag" },
+      { code: "pl", name: "Polski", flag: "pl", flagAlt: "Polish Flag" },
+      { code: "pt", name: "Português", flag: "pt", flagAlt: "Portuguese Flag" },
+      { code: "ro", name: "Română", flag: "ro", flagAlt: "Romanian Flag" },
+      { code: "es", name: "Español", flag: "es", flagAlt: "Spanish Flag" },
+      { code: "sk", name: "Slovenčina", flag: "sk", flagAlt: "Slovak Flag" },
+      { code: "sv", name: "Svenska", flag: "se", flagAlt: "Swedish Flag" },
     ];
+    const selectedLanguageOption =
+      languageOptions.find((lang) => lang.code === selectedModalLanguage) ||
+      languageOptions[0];
 
     const optionsHTML = languageOptions
       .map(
         (lang) =>
           `<option value="${lang.code}" ${
-            lang.code === selectedLanguage ? "selected" : ""
+            lang.code === selectedLanguageOption.code ? "selected" : ""
           }>${lang.name}</option>`,
       )
       .join("");
@@ -845,14 +969,32 @@
           )}" alt="QR Code" />
         </div>
         <p class="instruction">Photos will appear in this listing automatically</p>
+        <div class="phone-previews" aria-live="polite">
+          <div class="preview-header">
+            <span>Photos</span>
+            <span class="preview-extra"></span>
+          </div>
+          <div class="preview-grid">
+            <span class="preview-empty">
+              <span class="preview-pulse"></span>
+              <span>Waiting for photos</span>
+              <span class="preview-dot"></span>
+            </span>
+          </div>
+        </div>
         <div class="language-selector">
           <div class="language-select-wrapper">
+            <img
+              class="modal-flag-icon"
+              src="https://flagcdn.com/w40/${selectedLanguageOption.flag}.png"
+              alt="${selectedLanguageOption.flagAlt}"
+            />
             <select class="language-select" id="modal-language-select">
               ${optionsHTML}
             </select>
           </div>
         </div>
-        <div class="status waiting">Waiting for photos from phone...</div>
+        <div class="status waiting">Waiting for photos from your phone...</div>
         <div class="modal-buttons">
           <button class="close-btn">Done</button>
           <button class="generate-btn">
@@ -870,8 +1012,16 @@
 
     // Setup language selector
     const languageSelect = modal.querySelector("#modal-language-select");
+    const languageFlag = modal.querySelector(".modal-flag-icon");
     if (languageSelect) {
       languageSelect.addEventListener("change", (e) => {
+        const selectedOption = languageOptions.find(
+          (lang) => lang.code === e.target.value,
+        );
+        if (languageFlag && selectedOption) {
+          languageFlag.src = `https://flagcdn.com/w40/${selectedOption.flag}.png`;
+          languageFlag.alt = selectedOption.flagAlt;
+        }
         // Save the selected language for this session and future use
         chrome.storage.local.set({ selectedLanguage: e.target.value });
       });
@@ -900,6 +1050,9 @@
     const modal = document.getElementById(MODAL_ID);
     const sessionId = modal?.dataset?.sessionId;
 
+    if (activePhoneUploadSessionId === sessionId) {
+      activePhoneUploadSessionId = null;
+    }
     if (modal) {
       modal.remove();
     }
@@ -907,7 +1060,20 @@
       clearInterval(pollInterval);
       pollInterval = null;
     }
+    if (phoneUploadAutoCloseTimer) {
+      clearTimeout(phoneUploadAutoCloseTimer);
+      phoneUploadAutoCloseTimer = null;
+    }
     downloadedFiles.clear();
+    pendingPhoneFiles.clear();
+    isPhoneUploadPollInFlight = false;
+    if (phoneUploadPreviewTimer) {
+      clearTimeout(phoneUploadPreviewTimer);
+      phoneUploadPreviewTimer = null;
+    }
+    phoneUploadPreviewUrls.forEach((url) => URL.revokeObjectURL(url));
+    phoneUploadPreviewUrls = [];
+    displayedPhoneUploadPreviewCount = 0;
 
     // Notify server to clean up session and delete files
     if (sessionId && chrome.runtime?.id) {
@@ -929,19 +1095,37 @@
       return;
     }
 
+    if (document.getElementById(MODAL_ID)) {
+      closeModal();
+    }
+
     const sessionId = generateSessionId();
     await createModal(sessionId);
     startPolling(sessionId);
   }
 
   function startPolling(sessionId) {
+    activePhoneUploadSessionId = sessionId;
+
+    if (pollInterval) {
+      clearInterval(pollInterval);
+      pollInterval = null;
+    }
+
     const statusEl = document.querySelector(`#${MODAL_ID} .status`);
+    const initialImageCount = getVisibleUploadedPhotoCount();
+    schedulePhoneUploadAutoClose(sessionId);
 
     pollInterval = setInterval(async () => {
+      if (isPhoneUploadPollInFlight) return;
+
       try {
+        isPhoneUploadPollInFlight = true;
+
         // Check if extension context is still valid
         if (!chrome.runtime?.id) {
           clearInterval(pollInterval);
+          pollInterval = null;
           return;
         }
 
@@ -958,45 +1142,99 @@
             ? JSON.parse(response.data)
             : response.data;
         if (data.files && data.files.length > 0) {
-          let newFilesCount = 0;
+          const newRemoteFiles = data.files.filter((file) => {
+            const fileKey = getPhoneUploadFileKey(file);
+            return (
+              fileKey &&
+              !downloadedFiles.has(fileKey) &&
+              !pendingPhoneFiles.has(fileKey)
+            );
+          });
 
-          for (const file of data.files) {
-            if (!downloadedFiles.has(file.name)) {
-              downloadedFiles.add(file.name);
-              newFilesCount++;
-              await downloadAndInjectImage(file.url, file.name);
+          if (newRemoteFiles.length > 0) {
+            schedulePhoneUploadAutoClose(sessionId);
+            newRemoteFiles.forEach((file) =>
+              pendingPhoneFiles.add(getPhoneUploadFileKey(file)),
+            );
+
+            if (statusEl) {
+              statusEl.className = "status";
+              statusEl.textContent = `Adding ${newRemoteFiles.length} photo${
+                newRemoteFiles.length !== 1 ? "s" : ""
+              } to your listing...`;
+            }
+
+            try {
+              const downloads = await Promise.all(
+                newRemoteFiles.map(downloadPhoneUploadFile),
+              );
+
+              if (!isPhoneUploadSessionActive(sessionId)) {
+                downloads.forEach((result) => {
+                  if (result.previewUrl) URL.revokeObjectURL(result.previewUrl);
+                });
+                return;
+              }
+
+              const filesToInject = downloads
+                .filter((result) => result.file)
+                .map((result) => result.file);
+
+              if (filesToInject.length > 0) {
+                if (injectFilesIntoVinted(filesToInject)) {
+                  downloads.forEach((result) => {
+                    if (result.file) {
+                      downloadedFiles.add(result.key);
+                      if (result.previewUrl) {
+                        phoneUploadPreviewUrls.push(result.previewUrl);
+                      }
+                    }
+                  });
+                  schedulePhoneUploadPreviewReveal();
+                } else {
+                  downloads.forEach((result) => {
+                    if (result.previewUrl) URL.revokeObjectURL(result.previewUrl);
+                  });
+                }
+              }
+            } finally {
+              newRemoteFiles.forEach((file) =>
+                pendingPhoneFiles.delete(getPhoneUploadFileKey(file)),
+              );
             }
           }
 
-          // Update status with total count
-          if (statusEl) {
-            const total = downloadedFiles.size;
-            statusEl.className = "status";
-            statusEl.textContent = `✓ ${total} file${
-              total !== 1 ? "s" : ""
-            } added. Ready for more...`;
-          }
+          updatePhoneUploadStatus(statusEl, initialImageCount);
         } else {
           // No files yet, show waiting message
           if (statusEl && downloadedFiles.size === 0) {
             statusEl.className = "status waiting";
-            statusEl.textContent = "Waiting for photos from phone...";
+            statusEl.textContent = "Waiting for photos from your phone...";
           } else if (statusEl && downloadedFiles.size > 0) {
-            statusEl.className = "status";
-            statusEl.textContent = `✓ ${downloadedFiles.size} file${
-              downloadedFiles.size !== 1 ? "s" : ""
-            } added. Ready for more...`;
+            updatePhoneUploadStatus(statusEl, initialImageCount);
           }
         }
       } catch (err) {
         console.error("Polling error:", err);
+      } finally {
+        if (activePhoneUploadSessionId === sessionId) {
+          isPhoneUploadPollInFlight = false;
+        }
       }
     }, 3000);
 
+  }
+
+  function schedulePhoneUploadAutoClose(sessionId) {
+    if (phoneUploadAutoCloseTimer) {
+      clearTimeout(phoneUploadAutoCloseTimer);
+      phoneUploadAutoCloseTimer = null;
+    }
+
     // Auto-close after 5 minutes of inactivity (silent, no alert)
-    setTimeout(
+    phoneUploadAutoCloseTimer = setTimeout(
       () => {
-        if (pollInterval) {
+        if (isPhoneUploadSessionActive(sessionId)) {
           closeModal();
         }
       },
@@ -1004,11 +1242,36 @@
     );
   }
 
-  async function downloadAndInjectImage(url, filename) {
+  function isPhoneUploadSessionActive(sessionId) {
+    const modal = document.getElementById(MODAL_ID);
+    return (
+      activePhoneUploadSessionId === sessionId &&
+      modal?.dataset?.sessionId === sessionId
+    );
+  }
+
+  function getPhoneUploadFileKey(file) {
+    if (!file) return "";
+    const explicitKey = file.id || file.key || file.path || file.storagePath;
+    if (explicitKey) return String(explicitKey);
+
+    let stableUrl = file.url || "";
+    try {
+      const parsedUrl = new URL(file.url);
+      stableUrl = `${parsedUrl.origin}${parsedUrl.pathname}`;
+    } catch (err) {
+      // Keep the raw URL if it is not parseable.
+    }
+
+    return [file.name, stableUrl].filter(Boolean).join("|");
+  }
+
+  async function downloadPhoneUploadFile(remoteFile) {
+    const key = getPhoneUploadFileKey(remoteFile);
     try {
       const response = await sendMessage({
         type: "PROXY_FETCH",
-        url: url,
+        url: remoteFile.url,
         options: { method: "GET" },
         isBlob: true,
       });
@@ -1021,31 +1284,130 @@
 
       const res = await fetch(response.data);
       const blob = await res.blob();
-      const file = new File([blob], filename || `upload_${Date.now()}.jpg`, {
-        type: "image/jpeg",
+      const filename = remoteFile.name || `upload_${Date.now()}.jpg`;
+      const file = new File([blob], filename, {
+        type: blob.type || "image/jpeg",
       });
+      const previewUrl = URL.createObjectURL(blob);
 
-      const fileInput = document.querySelector(SELECTORS.fileInput);
-      if (fileInput) {
-        const dataTransfer = new DataTransfer();
-
-        if (fileInput.files) {
-          for (let i = 0; i < fileInput.files.length; i++) {
-            dataTransfer.items.add(fileInput.files[i]);
-          }
-        }
-
-        dataTransfer.items.add(file);
-
-        fileInput.files = dataTransfer.files;
-        fileInput.dispatchEvent(new Event("change", { bubbles: true }));
-
-        const statusEl = document.querySelector(`#${MODAL_ID} .status`);
-        if (statusEl) statusEl.textContent = "Image uploaded!";
-      }
+      return { key, file, previewUrl };
     } catch (err) {
-      console.error("Error downloading image:", err);
+      console.error("Error downloading phone upload image:", err);
+      return { key, file: null, previewUrl: null };
     }
+  }
+
+  function injectFilesIntoVinted(files) {
+    const fileInput = document.querySelector(SELECTORS.fileInput);
+    if (!fileInput || files.length === 0) return false;
+
+    const dataTransfer = new DataTransfer();
+    files.forEach((file) => dataTransfer.items.add(file));
+
+    fileInput.files = dataTransfer.files;
+    fileInput.dispatchEvent(new Event("change", { bubbles: true }));
+    return true;
+  }
+
+  function updatePhoneUploadStatus(statusEl, initialImageCount) {
+    if (!statusEl) return;
+
+    const sentCount = downloadedFiles.size;
+    const visiblePhoneUploadCount = Math.max(
+      0,
+      getVisibleUploadedPhotoCount() - initialImageCount,
+    );
+
+    statusEl.className = "status";
+    if (sentCount === 0) {
+      statusEl.className = "status waiting";
+      statusEl.textContent = "Waiting for photos from your phone...";
+    } else if (visiblePhoneUploadCount >= sentCount) {
+      statusEl.textContent = `${sentCount} photo${
+        sentCount !== 1 ? "s" : ""
+      } added. Ready for more.`;
+    } else {
+      statusEl.textContent = `${sentCount} photo${
+        sentCount !== 1 ? "s" : ""
+      } received. Adding to your listing...`;
+    }
+  }
+
+  function schedulePhoneUploadPreviewReveal() {
+    if (phoneUploadPreviewTimer) return;
+    if (displayedPhoneUploadPreviewCount >= phoneUploadPreviewUrls.length) return;
+
+    phoneUploadPreviewTimer = setTimeout(() => {
+      phoneUploadPreviewTimer = null;
+      displayedPhoneUploadPreviewCount += 1;
+      renderPhoneUploadPreviews();
+      schedulePhoneUploadPreviewReveal();
+    }, displayedPhoneUploadPreviewCount === 0 ? 80 : 180);
+  }
+
+  function createPhoneUploadEmptyState() {
+    const emptyEl = document.createElement("span");
+    emptyEl.className = "preview-empty";
+    emptyEl.innerHTML = `
+      <span class="preview-pulse"></span>
+      <span>Waiting for photos</span>
+      <span class="preview-dot"></span>
+    `;
+    return emptyEl;
+  }
+
+  function renderPhoneUploadPreviews() {
+    const modal = document.getElementById(MODAL_ID);
+    if (!modal) return;
+
+    const previewsEl = modal.querySelector(".phone-previews");
+    const gridEl = modal.querySelector(".preview-grid");
+    const extraEl = modal.querySelector(".preview-extra");
+    if (!previewsEl || !gridEl || !extraEl) return;
+
+    const revealedCount = Math.min(
+      displayedPhoneUploadPreviewCount,
+      phoneUploadPreviewUrls.length,
+    );
+    const visibleUrls = phoneUploadPreviewUrls.slice(
+      0,
+      Math.min(revealedCount, MAX_PHONE_UPLOAD_PREVIEWS),
+    );
+    const hiddenCount = Math.max(
+      0,
+      revealedCount - MAX_PHONE_UPLOAD_PREVIEWS,
+    );
+
+    const existingThumbs = gridEl.querySelectorAll(".preview-thumb").length;
+    if (revealedCount === 0) {
+      gridEl.replaceChildren(createPhoneUploadEmptyState());
+    } else {
+      const emptyEl = gridEl.querySelector(".preview-empty");
+      if (emptyEl) emptyEl.remove();
+
+      visibleUrls.slice(existingThumbs).forEach((url, index) => {
+        const thumbIndex = existingThumbs + index;
+        const img = document.createElement("img");
+        img.className = "preview-thumb";
+        img.src = url;
+        img.alt = `Uploaded photo ${thumbIndex + 1}`;
+        gridEl.appendChild(img);
+      });
+    }
+
+    let moreEl = gridEl.querySelector(".preview-more");
+    if (hiddenCount > 0) {
+      if (!moreEl) {
+        moreEl = document.createElement("span");
+        moreEl.className = "preview-more";
+        gridEl.appendChild(moreEl);
+      }
+      moreEl.textContent = `+${hiddenCount}`;
+    } else if (moreEl) {
+      moreEl.remove();
+    }
+
+    extraEl.textContent = revealedCount > 0 ? String(revealedCount) : "";
   }
 
   async function onGenerateClick() {
