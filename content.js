@@ -3,15 +3,22 @@
   const BTN_ID = "quickvint-gen-btn";
   const PHONE_BTN_ID = "quickvint-phone-btn";
   const SIGN_IN_BTN_ID = "quickvint-signin-btn";
+  const TITLE_LANGUAGE_SELECT_ID = "quickvint-title-language-select";
+  const DESCRIPTION_LANGUAGE_SELECT_ID = "quickvint-description-language-select";
   const MODAL_ID = "quickvint-phone-modal";
-  const API_BASE = "https://autolister.app";
-  const PHONE_API_BASE = "https://autolister.app";
+  const API_BASE = "http://localhost:5000";
+  const PHONE_API_BASE = "http://localhost:5000";
   const PHONE_UPLOAD_PAGE = `${PHONE_API_BASE}/phone-upload`;
   const PHONE_UPLOAD_API = `${PHONE_API_BASE}/api/phone-upload`;
   const MAX_PHONE_UPLOAD_PREVIEWS = 7;
+  const VINTED_FIELDS = window.QuickVintVintedFields;
+  const DOM_CANARY_STORAGE_KEY = "quickvintDomCanaryLastFailureReport";
+  const DOM_CANARY_SUCCESS_STORAGE_KEY = "quickvintDomCanaryLastSuccessReport";
+  const DOM_CANARY_LAST_RESULT_KEY = "quickvintDomCanaryLastResult";
+  const DOM_CANARY_COOLDOWN_MS = 24 * 60 * 60 * 1000;
   const SELECTORS = {
-    title: 'input[data-testid="title--input"]',
-    description: 'textarea[data-testid="description--input"]',
+    title: VINTED_FIELDS.SELECTORS.title,
+    description: VINTED_FIELDS.SELECTORS.description,
     mediaGrid: '[data-testid="media-upload-grid"], [data-testid="media-select-grid"]',
     mediaPhotoBox: ".photo-box",
     mediaImageWrapper: '[data-testid^="image-wrapper-"]',
@@ -24,6 +31,26 @@
     fileInput:
       '[data-testid="media-upload"] input[data-testid="add-photos-input"][type="file"], input[data-testid="add-photos-input"][type="file"], input[type="file"][name="photos"]',
   };
+  const LANGUAGE_OPTIONS = [
+    { code: "en", name: "English", shortName: "EN", flag: "gb", flagAlt: "UK Flag", flagEmoji: "🇬🇧" },
+    { code: "fr", name: "Français", shortName: "FR", flag: "fr", flagAlt: "French Flag", flagEmoji: "🇫🇷" },
+    { code: "cz", name: "Čeština", shortName: "CZ", flag: "cz", flagAlt: "Czech Flag", flagEmoji: "🇨🇿" },
+    { code: "da", name: "Dansk", shortName: "DA", flag: "dk", flagAlt: "Danish Flag", flagEmoji: "🇩🇰" },
+    { code: "nl", name: "Nederlands", shortName: "NL", flag: "nl", flagAlt: "Dutch Flag", flagEmoji: "🇳🇱" },
+    { code: "de", name: "Deutsch", shortName: "DE", flag: "de", flagAlt: "German Flag", flagEmoji: "🇩🇪" },
+    { code: "el", name: "Ελληνικά", shortName: "EL", flag: "gr", flagAlt: "Greek Flag", flagEmoji: "🇬🇷" },
+    { code: "hr", name: "Hrvatski", shortName: "HR", flag: "hr", flagAlt: "Croatian Flag", flagEmoji: "🇭🇷" },
+    { code: "fi", name: "Suomeksi", shortName: "FI", flag: "fi", flagAlt: "Finnish Flag", flagEmoji: "🇫🇮" },
+    { code: "hu", name: "Magyar", shortName: "HU", flag: "hu", flagAlt: "Hungarian Flag", flagEmoji: "🇭🇺" },
+    { code: "it", name: "Italiano", shortName: "IT", flag: "it", flagAlt: "Italian Flag", flagEmoji: "🇮🇹" },
+    { code: "lt", name: "Lietuvių", shortName: "LT", flag: "lt", flagAlt: "Lithuanian Flag", flagEmoji: "🇱🇹" },
+    { code: "pl", name: "Polski", shortName: "PL", flag: "pl", flagAlt: "Polish Flag", flagEmoji: "🇵🇱" },
+    { code: "pt", name: "Português", shortName: "PT", flag: "pt", flagAlt: "Portuguese Flag", flagEmoji: "🇵🇹" },
+    { code: "ro", name: "Română", shortName: "RO", flag: "ro", flagAlt: "Romanian Flag", flagEmoji: "🇷🇴" },
+    { code: "es", name: "Español", shortName: "ES", flag: "es", flagAlt: "Spanish Flag", flagEmoji: "🇪🇸" },
+    { code: "sk", name: "Slovenčina", shortName: "SK", flag: "sk", flagAlt: "Slovak Flag", flagEmoji: "🇸🇰" },
+    { code: "sv", name: "Svenska", shortName: "SV", flag: "se", flagAlt: "Swedish Flag", flagEmoji: "🇸🇪" },
+  ];
   const WAND_ICON_SVG = `<svg fill="#ffffff" viewBox="0 0 512 512" version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink"> <path d="M454.321,219.727l-38.766-51.947l20.815-61.385c2.046-6.032,0.489-12.704-4.015-17.208 c-4.504-4.504-11.175-6.061-17.208-4.015l-61.384,20.815l-51.951-38.766c-5.103-3.809-11.929-4.392-17.605-1.499 c-5.676,2.893-9.217,8.755-9.136,15.125l0.829,64.815l-52.923,37.426c-5.201,3.678-7.863,9.989-6.867,16.282 c0.996,6.291,5.479,11.471,11.561,13.363l43.844,13.63L14.443,483.432c-6.535,6.534-6.535,17.131,0,23.666s17.131,6.535,23.666,0 l257.073-257.072l13.629,43.843c2.172,6.986,8.638,11.768,15.984,11.768c5.375,0,10.494-2.595,13.66-7.072l37.426-52.923 l64.815,0.828c6.322,0.051,12.233-3.462,15.125-9.136S458.131,224.833,454.321,219.727z"></path> <polygon points="173.373,67.274 160.014,42.848 146.656,67.274 122.23,80.632 146.656,93.992 160.014,118.417 173.373,93.992 197.799,80.632 "></polygon> <polygon points="362.946,384.489 352.14,364.731 341.335,384.489 321.577,395.294 341.335,406.1 352.14,425.856 362.946,406.1 382.703,395.294 "></polygon> <polygon points="378.142,19.757 367.337,0 356.531,19.757 336.774,30.563 356.531,41.369 367.337,61.126 378.142,41.369 397.9,30.563 "></polygon> <polygon points="490.635,142.513 484.167,130.689 477.701,142.513 465.876,148.979 477.701,155.446 484.167,167.27 490.635,155.446 502.458,148.979 "></polygon> <polygon points="492.626,294.117 465.876,301.951 439.128,294.117 446.962,320.865 439.128,347.615 465.876,339.781 492.626,347.615 484.791,320.865 "></polygon> </svg>`;
   const PHONE_ICON_SVG = `<svg fill="#ffffff" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M17 1.01L7 1c-1.1 0-2 .9-2 2v18c0 1.1.9 2 2 2h10c1.1 0 2-.9 2-2V3c0-1.1-.9-1.99-2-1.99zM17 19H7V5h10v14z"/></svg>`;
 
@@ -42,6 +69,7 @@
   let displayedPhoneUploadPreviewCount = 0;
   let phoneUploadPreviewTimer = null;
   let phoneUploadAutoCloseTimer = null;
+  let inlineLanguageListenersBound = false;
 
   // --- HELPER FUNCTIONS ---
 
@@ -97,6 +125,30 @@
     }
   }
 
+  function normalizeLanguageCode(code) {
+    return code === "cs" ? "cz" : code;
+  }
+
+  function isVintedNewItemPage() {
+    return /\/items\/new(?:[/?#]|$)/.test(window.location.pathname);
+  }
+
+  async function getStorageValue(key) {
+    return new Promise((resolve) => {
+      chrome.storage.local.get(key, (data) => resolve(data?.[key]));
+    });
+  }
+
+  async function setStorageValue(values) {
+    return new Promise((resolve) => {
+      chrome.storage.local.set(values, resolve);
+    });
+  }
+
+  function sleep(ms) {
+    return new Promise((resolve) => setTimeout(resolve, ms));
+  }
+
   async function getPricingUrl() {
     return new Promise((resolve) => {
       chrome.storage.local.get(["supabaseSession", "userProfile"], (data) => {
@@ -113,10 +165,10 @@
           };
           // Simple base64 encode
           const token = btoa(JSON.stringify(userData));
-          resolve(`https://autolister.app/pricing?token=${token}`);
+          resolve(`http://localhost:5000/pricing?token=${token}`);
         } catch (e) {
           console.error("Error building pricing URL:", e);
-          resolve("https://autolister.app/pricing");
+          resolve("http://localhost:5000/pricing");
         }
       });
     });
@@ -126,6 +178,81 @@
     return new Promise((resolve) => {
       chrome.runtime.sendMessage(message, resolve);
     });
+  }
+
+  async function reportDomCanaryResult(result) {
+    const now = Date.now();
+    const storageKey = result.ok
+      ? DOM_CANARY_SUCCESS_STORAGE_KEY
+      : DOM_CANARY_STORAGE_KEY;
+    const lastReport = Number(await getStorageValue(storageKey)) || 0;
+    if (now - lastReport < DOM_CANARY_COOLDOWN_MS) return;
+
+    const tokenResponse = await sendMessage({ type: "GET_ACCESS_TOKEN" });
+    const accessToken = tokenResponse?.access_token;
+    if (!accessToken) return;
+
+    try {
+      const response = await fetch(`${API_BASE}/api/dom-canary`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${accessToken}`,
+        },
+        body: JSON.stringify({
+          check: "vinted_listing_field_injection",
+          status: result.ok ? "passed" : "failed",
+          url: window.location.href,
+          path: window.location.pathname,
+          userAgent: navigator.userAgent,
+          result,
+          selectors: {
+            title: SELECTORS.title,
+            description: SELECTORS.description,
+          },
+          extensionVersion: chrome.runtime?.getManifest?.().version,
+          occurredAt: new Date(now).toISOString(),
+        }),
+      });
+
+      if (response.ok) {
+        await setStorageValue({ [storageKey]: now });
+      }
+    } catch (error) {
+      console.warn("QuickVint DOM canary report failed:", error);
+    }
+  }
+
+  async function runDomCanary() {
+    if (!isVintedNewItemPage()) return;
+
+    const deadline = Date.now() + 10000;
+    while (Date.now() < deadline) {
+      const { titleInput, descriptionInput } = VINTED_FIELDS.findListingFields();
+      if (titleInput && descriptionInput) break;
+      await sleep(250);
+    }
+
+    const result = VINTED_FIELDS.testListingContentInjection({
+      title: `__QUICKVINT_CANARY_TITLE_${Date.now()}__`,
+      description: `__QUICKVINT_CANARY_DESCRIPTION_${Date.now()}__`,
+    });
+    const lastResult = {
+      ...result,
+      checkedAt: new Date().toISOString(),
+      url: window.location.href,
+      extensionVersion: chrome.runtime?.getManifest?.().version,
+    };
+
+    await setStorageValue({ [DOM_CANARY_LAST_RESULT_KEY]: lastResult });
+    console.info("QuickVint DOM canary result:", lastResult);
+
+    await reportDomCanaryResult(result);
+  }
+
+  function scheduleDomCanary() {
+    if (!isVintedNewItemPage()) return;
+    setTimeout(runDomCanary, 2000);
   }
 
   /**
@@ -233,6 +360,13 @@
       isAuthenticated = !!changes.supabaseSession.newValue?.access_token;
       updateButtonUI();
     }
+    if (
+      changes.selectedLanguage ||
+      changes.selectedTitleLanguage ||
+      changes.selectedDescriptionLanguage
+    ) {
+      syncInlineLanguageControls();
+    }
   });
 
   // --- UI ---
@@ -262,7 +396,7 @@
       #${SIGN_IN_BTN_ID} {
         display: none;
         width: 100%;
-        margin-top: 10px;
+        margin-top: 14px;
         padding: 14px 24px;
         background: linear-gradient(135deg, rgb(79, 70, 229) 0%, rgb(67, 56, 202) 100%);
         color: white;
@@ -337,6 +471,102 @@
       
       #${PHONE_BTN_ID} {
         margin-left: 8px;
+      }
+
+      .quickvint-lang-field {
+        display: none;
+        align-items: center;
+        width: fit-content;
+        margin-top: 0;
+        position: relative;
+        color: #4c1d95;
+        font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      }
+
+      .quickvint-lang-title-host {
+        display: flex !important;
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 10px;
+      }
+
+      .quickvint-lang-trigger {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        height: 28px;
+        padding: 0 9px;
+        border: 1px solid #ddd6fe;
+        border-radius: 8px;
+        background: #f8f7ff;
+        color: #312e81;
+        cursor: pointer;
+        font-size: 12px;
+        font-weight: 700;
+        outline: none;
+      }
+
+      .quickvint-lang-trigger::after {
+        content: "";
+        width: 6px;
+        height: 6px;
+        border-right: 1.5px solid currentColor;
+        border-bottom: 1.5px solid currentColor;
+        transform: rotate(45deg) translateY(-2px);
+      }
+
+      .quickvint-lang-menu {
+        display: none;
+        position: fixed;
+        z-index: 2147483647;
+        min-width: 92px;
+        max-height: 240px;
+        overflow-y: auto;
+        padding: 2px 0;
+        border: 1px solid #c7d2fe;
+        border-radius: 6px;
+        background: #ffffff;
+        box-shadow: 0 8px 18px rgba(17, 24, 39, 0.14);
+      }
+
+      .quickvint-lang-field.open .quickvint-lang-menu {
+        display: block;
+      }
+
+      .quickvint-lang-option {
+        display: flex;
+        align-items: center;
+        gap: 7px;
+        width: 100%;
+        margin: 0;
+        padding: 6px 9px;
+        border: 0 !important;
+        border-radius: 0;
+        background: transparent !important;
+        box-shadow: none !important;
+        color: #1f2937;
+        cursor: pointer;
+        font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        font-size: 12px;
+        font-weight: 700;
+        line-height: 1.2;
+        text-align: left;
+        appearance: none;
+        -webkit-appearance: none;
+      }
+
+      .quickvint-lang-option:hover,
+      .quickvint-lang-option.active {
+        background: #eef2ff;
+        color: #3730a3;
+      }
+
+      .quickvint-lang-field img {
+        width: 16px;
+        height: 11px;
+        border-radius: 2px;
+        object-fit: cover;
+        box-shadow: 0 0 0 1px rgba(17, 24, 39, 0.08);
       }
 
       #${BTN_ID}:not(:disabled):hover, #${PHONE_BTN_ID}:not(:disabled):hover {
@@ -653,20 +883,30 @@
         margin: 0 0 20px;
         display: flex;
         justify-content: center;
+        gap: 10px;
+        flex-wrap: wrap;
         position: relative;
       }
       
       #${MODAL_ID} .language-select-wrapper {
         position: relative;
         width: 100%;
-        max-width: 240px;
+        max-width: 180px;
+      }
+
+      #${MODAL_ID} .language-select-label {
+        display: block;
+        margin: 0 0 5px 2px;
+        color: #6b7280;
+        font-size: 11px;
+        font-weight: 700;
+        line-height: 1;
       }
       
       #${MODAL_ID} .modal-flag-icon {
         position: absolute;
         left: 12px;
-        top: 50%;
-        transform: translateY(-50%);
+        top: 30px;
         pointer-events: none;
         z-index: 1;
         width: 20px;
@@ -828,6 +1068,155 @@
     return btn;
   }
 
+  function createInlineLanguageField(label, title, selectId, storageKey) {
+    const field = document.createElement("label");
+    field.className = "quickvint-lang-field";
+    field.title = title;
+
+    const trigger = document.createElement("button");
+    trigger.id = selectId;
+    trigger.type = "button";
+    trigger.className = "quickvint-lang-trigger";
+    trigger.setAttribute("aria-label", title);
+    trigger.addEventListener("click", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      document.querySelectorAll(".quickvint-lang-field.open").forEach((openField) => {
+        if (openField !== field) openField.classList.remove("open");
+      });
+      field.classList.toggle("open");
+      if (field.classList.contains("open")) {
+        positionInlineLanguageMenu(trigger, menu);
+      }
+    });
+
+    const menu = document.createElement("div");
+    menu.className = "quickvint-lang-menu";
+    LANGUAGE_OPTIONS.forEach((lang) => {
+      const option = document.createElement("button");
+      option.type = "button";
+      option.className = "quickvint-lang-option";
+      option.dataset.value = lang.code;
+      option.title = lang.name;
+      option.innerHTML = `<img src="https://flagcdn.com/w40/${lang.flag}.png" alt="${lang.flagAlt}"><span>${lang.shortName}</span>`;
+      option.addEventListener("click", (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        updateInlineLanguageControl(trigger, lang.code);
+        field.classList.remove("open");
+        chrome.storage.local.set({
+          [storageKey]: lang.code,
+        });
+      });
+      menu.appendChild(option);
+    });
+
+    field.appendChild(trigger);
+    field.appendChild(menu);
+    bindInlineLanguageGlobalListeners();
+    return field;
+  }
+
+  function bindInlineLanguageGlobalListeners() {
+    if (inlineLanguageListenersBound) return;
+    inlineLanguageListenersBound = true;
+
+    document.addEventListener("click", closeInlineLanguageMenus);
+    window.addEventListener("scroll", closeInlineLanguageMenus, true);
+    window.addEventListener("resize", closeInlineLanguageMenus);
+  }
+
+  function closeInlineLanguageMenus() {
+    document.querySelectorAll(".quickvint-lang-field.open").forEach((field) => {
+      field.classList.remove("open");
+    });
+  }
+
+  function positionInlineLanguageMenu(trigger, menu) {
+    const rect = trigger.getBoundingClientRect();
+    menu.style.left = `${Math.round(rect.left)}px`;
+    menu.style.top = `${Math.round(rect.bottom + 4)}px`;
+    menu.style.minWidth = `${Math.round(rect.width)}px`;
+  }
+
+  function updateInlineLanguageControl(trigger, languageCode) {
+    const selectedOption = LANGUAGE_OPTIONS.find(
+      (lang) => lang.code === normalizeLanguageCode(languageCode),
+    );
+    if (!selectedOption) return;
+    trigger.dataset.value = selectedOption.code;
+    trigger.innerHTML = `<img src="https://flagcdn.com/w40/${selectedOption.flag}.png" alt="${selectedOption.flagAlt}"><span>${selectedOption.shortName}</span>`;
+    trigger
+      .closest(".quickvint-lang-field")
+      ?.querySelectorAll(".quickvint-lang-option")
+      .forEach((option) => {
+        option.classList.toggle("active", option.dataset.value === selectedOption.code);
+      });
+  }
+
+  function injectFieldLanguageControls() {
+    const titleInput = document.querySelector(SELECTORS.title);
+    const descriptionInput = document.querySelector(SELECTORS.description);
+
+    injectFieldLanguageControl(
+      titleInput,
+      "T",
+      "Title language",
+      TITLE_LANGUAGE_SELECT_ID,
+      "selectedTitleLanguage",
+    );
+    injectFieldLanguageControl(
+      descriptionInput,
+      "D",
+      "Description language",
+      DESCRIPTION_LANGUAGE_SELECT_ID,
+      "selectedDescriptionLanguage",
+    );
+    syncInlineLanguageControls();
+  }
+
+  function injectFieldLanguageControl(input, label, title, selectId, storageKey) {
+    if (!input || document.getElementById(selectId)) return;
+    const fieldLabel = input.closest("label");
+    const titleNode =
+      fieldLabel?.querySelector('[data-testid$="--title"]') ||
+      fieldLabel?.querySelector('[class*="Input__title"]');
+    if (!titleNode) return;
+    titleNode.classList.add("quickvint-lang-title-host");
+    titleNode.appendChild(
+      createInlineLanguageField(label, title, selectId, storageKey),
+    );
+  }
+
+  function syncInlineLanguageControls(root = document) {
+    chrome.storage.local.get(
+      ["selectedLanguage", "selectedTitleLanguage", "selectedDescriptionLanguage"],
+      ({
+        selectedLanguage = "en",
+        selectedTitleLanguage,
+        selectedDescriptionLanguage,
+      }) => {
+        const fallbackLanguage = normalizeLanguageCode(selectedLanguage);
+        const titleTrigger = root.querySelector(`#${TITLE_LANGUAGE_SELECT_ID}`);
+        const descriptionTrigger = root.querySelector(
+          `#${DESCRIPTION_LANGUAGE_SELECT_ID}`,
+        );
+        if (titleTrigger) {
+          updateInlineLanguageControl(
+            titleTrigger,
+            selectedTitleLanguage || fallbackLanguage,
+          );
+        }
+        if (descriptionTrigger) {
+          updateInlineLanguageControl(
+            descriptionTrigger,
+            selectedDescriptionLanguage || fallbackLanguage,
+          );
+        }
+      },
+    );
+  }
+
   function createSignInComponent() {
     const btn = document.createElement("button");
     btn.id = SIGN_IN_BTN_ID;
@@ -846,11 +1235,20 @@
   }
 
   function updateButtonUI() {
+    const titleLanguageField = document
+      .getElementById(TITLE_LANGUAGE_SELECT_ID)
+      ?.closest(".quickvint-lang-field");
+    const descriptionLanguageField = document
+      .getElementById(DESCRIPTION_LANGUAGE_SELECT_ID)
+      ?.closest(".quickvint-lang-field");
+
     // If not authenticated, show premium sign-in button and hide others
     if (!isAuthenticated) {
       if (signInBtn) signInBtn.style.display = "flex";
       if (generateBtn) generateBtn.style.display = "none";
       if (phoneBtn) phoneBtn.style.display = "none";
+      if (titleLanguageField) titleLanguageField.style.display = "none";
+      if (descriptionLanguageField) descriptionLanguageField.style.display = "none";
       return;
     }
 
@@ -858,6 +1256,10 @@
     if (signInBtn) signInBtn.style.display = "none";
     if (generateBtn) generateBtn.style.display = "flex";
     if (phoneBtn) phoneBtn.style.display = "flex";
+    if (titleLanguageField) titleLanguageField.style.display = "inline-flex";
+    if (descriptionLanguageField) {
+      descriptionLanguageField.style.display = "inline-flex";
+    }
 
     if (!generateBtn) return;
     const label = generateBtn.querySelector(".label");
@@ -916,41 +1318,38 @@
 
     const uploadUrl = `${PHONE_UPLOAD_PAGE}?s=${sessionId}`;
 
-    // Get saved language preference
-    const { selectedLanguage = "en" } =
-      await chrome.storage.local.get("selectedLanguage");
-    const selectedModalLanguage =
-      selectedLanguage === "cs" ? "cz" : selectedLanguage;
+    // Get saved language preferences. Fall back to the legacy single language setting.
+    const {
+      selectedLanguage = "en",
+      selectedTitleLanguage,
+      selectedDescriptionLanguage,
+    } = await chrome.storage.local.get([
+      "selectedLanguage",
+      "selectedTitleLanguage",
+      "selectedDescriptionLanguage",
+    ]);
+    const selectedModalTitleLanguage = normalizeLanguageCode(
+      selectedTitleLanguage || selectedLanguage,
+    );
+    const selectedModalDescriptionLanguage = normalizeLanguageCode(
+      selectedDescriptionLanguage || selectedLanguage,
+    );
 
-    const languageOptions = [
-      { code: "en", name: "English", flag: "gb", flagAlt: "UK Flag" },
-      { code: "fr", name: "Français", flag: "fr", flagAlt: "French Flag" },
-      { code: "cz", name: "Čeština", flag: "cz", flagAlt: "Czech Flag" },
-      { code: "da", name: "Dansk", flag: "dk", flagAlt: "Danish Flag" },
-      { code: "nl", name: "Nederlands", flag: "nl", flagAlt: "Dutch Flag" },
-      { code: "de", name: "Deutsch", flag: "de", flagAlt: "German Flag" },
-      { code: "el", name: "Ελληνικά", flag: "gr", flagAlt: "Greek Flag" },
-      { code: "hr", name: "Hrvatski", flag: "hr", flagAlt: "Croatian Flag" },
-      { code: "fi", name: "Suomeksi", flag: "fi", flagAlt: "Finnish Flag" },
-      { code: "hu", name: "Magyar", flag: "hu", flagAlt: "Hungarian Flag" },
-      { code: "it", name: "Italiano", flag: "it", flagAlt: "Italian Flag" },
-      { code: "lt", name: "Lietuvių", flag: "lt", flagAlt: "Lithuanian Flag" },
-      { code: "pl", name: "Polski", flag: "pl", flagAlt: "Polish Flag" },
-      { code: "pt", name: "Português", flag: "pt", flagAlt: "Portuguese Flag" },
-      { code: "ro", name: "Română", flag: "ro", flagAlt: "Romanian Flag" },
-      { code: "es", name: "Español", flag: "es", flagAlt: "Spanish Flag" },
-      { code: "sk", name: "Slovenčina", flag: "sk", flagAlt: "Slovak Flag" },
-      { code: "sv", name: "Svenska", flag: "se", flagAlt: "Swedish Flag" },
-    ];
-    const selectedLanguageOption =
-      languageOptions.find((lang) => lang.code === selectedModalLanguage) ||
-      languageOptions[0];
+    const selectedTitleLanguageOption =
+      LANGUAGE_OPTIONS.find((lang) => lang.code === selectedModalTitleLanguage) ||
+      LANGUAGE_OPTIONS[0];
+    const selectedDescriptionLanguageOption =
+      LANGUAGE_OPTIONS.find(
+        (lang) => lang.code === selectedModalDescriptionLanguage,
+      ) ||
+      LANGUAGE_OPTIONS[0];
 
-    const optionsHTML = languageOptions
+    const buildOptionsHTML = (selectedCode) =>
+      LANGUAGE_OPTIONS
       .map(
         (lang) =>
           `<option value="${lang.code}" ${
-            lang.code === selectedLanguageOption.code ? "selected" : ""
+            lang.code === selectedCode ? "selected" : ""
           }>${lang.name}</option>`,
       )
       .join("");
@@ -984,13 +1383,25 @@
         </div>
         <div class="language-selector">
           <div class="language-select-wrapper">
+            <span class="language-select-label">Title</span>
             <img
-              class="modal-flag-icon"
-              src="https://flagcdn.com/w40/${selectedLanguageOption.flag}.png"
-              alt="${selectedLanguageOption.flagAlt}"
+              class="modal-flag-icon modal-title-flag-icon"
+              src="https://flagcdn.com/w40/${selectedTitleLanguageOption.flag}.png"
+              alt="${selectedTitleLanguageOption.flagAlt}"
             />
-            <select class="language-select" id="modal-language-select">
-              ${optionsHTML}
+            <select class="language-select" id="modal-title-language-select">
+              ${buildOptionsHTML(selectedTitleLanguageOption.code)}
+            </select>
+          </div>
+          <div class="language-select-wrapper">
+            <span class="language-select-label">Description</span>
+            <img
+              class="modal-flag-icon modal-description-flag-icon"
+              src="https://flagcdn.com/w40/${selectedDescriptionLanguageOption.flag}.png"
+              alt="${selectedDescriptionLanguageOption.flagAlt}"
+            />
+            <select class="language-select" id="modal-description-language-select">
+              ${buildOptionsHTML(selectedDescriptionLanguageOption.code)}
             </select>
           </div>
         </div>
@@ -1010,22 +1421,34 @@
 
     document.body.appendChild(modal);
 
-    // Setup language selector
-    const languageSelect = modal.querySelector("#modal-language-select");
-    const languageFlag = modal.querySelector(".modal-flag-icon");
-    if (languageSelect) {
+    // Setup language selectors
+    const setupModalLanguageSelect = (selector, flagSelector, storageKey) => {
+      const languageSelect = modal.querySelector(selector);
+      const languageFlag = modal.querySelector(flagSelector);
+      if (!languageSelect) return;
       languageSelect.addEventListener("change", (e) => {
-        const selectedOption = languageOptions.find(
+        const selectedOption = LANGUAGE_OPTIONS.find(
           (lang) => lang.code === e.target.value,
         );
         if (languageFlag && selectedOption) {
           languageFlag.src = `https://flagcdn.com/w40/${selectedOption.flag}.png`;
           languageFlag.alt = selectedOption.flagAlt;
         }
-        // Save the selected language for this session and future use
-        chrome.storage.local.set({ selectedLanguage: e.target.value });
+        chrome.storage.local.set({
+          [storageKey]: e.target.value,
+        });
       });
-    }
+    };
+    setupModalLanguageSelect(
+      "#modal-title-language-select",
+      ".modal-title-flag-icon",
+      "selectedTitleLanguage",
+    );
+    setupModalLanguageSelect(
+      "#modal-description-language-select",
+      ".modal-description-flag-icon",
+      "selectedDescriptionLanguage",
+    );
 
     // Close button handlers
     modal.querySelector(".close-x").addEventListener("click", closeModal);
@@ -1429,15 +1852,26 @@
     try {
       const {
         selectedLanguage = "en",
+        selectedTitleLanguage,
+        selectedDescriptionLanguage,
         tone = "standard",
         useEmojis,
         useBulletPoints = true,
       } = await chrome.storage.local.get([
         "selectedLanguage",
+        "selectedTitleLanguage",
+        "selectedDescriptionLanguage",
         "tone",
         "useEmojis",
         "useBulletPoints",
       ]);
+      const titleLanguageCode = normalizeLanguageCode(
+        selectedTitleLanguage || selectedLanguage,
+      );
+      const descriptionLanguageCode = normalizeLanguageCode(
+        selectedDescriptionLanguage || selectedLanguage,
+      );
+      const legacyLanguageCode = descriptionLanguageCode || titleLanguageCode;
       const { access_token } = await sendMessage({ type: "GET_ACCESS_TOKEN" });
 
       if (!access_token) {
@@ -1457,7 +1891,9 @@
         },
         body: JSON.stringify({
           imageUrls: compressedImages,
-          languageCode: selectedLanguage,
+          languageCode: legacyLanguageCode,
+          titleLanguageCode,
+          descriptionLanguageCode,
           tone,
           useEmojis,
           useBulletPoints,
@@ -1489,17 +1925,7 @@
       }
 
       const { title, description, measurementAdvice } = await response.json();
-      const titleInput = document.querySelector(SELECTORS.title);
-      const descInput = document.querySelector(SELECTORS.description);
-
-      if (titleInput) {
-        titleInput.value = title;
-        titleInput.dispatchEvent(new Event("input", { bubbles: true }));
-      }
-      if (descInput) {
-        descInput.value = description;
-        descInput.dispatchEvent(new Event("input", { bubbles: true }));
-      }
+      VINTED_FIELDS.applyListingContent({ title, description });
 
       setButtonSuccessState();
 
@@ -1525,6 +1951,7 @@
       generateBtn = existingBtn;
       phoneBtn = document.getElementById(PHONE_BTN_ID);
       signInBtn = document.getElementById(SIGN_IN_BTN_ID);
+      injectFieldLanguageControls();
       updateButtonUI();
       return true;
     }
@@ -1554,6 +1981,7 @@
       btnContainer.appendChild(signInBtn);
 
       container.parentNode.insertBefore(btnContainer, container.nextSibling);
+      injectFieldLanguageControls();
       updateButtonUI();
       return true;
     }
@@ -1583,6 +2011,7 @@
     injectStylesheet();
     initializeAuthState();
     startInjectionObserver();
+    scheduleDomCanary();
   }
 
   init();
