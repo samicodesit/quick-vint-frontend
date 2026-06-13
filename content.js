@@ -11,14 +11,9 @@
   const PHONE_UPLOAD_PAGE = `${PHONE_API_BASE}/phone-upload`;
   const PHONE_UPLOAD_API = `${PHONE_API_BASE}/api/phone-upload`;
   const MAX_PHONE_UPLOAD_PREVIEWS = 7;
-  const VINTED_FIELDS = window.QuickVintVintedFields;
-  const DOM_CANARY_STORAGE_KEY = "quickvintDomCanaryLastFailureReport";
-  const DOM_CANARY_SUCCESS_STORAGE_KEY = "quickvintDomCanaryLastSuccessReport";
-  const DOM_CANARY_LAST_RESULT_KEY = "quickvintDomCanaryLastResult";
-  const DOM_CANARY_COOLDOWN_MS = 24 * 60 * 60 * 1000;
   const SELECTORS = {
-    title: VINTED_FIELDS.SELECTORS.title,
-    description: VINTED_FIELDS.SELECTORS.description,
+    title: 'input[data-testid="title--input"]',
+    description: 'textarea[data-testid="description--input"]',
     mediaGrid: '[data-testid="media-upload-grid"], [data-testid="media-select-grid"]',
     mediaPhotoBox: ".photo-box",
     mediaImageWrapper: '[data-testid^="image-wrapper-"]',
@@ -129,26 +124,6 @@
     return code === "cs" ? "cz" : code;
   }
 
-  function isVintedNewItemPage() {
-    return /\/items\/new(?:[/?#]|$)/.test(window.location.pathname);
-  }
-
-  async function getStorageValue(key) {
-    return new Promise((resolve) => {
-      chrome.storage.local.get(key, (data) => resolve(data?.[key]));
-    });
-  }
-
-  async function setStorageValue(values) {
-    return new Promise((resolve) => {
-      chrome.storage.local.set(values, resolve);
-    });
-  }
-
-  function sleep(ms) {
-    return new Promise((resolve) => setTimeout(resolve, ms));
-  }
-
   async function getPricingUrl() {
     return new Promise((resolve) => {
       chrome.storage.local.get(["supabaseSession", "userProfile"], (data) => {
@@ -178,81 +153,6 @@
     return new Promise((resolve) => {
       chrome.runtime.sendMessage(message, resolve);
     });
-  }
-
-  async function reportDomCanaryResult(result) {
-    const now = Date.now();
-    const storageKey = result.ok
-      ? DOM_CANARY_SUCCESS_STORAGE_KEY
-      : DOM_CANARY_STORAGE_KEY;
-    const lastReport = Number(await getStorageValue(storageKey)) || 0;
-    if (now - lastReport < DOM_CANARY_COOLDOWN_MS) return;
-
-    const tokenResponse = await sendMessage({ type: "GET_ACCESS_TOKEN" });
-    const accessToken = tokenResponse?.access_token;
-    if (!accessToken) return;
-
-    try {
-      const response = await fetch(`${API_BASE}/api/dom-canary`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${accessToken}`,
-        },
-        body: JSON.stringify({
-          check: "vinted_listing_field_injection",
-          status: result.ok ? "passed" : "failed",
-          url: window.location.href,
-          path: window.location.pathname,
-          userAgent: navigator.userAgent,
-          result,
-          selectors: {
-            title: SELECTORS.title,
-            description: SELECTORS.description,
-          },
-          extensionVersion: chrome.runtime?.getManifest?.().version,
-          occurredAt: new Date(now).toISOString(),
-        }),
-      });
-
-      if (response.ok) {
-        await setStorageValue({ [storageKey]: now });
-      }
-    } catch (error) {
-      console.warn("QuickVint DOM canary report failed:", error);
-    }
-  }
-
-  async function runDomCanary() {
-    if (!isVintedNewItemPage()) return;
-
-    const deadline = Date.now() + 10000;
-    while (Date.now() < deadline) {
-      const { titleInput, descriptionInput } = VINTED_FIELDS.findListingFields();
-      if (titleInput && descriptionInput) break;
-      await sleep(250);
-    }
-
-    const result = VINTED_FIELDS.testListingContentInjection({
-      title: `__QUICKVINT_CANARY_TITLE_${Date.now()}__`,
-      description: `__QUICKVINT_CANARY_DESCRIPTION_${Date.now()}__`,
-    });
-    const lastResult = {
-      ...result,
-      checkedAt: new Date().toISOString(),
-      url: window.location.href,
-      extensionVersion: chrome.runtime?.getManifest?.().version,
-    };
-
-    await setStorageValue({ [DOM_CANARY_LAST_RESULT_KEY]: lastResult });
-    console.info("QuickVint DOM canary result:", lastResult);
-
-    await reportDomCanaryResult(result);
-  }
-
-  function scheduleDomCanary() {
-    if (!isVintedNewItemPage()) return;
-    setTimeout(runDomCanary, 2000);
   }
 
   /**
@@ -1940,7 +1840,20 @@
       }
 
       const { title, description, measurementAdvice } = await response.json();
-      VINTED_FIELDS.applyListingContent({ title, description });
+      const titleInput = document.querySelector(SELECTORS.title);
+      const descInput = document.querySelector(SELECTORS.description);
+
+      if (titleInput) {
+        titleInput.value = title;
+        titleInput.dispatchEvent(new Event("input", { bubbles: true }));
+      }
+      if (descInput) {
+        const currentDescription = descInput.value || "";
+        descInput.value = currentDescription.trim()
+          ? `${currentDescription.trimEnd()}\n\n${description}`
+          : description;
+        descInput.dispatchEvent(new Event("input", { bubbles: true }));
+      }
 
       setButtonSuccessState();
 
@@ -2026,7 +1939,6 @@
     injectStylesheet();
     initializeAuthState();
     startInjectionObserver();
-    scheduleDomCanary();
   }
 
   init();
