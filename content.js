@@ -1014,7 +1014,6 @@
         field.classList.remove("open");
         chrome.storage.local.set({
           [storageKey]: lang.code,
-          selectedLanguage: lang.code,
         });
       });
       menu.appendChild(option);
@@ -1352,7 +1351,6 @@
         }
         chrome.storage.local.set({
           [storageKey]: e.target.value,
-          selectedLanguage: e.target.value,
         });
       });
     };
@@ -1788,6 +1786,7 @@
       const descriptionLanguageCode = normalizeLanguageCode(
         selectedDescriptionLanguage || selectedLanguage,
       );
+      const legacyLanguageCode = descriptionLanguageCode || titleLanguageCode;
       const { access_token } = await sendMessage({ type: "GET_ACCESS_TOKEN" });
 
       if (!access_token) {
@@ -1807,7 +1806,7 @@
         },
         body: JSON.stringify({
           imageUrls: compressedImages,
-          languageCode: selectedLanguage,
+          languageCode: legacyLanguageCode,
           titleLanguageCode,
           descriptionLanguageCode,
           tone,
