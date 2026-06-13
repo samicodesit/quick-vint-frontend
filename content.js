@@ -1069,7 +1069,7 @@
   }
 
   function createInlineLanguageField(label, title, selectId, storageKey) {
-    const field = document.createElement("label");
+    const field = document.createElement("div");
     field.className = "quickvint-lang-field";
     field.title = title;
 
@@ -1092,6 +1092,9 @@
 
     const menu = document.createElement("div");
     menu.className = "quickvint-lang-menu";
+    menu.addEventListener("mousedown", (event) => event.stopPropagation());
+    menu.addEventListener("click", (event) => event.stopPropagation());
+    menu.addEventListener("wheel", (event) => event.stopPropagation());
     LANGUAGE_OPTIONS.forEach((lang) => {
       const option = document.createElement("button");
       option.type = "button";
@@ -1126,7 +1129,14 @@
     window.addEventListener("resize", closeInlineLanguageMenus);
   }
 
-  function closeInlineLanguageMenus() {
+  function closeInlineLanguageMenus(event) {
+    const target = event?.target;
+    if (
+      target instanceof Element &&
+      target.closest(".quickvint-lang-field")
+    ) {
+      return;
+    }
     document.querySelectorAll(".quickvint-lang-field.open").forEach((field) => {
       field.classList.remove("open");
     });
