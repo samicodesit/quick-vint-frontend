@@ -553,12 +553,17 @@
         text-align: left;
         appearance: none;
         -webkit-appearance: none;
+        transition: background-color 120ms ease, color 120ms ease;
       }
 
-      .quickvint-lang-option:hover,
       .quickvint-lang-option.active {
         background: #eef2ff;
         color: #3730a3;
+      }
+
+      .quickvint-lang-option:hover {
+        background: #f6f7ff !important;
+        color: #312e81;
       }
 
       .quickvint-lang-field img {
