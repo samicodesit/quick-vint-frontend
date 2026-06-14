@@ -15,6 +15,7 @@ document.addEventListener("DOMContentLoaded", () => {
     credits: 20,
     price: "€5.99",
   };
+  const LOW_REMAINING_RATIO = 0.2;
 
   const TIER_DISPLAY_NAMES = {
     free: "Free Plan",
@@ -201,6 +202,10 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   }
 
+  function hasLowRemaining(remaining, total) {
+    return total > 0 && remaining / total <= LOW_REMAINING_RATIO;
+  }
+
   function restoreSignOutButtonContent(button) {
     if (!button) return;
     button.disabled = false;
@@ -335,6 +340,7 @@ document.addEventListener("DOMContentLoaded", () => {
         monthlyPercent: 0,
         packCredits,
         freeRemaining: Math.max(0, freeLimit - freeUsed),
+        freeLimit,
       });
       return;
     }
@@ -382,6 +388,7 @@ document.addEventListener("DOMContentLoaded", () => {
     monthlyPercent,
     packCredits,
     freeRemaining,
+    freeLimit,
     isLegacy,
     hasDailyLimit = true,
   }) {
@@ -390,18 +397,18 @@ document.addEventListener("DOMContentLoaded", () => {
     setCreditPackVisibility(false);
 
     if (tier === "free") {
-      if (usageLimitNote && packCredits > 0) {
-        usageLimitNote.textContent = `Credit pack: ${packCredits} top-up credits available.`;
-        usageLimitNote.style.display = "block";
+      const isLowFreeUsage = hasLowRemaining(freeRemaining, freeLimit);
+      const isLowCreditBalance =
+        packCredits > 0 && hasLowRemaining(packCredits, CREDIT_PACK.credits);
+
+      if (packCredits === 0 || isLowFreeUsage || isLowCreditBalance) {
+        setCreditPackVisibility(
+          true,
+          packCredits > 0
+            ? `Buy another ${CREDIT_PACK.credits} credits`
+            : `Buy ${CREDIT_PACK.credits} credits - ${CREDIT_PACK.price} one-time`,
+        );
       }
-      const isNearFreeLimit = freeRemaining <= 1;
-      setCreditPackVisibility(
-        true,
-        packCredits > 0
-          ? `Buy another ${CREDIT_PACK.credits} credits`
-          : `Buy ${CREDIT_PACK.credits} credits - ${CREDIT_PACK.price} one-time`,
-        { showSeparator: isNearFreeLimit || packCredits > 0 },
-      );
       return;
     }
 
@@ -409,23 +416,22 @@ document.addEventListener("DOMContentLoaded", () => {
     const isNearLimit =
       (hasDailyLimit && dailyPercent >= 80) || monthlyPercent >= 80;
     const hasCredits = packCredits > 0;
-
-    if (hasCredits && usageLimitNote) {
-      usageLimitNote.textContent = `Credit pack: ${packCredits} top-up credits available.`;
-      usageLimitNote.style.display = "block";
-    }
+    const isLowCreditBalance =
+      hasCredits && hasLowRemaining(packCredits, CREDIT_PACK.credits);
+    const shouldShowTopUp = isNearLimit && (!hasCredits || isLowCreditBalance);
 
     if (tier === "business") {
-      if (isNearLimit && usageLimitNote) {
-        usageLimitNote.textContent = hasCredits
-          ? `Credit pack: ${packCredits} top-up credits available.`
-          : "Business usage is high. Top-up credits are available if you need extra listings this cycle.";
+      if (shouldShowTopUp && usageLimitNote) {
+        usageLimitNote.textContent =
+          "Business usage is high. Top-up credits are available if you need extra listings this cycle.";
         usageLimitNote.style.display = "block";
       }
-      if (isNearLimit) {
+      if (shouldShowTopUp) {
         setCreditPackVisibility(
           true,
-          `Buy ${CREDIT_PACK.credits} extra credits`,
+          hasCredits
+            ? `Buy another ${CREDIT_PACK.credits} credits`
+            : `Buy ${CREDIT_PACK.credits} extra credits`,
         );
       }
       return;
@@ -442,12 +448,14 @@ document.addEventListener("DOMContentLoaded", () => {
       }
       setPaidUpgradeButton(tier);
       if (paidUpgradeBtn) paidUpgradeBtn.classList.remove("hidden");
-      setCreditPackVisibility(
-        true,
-        hasCredits
-          ? `Buy another ${CREDIT_PACK.credits} credits`
-          : `Buy ${CREDIT_PACK.credits} extra credits`,
-      );
+      if (shouldShowTopUp) {
+        setCreditPackVisibility(
+          true,
+          hasCredits
+            ? `Buy another ${CREDIT_PACK.credits} credits`
+            : `Buy ${CREDIT_PACK.credits} extra credits`,
+        );
+      }
     }
   }
 
