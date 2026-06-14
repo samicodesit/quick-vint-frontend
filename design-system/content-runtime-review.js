@@ -26,7 +26,7 @@
       id: "signed-out",
       title: "Signed out controls",
       note: "Real sign-in state from content.js.",
-      height: 330,
+      height: 390,
       auth: false,
       action: "none",
       openLanguage: false,
@@ -37,10 +37,24 @@
       },
     },
     {
+      id: "missing-photo",
+      title: "Missing photo error",
+      note: "Real validation toast before the API is called.",
+      height: 360,
+      auth: true,
+      action: "generate-missing-photo",
+      hasImages: false,
+      verify(doc) {
+        return /Please upload at least one image/.test(
+          doc.querySelector("#quickvint-toast")?.textContent || "",
+        );
+      },
+    },
+    {
       id: "signed-in",
       title: "Signed in controls + language dropdown",
       note: "Real injected buttons and real language dropdown behavior.",
-      height: 560,
+      height: 620,
       auth: true,
       action: "open-title-language",
       hasImages: true,
@@ -55,7 +69,7 @@
       id: "success",
       title: "Successful generation",
       note: "Clicks Generate against a mocked successful /api/generate response.",
-      height: 430,
+      height: 500,
       auth: true,
       action: "generate-success",
       hasImages: true,
@@ -67,7 +81,7 @@
       id: "free-limit",
       title: "Free limit paywall",
       note: "Real 429 handling path for free users.",
-      height: 370,
+      height: 430,
       auth: true,
       action: "generate-free-limit",
       hasImages: true,
@@ -89,7 +103,7 @@
       id: "paid-limit",
       title: "Paid plan limit paywall",
       note: "Real monthly limit path for Starter users.",
-      height: 370,
+      height: 430,
       auth: true,
       action: "generate-paid-limit",
       hasImages: true,
@@ -112,7 +126,7 @@
       id: "business-limit",
       title: "Business top-up prompt",
       note: "Real monthly limit path for Business users.",
-      height: 370,
+      height: 430,
       auth: true,
       action: "generate-business-limit",
       hasImages: true,
@@ -131,15 +145,22 @@
       },
     },
     {
-      id: "missing-photo",
-      title: "Missing photo error",
-      note: "Real validation toast before the API is called.",
-      height: 260,
+      id: "service-error",
+      title: "Temporary service error",
+      note: "Real non-paywall 429 handling for temporary backend issues.",
+      height: 360,
       auth: true,
-      action: "generate-missing-photo",
-      hasImages: false,
+      action: "generate-service-error",
+      hasImages: true,
+      generateResponse: {
+        status: 429,
+        body: {
+          code: "service_unavailable",
+          error: "Service temporarily unavailable. Please try again later.",
+        },
+      },
       verify(doc) {
-        return /Please upload at least one image/.test(
+        return /Service temporarily unavailable/.test(
           doc.querySelector("#quickvint-toast")?.textContent || "",
         );
       },
@@ -384,6 +405,12 @@
       const scenario = ${JSON.stringify(scenario)};
       const storage = ${JSON.stringify(storage)};
       const listeners = [];
+      const nativeSetTimeout = window.setTimeout.bind(window);
+
+      window.setTimeout = (callback, delay, ...args) => {
+        const reviewDelay = delay === 4000 ? 60000 : delay;
+        return nativeSetTimeout(callback, reviewDelay, ...args);
+      };
 
       function clone(value) {
         return value == null ? value : JSON.parse(JSON.stringify(value));
@@ -474,7 +501,8 @@
           scenario.action === "generate-free-limit" ||
           scenario.action === "generate-paid-limit" ||
           scenario.action === "generate-business-limit" ||
-          scenario.action === "generate-missing-photo"
+          scenario.action === "generate-missing-photo" ||
+          scenario.action === "generate-service-error"
         ) {
           generate?.click();
         }
