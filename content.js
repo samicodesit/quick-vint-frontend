@@ -126,6 +126,43 @@
     }
   }
 
+  function showLimitPaywall({ title, message, actionText, actionUrl }) {
+    let toast = document.getElementById("quickvint-toast");
+    if (!toast) {
+      toast = document.createElement("div");
+      toast.id = "quickvint-toast";
+      document.body.appendChild(toast);
+    }
+
+    toast.innerHTML = `
+      <div class="paywall-mark" aria-hidden="true">AI</div>
+      <div class="paywall-body">
+        <div class="paywall-title">${title}</div>
+        <div class="paywall-message">${message}</div>
+        <a class="paywall-action" href="${actionUrl}" target="_blank" rel="noopener noreferrer">${actionText}</a>
+      </div>
+      <button class="toast-close paywall-close" aria-label="Close">×</button>
+    `;
+
+    toast.className = "paywall";
+    toast.style.visibility = "visible";
+
+    const closeBtn = toast.querySelector(".toast-close");
+    if (closeBtn) {
+      closeBtn.onclick = () => {
+        toast.classList.remove("visible");
+        if (window.quickvintToastTimeout)
+          clearTimeout(window.quickvintToastTimeout);
+      };
+    }
+
+    toast.offsetHeight;
+    toast.classList.add("visible");
+
+    if (window.quickvintToastTimeout)
+      clearTimeout(window.quickvintToastTimeout);
+  }
+
   function normalizeLanguageCode(code) {
     return code === "cs" ? "cz" : code;
   }
@@ -180,6 +217,7 @@
       return {
         message: "Too many requests at once. Please wait a moment and try again.",
         actionText: null,
+        paywall: false,
       };
     }
 
@@ -187,32 +225,39 @@
       return {
         message: limitData.error || "Service temporarily unavailable. Please try again later.",
         actionText: null,
+        paywall: false,
       };
     }
 
     if (code === "free_lifetime_limit") {
       return {
+        title: "Free limit reached",
         message:
-          "Free listing limit reached. Upgrade to Starter or buy top-up credits when you need a one-time boost.",
-        actionText: "View Options",
+          "You used your free listings. Upgrade to Starter for more each month, or buy one-time credits for a small top-up.",
+        actionText: "View options",
+        paywall: true,
       };
     }
 
     if (currentTier === "business") {
       return {
+        title: "Limit reached",
         message:
           code === "monthly_limit" || code === "daily_limit"
-            ? "Business limit reached. Manage billing or buy top-up credits if you need extra listings."
+            ? "You can manage billing or buy top-up credits if you need extra listings this cycle."
             : limitData.error || "Usage limit reached.",
         actionText:
           code === "monthly_limit" || code === "daily_limit"
-            ? "Manage Plan"
+            ? "View options"
             : null,
+        paywall: code === "monthly_limit" || code === "daily_limit",
       };
     }
 
     if (nextPlan) {
       const scopeText = code === "monthly_limit" ? "monthly" : "daily";
+      const titleText =
+        code === "monthly_limit" ? "Monthly limit reached" : "Daily limit reached";
       const nextLimit =
         code === "monthly_limit"
           ? `${nextPlan.monthly}/month`
@@ -221,14 +266,18 @@
             : `${nextPlan.daily}/day`;
 
       return {
-        message: `${currentPlan.name} ${scopeText} limit reached. Upgrade to ${nextPlan.name} for ${nextLimit}.`,
+        title: titleText,
+        message: `Your ${currentPlan.name} ${scopeText} limit is used. Upgrade to ${nextPlan.name} for ${nextLimit}, or choose one-time credits on the pricing page.`,
         actionText: `Upgrade to ${nextPlan.name}`,
+        paywall: true,
       };
     }
 
     return {
       message: limitData.error || "You have exceeded your daily/monthly usage limit.",
       actionText: "Upgrade Plan",
+      paywall: true,
+      title: "Usage limit reached",
     };
   }
 
@@ -985,6 +1034,18 @@
         box-shadow: 0 10px 25px -5px rgba(5, 150, 105, 0.4), 0 8px 10px -6px rgba(5, 150, 105, 0.2);
       }
 
+      #quickvint-toast.paywall {
+        background: #ffffff;
+        color: #111827;
+        border: 1px solid rgba(17, 24, 39, 0.08);
+        border-radius: 16px;
+        padding: 16px;
+        min-width: 340px;
+        max-width: 390px;
+        gap: 12px;
+        box-shadow: 0 24px 70px rgba(17, 24, 39, 0.18), 0 8px 22px rgba(79, 70, 229, 0.12);
+      }
+
       #quickvint-toast.visible {
         opacity: 1;
         visibility: visible;
@@ -999,6 +1060,60 @@
       #quickvint-toast .toast-content {
         flex: 1;
         /* Allow wrapping normally */
+      }
+
+      #quickvint-toast.paywall .paywall-mark {
+        flex: 0 0 auto;
+        width: 34px;
+        height: 34px;
+        border-radius: 10px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: linear-gradient(135deg, #eef2ff 0%, #ecfdf5 100%);
+        color: #4f46e5;
+        font-size: 12px;
+        font-weight: 800;
+        letter-spacing: 0.02em;
+      }
+
+      #quickvint-toast.paywall .paywall-body {
+        flex: 1;
+        min-width: 0;
+      }
+
+      #quickvint-toast.paywall .paywall-title {
+        margin: 1px 0 4px;
+        color: #111827;
+        font-size: 15px;
+        font-weight: 800;
+        letter-spacing: 0;
+      }
+
+      #quickvint-toast.paywall .paywall-message {
+        color: #5b6472;
+        font-size: 13px;
+        line-height: 1.45;
+        margin-bottom: 12px;
+      }
+
+      #quickvint-toast.paywall .paywall-action {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-height: 34px;
+        padding: 0 13px;
+        border-radius: 9px;
+        background: #111827;
+        color: #ffffff;
+        text-decoration: none;
+        font-size: 13px;
+        font-weight: 800;
+        box-shadow: 0 10px 22px rgba(17, 24, 39, 0.18);
+      }
+
+      #quickvint-toast.paywall .paywall-action:hover {
+        background: #1f2937;
       }
 
       #quickvint-toast .toast-close {
@@ -1023,6 +1138,15 @@
       #quickvint-toast .toast-close:hover {
         background: rgba(255,255,255,0.15);
         color: #ffffff;
+      }
+
+      #quickvint-toast.paywall .toast-close {
+        color: #9ca3af;
+      }
+
+      #quickvint-toast.paywall .toast-close:hover {
+        background: #f3f4f6;
+        color: #111827;
       }
 
       /* Icons are emojis, but if we use text/svg later, ensure they pop */
@@ -1911,11 +2035,22 @@
         const errData = await response.json();
         const limitMessage = buildLimitMessage(errData);
         const pricingUrl = limitMessage.actionText ? await getPricingUrl() : null;
-        showToast(
-          limitMessage.message,
-          "error",
-          pricingUrl ? { text: limitMessage.actionText, url: pricingUrl } : null,
-        );
+        if (limitMessage.paywall && pricingUrl) {
+          showLimitPaywall({
+            title: limitMessage.title || "Usage limit reached",
+            message: limitMessage.message,
+            actionText: limitMessage.actionText,
+            actionUrl: pricingUrl,
+          });
+        } else {
+          showToast(
+            limitMessage.message,
+            "error",
+            pricingUrl
+              ? { text: limitMessage.actionText, url: pricingUrl }
+              : null,
+          );
+        }
         isBusy = false;
         updateButtonUI();
         return;
