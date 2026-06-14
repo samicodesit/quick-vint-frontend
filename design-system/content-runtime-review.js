@@ -1,0 +1,518 @@
+(async () => {
+  const statusEl = document.getElementById("sourceStatus");
+  const warningEl = document.getElementById("loadWarning");
+  const contentUrl = new URL("../content.js", window.location.href).href;
+
+  const imageDataUrl =
+    "data:image/svg+xml;charset=utf-8," +
+    encodeURIComponent(`
+      <svg xmlns="http://www.w3.org/2000/svg" width="320" height="320" viewBox="0 0 320 320">
+        <defs>
+          <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
+            <stop offset="0" stop-color="#e0f2fe"/>
+            <stop offset="1" stop-color="#ede9fe"/>
+          </linearGradient>
+        </defs>
+        <rect width="320" height="320" rx="28" fill="url(#g)"/>
+        <rect x="62" y="78" width="196" height="210" rx="24" fill="#ffffff"/>
+        <path d="M104 118h112v40H104z" fill="#c4b5fd"/>
+        <path d="M92 194h136" stroke="#94a3b8" stroke-width="14" stroke-linecap="round"/>
+        <path d="M92 228h102" stroke="#cbd5e1" stroke-width="14" stroke-linecap="round"/>
+      </svg>
+    `);
+
+  const scenarios = [
+    {
+      id: "signed-out",
+      title: "Signed out controls",
+      note: "Real sign-in state from content.js.",
+      height: 330,
+      auth: false,
+      action: "none",
+      openLanguage: false,
+      hasImages: true,
+      verify(doc) {
+        const signIn = doc.getElementById("quickvint-signin-btn");
+        return !!signIn && getComputedStyle(signIn).display !== "none";
+      },
+    },
+    {
+      id: "signed-in",
+      title: "Signed in controls + language dropdown",
+      note: "Real injected buttons and real language dropdown behavior.",
+      height: 560,
+      auth: true,
+      action: "open-title-language",
+      hasImages: true,
+      verify(doc) {
+        return !!(
+          doc.getElementById("quickvint-gen-btn") &&
+          doc.getElementById("quickvint-phone-btn") &&
+          doc.querySelector(".quickvint-lang-field.open .quickvint-lang-menu")
+        );
+      },
+    },
+    {
+      id: "success",
+      title: "Successful generation",
+      note: "Clicks Generate against a mocked successful /api/generate response.",
+      height: 430,
+      auth: true,
+      action: "generate-success",
+      hasImages: true,
+      verify(doc) {
+        return doc.querySelector('[data-testid="title--input"]')?.value === "Vintage denim jacket";
+      },
+    },
+    {
+      id: "free-limit",
+      title: "Free limit paywall",
+      note: "Real 429 handling path for free users.",
+      height: 370,
+      auth: true,
+      action: "generate-free-limit",
+      hasImages: true,
+      generateResponse: {
+        status: 429,
+        body: {
+          code: "free_lifetime_limit",
+          currentTier: "free",
+        },
+      },
+      verify(doc) {
+        return /Free limit reached/.test(doc.querySelector("#quickvint-toast")?.textContent || "");
+      },
+    },
+    {
+      id: "paid-limit",
+      title: "Paid plan limit paywall",
+      note: "Real monthly limit path for Starter users.",
+      height: 370,
+      auth: true,
+      action: "generate-paid-limit",
+      hasImages: true,
+      generateResponse: {
+        status: 429,
+        body: {
+          code: "monthly_limit",
+          currentTier: "starter",
+          nextTier: "pro",
+        },
+      },
+      verify(doc) {
+        return /Monthly limit reached/.test(doc.querySelector("#quickvint-toast")?.textContent || "");
+      },
+    },
+    {
+      id: "business-limit",
+      title: "Business top-up prompt",
+      note: "Real monthly limit path for Business users.",
+      height: 370,
+      auth: true,
+      action: "generate-business-limit",
+      hasImages: true,
+      generateResponse: {
+        status: 429,
+        body: {
+          code: "monthly_limit",
+          currentTier: "business",
+        },
+      },
+      verify(doc) {
+        return /Limit reached/.test(doc.querySelector("#quickvint-toast")?.textContent || "");
+      },
+    },
+    {
+      id: "missing-photo",
+      title: "Missing photo error",
+      note: "Real validation toast before the API is called.",
+      height: 260,
+      auth: true,
+      action: "generate-missing-photo",
+      hasImages: false,
+      verify(doc) {
+        return /Please upload at least one image/.test(
+          doc.querySelector("#quickvint-toast")?.textContent || "",
+        );
+      },
+    },
+  ];
+
+  function escapeAttr(value) {
+    return String(value)
+      .replace(/&/g, "&amp;")
+      .replace(/"/g, "&quot;")
+      .replace(/</g, "&lt;");
+  }
+
+  function renderPanels() {
+    const grid = document.getElementById("previewGrid");
+    grid.innerHTML = scenarios
+      .map((scenario) => {
+        const wide = scenario.id === "signed-in" || scenario.id === "success";
+        return `
+          <article class="ds-panel${wide ? " wide" : ""}">
+            <div class="ds-panel-head">
+              <div>
+                <h2 class="ds-panel-title">${scenario.title}</h2>
+                <p class="ds-panel-note">${scenario.note}</p>
+              </div>
+              <span class="ds-scenario-badge" data-scenario-badge="${escapeAttr(scenario.id)}">runtime</span>
+            </div>
+            <div class="ds-stage">
+              <iframe
+                class="ds-frame"
+                title="${escapeAttr(scenario.title)}"
+                data-scenario-id="${escapeAttr(scenario.id)}"
+                style="height: ${scenario.height}px"
+              ></iframe>
+            </div>
+          </article>
+        `;
+      })
+      .join("");
+  }
+
+  function scenarioStorage(scenario) {
+    return {
+      supabaseSession: scenario.auth
+        ? {
+            access_token: `preview-token-${scenario.id}`,
+            user: { email: "preview@autolister.app" },
+          }
+        : null,
+      userProfile: {
+        subscription_tier:
+          scenario.id === "paid-limit"
+            ? "starter"
+            : scenario.id === "business-limit"
+              ? "business"
+              : "free",
+      },
+      selectedLanguage: "en",
+      selectedTitleLanguage: "en",
+      selectedDescriptionLanguage: "nl",
+      tone: "standard",
+      useEmojis: false,
+      useBulletPoints: true,
+    };
+  }
+
+  function mockVintedMarkup({ hasImages }) {
+    const media = hasImages
+      ? `
+        <section data-testid="media-upload-grid" class="mock-media-grid">
+          <div class="photo-box">
+            <div data-testid="image-wrapper-0">
+              <img class="web_ui__Image__content" src="${imageDataUrl}" alt="Uploaded photo 1" />
+            </div>
+          </div>
+          <div class="photo-box">
+            <div data-testid="image-wrapper-1">
+              <img class="web_ui__Image__content" src="${imageDataUrl}" alt="Uploaded photo 2" />
+            </div>
+          </div>
+        </section>
+      `
+      : `
+        <section data-testid="media-upload-grid" class="mock-media-grid empty">
+          <div class="mock-empty-photo">No photos</div>
+        </section>
+      `;
+
+    return `
+      <main class="mock-page">
+        <div class="mock-card">
+          <div class="mock-card-title">Vinted item listing</div>
+          ${media}
+          <label class="mock-field">
+            <div data-testid="title--title" class="mock-field-title">Title</div>
+            <div class="mock-input-shell">
+              <input data-testid="title--input" class="mock-input" value="" placeholder="Item title" />
+            </div>
+          </label>
+          <label class="mock-field">
+            <div data-testid="description--title" class="mock-field-title">Description</div>
+            <div class="mock-input-shell">
+              <textarea data-testid="description--input" class="mock-textarea" placeholder="Describe your item"></textarea>
+            </div>
+          </label>
+        </div>
+      </main>
+    `;
+  }
+
+  function frameHtml(scenario) {
+    const storage = scenarioStorage(scenario);
+    return `<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    * { box-sizing: border-box; }
+    html, body {
+      margin: 0;
+      min-height: 100%;
+      overflow: hidden;
+      background: #f8fafc;
+      color: #111827;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      -webkit-font-smoothing: antialiased;
+    }
+    .mock-page {
+      min-height: ${scenario.height}px;
+      padding: 16px;
+      background:
+        linear-gradient(90deg, rgba(226, 232, 240, 0.74) 1px, transparent 1px),
+        linear-gradient(rgba(226, 232, 240, 0.74) 1px, transparent 1px),
+        #f8fafc;
+      background-size: 24px 24px;
+    }
+    .mock-card {
+      width: min(100%, 760px);
+      padding: 16px;
+      border: 1px solid #e5e7eb;
+      border-radius: 8px;
+      background: #ffffff;
+      box-shadow: 0 10px 26px rgba(15, 23, 42, 0.07);
+    }
+    .mock-card-title {
+      margin-bottom: 12px;
+      color: #111827;
+      font-size: 14px;
+      font-weight: 800;
+    }
+    .mock-media-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 70px);
+      gap: 10px;
+      margin-bottom: 16px;
+    }
+    .photo-box,
+    .mock-empty-photo {
+      width: 70px;
+      height: 70px;
+      display: grid;
+      place-items: center;
+      border: 1px solid #dbe3f0;
+      border-radius: 8px;
+      background: #f1f5f9;
+      overflow: hidden;
+      color: #94a3b8;
+      font-size: 11px;
+      font-weight: 700;
+    }
+    .photo-box img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block;
+    }
+    .mock-field {
+      display: block;
+      margin-top: 14px;
+    }
+    .mock-field-title {
+      margin-bottom: 8px;
+      color: #334155;
+      font-size: 13px;
+      font-weight: 760;
+    }
+    .mock-input,
+    .mock-textarea {
+      width: 100%;
+      border: 1px solid #cbd5e1;
+      border-radius: 8px;
+      background: #ffffff;
+      color: #111827;
+      font: inherit;
+      font-size: 14px;
+      outline: none;
+    }
+    .mock-input {
+      height: 40px;
+      padding: 0 12px;
+    }
+    .mock-textarea {
+      min-height: 74px;
+      padding: 10px 12px;
+      resize: none;
+    }
+    #quickvint-toast {
+      top: 18px !important;
+      right: 18px !important;
+      left: auto !important;
+    }
+    @media (max-width: 560px) {
+      .mock-page { padding: 12px; }
+      .mock-card { padding: 14px; }
+      #quickvint-toast {
+        right: 12px !important;
+        left: 12px !important;
+      }
+    }
+  </style>
+</head>
+<body>
+  ${mockVintedMarkup(scenario)}
+  <script>
+    (() => {
+      const scenario = ${JSON.stringify(scenario)};
+      const storage = ${JSON.stringify(storage)};
+      const listeners = [];
+
+      function clone(value) {
+        return value == null ? value : JSON.parse(JSON.stringify(value));
+      }
+
+      window.chrome = {
+        storage: {
+          local: {
+            get(keys, callback) {
+              let result = {};
+              if (Array.isArray(keys)) {
+                keys.forEach((key) => { result[key] = clone(storage[key]); });
+              } else if (typeof keys === "string") {
+                result[keys] = clone(storage[keys]);
+              } else if (keys && typeof keys === "object") {
+                Object.keys(keys).forEach((key) => {
+                  result[key] = storage[key] === undefined ? keys[key] : clone(storage[key]);
+                });
+              } else {
+                result = clone(storage);
+              }
+              if (callback) callback(result);
+              return Promise.resolve(result);
+            },
+            set(values, callback) {
+              Object.assign(storage, clone(values));
+              if (callback) callback();
+              return Promise.resolve();
+            },
+          },
+          onChanged: {
+            addListener(listener) {
+              listeners.push(listener);
+            },
+          },
+        },
+        runtime: {
+          getManifest() {
+            return { version: "design-system" };
+          },
+          sendMessage(message, callback) {
+            let response = {};
+            if (message && message.type === "GET_ACCESS_TOKEN") {
+              response = { access_token: storage.supabaseSession?.access_token || null };
+            }
+            if (callback) callback(response);
+            return Promise.resolve(response);
+          },
+        },
+      };
+
+      window.fetch = async (url) => {
+        if (String(url).includes("/api/generate")) {
+          const configured = scenario.generateResponse;
+          if (configured) {
+            return new Response(JSON.stringify(configured.body || {}), {
+              status: configured.status,
+              headers: { "Content-Type": "application/json" },
+            });
+          }
+          return new Response(JSON.stringify({
+            title: "Vintage denim jacket",
+            description: "Light blue denim jacket in good condition. Easy to style and ready for everyday wear.",
+            measurementAdvice: "Tip: add measurements if you want fewer buyer questions.",
+          }), {
+            status: 200,
+            headers: { "Content-Type": "application/json" },
+          });
+        }
+
+        return new Response("{}", {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        });
+      };
+
+      window.__runScenario = () => {
+        const generate = document.getElementById("quickvint-gen-btn");
+        if (scenario.action === "open-title-language") {
+          document.getElementById("quickvint-title-language-select")?.click();
+          return;
+        }
+        if (
+          scenario.action === "generate-success" ||
+          scenario.action === "generate-free-limit" ||
+          scenario.action === "generate-paid-limit" ||
+          scenario.action === "generate-business-limit" ||
+          scenario.action === "generate-missing-photo"
+        ) {
+          generate?.click();
+        }
+      };
+    })();
+  </script>
+  <script src="${contentUrl}"></script>
+  <script>
+    window.addEventListener("load", () => {
+      setTimeout(() => window.__runScenario?.(), 450);
+    });
+  </script>
+</body>
+</html>`;
+  }
+
+  function loadScenarioFrame(scenario) {
+    const frame = document.querySelector(`[data-scenario-id="${scenario.id}"]`);
+    if (!frame) return;
+    frame.addEventListener("load", () => {
+      setTimeout(() => verifyScenario(scenario), 1400);
+    });
+    frame.srcdoc = frameHtml(scenario);
+  }
+
+  function verifyScenario(scenario) {
+    const frame = document.querySelector(`[data-scenario-id="${scenario.id}"]`);
+    const badge = document.querySelector(`[data-scenario-badge="${scenario.id}"]`);
+    const panel = frame?.closest(".ds-panel");
+
+    let passed = false;
+    try {
+      passed = !!scenario.verify?.(frame.contentDocument);
+    } catch (error) {
+      console.warn(`Could not verify scenario: ${scenario.id}`, error);
+    }
+
+    if (panel) {
+      panel.classList.toggle("verified", passed);
+      panel.classList.toggle("needs-attention", !passed);
+    }
+    if (badge) {
+      badge.textContent = passed ? "verified" : "check";
+    }
+
+    const verifiedCount = document.querySelectorAll(".ds-panel.verified").length;
+    const total = scenarios.length;
+    statusEl.textContent =
+      verifiedCount === total
+        ? `Real content.js verified in ${total} scenarios`
+        : `Real content.js running: ${verifiedCount}/${total} verified`;
+  }
+
+  try {
+    const response = await fetch(contentUrl, { cache: "no-store" });
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    await response.text();
+
+    renderPanels();
+    scenarios.forEach(loadScenarioFrame);
+    statusEl.textContent = "Real content.js running in isolated scenarios";
+  } catch (error) {
+    warningEl.style.display = "block";
+    statusEl.textContent = "Could not load content.js";
+    console.error(error);
+  }
+})();

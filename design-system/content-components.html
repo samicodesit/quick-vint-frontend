@@ -8,7 +8,7 @@
   <style>
     :root {
       color-scheme: light;
-      --bg: #f4f6fb;
+      --bg: #f6f8fb;
       --ink: #111827;
       --muted: #667085;
       --line: #e5e7eb;
@@ -28,39 +28,39 @@
     }
 
     .ds-shell {
-      width: min(1180px, calc(100vw - 40px));
+      width: min(1220px, calc(100vw - 40px));
       margin: 0 auto;
-      padding: 34px 0 56px;
+      padding: 28px 0 48px;
     }
 
     .ds-header {
       display: flex;
       justify-content: space-between;
       gap: 18px;
-      align-items: flex-end;
-      margin-bottom: 24px;
+      align-items: flex-start;
+      margin-bottom: 20px;
     }
 
     .ds-eyebrow {
       color: #4f46e5;
       font-size: 12px;
       font-weight: 800;
-      letter-spacing: 0.08em;
+      letter-spacing: 0;
       text-transform: uppercase;
       margin-bottom: 8px;
     }
 
     h1 {
       margin: 0;
-      font-size: clamp(28px, 4vw, 44px);
-      line-height: 1.04;
+      font-size: clamp(26px, 3vw, 38px);
+      line-height: 1.08;
       letter-spacing: 0;
     }
 
     .ds-subtitle {
       margin: 10px 0 0;
       color: var(--muted);
-      max-width: 690px;
+      max-width: 760px;
       line-height: 1.55;
       font-size: 15px;
     }
@@ -69,8 +69,8 @@
       flex: 0 0 auto;
       border: 1px solid #dbe3f0;
       background: #fff;
-      border-radius: 999px;
-      padding: 8px 12px;
+      border-radius: 8px;
+      padding: 8px 10px;
       color: #475467;
       font-size: 12px;
       font-weight: 700;
@@ -84,11 +84,19 @@
 
     .ds-panel {
       min-height: 255px;
-      padding: 18px;
+      padding: 14px;
       border: 1px solid var(--line);
-      border-radius: 18px;
+      border-radius: 8px;
       background: var(--panel);
-      box-shadow: 0 18px 46px rgba(17, 24, 39, 0.08);
+      box-shadow: 0 10px 28px rgba(17, 24, 39, 0.06);
+    }
+
+    .ds-panel.verified {
+      border-color: #bbf7d0;
+    }
+
+    .ds-panel.needs-attention {
+      border-color: #fecaca;
     }
 
     .ds-panel.wide {
@@ -100,13 +108,13 @@
       align-items: flex-start;
       justify-content: space-between;
       gap: 12px;
-      margin-bottom: 18px;
+      margin-bottom: 12px;
     }
 
     .ds-panel-title {
       margin: 0;
       font-size: 15px;
-      font-weight: 850;
+      font-weight: 800;
     }
 
     .ds-panel-note {
@@ -120,7 +128,7 @@
       position: relative;
       min-height: 180px;
       overflow: hidden;
-      border-radius: 14px;
+      border-radius: 8px;
       border: 1px solid #edf0f5;
       background: #f8fafc;
     }
@@ -130,6 +138,24 @@
       width: 100%;
       border: 0;
       background: #fff;
+    }
+
+    .ds-scenario-badge {
+      flex: 0 0 auto;
+      border: 1px solid #d1fae5;
+      border-radius: 8px;
+      background: #ecfdf5;
+      color: #047857;
+      padding: 5px 8px;
+      font-size: 11px;
+      font-weight: 800;
+      line-height: 1;
+    }
+
+    .ds-panel.needs-attention .ds-scenario-badge {
+      border-color: #fecaca;
+      background: #fef2f2;
+      color: #b91c1c;
     }
 
     .ds-warning {
@@ -173,9 +199,8 @@
         <div class="ds-eyebrow">Dev-only preview</div>
         <h1>Content Components</h1>
         <p class="ds-subtitle">
-          This page is not packaged into the Chrome extension. It reads the real content script CSS at runtime so the
-          preview follows production component styling without manual CSS updates. Each state is isolated so production
-          IDs and fixed-position styles behave like they do on Vinted.
+          This page is not packaged into the Chrome extension. Each panel runs the real content script inside an
+          isolated mock Vinted page, with fake auth and API responses only where needed to trigger the state.
         </p>
       </div>
       <div class="ds-badge" id="sourceStatus">Loading content.js</div>
@@ -187,80 +212,10 @@
       <code>http://localhost:8080/design-system/content-components.html</code>.
     </p>
 
-    <section class="ds-grid" id="previewGrid">
-      <article class="ds-panel wide">
-        <div class="ds-panel-head">
-          <div>
-            <h2 class="ds-panel-title">On-page controls</h2>
-            <p class="ds-panel-note">Generate, phone upload, sign-in, and title/description language selectors.</p>
-          </div>
-        </div>
-        <div class="ds-stage" data-scenario="controls"></div>
-      </article>
-
-      <article class="ds-panel">
-        <div class="ds-panel-head">
-          <div>
-            <h2 class="ds-panel-title">Free limit paywall</h2>
-            <p class="ds-panel-note">Shown after free listings are used.</p>
-          </div>
-        </div>
-        <div class="ds-stage" data-scenario="free"></div>
-      </article>
-
-      <article class="ds-panel">
-        <div class="ds-panel-head">
-          <div>
-            <h2 class="ds-panel-title">Paid plan limit paywall</h2>
-            <p class="ds-panel-note">Shown for daily/monthly plan limits.</p>
-          </div>
-        </div>
-        <div class="ds-stage" data-scenario="monthly"></div>
-      </article>
-
-      <article class="ds-panel">
-        <div class="ds-panel-head">
-          <div>
-            <h2 class="ds-panel-title">Business limit paywall</h2>
-            <p class="ds-panel-note">Shown when Business needs options/top-up.</p>
-          </div>
-        </div>
-        <div class="ds-stage" data-scenario="business"></div>
-      </article>
-
-      <article class="ds-panel">
-        <div class="ds-panel-head">
-          <div>
-            <h2 class="ds-panel-title">Success toast</h2>
-            <p class="ds-panel-note">Normal completion feedback.</p>
-          </div>
-        </div>
-        <div class="ds-stage" data-scenario="success-toast"></div>
-      </article>
-
-      <article class="ds-panel">
-        <div class="ds-panel-head">
-          <div>
-            <h2 class="ds-panel-title">Info toast</h2>
-            <p class="ds-panel-note">Soft guidance and tips.</p>
-          </div>
-        </div>
-        <div class="ds-stage" data-scenario="info-toast"></div>
-      </article>
-
-      <article class="ds-panel">
-        <div class="ds-panel-head">
-          <div>
-            <h2 class="ds-panel-title">Error toast</h2>
-            <p class="ds-panel-note">Validation and recoverable errors.</p>
-          </div>
-        </div>
-        <div class="ds-stage" data-scenario="error-toast"></div>
-      </article>
-    </section>
+    <section class="ds-grid" id="previewGrid"></section>
   </main>
 
-  <script src="./content-components.js"></script>
+  <script src="./content-runtime-review.js"></script>
 </body>
 
 </html>
