@@ -121,58 +121,15 @@
       min-height: 180px;
       overflow: hidden;
       border-radius: 14px;
-      background:
-        linear-gradient(90deg, rgba(229, 231, 235, 0.7) 1px, transparent 1px),
-        linear-gradient(rgba(229, 231, 235, 0.7) 1px, transparent 1px),
-        #f8fafc;
-      background-size: 24px 24px;
       border: 1px solid #edf0f5;
+      background: #f8fafc;
     }
 
-    .ds-stage .floating {
-      position: absolute !important;
-      top: 24px !important;
-      right: 24px !important;
-      left: auto !important;
-      transform: none !important;
-      opacity: 1 !important;
-      visibility: visible !important;
-    }
-
-    .ds-stage .floating.center {
-      right: 50% !important;
-      transform: translateX(50%) !important;
-    }
-
-    .ds-vinted-form {
-      padding: 18px;
-      background: #fff;
-      border: 1px solid #e5e7eb;
-      border-radius: 14px;
-      max-width: 520px;
-    }
-
-    .ds-label {
-      color: #374151;
-      font-size: 13px;
-      font-weight: 750;
-      margin-bottom: 8px;
-    }
-
-    .ds-input {
+    .ds-frame {
+      display: block;
       width: 100%;
-      height: 42px;
-      border: 1px solid #d1d5db;
-      border-radius: 8px;
+      border: 0;
       background: #fff;
-      margin-bottom: 14px;
-    }
-
-    .ds-component-row {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      flex-wrap: wrap;
     }
 
     .ds-warning {
@@ -217,7 +174,8 @@
         <h1>Content Components</h1>
         <p class="ds-subtitle">
           This page is not packaged into the Chrome extension. It reads the real content script CSS at runtime so the
-          preview follows production component styling without manual CSS updates.
+          preview follows production component styling without manual CSS updates. Each state is isolated so production
+          IDs and fixed-position styles behave like they do on Vinted.
         </p>
       </div>
       <div class="ds-badge" id="sourceStatus">Loading content.js</div>
@@ -237,33 +195,7 @@
             <p class="ds-panel-note">Generate, phone upload, sign-in, and title/description language selectors.</p>
           </div>
         </div>
-        <div class="ds-vinted-form">
-          <div class="ds-label">Title</div>
-          <div class="ds-input"></div>
-          <div class="ds-component-row">
-            <button id="quickvint-gen-btn" type="button">
-              <span class="icon" aria-hidden="true">✦</span>
-              <span class="label">Generate</span>
-            </button>
-            <button id="quickvint-phone-btn" type="button">
-              <span class="icon" aria-hidden="true">▣</span>
-              <span class="label">Phone</span>
-            </button>
-            <button id="quickvint-signin-btn" type="button" style="display: inline-flex; width: auto; margin-top: 0;">
-              Sign in to AutoLister AI
-            </button>
-            <div class="quickvint-lang-field open" style="display: inline-flex;">
-              <button class="quickvint-lang-trigger" type="button">
-                <img src="https://flagcdn.com/w40/gb.png" alt="" /> English
-              </button>
-              <div class="quickvint-lang-menu" style="position: absolute; top: 100%; left: 0;">
-                <button class="quickvint-lang-option active" type="button"><img src="https://flagcdn.com/w40/gb.png" alt="" /> English</button>
-                <button class="quickvint-lang-option" type="button"><img src="https://flagcdn.com/w40/fr.png" alt="" /> Francais</button>
-                <button class="quickvint-lang-option" type="button"><img src="https://flagcdn.com/w40/nl.png" alt="" /> Nederlands</button>
-              </div>
-            </div>
-          </div>
-        </div>
+        <div class="ds-stage" data-scenario="controls"></div>
       </article>
 
       <article class="ds-panel">
@@ -273,7 +205,7 @@
             <p class="ds-panel-note">Shown after free listings are used.</p>
           </div>
         </div>
-        <div class="ds-stage" data-paywall="free"></div>
+        <div class="ds-stage" data-scenario="free"></div>
       </article>
 
       <article class="ds-panel">
@@ -283,7 +215,7 @@
             <p class="ds-panel-note">Shown for daily/monthly plan limits.</p>
           </div>
         </div>
-        <div class="ds-stage" data-paywall="monthly"></div>
+        <div class="ds-stage" data-scenario="monthly"></div>
       </article>
 
       <article class="ds-panel">
@@ -293,17 +225,37 @@
             <p class="ds-panel-note">Shown when Business needs options/top-up.</p>
           </div>
         </div>
-        <div class="ds-stage" data-paywall="business"></div>
+        <div class="ds-stage" data-scenario="business"></div>
       </article>
 
       <article class="ds-panel">
         <div class="ds-panel-head">
           <div>
-            <h2 class="ds-panel-title">Standard toasts</h2>
-            <p class="ds-panel-note">Non-paywall success, info, and error states.</p>
+            <h2 class="ds-panel-title">Success toast</h2>
+            <p class="ds-panel-note">Normal completion feedback.</p>
           </div>
         </div>
-        <div class="ds-stage" id="toastStage"></div>
+        <div class="ds-stage" data-scenario="success-toast"></div>
+      </article>
+
+      <article class="ds-panel">
+        <div class="ds-panel-head">
+          <div>
+            <h2 class="ds-panel-title">Info toast</h2>
+            <p class="ds-panel-note">Soft guidance and tips.</p>
+          </div>
+        </div>
+        <div class="ds-stage" data-scenario="info-toast"></div>
+      </article>
+
+      <article class="ds-panel">
+        <div class="ds-panel-head">
+          <div>
+            <h2 class="ds-panel-title">Error toast</h2>
+            <p class="ds-panel-note">Validation and recoverable errors.</p>
+          </div>
+        </div>
+        <div class="ds-stage" data-scenario="error-toast"></div>
       </article>
     </section>
   </main>
