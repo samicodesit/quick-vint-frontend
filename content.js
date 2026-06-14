@@ -135,11 +135,19 @@
     }
 
     toast.innerHTML = `
-      <div class="paywall-mark" aria-hidden="true">AI</div>
       <div class="paywall-body">
-        <div class="paywall-title">${title}</div>
+        <div class="paywall-header">
+          <div class="paywall-mark" aria-hidden="true">AI</div>
+          <div>
+            <div class="paywall-kicker">AutoLister AI</div>
+            <div class="paywall-title">${title}</div>
+          </div>
+        </div>
         <div class="paywall-message">${message}</div>
-        <a class="paywall-action" href="${actionUrl}" target="_blank" rel="noopener noreferrer">${actionText}</a>
+        <a class="paywall-action" href="${actionUrl}" target="_blank" rel="noopener noreferrer">
+          <span>${actionText}</span>
+          <span aria-hidden="true">→</span>
+        </a>
       </div>
       <button class="toast-close paywall-close" aria-label="Close">×</button>
     `;
@@ -1035,15 +1043,24 @@
       }
 
       #quickvint-toast.paywall {
-        background: #ffffff;
+        background: linear-gradient(180deg, #ffffff 0%, #fbfcff 100%);
         color: #111827;
-        border: 1px solid rgba(17, 24, 39, 0.08);
-        border-radius: 16px;
-        padding: 16px;
-        min-width: 340px;
-        max-width: 390px;
-        gap: 12px;
-        box-shadow: 0 24px 70px rgba(17, 24, 39, 0.18), 0 8px 22px rgba(79, 70, 229, 0.12);
+        border: 1px solid rgba(79, 70, 229, 0.14);
+        border-radius: 18px;
+        padding: 18px;
+        min-width: 360px;
+        max-width: 410px;
+        gap: 10px;
+        box-shadow: 0 26px 80px rgba(17, 24, 39, 0.2), 0 10px 26px rgba(79, 70, 229, 0.14);
+      }
+
+      #quickvint-toast.paywall::before {
+        content: "";
+        position: absolute;
+        inset: 0 0 auto;
+        height: 3px;
+        border-radius: 18px 18px 0 0;
+        background: linear-gradient(90deg, #10b981, #38bdf8, #4f46e5);
       }
 
       #quickvint-toast.visible {
@@ -1064,17 +1081,18 @@
 
       #quickvint-toast.paywall .paywall-mark {
         flex: 0 0 auto;
-        width: 34px;
-        height: 34px;
-        border-radius: 10px;
+        width: 38px;
+        height: 38px;
+        border-radius: 12px;
         display: flex;
         align-items: center;
         justify-content: center;
         background: linear-gradient(135deg, #eef2ff 0%, #ecfdf5 100%);
+        border: 1px solid rgba(79, 70, 229, 0.12);
         color: #4f46e5;
-        font-size: 12px;
+        font-size: 11px;
         font-weight: 800;
-        letter-spacing: 0.02em;
+        letter-spacing: 0;
       }
 
       #quickvint-toast.paywall .paywall-body {
@@ -1082,28 +1100,46 @@
         min-width: 0;
       }
 
+      #quickvint-toast.paywall .paywall-header {
+        display: flex;
+        align-items: center;
+        gap: 11px;
+        margin: 1px 28px 12px 0;
+      }
+
+      #quickvint-toast.paywall .paywall-kicker {
+        color: #667085;
+        font-size: 11px;
+        font-weight: 760;
+        line-height: 1.1;
+        margin-bottom: 3px;
+      }
+
       #quickvint-toast.paywall .paywall-title {
-        margin: 1px 0 4px;
+        margin: 0;
         color: #111827;
-        font-size: 15px;
+        font-size: 16px;
         font-weight: 800;
         letter-spacing: 0;
+        line-height: 1.2;
       }
 
       #quickvint-toast.paywall .paywall-message {
         color: #5b6472;
         font-size: 13px;
-        line-height: 1.45;
-        margin-bottom: 12px;
+        line-height: 1.5;
+        margin: 0 0 14px;
       }
 
       #quickvint-toast.paywall .paywall-action {
         display: inline-flex;
         align-items: center;
         justify-content: center;
-        min-height: 34px;
-        padding: 0 13px;
-        border-radius: 9px;
+        gap: 8px;
+        width: 100%;
+        min-height: 38px;
+        padding: 0 14px;
+        border-radius: 10px;
         background: #111827;
         color: #ffffff;
         text-decoration: none;
@@ -1141,6 +1177,9 @@
       }
 
       #quickvint-toast.paywall .toast-close {
+        position: absolute;
+        top: 12px;
+        right: 12px;
         color: #9ca3af;
       }
 
@@ -1153,6 +1192,21 @@
       #quickvint-toast.error .toast-icon { text-shadow: 0 0 10px rgba(220, 38, 38, 0.5); }
       #quickvint-toast.success .toast-icon { text-shadow: 0 0 10px rgba(5, 150, 105, 0.5); }
       #quickvint-toast.info .toast-icon { text-shadow: 0 0 10px rgba(8, 145, 178, 0.5); }
+
+      @media (max-width: 520px) {
+        #quickvint-toast {
+          top: 16px;
+          right: 12px;
+          left: 12px;
+          min-width: 0;
+          max-width: none;
+        }
+
+        #quickvint-toast.paywall {
+          min-width: 0;
+          max-width: none;
+        }
+      }
     `;
     document.head.appendChild(style);
   }
