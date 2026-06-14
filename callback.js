@@ -2,6 +2,7 @@
   const SUPABASE_URL = "https://jqloiovdwjaornnfvmyu.supabase.co";
   const SUPABASE_ANON_KEY =
     "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImpxbG9pb3Zkd2phb3JubmZ2bXl1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDgyMDgzMzIsImV4cCI6MjA2Mzc4NDMzMn0.iFtkUorY1UqK8zamnwgjB-yhsXe0bJAA8YFm22bzc3A";
+  const API_BASE = "https://autolister.app";
 
   const supabaseFactory = window.supabase || window.supabaseJs;
   if (!supabaseFactory?.createClient) {
@@ -186,7 +187,7 @@
 
     try {
       const response = await fetch(
-        "https://autolister.app/api/stripe/create-checkout",
+        `${API_BASE}/api/stripe/create-checkout`,
         {
           method: "POST",
           headers: {
@@ -225,7 +226,7 @@
     try {
       // Check if user has an active subscription by calling your backend
       const response = await fetch(
-        "https://autolister.app/api/check-subscription",
+        `${API_BASE}/api/check-subscription`,
         {
           method: "POST",
           headers: {
@@ -353,7 +354,7 @@
         try {
           const token = btoa(JSON.stringify(userData));
           window.open(
-            `https://autolister.app/pricing?token=${encodeURIComponent(
+            `${API_BASE}/pricing?token=${encodeURIComponent(
               token,
             )}`,
             "_blank",
@@ -368,7 +369,7 @@
             lang: userData.lang,
           });
           window.open(
-            `https://autolister.app/pricing?${params.toString()}`,
+            `${API_BASE}/pricing?${params.toString()}`,
             "_blank",
           );
         }
@@ -426,7 +427,7 @@
         try {
           const token = btoa(JSON.stringify(userData));
           window.open(
-            `https://autolister.app/pricing?token=${encodeURIComponent(
+            `${API_BASE}/pricing?token=${encodeURIComponent(
               token,
             )}`,
             "_blank",
@@ -441,7 +442,7 @@
             lang: userData.lang,
           });
           window.open(
-            `https://autolister.app/pricing?${params.toString()}`,
+            `${API_BASE}/pricing?${params.toString()}`,
             "_blank",
           );
         }

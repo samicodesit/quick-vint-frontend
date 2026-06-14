@@ -6,8 +6,8 @@
   const TITLE_LANGUAGE_SELECT_ID = "quickvint-title-language-select";
   const DESCRIPTION_LANGUAGE_SELECT_ID = "quickvint-description-language-select";
   const MODAL_ID = "quickvint-phone-modal";
-  const API_BASE = "http://localhost:5000";
-  const PHONE_API_BASE = "http://localhost:5000";
+  const API_BASE = "https://autolister.app";
+  const PHONE_API_BASE = "https://autolister.app";
   const PHONE_UPLOAD_PAGE = `${PHONE_API_BASE}/phone-upload`;
   const PHONE_UPLOAD_API = `${PHONE_API_BASE}/api/phone-upload`;
   const MAX_PHONE_UPLOAD_PREVIEWS = 7;
@@ -48,6 +48,12 @@
   ];
   const WAND_ICON_SVG = `<svg fill="#ffffff" viewBox="0 0 512 512" version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink"> <path d="M454.321,219.727l-38.766-51.947l20.815-61.385c2.046-6.032,0.489-12.704-4.015-17.208 c-4.504-4.504-11.175-6.061-17.208-4.015l-61.384,20.815l-51.951-38.766c-5.103-3.809-11.929-4.392-17.605-1.499 c-5.676,2.893-9.217,8.755-9.136,15.125l0.829,64.815l-52.923,37.426c-5.201,3.678-7.863,9.989-6.867,16.282 c0.996,6.291,5.479,11.471,11.561,13.363l43.844,13.63L14.443,483.432c-6.535,6.534-6.535,17.131,0,23.666s17.131,6.535,23.666,0 l257.073-257.072l13.629,43.843c2.172,6.986,8.638,11.768,15.984,11.768c5.375,0,10.494-2.595,13.66-7.072l37.426-52.923 l64.815,0.828c6.322,0.051,12.233-3.462,15.125-9.136S458.131,224.833,454.321,219.727z"></path> <polygon points="173.373,67.274 160.014,42.848 146.656,67.274 122.23,80.632 146.656,93.992 160.014,118.417 173.373,93.992 197.799,80.632 "></polygon> <polygon points="362.946,384.489 352.14,364.731 341.335,384.489 321.577,395.294 341.335,406.1 352.14,425.856 362.946,406.1 382.703,395.294 "></polygon> <polygon points="378.142,19.757 367.337,0 356.531,19.757 336.774,30.563 356.531,41.369 367.337,61.126 378.142,41.369 397.9,30.563 "></polygon> <polygon points="490.635,142.513 484.167,130.689 477.701,142.513 465.876,148.979 477.701,155.446 484.167,167.27 490.635,155.446 502.458,148.979 "></polygon> <polygon points="492.626,294.117 465.876,301.951 439.128,294.117 446.962,320.865 439.128,347.615 465.876,339.781 492.626,347.615 484.791,320.865 "></polygon> </svg>`;
   const PHONE_ICON_SVG = `<svg fill="#ffffff" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M17 1.01L7 1c-1.1 0-2 .9-2 2v18c0 1.1.9 2 2 2h10c1.1 0 2-.9 2-2V3c0-1.1-.9-1.99-2-1.99zM17 19H7V5h10v14z"/></svg>`;
+  const PLAN_LIMITS = {
+    free: { name: "Free", daily: null, monthly: 5 },
+    starter: { name: "Starter", daily: 10, monthly: 75 },
+    pro: { name: "Pro", daily: 25, monthly: 250 },
+    business: { name: "Business", daily: 60, monthly: 600 },
+  };
 
   // --- STATE ---
   let generateBtn = null;
@@ -135,18 +141,95 @@
             source: "extension",
             signed_in: !!user,
             plan: profile?.subscription_tier || "free",
+            subscription_status: profile?.subscription_status || "free",
             email: user?.email || "",
             timestamp: Date.now(),
           };
           // Simple base64 encode
           const token = btoa(JSON.stringify(userData));
-          resolve(`http://localhost:5000/pricing?token=${token}`);
+          resolve(`${API_BASE}/pricing?token=${token}`);
         } catch (e) {
           console.error("Error building pricing URL:", e);
-          resolve("http://localhost:5000/pricing");
+          resolve(`${API_BASE}/pricing`);
         }
       });
     });
+  }
+
+  function normalizeTier(tier) {
+    const map = {
+      unlimited_monthly: "starter",
+      unlimited_annual: "starter",
+      starter: "starter",
+      pro: "pro",
+      business: "business",
+      free: "free",
+    };
+
+    return map[tier] || "free";
+  }
+
+  function buildLimitMessage(limitData = {}) {
+    const code = limitData.code;
+    const currentTier = normalizeTier(limitData.currentTier);
+    const nextTier = limitData.nextTier ? normalizeTier(limitData.nextTier) : null;
+    const nextPlan = nextTier ? PLAN_LIMITS[nextTier] : null;
+    const currentPlan = PLAN_LIMITS[currentTier] || PLAN_LIMITS.free;
+
+    if (code === "burst_limit") {
+      return {
+        message: "Too many requests at once. Please wait a moment and try again.",
+        actionText: null,
+      };
+    }
+
+    if (code === "service_unavailable") {
+      return {
+        message: limitData.error || "Service temporarily unavailable. Please try again later.",
+        actionText: null,
+      };
+    }
+
+    if (code === "free_lifetime_limit") {
+      return {
+        message:
+          "Free listing limit reached. Upgrade to Starter or buy top-up credits when you need a one-time boost.",
+        actionText: "View Options",
+      };
+    }
+
+    if (currentTier === "business") {
+      return {
+        message:
+          code === "monthly_limit" || code === "daily_limit"
+            ? "Business limit reached. Manage billing or buy top-up credits if you need extra listings."
+            : limitData.error || "Usage limit reached.",
+        actionText:
+          code === "monthly_limit" || code === "daily_limit"
+            ? "Manage Plan"
+            : null,
+      };
+    }
+
+    if (nextPlan) {
+      const scopeText = code === "monthly_limit" ? "monthly" : "daily";
+      const nextLimit =
+        code === "monthly_limit"
+          ? `${nextPlan.monthly}/month`
+          : nextPlan.daily === null
+            ? "no daily cap"
+            : `${nextPlan.daily}/day`;
+
+      return {
+        message: `${currentPlan.name} ${scopeText} limit reached. Upgrade to ${nextPlan.name} for ${nextLimit}.`,
+        actionText: `Upgrade to ${nextPlan.name}`,
+      };
+    }
+
+    return {
+      message: limitData.error || "You have exceeded your daily/monthly usage limit.",
+      actionText: "Upgrade Plan",
+    };
   }
 
   async function sendMessage(message) {
@@ -1803,6 +1886,8 @@
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${access_token}`,
+          "X-Autolister-Extension-Version":
+            chrome.runtime.getManifest().version,
         },
         body: JSON.stringify({
           imageUrls: compressedImages,
@@ -1824,11 +1909,12 @@
       }
       if (response.status === 429) {
         const errData = await response.json();
-        const pricingUrl = await getPricingUrl();
+        const limitMessage = buildLimitMessage(errData);
+        const pricingUrl = limitMessage.actionText ? await getPricingUrl() : null;
         showToast(
-          errData.error || "You have exceeded your daily/monthly usage limit.",
+          limitMessage.message,
           "error",
-          { text: "Upgrade Plan", url: pricingUrl },
+          pricingUrl ? { text: limitMessage.actionText, url: pricingUrl } : null,
         );
         isBusy = false;
         updateButtonUI();

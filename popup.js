@@ -5,10 +5,15 @@ document.addEventListener("DOMContentLoaded", () => {
   const SUPABASE_ANON_KEY =
     "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImpxbG9pb3Zkd2phb3JubmZ2bXl1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDgyMDgzMzIsImV4cCI6MjA2Mzc4NDMzMn0.iFtkUorY1UqK8zamnwgjB-yhsXe0bJAA8YFm22bzc3A";
   const TIER_LIMITS = {
-    free: { daily: 2, monthly: 8 },
-    starter: { daily: 15, monthly: 300 },
-    pro: { daily: 40, monthly: 800 },
-    business: { daily: 75, monthly: 1500 },
+    free: { daily: 5, monthly: 5 },
+    starter: { daily: 10, monthly: 75 },
+    pro: { daily: 25, monthly: 250 },
+    business: { daily: 60, monthly: 600 },
+  };
+  const FREE_LIFETIME_LIMIT = 5;
+  const CREDIT_PACK = {
+    credits: 20,
+    price: "€5.99",
   };
 
   const TIER_DISPLAY_NAMES = {
@@ -16,6 +21,19 @@ document.addEventListener("DOMContentLoaded", () => {
     starter: "Starter Plan",
     pro: "Pro Plan",
     business: "Business Plan",
+  };
+
+  const NEXT_TIER = {
+    free: "starter",
+    starter: "pro",
+    pro: "business",
+    business: null,
+  };
+
+  const TIER_UPSELL_COPY = {
+    starter: "Upgrade to Starter (€3.99/mo)",
+    pro: "Upgrade to Pro (€9.99/mo)",
+    business: "Upgrade to Business (€19.99/mo)",
   };
 
   // --- SUPABASE CLIENT ---
@@ -30,8 +48,12 @@ document.addEventListener("DOMContentLoaded", () => {
   const signOutBtnSettings = document.getElementById("signOutBtnSettings");
   const freePlanView = document.getElementById("freePlanView");
   const paidPlanView = document.getElementById("paidPlanView");
+  const oneTimeSeparator = document.getElementById("oneTimeSeparator");
+  const oneTimePurchase = document.getElementById("oneTimePurchase");
+  const creditPackBtn = document.getElementById("creditPackBtn");
   const renewalDate = document.getElementById("renewalDate");
   const upgradeBtn = document.getElementById("upgradeBtn");
+  const paidUpgradeBtn = document.getElementById("paidUpgradeBtn");
   const manageBtn = document.getElementById("manageBtn");
   const viewAllPlansLink = document.getElementById("viewAllPlansLink");
   const viewAllPlansLinkPaid = document.getElementById("viewAllPlansLinkPaid");
@@ -40,19 +62,60 @@ document.addEventListener("DOMContentLoaded", () => {
   const monthlyProgressBar = document.getElementById("monthlyProgressBar");
   const dailyCallsUsed = document.getElementById("dailyCallsUsed");
   const monthlyCallsUsed = document.getElementById("monthlyCallsUsed");
-  const languageDropdown = document.querySelector(".language-dropdown");
-  const dropdownToggle = document.querySelector(".dropdown-toggle");
-  const dropdownMenu = document.querySelector(".dropdown-menu");
-  const languageOptions = document.querySelectorAll(".dropdown-menu li");
+  const dailyMeterLabel = document.getElementById("dailyMeterLabel");
+  const monthlyMeterLabel = document.getElementById("monthlyMeterLabel");
+  const usageLimitNote = document.getElementById("usageLimitNote");
+  const languageDropdowns = document.querySelectorAll(".language-dropdown");
   const settingsToggleBtn = document.getElementById("settingsToggleBtn");
   const gearIcon = document.querySelector(".gear-icon");
   const backIcon = document.querySelector(".back-icon");
-  const trustNotes = document.querySelectorAll(".trust-note");
   const toneOptions = document.querySelectorAll('input[name="tone"]');
   const emojiToggle = document.getElementById("emojiToggle");
   const formatOptions = document.querySelectorAll('input[name="format"]');
+  let renderRequestId = 0;
+  let profileRefreshInFlight = false;
+  let lastProfileRefreshAt = 0;
+  let renderedTier = null;
 
   // --- HELPER & UTILITY FUNCTIONS ---
+
+  function getLocalStorage(keys) {
+    return new Promise((resolve) => {
+      chrome.storage.local.get(keys, resolve);
+    });
+  }
+
+  function sendRuntimeMessage(message) {
+    return new Promise((resolve) => {
+      chrome.runtime.sendMessage(message, (response) => {
+        if (chrome.runtime.lastError) {
+          console.warn(
+            `Runtime message failed (${message.type}):`,
+            chrome.runtime.lastError.message,
+          );
+          resolve(null);
+          return;
+        }
+        resolve(response);
+      });
+    });
+  }
+
+  function setView(view) {
+    if (document.body.dataset.view !== view) {
+      document.body.dataset.view = view;
+    }
+  }
+
+  function getRenderableStateKey(data) {
+    return JSON.stringify({
+      userId:
+        data.supabaseSession?.user?.id ||
+        data.supabaseSession?.user?.email ||
+        null,
+      profile: data.userProfile || null,
+    });
+  }
 
   function toggleSettingsView() {
     const isSettingsActive = document.body.classList.toggle("settings-active");
@@ -100,6 +163,74 @@ document.addEventListener("DOMContentLoaded", () => {
     button.textContent = isLoading ? "Processing…" : defaultText;
   }
 
+  function restoreUpgradeButtonContent() {
+    if (!upgradeBtn) return;
+    upgradeBtn.disabled = false;
+    upgradeBtn.innerHTML = `Upgrade to Starter (€3.99/mo)<span class="cta-subline">10/day · 75/month</span>`;
+  }
+
+  function restoreCreditPackButtonContent() {
+    if (!creditPackBtn) return;
+    creditPackBtn.disabled = false;
+    creditPackBtn.textContent = `Buy ${CREDIT_PACK.credits} credits for ${CREDIT_PACK.price}`;
+  }
+
+  function setPaidUpgradeButton(tier) {
+    if (!paidUpgradeBtn) return;
+    const nextTier = NEXT_TIER[tier];
+    if (!nextTier) {
+      paidUpgradeBtn.classList.add("hidden");
+      return;
+    }
+
+    const nextLimits = TIER_LIMITS[nextTier];
+    const dailyCopy =
+      nextLimits.daily === null ? "No daily cap" : `${nextLimits.daily}/day`;
+    paidUpgradeBtn.innerHTML = `${TIER_UPSELL_COPY[nextTier]}<span class="cta-subline">${dailyCopy} · ${nextLimits.monthly}/month</span>`;
+  }
+
+  function setCreditPackVisibility(show, label) {
+    if (oneTimeSeparator) oneTimeSeparator.classList.toggle("hidden", !show);
+    if (oneTimePurchase) oneTimePurchase.classList.toggle("hidden", !show);
+    if (creditPackBtn) {
+      creditPackBtn.textContent =
+        label || `Buy ${CREDIT_PACK.credits} credits for ${CREDIT_PACK.price}`;
+    }
+  }
+
+  function restoreSignOutButtonContent(button) {
+    if (!button) return;
+    button.disabled = false;
+    button.innerHTML = `
+      <svg class="sign-out-icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor"
+        stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>
+        <polyline points="16 17 21 12 16 7"></polyline>
+        <line x1="21" y1="12" x2="9" y2="12"></line>
+      </svg>
+      Sign Out
+    `;
+  }
+
+  function setUsageLoadingUI(tier) {
+    if (usageLimitNote) usageLimitNote.style.display = "none";
+    if (paidUpgradeBtn) paidUpgradeBtn.classList.add("hidden");
+    setCreditPackVisibility(false);
+
+    if (tier === "free") {
+      if (dailyMeterLabel) dailyMeterLabel.textContent = "Free Listings";
+      if (monthlyMeterLabel) monthlyMeterLabel.textContent = "Credit Pack";
+    } else {
+      if (dailyMeterLabel) dailyMeterLabel.textContent = "Daily Usage";
+      if (monthlyMeterLabel) monthlyMeterLabel.textContent = "Monthly Usage";
+    }
+
+    if (dailyCallsUsed) dailyCallsUsed.textContent = "Loading...";
+    if (monthlyCallsUsed) monthlyCallsUsed.textContent = "Loading...";
+    if (dailyProgressBar) dailyProgressBar.style.width = "0%";
+    if (monthlyProgressBar) monthlyProgressBar.style.width = "0%";
+  }
+
   function encodeUserData(data) {
     try {
       return btoa(JSON.stringify(data));
@@ -109,114 +240,251 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   }
 
-  function getTrustNoteText(languageCode) {
-    const code = (languageCode || "en").toLowerCase();
-    const trustByLanguage = {
-      en: "Safe workflow by design: text generation only, no automated mass account actions.",
-      fr: "Flux de travail sécurisé : génération de texte uniquement, sans actions de masse automatisées sur le compte.",
-      de: "Sicherer Workflow: nur Textgenerierung, keine automatisierten Massenaktionen auf dem Konto.",
-      es: "Flujo seguro: solo generación de texto, sin acciones masivas automatizadas en la cuenta.",
-      it: "Flusso di lavoro sicuro: solo generazione di testo, senza azioni di massa automatizzate sull'account.",
-      nl: "Veilige workflow: alleen tekstgeneratie, geen geautomatiseerde massa-acties op je account.",
-      pl: "Bezpieczny workflow: tylko generowanie tekstu, bez masowych zautomatyzowanych akcji na koncie.",
-      cz: "Bezpečný workflow: pouze generování textu, bez automatizovaných hromadných akcí na účtu.",
-      da: "Sikkert workflow: kun tekstgenerering, ingen automatiserede massehandlinger på kontoen.",
-    };
-    return trustByLanguage[code] || trustByLanguage.en;
-  }
-
-  function applyTrustNoteLocalization(languageCode) {
-    if (!trustNotes || trustNotes.length === 0) return;
-    const localizedText = getTrustNoteText(languageCode);
-    trustNotes.forEach((node) => {
-      node.textContent = localizedText;
-    });
-  }
-
   // --- UI RENDERING ---
 
-  function render(user, profile) {
+  async function render(user, profile) {
+    const requestId = ++renderRequestId;
+
     if (user && profile) {
+      const shouldRevealAfterUsage = document.body.dataset.view !== "signed-in";
+      if (shouldRevealAfterUsage) {
+        setView("loading");
+      }
+
       if (userEmailSpan) userEmailSpan.textContent = user.email;
-      const status = profile.subscription_status || "free";
       const rawTier = profile.subscription_tier || "free";
-      const tier = normalizeTier(rawTier);
+      const normalizedTier = normalizeTier(rawTier);
+      const isActive = profile.subscription_status === "active";
+      const tier = isActive ? normalizedTier : "free";
+      const hasSubscriptionPlan = tier !== "free";
+      const shouldResetUsage = shouldRevealAfterUsage || renderedTier !== tier;
+      renderedTier = tier;
       if (planName) planName.textContent = TIER_DISPLAY_NAMES[tier] || "Free Plan";
 
-      chrome.runtime.sendMessage({ type: "GET_USER_USAGE_COUNT" }, (resp) => {
-        const dailyUsed =
-          resp && typeof resp.daily === "number" ? resp.daily : 0;
-        const monthlyUsed =
-          resp && typeof resp.monthly === "number" ? resp.monthly : 0;
-
-        updateUsageUI(dailyUsed, monthlyUsed, tier);
-      });
-
-      if (status === "active" && tier !== "free") {
+      if (hasSubscriptionPlan) {
         if (freePlanView) freePlanView.classList.add("hidden");
         if (paidPlanView) paidPlanView.classList.remove("hidden");
+        if (shouldRevealAfterUsage) setCreditPackVisibility(false);
         const rawEnd = profile.current_period_end;
         if (renewalDate) {
           if (rawEnd) {
             const dt = new Date(rawEnd);
-            renewalDate.innerHTML = `Active until: <strong>${dt.toLocaleDateString(
+            renewalDate.innerHTML = `Current period ends: <strong>${dt.toLocaleDateString(
               undefined,
               { year: "numeric", month: "short", day: "numeric" },
             )}</strong>`;
           } else {
-            renewalDate.innerHTML = `<strong>Active subscription</strong>`;
+            renewalDate.innerHTML = `Subscription settings are available in Stripe.`;
           }
         }
       } else {
         if (paidPlanView) paidPlanView.classList.add("hidden");
         if (freePlanView) freePlanView.classList.remove("hidden");
+        if (shouldRevealAfterUsage) setCreditPackVisibility(false);
       }
-      document.body.dataset.view = "signed-in";
+
+      if (shouldResetUsage) {
+        setUsageLoadingUI(tier);
+      }
+      if (shouldRevealAfterUsage) {
+        setView("signed-in");
+      }
+
+      sendRuntimeMessage({ type: "GET_USER_USAGE_COUNT" }).then((usage) => {
+        if (requestId !== renderRequestId) return;
+        updateUsageUI(usage || {}, tier);
+      });
     } else {
-      document.body.dataset.view = "signed-out";
+      renderRequestId += 1;
+      renderedTier = null;
+      document.body.classList.remove("settings-active");
+      setView("signed-out");
     }
   }
 
-  function updateUsageUI(dailyUsed, monthlyUsed, tier) {
-    const totals = TIER_LIMITS[tier] || TIER_LIMITS["free"];
-    const dailyTotal = totals.daily;
-    const monthlyTotal = totals.monthly;
-    const displayDailyUsed = Math.min(dailyUsed, dailyTotal);
+  function updateUsageUI(usage, fallbackTier) {
+    const tier = normalizeTier(usage.tier || fallbackTier);
+    const limits = usage.limits || TIER_LIMITS[tier] || TIER_LIMITS.free;
+    const packCredits = Math.max(0, Number(usage.packCredits || 0));
+
+    if (tier === "free") {
+      const freeLimit = Number(usage.freeLifetimeLimit || FREE_LIFETIME_LIMIT);
+      const freeUsed = Math.max(
+        0,
+        Math.min(Number(usage.freeLifetimeUsed || 0), freeLimit),
+      );
+      const freePercent =
+        freeLimit > 0 ? Math.min((freeUsed / freeLimit) * 100, 100) : 0;
+
+      if (dailyMeterLabel) dailyMeterLabel.textContent = "Free Listings";
+      if (monthlyMeterLabel) monthlyMeterLabel.textContent = "Credit Pack";
+      if (dailyCallsUsed) dailyCallsUsed.textContent = `${freeUsed} / ${freeLimit}`;
+      if (monthlyCallsUsed)
+        monthlyCallsUsed.textContent =
+          packCredits > 0 ? `${packCredits} left` : "None";
+      if (dailyProgressBar) dailyProgressBar.style.width = `${freePercent}%`;
+      if (monthlyProgressBar)
+        monthlyProgressBar.style.width = packCredits > 0 ? "100%" : "0%";
+
+      updateUsageUpsell({
+        tier,
+        dailyPercent: freePercent,
+        monthlyPercent: 0,
+        packCredits,
+        freeRemaining: Math.max(0, freeLimit - freeUsed),
+      });
+      return;
+    }
+
+    const dailyUsed = Math.max(0, Number(usage.daily || 0));
+    const monthlyUsed = Math.max(0, Number(usage.monthly || 0));
+    const dailyTotal = limits.daily;
+    const monthlyTotal = limits.monthly;
+    const hasDailyLimit = dailyTotal !== null && dailyTotal !== undefined;
+    const displayDailyUsed = hasDailyLimit
+      ? Math.min(dailyUsed, dailyTotal)
+      : dailyUsed;
     const displayMonthlyUsed = Math.min(monthlyUsed, monthlyTotal);
     const dailyPercent =
-      dailyTotal > 0 ? Math.min((dailyUsed / dailyTotal) * 100, 100) : 0;
+      hasDailyLimit && dailyTotal > 0
+        ? Math.min((dailyUsed / dailyTotal) * 100, 100)
+        : 100;
     const monthlyPercent =
       monthlyTotal > 0 ? Math.min((monthlyUsed / monthlyTotal) * 100, 100) : 0;
 
+    if (dailyMeterLabel) dailyMeterLabel.textContent = "Daily Usage";
+    if (monthlyMeterLabel) monthlyMeterLabel.textContent = "Monthly Usage";
     if (dailyCallsUsed)
-      dailyCallsUsed.textContent = `${displayDailyUsed} / ${dailyTotal}`;
+      dailyCallsUsed.textContent = hasDailyLimit
+        ? `${displayDailyUsed} / ${dailyTotal}`
+        : "No daily limit";
     if (monthlyCallsUsed)
       monthlyCallsUsed.textContent = `${displayMonthlyUsed} / ${monthlyTotal}`;
     if (dailyProgressBar) dailyProgressBar.style.width = `${dailyPercent}%`;
-    if (monthlyProgressBar)
-      monthlyProgressBar.style.width = `${monthlyPercent}%`;
+    if (monthlyProgressBar) monthlyProgressBar.style.width = `${monthlyPercent}%`;
+
+    updateUsageUpsell({
+      tier,
+      dailyPercent,
+      monthlyPercent,
+      packCredits,
+      isLegacy: Boolean(usage.isLegacy),
+      hasDailyLimit,
+    });
+  }
+
+  function updateUsageUpsell({
+    tier,
+    dailyPercent,
+    monthlyPercent,
+    packCredits,
+    freeRemaining,
+    isLegacy,
+    hasDailyLimit = true,
+  }) {
+    if (usageLimitNote) usageLimitNote.style.display = "none";
+    if (paidUpgradeBtn) paidUpgradeBtn.classList.add("hidden");
+    setCreditPackVisibility(false);
+
+    if (tier === "free") {
+      if (usageLimitNote && packCredits > 0) {
+        usageLimitNote.textContent = `Credit pack: ${packCredits} top-up credits available.`;
+        usageLimitNote.style.display = "block";
+      }
+      if (freeRemaining <= 1 || packCredits > 0) {
+        setCreditPackVisibility(
+          true,
+          packCredits > 0
+            ? `Add ${CREDIT_PACK.credits} more credits (${CREDIT_PACK.price})`
+            : `Buy ${CREDIT_PACK.credits} credits for ${CREDIT_PACK.price}`,
+        );
+      }
+      return;
+    }
+
+    const nextTier = NEXT_TIER[tier];
+    const isNearLimit =
+      (hasDailyLimit && dailyPercent >= 80) || monthlyPercent >= 80;
+    const hasCredits = packCredits > 0;
+
+    if (hasCredits && usageLimitNote) {
+      usageLimitNote.textContent = `Credit pack: ${packCredits} top-up credits available.`;
+      usageLimitNote.style.display = "block";
+    }
+
     if (tier === "business") {
-      if (dailyCallsUsed) dailyCallsUsed.textContent = `Unlimited`;
-      if (dailyProgressBar) dailyProgressBar.style.width = "100%";
+      if (isNearLimit && usageLimitNote) {
+        usageLimitNote.textContent = hasCredits
+          ? `Credit pack: ${packCredits} top-up credits available.`
+          : "Business usage is high. Top-up credits are available if you need extra listings this cycle.";
+        usageLimitNote.style.display = "block";
+      }
+      if (isNearLimit) {
+        setCreditPackVisibility(true, `Buy ${CREDIT_PACK.credits} top-up credits (${CREDIT_PACK.price})`);
+      }
+      return;
+    }
+
+    if (isNearLimit && nextTier) {
+      const nextLimits = TIER_LIMITS[nextTier];
+      const dailyCopy =
+        nextLimits.daily === null ? "no daily cap" : `${nextLimits.daily}/day`;
+      if (usageLimitNote) {
+        const legacyCopy = isLegacy ? " Your current legacy limits stay while this subscription remains active." : "";
+        usageLimitNote.textContent = `${TIER_DISPLAY_NAMES[nextTier].replace(" Plan", "")}: ${dailyCopy} · ${nextLimits.monthly}/month.${legacyCopy}`;
+        usageLimitNote.style.display = "block";
+      }
+      setPaidUpgradeButton(tier);
+      if (paidUpgradeBtn) paidUpgradeBtn.classList.remove("hidden");
+      setCreditPackVisibility(
+        true,
+        hasCredits
+          ? `Add ${CREDIT_PACK.credits} more credits (${CREDIT_PACK.price})`
+          : `Buy ${CREDIT_PACK.credits} top-up credits (${CREDIT_PACK.price})`,
+      );
     }
   }
 
   // --- DATA & STATE MANAGEMENT ---
 
   /**
-   * Refreshes user profile from database then reads from storage and triggers a render.
-   * This ensures we always have fresh data, matching the instant update behavior of usage counters.
+   * Reads the cached auth/profile state and renders from local extension storage.
+   * Remote profile refreshes run separately so opening the popup does not block on
+   * network or reveal stale default UI first.
    */
-  function updateFromStorage() {
-    // First, trigger background to refresh profile from database
-    chrome.runtime.sendMessage({ type: "AUTH_UPDATED" }, () => {
-      // Then read the freshly updated storage and render
-      chrome.storage.local.get(["supabaseSession", "userProfile"], (data) => {
-        const user = data.supabaseSession?.user || null;
-        const profile = data.userProfile || null;
-        render(user, profile);
-      });
-    });
+  async function updateFromStorage() {
+    const data = await getLocalStorage(["supabaseSession", "userProfile"]);
+    const user = data.supabaseSession?.user || null;
+    const profile = data.userProfile || null;
+
+    if (user && !profile) {
+      setView("loading");
+      refreshProfileInBackground({ force: true });
+      return;
+    }
+
+    await render(user, profile);
+  }
+
+  async function refreshProfileInBackground({ force = false } = {}) {
+    const now = Date.now();
+    if (profileRefreshInFlight) return;
+    if (!force && now - lastProfileRefreshAt < 15000) return;
+
+    profileRefreshInFlight = true;
+    lastProfileRefreshAt = now;
+    try {
+      const before = await getLocalStorage(["supabaseSession", "userProfile"]);
+      const beforeKey = getRenderableStateKey(before);
+      await sendRuntimeMessage({ type: "AUTH_UPDATED" });
+      const after = await getLocalStorage(["supabaseSession", "userProfile"]);
+      if (getRenderableStateKey(after) !== beforeKey) {
+        await updateFromStorage();
+        refreshSettingsAccess();
+      }
+    } finally {
+      profileRefreshInFlight = false;
+    }
   }
 
   // --- API & EVENT HANDLERS ---
@@ -270,10 +538,11 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   }
 
-  function handleSignOut() {
-    setLoading(signOutBtn, true, "Sign Out");
+  function handleSignOut(event) {
+    const button = event?.currentTarget || signOutBtn;
+    setLoading(button, true, "Sign Out");
     chrome.runtime.sendMessage({ type: "SIGN_OUT" }, () => {
-      setLoading(signOutBtn, false, "Sign Out");
+      restoreSignOutButtonContent(button);
     });
   }
 
@@ -302,7 +571,7 @@ document.addEventListener("DOMContentLoaded", () => {
       console.error("Checkout error:", err);
       showMessage("Connection issue. Please try again.", "error");
     } finally {
-      setLoading(upgradeBtn, false, "Upgrade to Starter (€3.99)");
+      restoreUpgradeButtonContent();
     }
   }
 
@@ -335,6 +604,36 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   }
 
+  async function handleCreditPackPurchase() {
+    const {
+      data: { session },
+    } = await supabaseClient.auth.getSession();
+    if (!session?.user?.email) {
+      showMessage("Please sign in to buy credits.", "error");
+      return;
+    }
+
+    setLoading(creditPackBtn, true, "Loading…");
+    try {
+      const res = await fetch(`${API_BASE}/api/stripe/create-credit-checkout`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: session.user.email }),
+      });
+      const { url, error } = await res.json();
+      if (res.ok && url) {
+        window.open(url, "_blank");
+      } else {
+        showMessage(error || "Unable to open the payment page.", "error");
+      }
+    } catch (err) {
+      console.error("Credit checkout error:", err);
+      showMessage("Connection issue. Please try again.", "error");
+    } finally {
+      restoreCreditPackButtonContent();
+    }
+  }
+
   function handleViewAllPlans(e) {
     if (e) e.preventDefault();
     chrome.runtime.sendMessage({ type: "GET_USER_PROFILE" }, (resp) => {
@@ -342,12 +641,13 @@ document.addEventListener("DOMContentLoaded", () => {
         source: "extension",
         signed_in: !!resp?.user,
         plan: resp?.profile?.subscription_tier || "free",
+        subscription_status: resp?.profile?.subscription_status || "free",
         email: resp?.user?.email || "",
         timestamp: Date.now(),
       };
       const token = encodeUserData(userData);
       if (token) {
-        const url = `https://autolister.app/pricing?token=${token}`;
+        const url = `${API_BASE}/pricing?token=${token}`;
         window.open(url, "_blank");
       }
     });
@@ -355,54 +655,96 @@ document.addEventListener("DOMContentLoaded", () => {
 
   // --- LANGUAGE DROPDOWN LOGIC ---
   function setupLanguageDropdown() {
-    chrome.storage.local.get(["selectedLanguage"], (result) => {
-      if (result.selectedLanguage) {
-        const selectedItem = [...languageOptions].find(
-          (item) => item.dataset.value === result.selectedLanguage,
-        );
-        if (selectedItem && dropdownToggle) {
-          dropdownToggle.innerHTML = selectedItem.innerHTML;
-          languageOptions.forEach((opt) => opt.classList.remove("selected"));
-          selectedItem.classList.add("selected");
-        }
-        applyTrustNoteLocalization(result.selectedLanguage);
-      } else {
-        const browserLanguage = (navigator.language || "en").slice(0, 2);
-        const fallbackCode = browserLanguage === "cs" ? "cz" : browserLanguage;
-        applyTrustNoteLocalization(fallbackCode);
-      }
+    const browserLanguage = (navigator.language || "en").slice(0, 2);
+    const fallbackCode = browserLanguage === "cs" ? "cz" : browserLanguage;
+
+    const ready = new Promise((resolve) => {
+      chrome.storage.local.get(
+        [
+          "selectedLanguage",
+          "selectedTitleLanguage",
+          "selectedDescriptionLanguage",
+        ],
+        (result) => {
+          languageDropdowns.forEach((dropdown) => {
+            const storageKey = dropdown.dataset.storageKey || "selectedLanguage";
+            const dropdownToggle = dropdown.querySelector(".dropdown-toggle");
+            const languageOptions = dropdown.querySelectorAll(".dropdown-menu li");
+            const selectedValue =
+              result[storageKey] || result.selectedLanguage || fallbackCode;
+            const selectedItem = [...languageOptions].find(
+              (item) => item.dataset.value === selectedValue,
+            );
+
+            if (selectedItem && dropdownToggle) {
+              dropdownToggle.innerHTML = selectedItem.innerHTML;
+              languageOptions.forEach((opt) => opt.classList.remove("selected"));
+              selectedItem.classList.add("selected");
+            }
+          });
+
+          resolve();
+        },
+      );
     });
-    const toggleDropdown = (show) => {
-      if (dropdownMenu && dropdownToggle) {
-        dropdownMenu.classList.toggle("visible", show);
-        dropdownToggle.classList.toggle("active", show);
-      }
+
+    const closeAllDropdowns = () => {
+      languageDropdowns.forEach((dropdown) => {
+        const menu = dropdown.querySelector(".dropdown-menu");
+        const toggle = dropdown.querySelector(".dropdown-toggle");
+        if (menu) menu.classList.remove("visible");
+        if (toggle) toggle.classList.remove("active");
+      });
     };
-    if (dropdownToggle) {
-      dropdownToggle.addEventListener("click", (e) => {
-        e.stopPropagation();
-        if (dropdownMenu) {
-          toggleDropdown(!dropdownMenu.classList.contains("visible"));
+
+    languageDropdowns.forEach((dropdown) => {
+      const dropdownToggle = dropdown.querySelector(".dropdown-toggle");
+      const dropdownMenu = dropdown.querySelector(".dropdown-menu");
+      const languageOptions = dropdown.querySelectorAll(".dropdown-menu li");
+      const storageKey = dropdown.dataset.storageKey || "selectedLanguage";
+
+      const toggleDropdown = (show) => {
+        if (dropdownMenu && dropdownToggle) {
+          if (show) closeAllDropdowns();
+          dropdownMenu.classList.toggle("visible", show);
+          dropdownToggle.classList.toggle("active", show);
         }
-      });
-    }
-    languageOptions.forEach((li) => {
-      li.addEventListener("click", () => {
-        if (dropdownToggle) {
-          dropdownToggle.innerHTML = li.innerHTML;
-        }
-        languageOptions.forEach((opt) => opt.classList.remove("selected"));
-        li.classList.add("selected");
-        toggleDropdown(false);
-        chrome.storage.local.set({ selectedLanguage: li.dataset.value });
-        applyTrustNoteLocalization(li.dataset.value);
+      };
+
+      if (dropdownToggle) {
+        dropdownToggle.addEventListener("click", (e) => {
+          e.stopPropagation();
+          if (dropdownMenu) {
+            toggleDropdown(!dropdownMenu.classList.contains("visible"));
+          }
+        });
+      }
+
+      languageOptions.forEach((li) => {
+        li.addEventListener("click", () => {
+          if (dropdownToggle) {
+            dropdownToggle.innerHTML = li.innerHTML;
+          }
+          languageOptions.forEach((opt) => opt.classList.remove("selected"));
+          li.classList.add("selected");
+          toggleDropdown(false);
+          chrome.storage.local.set({
+            [storageKey]: li.dataset.value,
+          });
+        });
       });
     });
+
     document.addEventListener("click", (e) => {
-      if (languageDropdown && !languageDropdown.contains(e.target)) {
-        toggleDropdown(false);
+      const clickedInsideLanguageDropdown = [...languageDropdowns].some(
+        (dropdown) => dropdown.contains(e.target),
+      );
+      if (!clickedInsideLanguageDropdown) {
+        closeAllDropdowns();
       }
     });
+
+    return ready;
   }
 
   // --- SETTINGS LOGIC ---
@@ -413,7 +755,9 @@ document.addEventListener("DOMContentLoaded", () => {
       (result) => {
         const profile = result.userProfile || {};
         const tier = normalizeTier(profile.subscription_tier);
-        const hasProAccess = tier === "pro" || tier === "business";
+        const isActive = profile.subscription_status === "active";
+        const hasProAccess =
+          isActive && (tier === "pro" || tier === "business");
 
         // Set Tone
         const savedTone = result.tone || "standard";
@@ -494,7 +838,9 @@ document.addEventListener("DOMContentLoaded", () => {
     chrome.storage.local.get(["userProfile"], (data) => {
       const profile = data.userProfile || {};
       const tier = normalizeTier(profile.subscription_tier);
-      const hasProAccess = tier === "pro" || tier === "business";
+      const isActive = profile.subscription_status === "active";
+      const hasProAccess =
+        isActive && (tier === "pro" || tier === "business");
       updateSettingsAccess(hasProAccess);
     });
   }
@@ -537,7 +883,7 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   // --- INITIALIZATION ---
-  function init() {
+  async function init() {
     document
       .getElementById("googleSignIn")
       ?.addEventListener("click", async () => {
@@ -584,8 +930,14 @@ document.addEventListener("DOMContentLoaded", () => {
     if (upgradeBtn) {
       upgradeBtn.addEventListener("click", handleUpgrade);
     }
+    if (paidUpgradeBtn) {
+      paidUpgradeBtn.addEventListener("click", handleViewAllPlans);
+    }
     if (manageBtn) {
       manageBtn.addEventListener("click", handleManageSubscription);
+    }
+    if (creditPackBtn) {
+      creditPackBtn.addEventListener("click", handleCreditPackPurchase);
     }
     if (viewAllPlansLink) {
       viewAllPlansLink.addEventListener("click", handleViewAllPlans);
@@ -603,7 +955,7 @@ document.addEventListener("DOMContentLoaded", () => {
       });
     }
 
-    setupLanguageDropdown();
+    const languageDropdownReady = setupLanguageDropdown();
     setupSettings();
 
     if (settingsToggleBtn) {
@@ -614,17 +966,28 @@ document.addEventListener("DOMContentLoaded", () => {
     // primary way the UI stays in sync with auth and profile changes.
     chrome.storage.onChanged.addListener((changes) => {
       if (changes.supabaseSession || changes.userProfile) {
+        if (profileRefreshInFlight && changes.userProfile && !changes.supabaseSession) {
+          return;
+        }
         updateFromStorage();
         refreshSettingsAccess(); // Update settings tier access when profile changes
       }
     });
 
-    // Also update when the popup gains focus, to catch changes from other tabs.
-    window.addEventListener("focus", updateFromStorage);
+    // Also refresh when the popup gains focus, to catch checkout/auth changes
+    // from other tabs without blocking the initial popup render.
+    window.addEventListener("focus", () => {
+      refreshProfileInBackground();
+    });
 
     // Initial load
-    updateFromStorage();
+    await languageDropdownReady;
+    await updateFromStorage();
+    refreshProfileInBackground();
   }
 
-  init();
+  init().catch((error) => {
+    console.error("Popup initialization failed:", error);
+    setView("signed-out");
+  });
 });

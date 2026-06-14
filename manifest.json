@@ -24,7 +24,7 @@
     "storage"
   ],
   "host_permissions": [
-    "http://localhost:5000/*",
+    "https://autolister.app/*",
     "*://*.vinted.at/*",
     "*://*.vinted.be/*",
     "*://*.vinted.cz/*",

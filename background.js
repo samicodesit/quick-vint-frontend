@@ -14,6 +14,19 @@ const SUPABASE_ANON_KEY =
   "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImpxbG9pb3Zkd2phb3JubmZ2bXl1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDgyMDgzMzIsImV4cCI6MjA2Mzc4NDMzMn0.iFtkUorY1UqK8zamnwgjB-yhsXe0bJAA8YFm22bzc3A";
 const TOKEN_REFRESH_MARGIN_MS = 5 * 60 * 1000; // 5 minutes
 const MIN_REFRESH_DELAY_MS = 60 * 1000; // 1 minute
+const FREE_LIFETIME_LIMIT = 5;
+const CURRENT_TIER_LIMITS = {
+  free: { daily: FREE_LIFETIME_LIMIT, monthly: FREE_LIFETIME_LIMIT },
+  starter: { daily: 10, monthly: 75 },
+  pro: { daily: 25, monthly: 250 },
+  business: { daily: 60, monthly: 600 },
+};
+const LEGACY_TIER_LIMITS = {
+  free: CURRENT_TIER_LIMITS.free,
+  starter: { daily: 15, monthly: 300 },
+  pro: { daily: 40, monthly: 800 },
+  business: { daily: null, monthly: 1500 },
+};
 
 // --- STATE ---
 const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
@@ -148,6 +161,36 @@ function createAuthenticatedClient(accessToken) {
   });
 }
 
+function normalizeTier(tier) {
+  const map = {
+    unlimited_monthly: "starter",
+    unlimited_annual: "starter",
+    starter: "starter",
+    pro: "pro",
+    business: "business",
+    free: "free",
+  };
+
+  return map[tier] || "free";
+}
+
+function getUsageLimits(profile) {
+  const tier =
+    profile?.subscription_status === "active"
+      ? normalizeTier(profile?.subscription_tier)
+      : "free";
+  const source =
+    tier !== "free" && profile?.is_legacy_plan
+      ? LEGACY_TIER_LIMITS
+      : CURRENT_TIER_LIMITS;
+
+  return {
+    tier,
+    isLegacy: tier !== "free" && Boolean(profile?.is_legacy_plan),
+    limits: source[tier] || CURRENT_TIER_LIMITS.free,
+  };
+}
+
 // --- DATA FETCHING & STATE SYNCHRONIZATION ---
 
 /**
@@ -169,7 +212,7 @@ async function updateAndStoreUserProfile() {
     const { data: profile, error: profileError } = await authClient
       .from("profiles")
       .select(
-        "subscription_status, api_calls_this_month, subscription_tier, current_period_end",
+        "subscription_status, api_calls_this_month, subscription_tier, current_period_end, is_legacy_plan, free_lifetime_generations_used, pack_credits",
       )
       .eq("id", user.id)
       .single();
@@ -183,12 +226,23 @@ async function updateAndStoreUserProfile() {
 }
 
 /**
- * Fetches the user's daily API call count.
- * @returns {Promise<{daily: number|null}>} Null for business tier, otherwise the count.
+ * Fetches current usage, current limits, and available top-up credits.
+ * @returns {Promise<object>}
  */
 async function fetchUserUsageCount() {
   const session = await ensureValidToken();
-  if (!session?.access_token) return { daily: 0, monthly: 0 };
+  if (!session?.access_token) {
+    return {
+      daily: 0,
+      monthly: 0,
+      tier: "free",
+      isLegacy: false,
+      limits: CURRENT_TIER_LIMITS.free,
+      freeLifetimeUsed: 0,
+      freeLifetimeLimit: FREE_LIFETIME_LIMIT,
+      packCredits: 0,
+    };
+  }
 
   try {
     const authClient = createAuthenticatedClient(session.access_token);
@@ -200,7 +254,9 @@ async function fetchUserUsageCount() {
 
     const { data: profile, error: profileError } = await authClient
       .from("profiles")
-      .select("subscription_tier, api_calls_this_month")
+      .select(
+        "subscription_status, subscription_tier, api_calls_this_month, is_legacy_plan, free_lifetime_generations_used, pack_credits",
+      )
       .eq("id", user.id)
       .single();
     if (profileError) throw profileError;
@@ -209,8 +265,12 @@ async function fetchUserUsageCount() {
       typeof profile?.api_calls_this_month === "number"
         ? profile.api_calls_this_month
         : 0;
-    if (profile?.subscription_tier === "business")
-      return { daily: null, monthly };
+    const entitlement = getUsageLimits(profile);
+    const freeLifetimeUsed = Math.max(
+      0,
+      Number(profile?.free_lifetime_generations_used || 0),
+    );
+    const packCredits = Math.max(0, Number(profile?.pack_credits || 0));
 
     const { data: limit, error: limitError } = await authClient
       .from("rate_limits")
@@ -224,10 +284,28 @@ async function fetchUserUsageCount() {
 
     if (limitError) throw limitError;
 
-    return { daily: limit?.count || 0, monthly };
+    return {
+      daily: entitlement.tier === "free" ? null : limit?.count || 0,
+      monthly: entitlement.tier === "free" ? null : monthly,
+      tier: entitlement.tier,
+      isLegacy: entitlement.isLegacy,
+      limits: entitlement.limits,
+      freeLifetimeUsed,
+      freeLifetimeLimit: FREE_LIFETIME_LIMIT,
+      packCredits,
+    };
   } catch (error) {
     console.error("Failed to fetch user day count:", error);
-    return { daily: 0, monthly: 0 };
+    return {
+      daily: 0,
+      monthly: 0,
+      tier: "free",
+      isLegacy: false,
+      limits: CURRENT_TIER_LIMITS.free,
+      freeLifetimeUsed: 0,
+      freeLifetimeLimit: FREE_LIFETIME_LIMIT,
+      packCredits: 0,
+    };
   }
 }
 
