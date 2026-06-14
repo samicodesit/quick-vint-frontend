@@ -172,7 +172,7 @@ document.addEventListener("DOMContentLoaded", () => {
   function restoreCreditPackButtonContent() {
     if (!creditPackBtn) return;
     creditPackBtn.disabled = false;
-    creditPackBtn.textContent = `Buy ${CREDIT_PACK.credits} credits for ${CREDIT_PACK.price}`;
+    creditPackBtn.textContent = `One-time: ${CREDIT_PACK.credits} credits for ${CREDIT_PACK.price}`;
   }
 
   function setPaidUpgradeButton(tier) {
@@ -196,7 +196,8 @@ document.addEventListener("DOMContentLoaded", () => {
     if (oneTimePurchase) oneTimePurchase.classList.toggle("hidden", !show);
     if (creditPackBtn) {
       creditPackBtn.textContent =
-        label || `Buy ${CREDIT_PACK.credits} credits for ${CREDIT_PACK.price}`;
+        label ||
+        `One-time: ${CREDIT_PACK.credits} credits for ${CREDIT_PACK.price}`;
     }
   }
 
@@ -397,8 +398,8 @@ document.addEventListener("DOMContentLoaded", () => {
       setCreditPackVisibility(
         true,
         packCredits > 0
-          ? `Add ${CREDIT_PACK.credits} more credits (${CREDIT_PACK.price})`
-          : `Buy ${CREDIT_PACK.credits} extra credits (${CREDIT_PACK.price})`,
+          ? `One-time top-up: ${CREDIT_PACK.credits} more credits`
+          : `One-time top-up: ${CREDIT_PACK.credits} credits`,
         { showSeparator: isNearFreeLimit || packCredits > 0 },
       );
       return;
@@ -422,7 +423,10 @@ document.addEventListener("DOMContentLoaded", () => {
         usageLimitNote.style.display = "block";
       }
       if (isNearLimit) {
-        setCreditPackVisibility(true, `Buy ${CREDIT_PACK.credits} top-up credits (${CREDIT_PACK.price})`);
+        setCreditPackVisibility(
+          true,
+          `One-time top-up: ${CREDIT_PACK.credits} credits`,
+        );
       }
       return;
     }
@@ -441,8 +445,8 @@ document.addEventListener("DOMContentLoaded", () => {
       setCreditPackVisibility(
         true,
         hasCredits
-          ? `Add ${CREDIT_PACK.credits} more credits (${CREDIT_PACK.price})`
-          : `Buy ${CREDIT_PACK.credits} top-up credits (${CREDIT_PACK.price})`,
+          ? `One-time top-up: ${CREDIT_PACK.credits} more credits`
+          : `One-time top-up: ${CREDIT_PACK.credits} credits`,
       );
     }
   }

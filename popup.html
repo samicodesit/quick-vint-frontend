@@ -208,15 +208,15 @@
     .one-time-offer {
       width: 100%;
       margin: 0;
-      padding: 8px 14px;
+      padding: 8px 12px;
       border: 1px solid #e0e7ff;
       border-radius: 8px;
       background: #ffffff;
       color: #4f46e5;
       cursor: pointer;
       font-size: 13px;
-      font-weight: 800;
-      line-height: 1.25;
+      font-weight: 700;
+      line-height: 1.2;
       text-align: center;
       box-shadow: 0 1px 4px rgba(79, 70, 229, 0.08);
     }
@@ -386,6 +386,15 @@
 
     .one-time-purchase {
       margin: 0 0 8px;
+    }
+
+    .one-time-caption {
+      margin: 3px 2px 0;
+      color: #6b7280;
+      font-size: 10.5px;
+      font-weight: 500;
+      line-height: 1.3;
+      text-align: center;
     }
 
     .stripe-note {
@@ -1191,7 +1200,6 @@
               Upgrade to Starter (€3.99/mo)
               <span class="cta-subline">10/day · 75/month</span>
             </button>
-            <div class="stripe-note">Secure payment by Stripe</div>
             <a href="#" id="viewAllPlansLink" class="view-plans-link">Compare All Plans</a>
           </div>
           <div id="paidPlanView" class="hidden">
@@ -1203,18 +1211,18 @@
               Upgrade Plan
             </button>
             <button id="manageBtn" class="btn">Manage Subscription</button>
-            <div class="stripe-note">Secure payment by Stripe</div>
             <a href="#" id="viewAllPlansLinkPaid" class="view-plans-link">Compare All Plans</a>
           </div>
+          <div class="stripe-note">Secure payment by Stripe</div>
 
         </div>
 
-        <div id="oneTimeSeparator" class="purchase-separator">OR</div>
+        <div id="oneTimeSeparator" class="purchase-separator">One-time top-up</div>
         <div id="oneTimePurchase" class="one-time-purchase">
           <button id="creditPackBtn" class="one-time-offer" type="button" aria-label="Buy 20 top-up credits for €5.99">
             Buy 20 credits for €5.99
           </button>
-          <div class="stripe-note">Secure payment by Stripe</div>
+          <div class="one-time-caption">No subscription. Use when you just need a few extra listings.</div>
         </div>
 
         <div class="language-row">
