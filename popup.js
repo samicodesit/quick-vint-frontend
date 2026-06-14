@@ -172,7 +172,7 @@ document.addEventListener("DOMContentLoaded", () => {
   function restoreCreditPackButtonContent() {
     if (!creditPackBtn) return;
     creditPackBtn.disabled = false;
-    creditPackBtn.textContent = `One-time: ${CREDIT_PACK.credits} credits for ${CREDIT_PACK.price}`;
+    creditPackBtn.textContent = `Buy ${CREDIT_PACK.credits} credits - ${CREDIT_PACK.price} one-time`;
   }
 
   function setPaidUpgradeButton(tier) {
@@ -197,7 +197,7 @@ document.addEventListener("DOMContentLoaded", () => {
     if (creditPackBtn) {
       creditPackBtn.textContent =
         label ||
-        `One-time: ${CREDIT_PACK.credits} credits for ${CREDIT_PACK.price}`;
+        `Buy ${CREDIT_PACK.credits} credits - ${CREDIT_PACK.price} one-time`;
     }
   }
 
@@ -398,8 +398,8 @@ document.addEventListener("DOMContentLoaded", () => {
       setCreditPackVisibility(
         true,
         packCredits > 0
-          ? `One-time top-up: ${CREDIT_PACK.credits} more credits`
-          : `One-time top-up: ${CREDIT_PACK.credits} credits`,
+          ? `Buy another ${CREDIT_PACK.credits} credits`
+          : `Buy ${CREDIT_PACK.credits} credits - ${CREDIT_PACK.price} one-time`,
         { showSeparator: isNearFreeLimit || packCredits > 0 },
       );
       return;
@@ -425,7 +425,7 @@ document.addEventListener("DOMContentLoaded", () => {
       if (isNearLimit) {
         setCreditPackVisibility(
           true,
-          `One-time top-up: ${CREDIT_PACK.credits} credits`,
+          `Buy ${CREDIT_PACK.credits} extra credits`,
         );
       }
       return;
@@ -445,8 +445,8 @@ document.addEventListener("DOMContentLoaded", () => {
       setCreditPackVisibility(
         true,
         hasCredits
-          ? `One-time top-up: ${CREDIT_PACK.credits} more credits`
-          : `One-time top-up: ${CREDIT_PACK.credits} credits`,
+          ? `Buy another ${CREDIT_PACK.credits} credits`
+          : `Buy ${CREDIT_PACK.credits} extra credits`,
       );
     }
   }
