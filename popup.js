@@ -189,8 +189,10 @@ document.addEventListener("DOMContentLoaded", () => {
     paidUpgradeBtn.innerHTML = `${TIER_UPSELL_COPY[nextTier]}<span class="cta-subline">${dailyCopy} · ${nextLimits.monthly}/month</span>`;
   }
 
-  function setCreditPackVisibility(show, label) {
-    if (oneTimeSeparator) oneTimeSeparator.classList.toggle("hidden", !show);
+  function setCreditPackVisibility(show, label, options = {}) {
+    const showSeparator = options.showSeparator !== false;
+    if (oneTimeSeparator)
+      oneTimeSeparator.classList.toggle("hidden", !show || !showSeparator);
     if (oneTimePurchase) oneTimePurchase.classList.toggle("hidden", !show);
     if (creditPackBtn) {
       creditPackBtn.textContent =
@@ -391,14 +393,14 @@ document.addEventListener("DOMContentLoaded", () => {
         usageLimitNote.textContent = `Credit pack: ${packCredits} top-up credits available.`;
         usageLimitNote.style.display = "block";
       }
-      if (freeRemaining <= 1 || packCredits > 0) {
-        setCreditPackVisibility(
-          true,
-          packCredits > 0
-            ? `Add ${CREDIT_PACK.credits} more credits (${CREDIT_PACK.price})`
-            : `Buy ${CREDIT_PACK.credits} credits for ${CREDIT_PACK.price}`,
-        );
-      }
+      const isNearFreeLimit = freeRemaining <= 1;
+      setCreditPackVisibility(
+        true,
+        packCredits > 0
+          ? `Add ${CREDIT_PACK.credits} more credits (${CREDIT_PACK.price})`
+          : `Buy ${CREDIT_PACK.credits} extra credits (${CREDIT_PACK.price})`,
+        { showSeparator: isNearFreeLimit || packCredits > 0 },
+      );
       return;
     }
 
