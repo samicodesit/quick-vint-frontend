@@ -89,7 +89,8 @@
   "web_accessible_resources": [
     {
       "resources": [
-        "callback.html"
+        "callback.html",
+        "icons/icon48.png"
       ],
       "matches": [
         "<all_urls>"

@@ -33,7 +33,7 @@
       hasImages: true,
       verify(doc) {
         const signIn = doc.getElementById("quickvint-signin-btn");
-        return !!signIn && getComputedStyle(signIn).display !== "none";
+        return isVisible(doc, signIn);
       },
     },
     {
@@ -45,11 +45,10 @@
       action: "open-title-language",
       hasImages: true,
       verify(doc) {
-        return !!(
-          doc.getElementById("quickvint-gen-btn") &&
-          doc.getElementById("quickvint-phone-btn") &&
-          doc.querySelector(".quickvint-lang-field.open .quickvint-lang-menu")
-        );
+        const generate = doc.getElementById("quickvint-gen-btn");
+        const phone = doc.getElementById("quickvint-phone-btn");
+        const menu = doc.querySelector(".quickvint-lang-field.open .quickvint-lang-menu");
+        return isVisible(doc, generate) && isVisible(doc, phone) && isVisible(doc, menu);
       },
     },
     {
@@ -80,7 +79,10 @@
         },
       },
       verify(doc) {
-        return /Free limit reached/.test(doc.querySelector("#quickvint-toast")?.textContent || "");
+        return (
+          /Free listings used/.test(doc.querySelector("#quickvint-toast")?.textContent || "") &&
+          !!doc.querySelector("#quickvint-toast .paywall-logo")
+        );
       },
     },
     {
@@ -100,7 +102,10 @@
         },
       },
       verify(doc) {
-        return /Monthly limit reached/.test(doc.querySelector("#quickvint-toast")?.textContent || "");
+        return (
+          /Monthly limit reached/.test(doc.querySelector("#quickvint-toast")?.textContent || "") &&
+          !!doc.querySelector("#quickvint-toast .paywall-logo")
+        );
       },
     },
     {
@@ -119,7 +124,10 @@
         },
       },
       verify(doc) {
-        return /Limit reached/.test(doc.querySelector("#quickvint-toast")?.textContent || "");
+        return (
+          /Limit reached/.test(doc.querySelector("#quickvint-toast")?.textContent || "") &&
+          !!doc.querySelector("#quickvint-toast .paywall-logo")
+        );
       },
     },
     {
@@ -145,6 +153,18 @@
       .replace(/</g, "&lt;");
   }
 
+  function isVisible(doc, element) {
+    if (!element) return false;
+    const style = doc.defaultView.getComputedStyle(element);
+    const rect = element.getBoundingClientRect();
+    return (
+      style.display !== "none" &&
+      style.visibility !== "hidden" &&
+      rect.width > 0 &&
+      rect.height > 0
+    );
+  }
+
   function renderPanels() {
     const grid = document.getElementById("previewGrid");
     grid.innerHTML = scenarios
@@ -157,7 +177,10 @@
                 <h2 class="ds-panel-title">${scenario.title}</h2>
                 <p class="ds-panel-note">${scenario.note}</p>
               </div>
-              <span class="ds-scenario-badge" data-scenario-badge="${escapeAttr(scenario.id)}">runtime</span>
+              <div class="ds-panel-actions">
+                <span class="ds-scenario-badge" data-scenario-badge="${escapeAttr(scenario.id)}">runtime</span>
+                <button class="ds-rerun" type="button" data-rerun-scenario="${escapeAttr(scenario.id)}">rerun</button>
+              </div>
             </div>
             <div class="ds-stage">
               <iframe
@@ -401,6 +424,9 @@
           getManifest() {
             return { version: "design-system" };
           },
+          getURL(path) {
+            return new URL("../" + path, ${JSON.stringify(window.location.href)}).href;
+          },
           sendMessage(message, callback) {
             let response = {};
             if (message && message.type === "GET_ACCESS_TOKEN") {
@@ -468,9 +494,13 @@
   function loadScenarioFrame(scenario) {
     const frame = document.querySelector(`[data-scenario-id="${scenario.id}"]`);
     if (!frame) return;
+    const panel = frame.closest(".ds-panel");
+    const badge = document.querySelector(`[data-scenario-badge="${scenario.id}"]`);
+    panel?.classList.remove("verified", "needs-attention");
+    if (badge) badge.textContent = "runtime";
     frame.addEventListener("load", () => {
       setTimeout(() => verifyScenario(scenario), 1400);
-    });
+    }, { once: true });
     frame.srcdoc = frameHtml(scenario);
   }
 
@@ -508,6 +538,12 @@
     await response.text();
 
     renderPanels();
+    document.getElementById("previewGrid").addEventListener("click", (event) => {
+      const button = event.target.closest("[data-rerun-scenario]");
+      if (!button) return;
+      const scenario = scenarios.find((item) => item.id === button.dataset.rerunScenario);
+      if (scenario) loadScenarioFrame(scenario);
+    });
     scenarios.forEach(loadScenarioFrame);
     statusEl.textContent = "Real content.js running in isolated scenarios";
   } catch (error) {

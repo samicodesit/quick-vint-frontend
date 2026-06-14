@@ -134,10 +134,12 @@
       document.body.appendChild(toast);
     }
 
+    const logoUrl = chrome.runtime.getURL("icons/icon48.png");
+
     toast.innerHTML = `
       <div class="paywall-body">
         <div class="paywall-header">
-          <div class="paywall-mark" aria-hidden="true">AI</div>
+          <img class="paywall-logo" src="${logoUrl}" alt="" aria-hidden="true">
           <div>
             <div class="paywall-kicker">AutoLister AI</div>
             <div class="paywall-title">${title}</div>
@@ -239,10 +241,10 @@
 
     if (code === "free_lifetime_limit") {
       return {
-        title: "Free limit reached",
+        title: "Free listings used",
         message:
-          "You used your free listings. Upgrade to Starter for more each month, or buy one-time credits for a small top-up.",
-        actionText: "View options",
+          "You have used your free listings. Upgrade for more listings every month, or buy one-time credits if you only need a few more.",
+        actionText: "See options",
         paywall: true,
       };
     }
@@ -252,38 +254,40 @@
         title: "Limit reached",
         message:
           code === "monthly_limit" || code === "daily_limit"
-            ? "You can manage billing or buy top-up credits if you need extra listings this cycle."
+            ? "You have used your current listings. Buy one-time credits for extra listings this cycle, or manage your plan."
             : limitData.error || "Usage limit reached.",
         actionText:
           code === "monthly_limit" || code === "daily_limit"
-            ? "View options"
+            ? "See options"
             : null,
         paywall: code === "monthly_limit" || code === "daily_limit",
       };
     }
 
     if (nextPlan) {
-      const scopeText = code === "monthly_limit" ? "monthly" : "daily";
+      const scopeText = code === "monthly_limit" ? "this month's" : "today's";
       const titleText =
         code === "monthly_limit" ? "Monthly limit reached" : "Daily limit reached";
       const nextLimit =
         code === "monthly_limit"
-          ? `${nextPlan.monthly}/month`
+          ? `${nextPlan.monthly} listings/month`
           : nextPlan.daily === null
-            ? "no daily cap"
-            : `${nextPlan.daily}/day`;
+            ? "no daily limit"
+            : `${nextPlan.daily} listings/day`;
 
       return {
         title: titleText,
-        message: `Your ${currentPlan.name} ${scopeText} limit is used. Upgrade to ${nextPlan.name} for ${nextLimit}, or choose one-time credits on the pricing page.`,
+        message: `You have used ${scopeText} ${currentPlan.name} listings. Upgrade to ${nextPlan.name} for ${nextLimit}, or buy one-time credits if you only need a few more.`,
         actionText: `Upgrade to ${nextPlan.name}`,
         paywall: true,
       };
     }
 
     return {
-      message: limitData.error || "You have exceeded your daily/monthly usage limit.",
-      actionText: "Upgrade Plan",
+      message:
+        limitData.error ||
+        "You are out of listings for now. See upgrade and one-time credit options.",
+      actionText: "See options",
       paywall: true,
       title: "Usage limit reached",
     };
@@ -1079,20 +1083,15 @@
         /* Allow wrapping normally */
       }
 
-      #quickvint-toast.paywall .paywall-mark {
+      #quickvint-toast.paywall .paywall-logo {
         flex: 0 0 auto;
         width: 38px;
         height: 38px;
         border-radius: 12px;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        background: linear-gradient(135deg, #eef2ff 0%, #ecfdf5 100%);
+        display: block;
+        background: #ffffff;
         border: 1px solid rgba(79, 70, 229, 0.12);
-        color: #4f46e5;
-        font-size: 11px;
-        font-weight: 800;
-        letter-spacing: 0;
+        box-shadow: 0 6px 14px rgba(17, 24, 39, 0.08);
       }
 
       #quickvint-toast.paywall .paywall-body {
