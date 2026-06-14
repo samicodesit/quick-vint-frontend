@@ -49,11 +49,19 @@
   const WAND_ICON_SVG = `<svg fill="#ffffff" viewBox="0 0 512 512" version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink"> <path d="M454.321,219.727l-38.766-51.947l20.815-61.385c2.046-6.032,0.489-12.704-4.015-17.208 c-4.504-4.504-11.175-6.061-17.208-4.015l-61.384,20.815l-51.951-38.766c-5.103-3.809-11.929-4.392-17.605-1.499 c-5.676,2.893-9.217,8.755-9.136,15.125l0.829,64.815l-52.923,37.426c-5.201,3.678-7.863,9.989-6.867,16.282 c0.996,6.291,5.479,11.471,11.561,13.363l43.844,13.63L14.443,483.432c-6.535,6.534-6.535,17.131,0,23.666s17.131,6.535,23.666,0 l257.073-257.072l13.629,43.843c2.172,6.986,8.638,11.768,15.984,11.768c5.375,0,10.494-2.595,13.66-7.072l37.426-52.923 l64.815,0.828c6.322,0.051,12.233-3.462,15.125-9.136S458.131,224.833,454.321,219.727z"></path> <polygon points="173.373,67.274 160.014,42.848 146.656,67.274 122.23,80.632 146.656,93.992 160.014,118.417 173.373,93.992 197.799,80.632 "></polygon> <polygon points="362.946,384.489 352.14,364.731 341.335,384.489 321.577,395.294 341.335,406.1 352.14,425.856 362.946,406.1 382.703,395.294 "></polygon> <polygon points="378.142,19.757 367.337,0 356.531,19.757 336.774,30.563 356.531,41.369 367.337,61.126 378.142,41.369 397.9,30.563 "></polygon> <polygon points="490.635,142.513 484.167,130.689 477.701,142.513 465.876,148.979 477.701,155.446 484.167,167.27 490.635,155.446 502.458,148.979 "></polygon> <polygon points="492.626,294.117 465.876,301.951 439.128,294.117 446.962,320.865 439.128,347.615 465.876,339.781 492.626,347.615 484.791,320.865 "></polygon> </svg>`;
   const PHONE_ICON_SVG = `<svg fill="#ffffff" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M17 1.01L7 1c-1.1 0-2 .9-2 2v18c0 1.1.9 2 2 2h10c1.1 0 2-.9 2-2V3c0-1.1-.9-1.99-2-1.99zM17 19H7V5h10v14z"/></svg>`;
   const PLAN_LIMITS = {
-    free: { name: "Free", daily: null, monthly: 5 },
-    starter: { name: "Starter", daily: 10, monthly: 75 },
-    pro: { name: "Pro", daily: 25, monthly: 250 },
-    business: { name: "Business", daily: 60, monthly: 600 },
+    free: { name: "Free", daily: null, monthly: 5, price: "Free" },
+    starter: { name: "Starter", daily: 10, monthly: 75, price: "€3.99/mo" },
+    pro: { name: "Pro", daily: 25, monthly: 250, price: "€9.99/mo" },
+    business: { name: "Business", daily: 60, monthly: 600, price: "€19.99/mo" },
   };
+  const CREDIT_PACK = {
+    name: "One-time credits",
+    price: "€5.99",
+    limits: "20 extra listings",
+  };
+  const SUPPORT_EMAIL = "support@autolister.app";
+  const TAILORED_LIMITS_CONTACT_URL =
+    `mailto:${SUPPORT_EMAIL}?subject=AutoLister%20AI%20tailored%20limits`;
 
   // --- STATE ---
   let generateBtn = null;
@@ -126,9 +134,20 @@
     }
   }
 
+  function escapeHtml(value) {
+    return String(value)
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#39;");
+  }
+
   function showLimitPaywall({
     title,
     message,
+    options = [],
+    trustNote,
     actionText,
     actionUrl,
     secondaryActionText,
@@ -142,6 +161,53 @@
     }
 
     const logoUrl = chrome.runtime.getURL("icons/icon48.png");
+    const selectableIndex = options.findIndex(
+      (option) => option.featured && option.selectable !== false,
+    );
+    const firstSelectableIndex = options.findIndex(
+      (option) => option.selectable !== false,
+    );
+    const defaultOptionIndex =
+      selectableIndex >= 0 ? selectableIndex : firstSelectableIndex;
+    const defaultOption =
+      defaultOptionIndex >= 0 ? options[defaultOptionIndex] : null;
+    const defaultActionText = defaultOption?.actionText || actionText;
+    const optionsHtml = options.length
+      ? `
+        <div class="paywall-options">
+          ${options
+            .map((option, index) => {
+              const isSelectable = option.selectable !== false;
+              const isSelected = index === defaultOptionIndex;
+              return `
+                <button
+                  class="paywall-option${option.featured ? " featured" : ""}${option.muted ? " muted" : ""}${isSelected ? " selected" : ""}"
+                  type="button"
+                  data-paywall-option-index="${index}"
+                  ${isSelectable ? "" : "disabled"}
+                >
+                  <div class="paywall-option-main">
+                    <span class="paywall-option-name">${escapeHtml(option.name)}</span>
+                    ${
+                      option.badge
+                        ? `<span class="paywall-option-badge">${escapeHtml(option.badge)}</span>`
+                        : ""
+                    }
+                  </div>
+                  <div class="paywall-option-side">
+                    <span class="paywall-option-price">${escapeHtml(option.price)}</span>
+                    <span class="paywall-option-limits">${escapeHtml(option.limits)}</span>
+                  </div>
+                </button>
+              `;
+            })
+            .join("")}
+        </div>
+      `
+      : "";
+    const trustHtml = trustNote
+      ? `<div class="paywall-trust">${escapeHtml(trustNote)}</div>`
+      : "";
 
     toast.innerHTML = `
       <div class="paywall-body">
@@ -149,19 +215,21 @@
           <img class="paywall-logo" src="${logoUrl}" alt="" aria-hidden="true">
           <div>
             <div class="paywall-kicker">AutoLister AI</div>
-            <div class="paywall-title">${title}</div>
+            <div class="paywall-title">${escapeHtml(title)}</div>
           </div>
         </div>
-        <div class="paywall-message">${message}</div>
-        <a class="paywall-action" href="${actionUrl}" target="_blank" rel="noopener noreferrer">
-          <span>${actionText}</span>
+        <div class="paywall-message">${escapeHtml(message)}</div>
+        ${optionsHtml}
+        <button class="paywall-action" type="button">
+          <span>${escapeHtml(defaultActionText)}</span>
           <span aria-hidden="true">→</span>
-        </a>
+        </button>
         ${
           secondaryActionText && secondaryActionUrl
-            ? `<a class="paywall-secondary-action" href="${secondaryActionUrl}" target="_blank" rel="noopener noreferrer">${secondaryActionText}</a>`
+            ? `<a class="paywall-secondary-action" href="${secondaryActionUrl}" target="_blank" rel="noopener noreferrer">${escapeHtml(secondaryActionText)}</a>`
             : ""
         }
+        ${trustHtml}
       </div>
       <button class="toast-close paywall-close" aria-label="Close">×</button>
     `;
@@ -176,6 +244,77 @@
         if (window.quickvintToastTimeout)
           clearTimeout(window.quickvintToastTimeout);
       };
+    }
+
+    let selectedOptionIndex = defaultOptionIndex;
+    const actionBtn = toast.querySelector(".paywall-action");
+    const actionTextEl = actionBtn?.querySelector("span");
+    const optionButtons = Array.from(
+      toast.querySelectorAll("[data-paywall-option-index]"),
+    );
+
+    function setSelectedOption(index) {
+      const option = options[index];
+      if (!option || option.selectable === false) return;
+      selectedOptionIndex = index;
+      optionButtons.forEach((button) => {
+        button.classList.toggle(
+          "selected",
+          Number(button.dataset.paywallOptionIndex) === index,
+        );
+      });
+      if (actionTextEl) {
+        actionTextEl.textContent = option.actionText || actionText;
+      }
+    }
+
+    optionButtons.forEach((button) => {
+      button.addEventListener("click", () => {
+        setSelectedOption(Number(button.dataset.paywallOptionIndex));
+      });
+    });
+
+    if (actionBtn) {
+      actionBtn.addEventListener("click", async () => {
+        const selectedOption = options[selectedOptionIndex];
+        const checkoutOption =
+          selectedOption && selectedOption.selectable !== false
+            ? selectedOption
+            : null;
+
+        if (!checkoutOption?.checkoutType) {
+          window.open(
+            checkoutOption?.actionUrl || actionUrl,
+            "_blank",
+            "noopener,noreferrer",
+          );
+          return;
+        }
+
+        const previousText = actionTextEl?.textContent || actionText;
+        const checkoutWindow = window.open("about:blank", "_blank");
+        actionBtn.disabled = true;
+        if (actionTextEl) actionTextEl.textContent = "Opening checkout...";
+
+        try {
+          const checkoutUrl = await createCheckoutForPaywall(checkoutOption);
+          if (checkoutWindow) {
+            checkoutWindow.location.href = checkoutUrl;
+          } else {
+            window.open(checkoutUrl, "_blank", "noopener,noreferrer");
+          }
+        } catch (error) {
+          if (checkoutWindow) checkoutWindow.close();
+          console.error("Paywall checkout error:", error);
+          showToast(
+            error.message || "Unable to open the payment page. Please try again.",
+            "error",
+          );
+        } finally {
+          actionBtn.disabled = false;
+          if (actionTextEl) actionTextEl.textContent = previousText;
+        }
+      });
     }
 
     toast.offsetHeight;
@@ -228,13 +367,94 @@
     return map[tier] || "free";
   }
 
+  function formatPlanLimitSummary(plan) {
+    const daily = plan.daily === null ? "no daily limit" : `${plan.daily}/day`;
+    return `${daily} · ${plan.monthly}/month`;
+  }
+
+  function planOption(
+    tier,
+    { badge = "", featured = false, muted = false, selectable = true } = {},
+  ) {
+    const plan = PLAN_LIMITS[tier];
+    return {
+      tier,
+      name: plan.name,
+      price: plan.price,
+      limits: formatPlanLimitSummary(plan),
+      actionText: `Upgrade to ${plan.name}`,
+      checkoutType: "subscription",
+      badge,
+      featured,
+      muted,
+      selectable,
+    };
+  }
+
+  function creditPackOption({ badge = "", featured = false } = {}) {
+    return {
+      tier: "credit_pack",
+      name: CREDIT_PACK.name,
+      price: CREDIT_PACK.price,
+      limits: CREDIT_PACK.limits,
+      actionText: "Buy one-time credits",
+      checkoutType: "credit_pack",
+      badge,
+      featured,
+    };
+  }
+
+  function tailoredLimitsOption({ badge = "", featured = false } = {}) {
+    return {
+      name: "Tailored limits",
+      price: SUPPORT_EMAIL,
+      limits: "For higher volume",
+      actionText: "Contact us",
+      actionUrl: TAILORED_LIMITS_CONTACT_URL,
+      badge,
+      featured,
+    };
+  }
+
+  function getCurrentUserEmail() {
+    return new Promise((resolve) => {
+      chrome.storage.local.get("supabaseSession", ({ supabaseSession }) => {
+        resolve(supabaseSession?.user?.email || "");
+      });
+    });
+  }
+
+  async function createCheckoutForPaywall(option) {
+    const email = await getCurrentUserEmail();
+    if (!email) {
+      throw new Error("Please sign in again before checkout.");
+    }
+
+    const isCreditPack = option.checkoutType === "credit_pack";
+    const endpoint = isCreditPack
+      ? `${API_BASE}/api/stripe/create-credit-checkout`
+      : `${API_BASE}/api/stripe/create-checkout`;
+    const body = isCreditPack
+      ? { email }
+      : { email, tier: option.tier };
+
+    const res = await fetch(endpoint, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    const payload = await res.json().catch(() => ({}));
+    if (!res.ok || !payload.url) {
+      throw new Error(payload.error || "Unable to open the payment page.");
+    }
+    return payload.url;
+  }
+
   function buildLimitMessage(limitData = {}) {
     const code = limitData.code;
     const currentTier = normalizeTier(limitData.currentTier);
     const nextTier = limitData.nextTier ? normalizeTier(limitData.nextTier) : null;
     const nextPlan = nextTier ? PLAN_LIMITS[nextTier] : null;
-    const currentPlan = PLAN_LIMITS[currentTier] || PLAN_LIMITS.free;
-
     if (code === "burst_limit") {
       return {
         message: "Too many requests at once. Please wait a moment and try again.",
@@ -254,9 +474,15 @@
     if (code === "free_lifetime_limit") {
       return {
         title: "Free listings used",
-        message: "Starter gives you 75 listings/month.",
+        message: "Pick the plan that fits how often you list.",
+        options: [
+          planOption("starter", { badge: "Best next step", featured: true }),
+          planOption("pro"),
+          planOption("business"),
+        ],
+        trustNote: "Secure checkout by Stripe. Cancel anytime.",
         actionText: "Upgrade to Starter",
-        secondaryActionText: "Compare plans",
+        secondaryActionText: "Compare all plans",
         paywall: true,
       };
     }
@@ -266,15 +492,26 @@
         title: "Limit reached",
         message:
           code === "monthly_limit" || code === "daily_limit"
-            ? "Need extra listings this cycle?"
+            ? "Add a few more listings without changing plan."
             : limitData.error || "Usage limit reached.",
+        options:
+          code === "monthly_limit" || code === "daily_limit"
+            ? [
+                creditPackOption({ badge: "One-time", featured: true }),
+                tailoredLimitsOption(),
+              ]
+            : [],
+        trustNote:
+          code === "monthly_limit" || code === "daily_limit"
+            ? "Secure checkout by Stripe. One-time purchase."
+            : "",
         actionText:
           code === "monthly_limit" || code === "daily_limit"
             ? "Buy one-time credits"
             : null,
         secondaryActionText:
           code === "monthly_limit" || code === "daily_limit"
-            ? "Compare plans"
+            ? null
             : null,
         paywall: code === "monthly_limit" || code === "daily_limit",
       };
@@ -283,18 +520,27 @@
     if (nextPlan) {
       const titleText =
         code === "monthly_limit" ? "Monthly limit reached" : "Daily limit reached";
-      const nextLimit =
-        code === "monthly_limit"
-          ? `${nextPlan.monthly} listings/month`
-          : nextPlan.daily === null
-            ? "no daily limit"
-            : `${nextPlan.daily} listings/day`;
+      const nextTierOptions =
+        currentTier === "starter"
+          ? [
+              planOption("pro", { badge: "Recommended", featured: true }),
+              planOption("business"),
+              creditPackOption({ badge: "One-time" }),
+            ]
+          : currentTier === "pro"
+            ? [
+                planOption("business", { badge: "Recommended", featured: true }),
+                creditPackOption({ badge: "One-time" }),
+              ]
+            : [planOption(nextTier, { badge: "Recommended", featured: true })];
 
       return {
         title: titleText,
-        message: `${nextPlan.name} gives you ${nextLimit}.`,
+        message: "Choose more monthly room or a one-time top-up.",
+        options: nextTierOptions,
+        trustNote: "Secure checkout by Stripe. Cancel anytime.",
         actionText: `Upgrade to ${nextPlan.name}`,
-        secondaryActionText: "Compare plans",
+        secondaryActionText: "Compare all plans",
         paywall: true,
       };
     }
@@ -303,7 +549,13 @@
       message:
         limitData.error ||
         "Pick the option that fits your next listings.",
-      actionText: "Compare plans",
+      actionText: "Compare all plans",
+      options: [
+        planOption("starter", { featured: true }),
+        planOption("pro"),
+        planOption("business"),
+      ],
+      trustNote: "Secure checkout by Stripe. Cancel anytime.",
       paywall: true,
       title: "Usage limit reached",
     };
@@ -1067,20 +1319,24 @@
         color: #111827;
         border: 1px solid rgba(79, 70, 229, 0.14);
         border-radius: 18px;
-        padding: 18px;
-        min-width: 360px;
-        max-width: 410px;
+        padding: 17px;
+        min-width: 390px;
+        max-width: 450px;
         gap: 10px;
         box-shadow: 0 26px 80px rgba(17, 24, 39, 0.2), 0 10px 26px rgba(79, 70, 229, 0.14);
+        overflow: hidden;
       }
 
       #quickvint-toast.paywall::before {
         content: "";
         position: absolute;
-        inset: 0 0 auto;
+        top: 0;
+        left: 0;
+        right: 0;
         height: 3px;
-        border-radius: 18px 18px 0 0;
         background: linear-gradient(90deg, #10b981, #38bdf8, #4f46e5);
+        pointer-events: none;
+        z-index: 0;
       }
 
       #quickvint-toast.visible {
@@ -1111,6 +1367,8 @@
       }
 
       #quickvint-toast.paywall .paywall-body {
+        position: relative;
+        z-index: 1;
         flex: 1;
         min-width: 0;
       }
@@ -1119,7 +1377,7 @@
         display: flex;
         align-items: center;
         gap: 11px;
-        margin: 1px 28px 12px 0;
+        margin: 1px 28px 10px 0;
       }
 
       #quickvint-toast.paywall .paywall-kicker {
@@ -1143,7 +1401,103 @@
         color: #5b6472;
         font-size: 13px;
         line-height: 1.5;
-        margin: 0 0 14px;
+        margin: 0 0 11px;
+      }
+
+      #quickvint-toast.paywall .paywall-options {
+        display: grid;
+        gap: 7px;
+        margin: 0 0 12px;
+      }
+
+      #quickvint-toast.paywall .paywall-option {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        align-items: center;
+        gap: 10px;
+        width: 100%;
+        min-height: 48px;
+        padding: 9px 10px;
+        border: 1px solid #e5e7eb;
+        border-radius: 12px;
+        background: #ffffff;
+        box-shadow: 0 1px 2px rgba(17, 24, 39, 0.04);
+        cursor: pointer;
+        font-family: inherit;
+        text-align: left;
+        transition: border-color 140ms ease, background 140ms ease, box-shadow 140ms ease;
+      }
+
+      #quickvint-toast.paywall .paywall-option:hover:not(:disabled) {
+        border-color: #d1d5db;
+        box-shadow: 0 5px 14px rgba(79, 70, 229, 0.1);
+      }
+
+      #quickvint-toast.paywall .paywall-option.selected {
+        border-color: rgba(79, 70, 229, 0.62);
+        background: #f7f7ff;
+        box-shadow: 0 0 0 2px rgba(79, 70, 229, 0.1);
+      }
+
+      #quickvint-toast.paywall .paywall-option.muted {
+        background: #f8fafc;
+      }
+
+      #quickvint-toast.paywall .paywall-option:disabled {
+        cursor: default;
+      }
+
+      #quickvint-toast.paywall .paywall-option-main {
+        display: flex;
+        align-items: center;
+        gap: 7px;
+        min-width: 0;
+      }
+
+      #quickvint-toast.paywall .paywall-option-name {
+        color: #111827;
+        font-size: 13px;
+        font-weight: 850;
+        line-height: 1.2;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      #quickvint-toast.paywall .paywall-option-badge {
+        flex: 0 0 auto;
+        padding: 3px 6px;
+        border-radius: 999px;
+        background: #ecfdf5;
+        color: #047857;
+        border: 1px solid #bbf7d0;
+        font-size: 10px;
+        font-weight: 850;
+        line-height: 1;
+        white-space: nowrap;
+      }
+
+      #quickvint-toast.paywall .paywall-option-side {
+        display: flex;
+        flex-direction: column;
+        align-items: flex-end;
+        gap: 2px;
+        text-align: right;
+        white-space: nowrap;
+      }
+
+      #quickvint-toast.paywall .paywall-option-price {
+        color: #111827;
+        font-size: 13px;
+        font-weight: 850;
+        line-height: 1.1;
+      }
+
+      #quickvint-toast.paywall .paywall-option-limits {
+        color: #667085;
+        font-size: 11px;
+        font-weight: 720;
+        line-height: 1.15;
       }
 
       #quickvint-toast.paywall .paywall-action {
@@ -1157,14 +1511,22 @@
         border-radius: 10px;
         background: #111827;
         color: #ffffff;
+        border: 0;
+        cursor: pointer;
+        font-family: inherit;
         text-decoration: none;
         font-size: 13px;
         font-weight: 800;
         box-shadow: 0 10px 22px rgba(17, 24, 39, 0.18);
       }
 
-      #quickvint-toast.paywall .paywall-action:hover {
+      #quickvint-toast.paywall .paywall-action:hover:not(:disabled) {
         background: #1f2937;
+      }
+
+      #quickvint-toast.paywall .paywall-action:disabled {
+        cursor: wait;
+        opacity: 0.78;
       }
 
       #quickvint-toast.paywall .paywall-secondary-action {
@@ -1180,6 +1542,15 @@
 
       #quickvint-toast.paywall .paywall-secondary-action:hover {
         text-decoration: underline;
+      }
+
+      #quickvint-toast.paywall .paywall-trust {
+        margin-top: 9px;
+        color: #778196;
+        font-size: 11px;
+        font-weight: 650;
+        line-height: 1.35;
+        text-align: center;
       }
 
       #quickvint-toast .toast-close {
@@ -1211,6 +1582,7 @@
         top: 12px;
         right: 12px;
         color: #9ca3af;
+        z-index: 2;
       }
 
       #quickvint-toast.paywall .toast-close:hover {
@@ -1235,6 +1607,16 @@
         #quickvint-toast.paywall {
           min-width: 0;
           max-width: none;
+        }
+
+        #quickvint-toast.paywall .paywall-option {
+          grid-template-columns: 1fr;
+          gap: 5px;
+        }
+
+        #quickvint-toast.paywall .paywall-option-side {
+          align-items: flex-start;
+          text-align: left;
         }
       }
     `;
@@ -2123,6 +2505,8 @@
           showLimitPaywall({
             title: limitMessage.title || "Usage limit reached",
             message: limitMessage.message,
+            options: limitMessage.options,
+            trustNote: limitMessage.trustNote,
             actionText: limitMessage.actionText,
             actionUrl: pricingUrl,
             secondaryActionText: limitMessage.secondaryActionText,
