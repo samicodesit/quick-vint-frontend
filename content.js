@@ -126,7 +126,14 @@
     }
   }
 
-  function showLimitPaywall({ title, message, actionText, actionUrl }) {
+  function showLimitPaywall({
+    title,
+    message,
+    actionText,
+    actionUrl,
+    secondaryActionText,
+    secondaryActionUrl,
+  }) {
     let toast = document.getElementById("quickvint-toast");
     if (!toast) {
       toast = document.createElement("div");
@@ -150,6 +157,11 @@
           <span>${actionText}</span>
           <span aria-hidden="true">→</span>
         </a>
+        ${
+          secondaryActionText && secondaryActionUrl
+            ? `<a class="paywall-secondary-action" href="${secondaryActionUrl}" target="_blank" rel="noopener noreferrer">${secondaryActionText}</a>`
+            : ""
+        }
       </div>
       <button class="toast-close paywall-close" aria-label="Close">×</button>
     `;
@@ -242,8 +254,9 @@
     if (code === "free_lifetime_limit") {
       return {
         title: "Free listings used",
-        message: "Get more listings with a plan or one-time credits.",
-        actionText: "See options",
+        message: "Starter gives you 75 listings/month.",
+        actionText: "Upgrade to Starter",
+        secondaryActionText: "Compare plans",
         paywall: true,
       };
     }
@@ -253,11 +266,15 @@
         title: "Limit reached",
         message:
           code === "monthly_limit" || code === "daily_limit"
-            ? "Need more listings? Add credits or manage your plan."
+            ? "Need extra listings this cycle?"
             : limitData.error || "Usage limit reached.",
         actionText:
           code === "monthly_limit" || code === "daily_limit"
-            ? "See options"
+            ? "Buy one-time credits"
+            : null,
+        secondaryActionText:
+          code === "monthly_limit" || code === "daily_limit"
+            ? "Compare plans"
             : null,
         paywall: code === "monthly_limit" || code === "daily_limit",
       };
@@ -275,8 +292,9 @@
 
       return {
         title: titleText,
-        message: `${nextPlan.name} gives you ${nextLimit}. One-time credits are also available.`,
+        message: `${nextPlan.name} gives you ${nextLimit}.`,
         actionText: `Upgrade to ${nextPlan.name}`,
+        secondaryActionText: "Compare plans",
         paywall: true,
       };
     }
@@ -284,8 +302,8 @@
     return {
       message:
         limitData.error ||
-        "Need more listings? See your options.",
-      actionText: "See options",
+        "Pick the option that fits your next listings.",
+      actionText: "Compare plans",
       paywall: true,
       title: "Usage limit reached",
     };
@@ -1147,6 +1165,21 @@
 
       #quickvint-toast.paywall .paywall-action:hover {
         background: #1f2937;
+      }
+
+      #quickvint-toast.paywall .paywall-secondary-action {
+        display: inline-flex;
+        justify-content: center;
+        width: 100%;
+        margin-top: 9px;
+        color: #4f46e5;
+        text-decoration: none;
+        font-size: 12px;
+        font-weight: 800;
+      }
+
+      #quickvint-toast.paywall .paywall-secondary-action:hover {
+        text-decoration: underline;
       }
 
       #quickvint-toast .toast-close {
@@ -2092,6 +2125,8 @@
             message: limitMessage.message,
             actionText: limitMessage.actionText,
             actionUrl: pricingUrl,
+            secondaryActionText: limitMessage.secondaryActionText,
+            secondaryActionUrl: pricingUrl,
           });
         } else {
           showToast(

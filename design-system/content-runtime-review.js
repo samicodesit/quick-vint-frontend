@@ -93,8 +93,11 @@
         },
       },
       verify(doc) {
+        const toastText = doc.querySelector("#quickvint-toast")?.textContent || "";
         return (
-          /Free listings used/.test(doc.querySelector("#quickvint-toast")?.textContent || "") &&
+          /Free listings used/.test(toastText) &&
+          /Upgrade to Starter/.test(toastText) &&
+          /Compare plans/.test(toastText) &&
           !!doc.querySelector("#quickvint-toast .paywall-logo")
         );
       },
@@ -116,8 +119,11 @@
         },
       },
       verify(doc) {
+        const toastText = doc.querySelector("#quickvint-toast")?.textContent || "";
         return (
-          /Monthly limit reached/.test(doc.querySelector("#quickvint-toast")?.textContent || "") &&
+          /Monthly limit reached/.test(toastText) &&
+          /Upgrade to Pro/.test(toastText) &&
+          /Compare plans/.test(toastText) &&
           !!doc.querySelector("#quickvint-toast .paywall-logo")
         );
       },
@@ -138,8 +144,11 @@
         },
       },
       verify(doc) {
+        const toastText = doc.querySelector("#quickvint-toast")?.textContent || "";
         return (
-          /Limit reached/.test(doc.querySelector("#quickvint-toast")?.textContent || "") &&
+          /Limit reached/.test(toastText) &&
+          /Buy one-time credits/.test(toastText) &&
+          /Compare plans/.test(toastText) &&
           !!doc.querySelector("#quickvint-toast .paywall-logo")
         );
       },
