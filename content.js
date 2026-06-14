@@ -242,8 +242,7 @@
     if (code === "free_lifetime_limit") {
       return {
         title: "Free listings used",
-        message:
-          "You have used your free listings. Upgrade for more listings every month, or buy one-time credits if you only need a few more.",
+        message: "Get more listings with a plan or one-time credits.",
         actionText: "See options",
         paywall: true,
       };
@@ -254,7 +253,7 @@
         title: "Limit reached",
         message:
           code === "monthly_limit" || code === "daily_limit"
-            ? "You have used your current listings. Buy one-time credits for extra listings this cycle, or manage your plan."
+            ? "Need more listings? Add credits or manage your plan."
             : limitData.error || "Usage limit reached.",
         actionText:
           code === "monthly_limit" || code === "daily_limit"
@@ -265,7 +264,6 @@
     }
 
     if (nextPlan) {
-      const scopeText = code === "monthly_limit" ? "this month's" : "today's";
       const titleText =
         code === "monthly_limit" ? "Monthly limit reached" : "Daily limit reached";
       const nextLimit =
@@ -277,7 +275,7 @@
 
       return {
         title: titleText,
-        message: `You have used ${scopeText} ${currentPlan.name} listings. Upgrade to ${nextPlan.name} for ${nextLimit}, or buy one-time credits if you only need a few more.`,
+        message: `${nextPlan.name} gives you ${nextLimit}. One-time credits are also available.`,
         actionText: `Upgrade to ${nextPlan.name}`,
         paywall: true,
       };
@@ -286,7 +284,7 @@
     return {
       message:
         limitData.error ||
-        "You are out of listings for now. See upgrade and one-time credit options.",
+        "Need more listings? See your options.",
       actionText: "See options",
       paywall: true,
       title: "Usage limit reached",
