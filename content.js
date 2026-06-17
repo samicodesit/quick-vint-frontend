@@ -3,6 +3,7 @@
   const BTN_ID = "quickvint-gen-btn";
   const PHONE_BTN_ID = "quickvint-phone-btn";
   const SIGN_IN_BTN_ID = "quickvint-signin-btn";
+  const DESCRIPTION_APPLY_PROMPT_ID = "quickvint-description-apply-prompt";
   const TITLE_LANGUAGE_SELECT_ID = "quickvint-title-language-select";
   const DESCRIPTION_LANGUAGE_SELECT_ID = "quickvint-description-language-select";
   const MODAL_ID = "quickvint-phone-modal";
@@ -1272,6 +1273,54 @@
         text-align: center;
       }
 
+      #${DESCRIPTION_APPLY_PROMPT_ID} {
+        width: 100%;
+        margin-top: 10px;
+        padding: 12px;
+        border: 1px solid #e5e7eb;
+        border-radius: 10px;
+        background: #ffffff;
+        box-shadow: 0 8px 22px rgba(17, 24, 39, 0.1);
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      }
+
+      #${DESCRIPTION_APPLY_PROMPT_ID} .quickvint-apply-title {
+        margin: 0 0 10px;
+        color: #111827;
+        font-size: 13px;
+        font-weight: 800;
+        line-height: 1.35;
+      }
+
+      #${DESCRIPTION_APPLY_PROMPT_ID} .quickvint-apply-actions {
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+      }
+
+      #${DESCRIPTION_APPLY_PROMPT_ID} button {
+        min-height: 34px;
+        padding: 0 12px;
+        border-radius: 8px;
+        border: 1px solid #d1d5db;
+        background: #ffffff;
+        color: #111827;
+        cursor: pointer;
+        font: inherit;
+        font-size: 12px;
+        font-weight: 800;
+      }
+
+      #${DESCRIPTION_APPLY_PROMPT_ID} .quickvint-apply-add {
+        border-color: #4f46e5;
+        background: #4f46e5;
+        color: #ffffff;
+      }
+
+      #${DESCRIPTION_APPLY_PROMPT_ID} button:hover {
+        filter: brightness(0.98);
+      }
+
       /* TOAST NOTIFICATION */
       #quickvint-toast {
         position: fixed;
@@ -1891,6 +1940,66 @@
     }, 2000);
   }
 
+  function removeDescriptionApplyPrompt() {
+    document.getElementById(DESCRIPTION_APPLY_PROMPT_ID)?.remove();
+  }
+
+  function setDescriptionValue(descInput, value) {
+    descInput.value = value;
+    descInput.dispatchEvent(new Event("input", { bubbles: true }));
+  }
+
+  function applyGeneratedDescription(descInput, generatedDescription) {
+    const currentDescription = descInput.value || "";
+    if (!currentDescription.trim()) {
+      setDescriptionValue(descInput, generatedDescription);
+      return Promise.resolve();
+    }
+
+    removeDescriptionApplyPrompt();
+
+    return new Promise((resolve) => {
+      const prompt = document.createElement("div");
+      prompt.id = DESCRIPTION_APPLY_PROMPT_ID;
+      prompt.innerHTML = `
+        <div class="quickvint-apply-title">You already have text in the description box.</div>
+        <div class="quickvint-apply-actions">
+          <button type="button" class="quickvint-apply-replace">Replace</button>
+          <button type="button" class="quickvint-apply-add">Add below existing text</button>
+        </div>
+      `;
+
+      const insertAfter = descInput.closest("label") || descInput;
+      const promptParent = insertAfter.parentNode;
+      if (!promptParent) {
+        setDescriptionValue(descInput, generatedDescription);
+        resolve();
+        return;
+      }
+
+      promptParent.insertBefore(prompt, insertAfter.nextSibling);
+
+      prompt
+        .querySelector(".quickvint-apply-replace")
+        ?.addEventListener("click", () => {
+          setDescriptionValue(descInput, generatedDescription);
+          prompt.remove();
+          resolve();
+        });
+
+      prompt
+        .querySelector(".quickvint-apply-add")
+        ?.addEventListener("click", () => {
+          setDescriptionValue(
+            descInput,
+            `${currentDescription.trimEnd()}\n\n${generatedDescription}`,
+          );
+          prompt.remove();
+          resolve();
+        });
+    });
+  }
+
   // --- CORE LOGIC & EVENT HANDLERS ---
 
   // --- PHONE UPLOAD LOGIC ---
@@ -2435,6 +2544,7 @@
     }
 
     isBusy = true;
+    removeDescriptionApplyPrompt();
     updateButtonUI();
 
     try {
@@ -2539,11 +2649,7 @@
         titleInput.dispatchEvent(new Event("input", { bubbles: true }));
       }
       if (descInput) {
-        const currentDescription = descInput.value || "";
-        descInput.value = currentDescription.trim()
-          ? `${currentDescription.trimEnd()}\n\n${description}`
-          : description;
-        descInput.dispatchEvent(new Event("input", { bubbles: true }));
+        await applyGeneratedDescription(descInput, description);
       }
 
       setButtonSuccessState();

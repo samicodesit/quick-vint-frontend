@@ -78,6 +78,73 @@
       },
     },
     {
+      id: "existing-description-choice",
+      title: "Existing description choice",
+      note: "Generated text waits while the user chooses how to apply it.",
+      height: 560,
+      auth: true,
+      action: "generate-success",
+      hasImages: true,
+      initialDescription: "My original description.",
+      verify(doc) {
+        const desc = doc.querySelector('[data-testid="description--input"]');
+        const prompt = doc.getElementById("quickvint-description-apply-prompt");
+        return (
+          desc?.value === "My original description." &&
+          /already have text in the description box/.test(prompt?.textContent || "") &&
+          /Replace/.test(prompt?.textContent || "") &&
+          /Add below existing text/.test(prompt?.textContent || "")
+        );
+      },
+    },
+    {
+      id: "existing-description-replace",
+      title: "Existing description: replace",
+      note: "Generated text waits for an explicit replace choice.",
+      height: 540,
+      auth: true,
+      action: "generate-success",
+      hasImages: true,
+      initialDescription: "My original description.",
+      verify(doc) {
+        const desc = doc.querySelector('[data-testid="description--input"]');
+        const prompt = doc.getElementById("quickvint-description-apply-prompt");
+        const stayedUntouched = desc?.value === "My original description.";
+        prompt?.querySelector(".quickvint-apply-replace")?.click();
+        return (
+          stayedUntouched &&
+          /already have text/.test(prompt?.textContent || "") &&
+          desc?.value ===
+            "Light blue denim jacket in good condition. Easy to style and ready for everyday wear." &&
+          !doc.getElementById("quickvint-description-apply-prompt")
+        );
+      },
+    },
+    {
+      id: "existing-description-add",
+      title: "Existing description: add below",
+      note: "Generated text appends only after the user chooses add below.",
+      height: 540,
+      auth: true,
+      action: "generate-success",
+      hasImages: true,
+      initialDescription: "My original description.",
+      verify(doc) {
+        const desc = doc.querySelector('[data-testid="description--input"]');
+        const prompt = doc.getElementById("quickvint-description-apply-prompt");
+        const stayedUntouched = desc?.value === "My original description.";
+        prompt?.querySelector(".quickvint-apply-add")?.click();
+        return (
+          stayedUntouched &&
+          /Replace/.test(prompt?.textContent || "") &&
+          /Add below existing text/.test(prompt?.textContent || "") &&
+          desc?.value ===
+            "My original description.\n\nLight blue denim jacket in good condition. Easy to style and ready for everyday wear." &&
+          !doc.getElementById("quickvint-description-apply-prompt")
+        );
+      },
+    },
+    {
       id: "free-limit",
       title: "Free limit paywall",
       note: "Real 429 handling path for free users.",
@@ -221,6 +288,13 @@
       .replace(/</g, "&lt;");
   }
 
+  function escapeTextAreaValue(value) {
+    return String(value)
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;");
+  }
+
   function isVisible(doc, element) {
     if (!element) return false;
     const style = doc.defaultView.getComputedStyle(element);
@@ -306,7 +380,8 @@
     };
   }
 
-  function mockVintedMarkup({ hasImages }) {
+  function mockVintedMarkup({ hasImages, initialDescription = "" }) {
+    const safeInitialDescription = escapeTextAreaValue(initialDescription);
     const media = hasImages
       ? `
         <section data-testid="media-upload-grid" class="mock-media-grid">
@@ -342,7 +417,7 @@
           <label class="mock-field">
             <div data-testid="description--title" class="mock-field-title">Description</div>
             <div class="mock-input-shell">
-              <textarea data-testid="description--input" class="mock-textarea" placeholder="Describe your item"></textarea>
+              <textarea data-testid="description--input" class="mock-textarea" placeholder="Describe your item">${safeInitialDescription}</textarea>
             </div>
           </label>
         </div>
