@@ -1296,10 +1296,14 @@
       #${DESCRIPTION_APPLY_PROMPT_ID} .quickvint-apply-actions {
         display: flex;
         gap: 8px;
-        flex-wrap: wrap;
+        flex-wrap: nowrap;
+        justify-content: flex-end;
       }
 
       #${DESCRIPTION_APPLY_PROMPT_ID} button {
+        flex: 0 0 auto;
+        width: auto !important;
+        min-width: 76px;
         min-height: 34px;
         padding: 0 12px;
         border-radius: 8px;
@@ -1313,6 +1317,7 @@
       }
 
       #${DESCRIPTION_APPLY_PROMPT_ID} .quickvint-apply-add {
+        min-width: 96px;
         border-color: #4f46e5;
         background: #4f46e5;
         color: #ffffff;
