@@ -80,6 +80,7 @@
   let phoneUploadPreviewTimer = null;
   let phoneUploadAutoCloseTimer = null;
   let inlineLanguageListenersBound = false;
+  let activeDescriptionApplyPromptCleanup = null;
 
   // --- HELPER FUNCTIONS ---
 
@@ -1274,18 +1275,18 @@
       }
 
       #${DESCRIPTION_APPLY_PROMPT_ID} {
-        width: 100%;
-        margin-top: 10px;
+        position: fixed;
+        z-index: 2147483647;
         padding: 12px;
         border: 1px solid #e5e7eb;
-        border-radius: 10px;
+        border-radius: 12px;
         background: #ffffff;
-        box-shadow: 0 8px 22px rgba(17, 24, 39, 0.1);
+        box-shadow: 0 16px 40px rgba(17, 24, 39, 0.18);
         font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
       }
 
       #${DESCRIPTION_APPLY_PROMPT_ID} .quickvint-apply-title {
-        margin: 0 0 10px;
+        margin: 0 0 9px;
         color: #111827;
         font-size: 13px;
         font-weight: 800;
@@ -1941,6 +1942,10 @@
   }
 
   function removeDescriptionApplyPrompt() {
+    if (activeDescriptionApplyPromptCleanup) {
+      activeDescriptionApplyPromptCleanup("cancel");
+      return;
+    }
     document.getElementById(DESCRIPTION_APPLY_PROMPT_ID)?.remove();
   }
 
@@ -1949,11 +1954,28 @@
     descInput.dispatchEvent(new Event("input", { bubbles: true }));
   }
 
-  function applyGeneratedDescription(descInput, generatedDescription) {
-    const currentDescription = descInput.value || "";
-    if (!currentDescription.trim()) {
-      setDescriptionValue(descInput, generatedDescription);
-      return Promise.resolve();
+  function positionDescriptionApplyPrompt(prompt, descInput) {
+    const descriptionBox = descInput.closest("label") || descInput;
+    const titleInput = document.querySelector(SELECTORS.title);
+    const titleBox = titleInput?.closest("label") || titleInput;
+    const anchor = titleBox?.parentElement || descriptionBox.parentElement || descriptionBox;
+    const anchorRect = anchor.getBoundingClientRect();
+    const promptWidth = Math.min(320, window.innerWidth - 24);
+    const gap = 12;
+    const rightSpace = window.innerWidth - anchorRect.right;
+    const left = rightSpace >= promptWidth + gap
+      ? anchorRect.right + gap
+      : Math.max(12, window.innerWidth - promptWidth - 12);
+    const top = Math.max(12, anchorRect.top);
+
+    prompt.style.width = `${promptWidth}px`;
+    prompt.style.left = `${left}px`;
+    prompt.style.top = `${top}px`;
+  }
+
+  function getDescriptionApplyChoice(descInput) {
+    if (!(descInput.value || "").trim()) {
+      return Promise.resolve("replace");
     }
 
     removeDescriptionApplyPrompt();
@@ -1962,42 +1984,62 @@
       const prompt = document.createElement("div");
       prompt.id = DESCRIPTION_APPLY_PROMPT_ID;
       prompt.innerHTML = `
-        <div class="quickvint-apply-title">You already have text in the description box.</div>
+        <div class="quickvint-apply-title">Description already has text.</div>
         <div class="quickvint-apply-actions">
           <button type="button" class="quickvint-apply-replace">Replace</button>
-          <button type="button" class="quickvint-apply-add">Add below existing text</button>
+          <button type="button" class="quickvint-apply-add">Add below</button>
+          <button type="button" class="quickvint-apply-cancel">Cancel</button>
         </div>
       `;
 
-      const insertAfter = descInput.closest("label") || descInput;
-      const promptParent = insertAfter.parentNode;
-      if (!promptParent) {
-        setDescriptionValue(descInput, generatedDescription);
-        resolve();
-        return;
+      document.body.appendChild(prompt);
+      positionDescriptionApplyPrompt(prompt, descInput);
+
+      const onReposition = () => positionDescriptionApplyPrompt(prompt, descInput);
+      window.addEventListener("resize", onReposition);
+      window.addEventListener("scroll", onReposition, true);
+
+      function finish(choice) {
+        window.removeEventListener("resize", onReposition);
+        window.removeEventListener("scroll", onReposition, true);
+        prompt.remove();
+        activeDescriptionApplyPromptCleanup = null;
+        resolve(choice);
       }
 
-      promptParent.insertBefore(prompt, insertAfter.nextSibling);
+      activeDescriptionApplyPromptCleanup = finish;
 
       prompt
         .querySelector(".quickvint-apply-replace")
         ?.addEventListener("click", () => {
-          setDescriptionValue(descInput, generatedDescription);
-          prompt.remove();
-          resolve();
+          finish("replace");
         });
 
       prompt
         .querySelector(".quickvint-apply-add")
         ?.addEventListener("click", () => {
-          setDescriptionValue(
-            descInput,
-            `${currentDescription.trimEnd()}\n\n${generatedDescription}`,
-          );
-          prompt.remove();
-          resolve();
+          finish("add");
+        });
+
+      prompt
+        .querySelector(".quickvint-apply-cancel")
+        ?.addEventListener("click", () => {
+          finish("cancel");
         });
     });
+  }
+
+  function applyGeneratedDescription(descInput, generatedDescription, applyChoice) {
+    const currentDescription = descInput.value || "";
+    if (applyChoice === "add" && currentDescription.trim()) {
+      setDescriptionValue(
+        descInput,
+        `${currentDescription.trimEnd()}\n\n${generatedDescription}`,
+      );
+      return;
+    }
+
+    setDescriptionValue(descInput, generatedDescription);
   }
 
   // --- CORE LOGIC & EVENT HANDLERS ---
@@ -2543,6 +2585,15 @@
       return;
     }
 
+    const descInputBeforeGenerate = document.querySelector(SELECTORS.description);
+    const descriptionApplyChoice = descInputBeforeGenerate
+      ? await getDescriptionApplyChoice(descInputBeforeGenerate)
+      : "replace";
+
+    if (descriptionApplyChoice === "cancel") {
+      return;
+    }
+
     isBusy = true;
     removeDescriptionApplyPrompt();
     updateButtonUI();
@@ -2649,7 +2700,7 @@
         titleInput.dispatchEvent(new Event("input", { bubbles: true }));
       }
       if (descInput) {
-        await applyGeneratedDescription(descInput, description);
+        applyGeneratedDescription(descInput, description, descriptionApplyChoice);
       }
 
       setButtonSuccessState();

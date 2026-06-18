@@ -91,9 +91,12 @@
         const prompt = doc.getElementById("quickvint-description-apply-prompt");
         return (
           desc?.value === "My original description." &&
-          /already have text in the description box/.test(prompt?.textContent || "") &&
+          doc.querySelector('[data-testid="title--input"]')?.value === "" &&
+          doc.defaultView.__generateCallCount === 0 &&
+          /Description already has text/.test(prompt?.textContent || "") &&
           /Replace/.test(prompt?.textContent || "") &&
-          /Add below existing text/.test(prompt?.textContent || "")
+          /Add below/.test(prompt?.textContent || "") &&
+          /Cancel/.test(prompt?.textContent || "")
         );
       },
     },
@@ -103,17 +106,13 @@
       note: "Generated text waits for an explicit replace choice.",
       height: 540,
       auth: true,
-      action: "generate-success",
+      action: "generate-existing-replace",
       hasImages: true,
       initialDescription: "My original description.",
       verify(doc) {
         const desc = doc.querySelector('[data-testid="description--input"]');
-        const prompt = doc.getElementById("quickvint-description-apply-prompt");
-        const stayedUntouched = desc?.value === "My original description.";
-        prompt?.querySelector(".quickvint-apply-replace")?.click();
         return (
-          stayedUntouched &&
-          /already have text/.test(prompt?.textContent || "") &&
+          doc.defaultView.__generateCallCount === 1 &&
           desc?.value ===
             "Light blue denim jacket in good condition. Easy to style and ready for everyday wear." &&
           !doc.getElementById("quickvint-description-apply-prompt")
@@ -126,20 +125,34 @@
       note: "Generated text appends only after the user chooses add below.",
       height: 540,
       auth: true,
-      action: "generate-success",
+      action: "generate-existing-add",
       hasImages: true,
       initialDescription: "My original description.",
       verify(doc) {
         const desc = doc.querySelector('[data-testid="description--input"]');
-        const prompt = doc.getElementById("quickvint-description-apply-prompt");
-        const stayedUntouched = desc?.value === "My original description.";
-        prompt?.querySelector(".quickvint-apply-add")?.click();
         return (
-          stayedUntouched &&
-          /Replace/.test(prompt?.textContent || "") &&
-          /Add below existing text/.test(prompt?.textContent || "") &&
+          doc.defaultView.__generateCallCount === 1 &&
           desc?.value ===
             "My original description.\n\nLight blue denim jacket in good condition. Easy to style and ready for everyday wear." &&
+          !doc.getElementById("quickvint-description-apply-prompt")
+        );
+      },
+    },
+    {
+      id: "existing-description-cancel",
+      title: "Existing description: cancel",
+      note: "Cancel closes the prompt before any API call.",
+      height: 540,
+      auth: true,
+      action: "generate-existing-cancel",
+      hasImages: true,
+      initialDescription: "My original description.",
+      verify(doc) {
+        const desc = doc.querySelector('[data-testid="description--input"]');
+        return (
+          doc.defaultView.__generateCallCount === 0 &&
+          doc.querySelector('[data-testid="title--input"]')?.value === "" &&
+          desc?.value === "My original description." &&
           !doc.getElementById("quickvint-description-apply-prompt")
         );
       },
@@ -555,6 +568,8 @@
         return value == null ? value : JSON.parse(JSON.stringify(value));
       }
 
+      window.__generateCallCount = 0;
+
       window.chrome = {
         storage: {
           local: {
@@ -606,6 +621,7 @@
 
       window.fetch = async (url) => {
         if (String(url).includes("/api/generate")) {
+          window.__generateCallCount += 1;
           const configured = scenario.generateResponse;
           if (configured) {
             return new Response(JSON.stringify(configured.body || {}), {
@@ -633,6 +649,23 @@
         const generate = document.getElementById("quickvint-gen-btn");
         if (scenario.action === "open-title-language") {
           document.getElementById("quickvint-title-language-select")?.click();
+          return;
+        }
+        if (
+          scenario.action === "generate-existing-replace" ||
+          scenario.action === "generate-existing-add" ||
+          scenario.action === "generate-existing-cancel"
+        ) {
+          generate?.click();
+          const buttonClass =
+            scenario.action === "generate-existing-replace"
+              ? ".quickvint-apply-replace"
+              : scenario.action === "generate-existing-add"
+                ? ".quickvint-apply-add"
+                : ".quickvint-apply-cancel";
+          setTimeout(() => {
+            document.querySelector(buttonClass)?.click();
+          }, 120);
           return;
         }
         if (
