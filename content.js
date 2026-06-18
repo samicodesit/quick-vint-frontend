@@ -418,38 +418,16 @@
     };
   }
 
-  function getCurrentUserEmail() {
-    return new Promise((resolve) => {
-      chrome.storage.local.get("supabaseSession", ({ supabaseSession }) => {
-        resolve(supabaseSession?.user?.email || "");
-      });
-    });
-  }
-
   async function createCheckoutForPaywall(option) {
-    const email = await getCurrentUserEmail();
-    if (!email) {
-      throw new Error("Please sign in again before checkout.");
-    }
-
-    const isCreditPack = option.checkoutType === "credit_pack";
-    const endpoint = isCreditPack
-      ? `${API_BASE}/api/stripe/create-credit-checkout`
-      : `${API_BASE}/api/stripe/create-checkout`;
-    const body = isCreditPack
-      ? { email }
-      : { email, tier: option.tier };
-
-    const res = await fetch(endpoint, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
+    const response = await sendMessage({
+      type: "CREATE_CHECKOUT",
+      checkoutType: option.checkoutType,
+      tier: option.tier,
     });
-    const payload = await res.json().catch(() => ({}));
-    if (!res.ok || !payload.url) {
-      throw new Error(payload.error || "Unable to open the payment page.");
+    if (!response?.ok || !response.url) {
+      throw new Error(response?.error || "Unable to open the payment page.");
     }
-    return payload.url;
+    return response.url;
   }
 
   function buildLimitMessage(limitData = {}) {

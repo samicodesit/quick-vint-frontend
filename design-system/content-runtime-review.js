@@ -613,6 +613,11 @@
             if (message && message.type === "GET_ACCESS_TOKEN") {
               response = { access_token: storage.supabaseSession?.access_token || null };
             }
+            if (message && message.type === "CREATE_CHECKOUT") {
+              response = storage.supabaseSession?.user?.email
+                ? { ok: true, url: "https://checkout.stripe.test/session" }
+                : { ok: false, error: "Please sign in again before checkout." };
+            }
             if (callback) callback(response);
             return Promise.resolve(response);
           },

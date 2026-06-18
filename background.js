@@ -12,9 +12,11 @@ chrome.runtime.onInstalled.addListener((details) => {
 const SUPABASE_URL = "https://jqloiovdwjaornnfvmyu.supabase.co";
 const SUPABASE_ANON_KEY =
   "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImpxbG9pb3Zkd2phb3JubmZ2bXl1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDgyMDgzMzIsImV4cCI6MjA2Mzc4NDMzMn0.iFtkUorY1UqK8zamnwgjB-yhsXe0bJAA8YFm22bzc3A";
+const API_BASE = "https://autolister.app";
 const TOKEN_REFRESH_MARGIN_MS = 5 * 60 * 1000; // 5 minutes
 const MIN_REFRESH_DELAY_MS = 60 * 1000; // 1 minute
 const FREE_LIFETIME_LIMIT = 5;
+const CHECKOUT_TIERS = new Set(["starter", "pro", "business"]);
 const CURRENT_TIER_LIMITS = {
   free: { daily: FREE_LIFETIME_LIMIT, monthly: FREE_LIFETIME_LIMIT },
   starter: { daily: 10, monthly: 75 },
@@ -324,6 +326,55 @@ async function handleSignOut() {
   }
 }
 
+async function createCheckout(message = {}) {
+  const session = await ensureValidToken();
+  const email = session?.user?.email;
+  if (!email) {
+    return { ok: false, error: "Please sign in again before checkout." };
+  }
+
+  const checkoutType = message.checkoutType;
+  const isCreditPack = checkoutType === "credit_pack";
+  if (!isCreditPack && checkoutType !== "subscription") {
+    return { ok: false, error: "Unsupported checkout type." };
+  }
+
+  const tier = normalizeTier(message.tier);
+  if (!isCreditPack && !CHECKOUT_TIERS.has(tier)) {
+    return { ok: false, error: "Unsupported plan." };
+  }
+
+  const endpoint = isCreditPack
+    ? `${API_BASE}/api/stripe/create-credit-checkout`
+    : `${API_BASE}/api/stripe/create-checkout`;
+  const body = isCreditPack ? { email } : { email, tier };
+
+  try {
+    const response = await fetch(endpoint, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    const payload = await response.json().catch(() => ({}));
+
+    if (!response.ok || !payload.url) {
+      return {
+        ok: false,
+        status: response.status,
+        error: payload.error || "Unable to open the payment page.",
+      };
+    }
+
+    return { ok: true, url: payload.url };
+  } catch (err) {
+    console.error("[Background] Checkout exception:", err);
+    return {
+      ok: false,
+      error: "Connection issue. Please try again.",
+    };
+  }
+}
+
 // --- EVENT LISTENERS ---
 
 /**
@@ -374,6 +425,12 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         chrome.action.openPopup();
         sendResponse({ ok: true });
         break;
+
+      case "CREATE_CHECKOUT": {
+        const checkout = await createCheckout(message);
+        sendResponse(checkout);
+        break;
+      }
 
       case "PROXY_FETCH":
         try {
