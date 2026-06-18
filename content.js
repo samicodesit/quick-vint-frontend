@@ -1297,7 +1297,7 @@
         display: flex;
         gap: 8px;
         flex-wrap: nowrap;
-        justify-content: flex-end;
+        justify-content: flex-start;
       }
 
       #${DESCRIPTION_APPLY_PROMPT_ID} button {
