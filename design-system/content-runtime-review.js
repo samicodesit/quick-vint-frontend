@@ -161,7 +161,7 @@
       id: "free-limit",
       title: "Free limit paywall",
       note: "Real 429 handling path for free users.",
-      height: 430,
+      height: 480,
       auth: true,
       action: "generate-free-limit",
       hasImages: true,
@@ -177,6 +177,10 @@
         const canSelectPlans =
           selectPaywallOption(doc, "Pro") &&
           /Upgrade to Pro/.test(paywallPrimaryText(doc)) &&
+          selectPaywallOption(doc, "Business") &&
+          /Upgrade to Business/.test(paywallPrimaryText(doc)) &&
+          selectPaywallOption(doc, "One-time credits") &&
+          /Buy one-time credits/.test(paywallPrimaryText(doc)) &&
           selectPaywallOption(doc, "Starter") &&
           /Upgrade to Starter/.test(paywallPrimaryText(doc));
         return (
@@ -186,6 +190,11 @@
           /10\/day · 75\/month/.test(toastText) &&
           /Pro/.test(toastText) &&
           /€9\.99\/mo/.test(toastText) &&
+          /Business/.test(toastText) &&
+          /€19\.99\/mo/.test(toastText) &&
+          /One-time credits/.test(toastText) &&
+          /€5\.99/.test(toastText) &&
+          /No commitment/.test(toastText) &&
           /Upgrade to Starter/.test(toastText) &&
           /Compare all plans/.test(toastText) &&
           /Secure checkout by Stripe/.test(toastText) &&

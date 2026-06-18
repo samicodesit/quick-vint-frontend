@@ -459,6 +459,7 @@
           planOption("starter", { badge: "Best next step", featured: true }),
           planOption("pro"),
           planOption("business"),
+          creditPackOption({ badge: "No commitment" }),
         ],
         trustNote: "Secure checkout by Stripe. Cancel anytime.",
         actionText: "Upgrade to Starter",
