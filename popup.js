@@ -397,11 +397,10 @@ document.addEventListener("DOMContentLoaded", () => {
     setCreditPackVisibility(false);
 
     if (tier === "free") {
-      const isLowFreeUsage = hasLowRemaining(freeRemaining, freeLimit);
       const isLowCreditBalance =
         packCredits > 0 && hasLowRemaining(packCredits, CREDIT_PACK.credits);
 
-      if (packCredits === 0 || isLowFreeUsage || isLowCreditBalance) {
+      if (packCredits === 0 || isLowCreditBalance) {
         setCreditPackVisibility(
           true,
           packCredits > 0
