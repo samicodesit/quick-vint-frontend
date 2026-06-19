@@ -2459,14 +2459,15 @@
       }
 
       #${BATCH_MODAL_ID}.organizing .batch-body {
-        flex: 1 1 auto;
+        flex: 0 1 auto;
         max-height: none;
         overflow: hidden;
       }
 
       #${BATCH_MODAL_ID}.organizing .batch-review {
-        flex: 1 1 auto;
+        flex: 0 1 auto;
         min-height: 0;
+        max-height: min(650px, calc(100vh - 184px));
         overflow-x: hidden;
         overflow-y: auto;
         padding: 0 0 18px;
@@ -5526,15 +5527,9 @@
           : remainingCount
           ? "Select photos for one item"
           : "Review grouped items";
-      selectionCount.classList.toggle(
-        "is-hidden",
+      setBatchControlHidden(
+        selectionCount,
         selectedCount === 0 && remainingCount === 0 && groups.length > 0,
-      );
-      selectionCount.setAttribute(
-        "aria-hidden",
-        selectedCount === 0 && remainingCount === 0 && groups.length > 0
-          ? "true"
-          : "false",
       );
     }
     if (review) {
@@ -5598,8 +5593,8 @@
       setBatchControlHidden(resetButton, groups.length === 0);
     }
     if (secondaryActions) {
-      secondaryActions.classList.toggle(
-        "is-hidden",
+      setBatchControlHidden(
+        secondaryActions,
         selectedCount === 0 && groups.length === 0,
       );
     }
