@@ -2060,15 +2060,21 @@
 
       #${BATCH_MODAL_ID} .batch-wait-title {
         font-size: 18px;
+        min-height: 22px;
       }
 
       #${BATCH_MODAL_ID} .batch-wait-copy {
         max-width: 360px;
+        min-height: 34px;
       }
 
       #${BATCH_MODAL_ID} .batch-actions {
         margin: 16px -18px 0;
         padding: 10px 18px 12px;
+      }
+
+      #${BATCH_MODAL_ID} .batch-layout + .batch-actions {
+        min-height: 58px;
       }
 
       #${BATCH_MODAL_ID} .batch-actions button[hidden] {
