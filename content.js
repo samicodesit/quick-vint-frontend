@@ -2504,7 +2504,7 @@
         text-transform: none;
       }
 
-      #${BATCH_MODAL_ID}.organizing .batch-capacity-note {
+      #${BATCH_MODAL_ID} .batch-capacity-note {
         margin: 12px 0 0;
         padding: 10px 12px;
         border: 1px solid #e0e7ff;
@@ -2516,13 +2516,13 @@
         line-height: 1.35;
       }
 
-      #${BATCH_MODAL_ID}.organizing .batch-capacity-note.warning {
+      #${BATCH_MODAL_ID} .batch-capacity-note.warning {
         border-color: #fed7aa;
         background: #fff7ed;
         color: #9a3412;
       }
 
-      #${BATCH_MODAL_ID}.organizing .batch-capacity-note.error {
+      #${BATCH_MODAL_ID} .batch-capacity-note.error {
         border-color: #fecaca;
         background: #fef2f2;
         color: #991b1b;
@@ -4475,6 +4475,36 @@
     }
 
     resetBatchState();
+    const batchLabel = batchBtn?.querySelector(".label");
+    const previousBatchLabel = batchLabel?.textContent || "Batch";
+    batchCapacityLoading = true;
+    if (batchBtn) batchBtn.disabled = true;
+    if (batchLabel) batchLabel.textContent = "Checking...";
+
+    try {
+      batchGenerationCapacity = await fetchBatchGenerationCapacity();
+    } catch (err) {
+      batchGenerationCapacity = {
+        allowed: false,
+        available: 0,
+        message: "Could not check how many listings are available.",
+      };
+    } finally {
+      batchCapacityLoading = false;
+      if (batchBtn) batchBtn.disabled = false;
+      if (batchLabel) batchLabel.textContent = previousBatchLabel;
+    }
+
+    const available = Math.max(
+      0,
+      Math.floor(Number(batchGenerationCapacity?.available || 0)),
+    );
+    if (!batchGenerationCapacity?.allowed || available <= 0) {
+      await showBatchCapacityBlocked(batchGenerationCapacity);
+      resetBatchState();
+      return;
+    }
+
     const sessionId = generateSessionId();
     batchUploadSessionId = sessionId;
     batchLastFileChangeAt = Date.now();
@@ -4547,6 +4577,7 @@
           <div class="batch-status">Waiting for photos...</div>
           <div class="batch-wait-title">Waiting for phone</div>
           <div class="batch-wait-copy">Photos will upload automatically after selection.</div>
+          <div class="batch-capacity-note"></div>
         </div>
       </div>
       <div class="batch-actions">
@@ -4571,6 +4602,7 @@
       renderBatchGroupingPhase();
     });
     renderBatchUploadStrip();
+    updateBatchUploadCapacityNote();
   }
 
   function renderBatchUploadStrip() {
@@ -4626,6 +4658,44 @@
           : "Receiving photos"
         : "Group photos";
     }
+  }
+
+  function updateBatchUploadCapacityNote() {
+    const capacityNote = document.querySelector(
+      `#${BATCH_MODAL_ID} .batch-wait-panel .batch-capacity-note`,
+    );
+    if (!capacityNote) return;
+
+    capacityNote.classList.remove("warning", "error");
+    if (batchCapacityLoading) {
+      capacityNote.textContent = "Checking how many listings you can generate...";
+      return;
+    }
+
+    if (!batchGenerationCapacity) {
+      capacityNote.classList.add("warning");
+      capacityNote.textContent =
+        "Listing availability will be checked before generation starts.";
+      return;
+    }
+
+    const available = Math.max(
+      0,
+      Math.floor(Number(batchGenerationCapacity.available || 0)),
+    );
+    if (!batchGenerationCapacity.allowed || available <= 0) {
+      capacityNote.classList.add("error");
+      capacityNote.textContent =
+        batchGenerationCapacity.message ||
+        "You cannot generate more listings right now.";
+      return;
+    }
+
+    capacityNote.textContent = `You can generate up to ${available} listing${
+      available === 1 ? "" : "s"
+    } right now. Upload photos for up to ${available} item${
+      available === 1 ? "" : "s"
+    }.`;
   }
 
   function refreshBatchWaitingState() {
@@ -4834,6 +4904,19 @@
     }
   }
 
+  async function fetchBatchGenerationCapacity() {
+    const response = await sendMessage({ type: "GET_BATCH_CAPACITY" });
+    return response?.ok
+      ? response.capacity
+      : {
+          allowed: false,
+          available: 0,
+          message:
+            response?.error ||
+            "Could not check how many listings are available.",
+        };
+  }
+
   async function refreshBatchGenerationCapacity() {
     if (batchCapacityLoading) return;
     batchCapacityLoading = true;
@@ -4841,16 +4924,7 @@
     updateBatchGroupingControls();
 
     try {
-      const response = await sendMessage({ type: "GET_BATCH_CAPACITY" });
-      batchGenerationCapacity = response?.ok
-        ? response.capacity
-        : {
-            allowed: false,
-            available: 0,
-            message:
-              response?.error ||
-              "Could not check how many listings are available.",
-          };
+      batchGenerationCapacity = await fetchBatchGenerationCapacity();
     } catch (err) {
       batchGenerationCapacity = {
         allowed: false,
@@ -5240,16 +5314,16 @@
       return;
     }
 
-    const capacityResponse = await sendMessage({ type: "GET_BATCH_CAPACITY" });
-    if (!capacityResponse?.ok) {
-      showToast(
-        capacityResponse?.error || "Could not check how many listings are available.",
-        "error",
-      );
-      return;
+    let capacity;
+    try {
+      capacity = await fetchBatchGenerationCapacity();
+    } catch (err) {
+      capacity = {
+        allowed: false,
+        available: 0,
+        message: "Could not check how many listings are available.",
+      };
     }
-
-    const capacity = capacityResponse.capacity || {};
     const available = Math.max(0, Math.floor(Number(capacity.available || 0)));
     if (!capacity.allowed || available <= 0) {
       await showBatchCapacityBlocked(capacity);
