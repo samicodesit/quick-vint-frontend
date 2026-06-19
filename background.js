@@ -34,6 +34,14 @@ const LEGACY_TIER_LIMITS = {
 const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 let isRefreshingToken = false;
 let tokenRefreshTimeout = null;
+let activeBatchJob = null;
+
+const BATCH_DELAY_BY_TIER_MS = {
+  free: 22000,
+  starter: 7000,
+  pro: 4000,
+  business: 3000,
+};
 
 // --- SESSION & TOKEN MANAGEMENT ---
 
@@ -375,6 +383,197 @@ async function createCheckout(message = {}) {
   }
 }
 
+function getBatchDelayMs(profile) {
+  const tier =
+    profile?.subscription_status === "active"
+      ? normalizeTier(profile?.subscription_tier)
+      : "free";
+  return BATCH_DELAY_BY_TIER_MS[tier] || BATCH_DELAY_BY_TIER_MS.free;
+}
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function duplicateTab(tabId) {
+  return new Promise((resolve, reject) => {
+    chrome.tabs.duplicate(tabId, (tab) => {
+      const error = chrome.runtime.lastError;
+      if (error || !tab?.id) {
+        reject(new Error(error?.message || "Could not duplicate Vinted tab."));
+        return;
+      }
+      chrome.tabs.update(tab.id, { active: false }, () => resolve(tab));
+    });
+  });
+}
+
+function waitForTabComplete(tabId, timeoutMs = 30000) {
+  return new Promise((resolve, reject) => {
+    let done = false;
+    const timeout = setTimeout(() => {
+      if (done) return;
+      done = true;
+      chrome.tabs.onUpdated.removeListener(onUpdated);
+      reject(new Error("Duplicated Vinted tab did not finish loading in time."));
+    }, timeoutMs);
+
+    const finish = () => {
+      if (done) return;
+      done = true;
+      clearTimeout(timeout);
+      chrome.tabs.onUpdated.removeListener(onUpdated);
+      resolve();
+    };
+
+    const onUpdated = (updatedTabId, changeInfo) => {
+      if (updatedTabId === tabId && changeInfo.status === "complete") {
+        finish();
+      }
+    };
+
+    chrome.tabs.onUpdated.addListener(onUpdated);
+    chrome.tabs.get(tabId, (tab) => {
+      const error = chrome.runtime.lastError;
+      if (error) {
+        finish();
+        return;
+      }
+      if (tab?.status === "complete") finish();
+    });
+  });
+}
+
+function sendTabMessage(tabId, message) {
+  return new Promise((resolve, reject) => {
+    chrome.tabs.sendMessage(tabId, message, (response) => {
+      const error = chrome.runtime.lastError;
+      if (error) {
+        reject(new Error(error.message));
+        return;
+      }
+      resolve(response);
+    });
+  });
+}
+
+function notifyBatchProgress(job, payload) {
+  if (!job?.sourceTabId) return;
+  chrome.tabs.sendMessage(job.sourceTabId, {
+    type: "BATCH_PROGRESS",
+    ...payload,
+  });
+}
+
+async function cleanupBatchUploadSession(sessionId) {
+  if (!sessionId) return;
+  try {
+    await fetch(
+      `${API_BASE}/api/phone-upload?action=cleanup&sessionId=${encodeURIComponent(sessionId)}`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({}),
+      },
+    );
+  } catch (err) {
+    console.warn("[Background] Batch cleanup failed:", err);
+  }
+}
+
+async function runBatchGenerationJob(job) {
+  const { groups, delayMs } = job;
+  let currentTabId = job.sourceTabId;
+
+  notifyBatchProgress(job, {
+    status: "queued",
+    current: 0,
+    total: groups.length,
+  });
+
+  try {
+    for (let index = 0; index < groups.length; index += 1) {
+      let nextBlankTabId = null;
+      if (index < groups.length - 1) {
+        const nextTab = await duplicateTab(currentTabId);
+        nextBlankTabId = nextTab.id;
+        await waitForTabComplete(nextBlankTabId);
+        await sleep(800);
+      }
+
+      notifyBatchProgress(job, {
+        status: "running",
+        current: index + 1,
+        total: groups.length,
+      });
+
+      const result = await sendTabMessage(currentTabId, {
+        type: "RUN_BATCH_ITEM",
+        itemIndex: index + 1,
+        totalItems: groups.length,
+        files: groups[index],
+      });
+
+      if (!result?.ok) {
+        throw new Error(
+          result?.error || `Listing ${index + 1} could not be generated.`,
+        );
+      }
+
+      if (index < groups.length - 1) {
+        await sleep(delayMs);
+        currentTabId = nextBlankTabId;
+      }
+    }
+
+    await cleanupBatchUploadSession(job.sessionId);
+    notifyBatchProgress(job, {
+      status: "done",
+      current: groups.length,
+      total: groups.length,
+    });
+  } catch (err) {
+    console.error("[Background] Batch generation failed:", err);
+    notifyBatchProgress(job, {
+      status: "failed",
+      current: 0,
+      total: groups.length,
+      message: err.message || "Batch generation stopped.",
+    });
+  } finally {
+    activeBatchJob = null;
+  }
+}
+
+async function startBatchGeneration(message, sender) {
+  if (activeBatchJob) {
+    return { ok: false, error: "A batch is already running." };
+  }
+
+  const sourceTabId = sender?.tab?.id;
+  if (!sourceTabId) {
+    return { ok: false, error: "Could not find the current Vinted tab." };
+  }
+
+  const groups = Array.isArray(message.groups)
+    ? message.groups.filter((group) => Array.isArray(group) && group.length > 0)
+    : [];
+  if (!groups.length) {
+    return { ok: false, error: "No grouped photos were provided." };
+  }
+
+  const { userProfile } = await chrome.storage.local.get(["userProfile"]);
+  activeBatchJob = {
+    sourceTabId,
+    sessionId: message.sessionId,
+    groups,
+    delayMs: getBatchDelayMs(userProfile),
+  };
+
+  runBatchGenerationJob(activeBatchJob);
+  return { ok: true };
+}
+
 // --- EVENT LISTENERS ---
 
 /**
@@ -429,6 +628,12 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       case "CREATE_CHECKOUT": {
         const checkout = await createCheckout(message);
         sendResponse(checkout);
+        break;
+      }
+
+      case "START_BATCH_GENERATION": {
+        const batchStart = await startBatchGeneration(message, sender);
+        sendResponse(batchStart);
         break;
       }
 
