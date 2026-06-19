@@ -4994,6 +4994,40 @@
     );
   }
 
+  async function showBatchCapacityBlocked(capacity = {}) {
+    const pricingUrl = await getPricingUrl();
+    const limitMessage = buildLimitMessage({
+      code: capacity.reason,
+      currentTier: capacity.tier,
+      nextTier: capacity.nextTier,
+      error: capacity.message,
+    });
+
+    if (limitMessage.paywall && pricingUrl) {
+      showLimitPaywall({
+        title: limitMessage.title || "Usage limit reached",
+        message: limitMessage.message,
+        options: limitMessage.options,
+        trustNote: limitMessage.trustNote,
+        actionText: limitMessage.actionText,
+        actionUrl: pricingUrl,
+        secondaryActionText: limitMessage.secondaryActionText,
+        secondaryActionUrl: pricingUrl,
+      });
+      return;
+    }
+
+    showToast(
+      limitMessage.message ||
+        capacity.message ||
+        "You do not have enough listings available right now.",
+      "error",
+      pricingUrl && limitMessage.actionText
+        ? { text: limitMessage.actionText, url: pricingUrl }
+        : null,
+    );
+  }
+
   function normalizeBatchRemoteFiles(files) {
     return files
       .slice()
@@ -5089,8 +5123,8 @@
       return;
     }
 
-    const groupsWithKeys = getBatchGroupsWithKeys();
-    const groups = groupsWithKeys.map((group) => group.map(({ file }) => file));
+    let groupsWithKeys = getBatchGroupsWithKeys();
+    let groups = groupsWithKeys.map((group) => group.map(({ file }) => file));
     if (!groups.length) {
       showToast("Add at least one photo before starting batch generation.", "error");
       return;
@@ -5105,6 +5139,36 @@
     if (getVisibleUploadedPhotoCount() > 0) {
       showToast("Start batch generation from an empty Vinted listing tab.", "error");
       return;
+    }
+
+    const capacityResponse = await sendMessage({ type: "GET_BATCH_CAPACITY" });
+    if (!capacityResponse?.ok) {
+      showToast(
+        capacityResponse?.error || "Could not check how many listings are available.",
+        "error",
+      );
+      return;
+    }
+
+    const capacity = capacityResponse.capacity || {};
+    const available = Math.max(0, Math.floor(Number(capacity.available || 0)));
+    if (!capacity.allowed || available <= 0) {
+      await showBatchCapacityBlocked(capacity);
+      return;
+    }
+
+    if (available < groups.length) {
+      const confirmed = window.confirm(
+        `You can generate ${available} of ${groups.length} listings right now. Generate the first ${available}?`,
+      );
+      if (!confirmed) return;
+
+      groupsWithKeys = groupsWithKeys.slice(0, available);
+      groups = groups.slice(0, available);
+      showToast(
+        `Generating the first ${available} listing${available === 1 ? "" : "s"}.`,
+        "info",
+      );
     }
 
     if (batchPollInterval) {

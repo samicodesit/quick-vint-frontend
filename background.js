@@ -36,13 +36,6 @@ let isRefreshingToken = false;
 let tokenRefreshTimeout = null;
 let activeBatchJob = null;
 
-const BATCH_DELAY_BY_TIER_MS = {
-  free: 21000,
-  starter: 6300,
-  pro: 3200,
-  business: 2200,
-};
-
 // --- SESSION & TOKEN MANAGEMENT ---
 
 /**
@@ -383,14 +376,6 @@ async function createCheckout(message = {}) {
   }
 }
 
-function getBatchDelayMs(profile) {
-  const tier =
-    profile?.subscription_status === "active"
-      ? normalizeTier(profile?.subscription_tier)
-      : "free";
-  return BATCH_DELAY_BY_TIER_MS[tier] || BATCH_DELAY_BY_TIER_MS.free;
-}
-
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
@@ -502,7 +487,7 @@ async function cleanupBatchUploadSession(sessionId) {
 }
 
 async function runBatchGenerationJob(job) {
-  const { groups, delayMs } = job;
+  const { groups } = job;
   let activeItemIndex = 0;
 
   notifyBatchProgress(job, {
@@ -514,17 +499,6 @@ async function runBatchGenerationJob(job) {
   try {
     for (let index = 0; index < groups.length; index += 1) {
       activeItemIndex = index + 1;
-      if (index > 0 && delayMs > 0) {
-        notifyBatchProgress(job, {
-          status: "waiting",
-          current: index,
-          total: groups.length,
-          itemIndex: index + 1,
-          delayMs,
-        });
-        await sleep(delayMs);
-      }
-
       notifyBatchProgress(job, {
         status: "opening_tab",
         current: index + 1,
@@ -608,16 +582,48 @@ async function startBatchGeneration(message, sender) {
     return { ok: false, error: "No grouped photos were provided." };
   }
 
-  const { userProfile } = await chrome.storage.local.get(["userProfile"]);
   activeBatchJob = {
     sourceTabId,
     sessionId: message.sessionId,
     groups,
-    delayMs: getBatchDelayMs(userProfile),
   };
 
   runBatchGenerationJob(activeBatchJob);
   return { ok: true };
+}
+
+async function getBatchCapacity() {
+  const session = await ensureValidToken();
+  if (!session?.access_token) {
+    return { ok: false, error: "Please sign in again before generating." };
+  }
+
+  try {
+    const response = await fetch(`${API_BASE}/api/user/batch-capacity`, {
+      method: "GET",
+      headers: {
+        Authorization: `Bearer ${session.access_token}`,
+        "X-Autolister-Extension-Version": chrome.runtime.getManifest().version,
+      },
+    });
+    const payload = await response.json().catch(() => ({}));
+
+    if (!response.ok) {
+      return {
+        ok: false,
+        status: response.status,
+        error: payload.error || "Could not check generation capacity.",
+      };
+    }
+
+    return { ok: true, capacity: payload };
+  } catch (err) {
+    console.error("[Background] Batch capacity exception:", err);
+    return {
+      ok: false,
+      error: "Connection issue. Please try again.",
+    };
+  }
 }
 
 // --- EVENT LISTENERS ---
@@ -680,6 +686,12 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       case "START_BATCH_GENERATION": {
         const batchStart = await startBatchGeneration(message, sender);
         sendResponse(batchStart);
+        break;
+      }
+
+      case "GET_BATCH_CAPACITY": {
+        const capacity = await getBatchCapacity();
+        sendResponse(capacity);
         break;
       }
 
