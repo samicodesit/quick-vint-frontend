@@ -5931,14 +5931,20 @@
 
     const titleInput = document.querySelector(SELECTORS.title);
     const descriptionInput = document.querySelector(SELECTORS.description);
-    const anchor =
+    const detailsCard =
+      titleInput?.closest(".web_ui__Card__card") ||
+      descriptionInput?.closest(".web_ui__Card__card");
+    const fallbackAnchor =
       titleInput?.closest("label") ||
       titleInput ||
       descriptionInput?.closest("label") ||
       descriptionInput;
+    const anchor = detailsCard || fallbackAnchor;
 
-    if (anchor?.parentElement && status.parentElement !== anchor.parentElement) {
-      anchor.parentElement.insertBefore(status, anchor);
+    if (anchor?.parentElement) {
+      if (status.parentElement !== anchor.parentElement || status.nextSibling !== anchor) {
+        anchor.parentElement.insertBefore(status, anchor);
+      }
     } else if (!status.parentElement) {
       document.body.appendChild(status);
     }
@@ -5979,14 +5985,21 @@
     const itemIndex = Math.max(1, Number(message.itemIndex || 1));
     const totalItems = Math.max(itemIndex, Number(message.totalItems || itemIndex));
     const listingPrefix = totalItems > 1 ? `Listing ${itemIndex} of ${totalItems}` : "Listing";
+    isBusy = true;
+    updateButtonUI();
+
     if (!remoteFiles.length) {
       showBatchTabStatus(`${listingPrefix}: no photos were provided.`, "error");
       hideBatchTabStatus(9000);
+      isBusy = false;
+      updateButtonUI();
       throw new Error("Batch item has no photos.");
     }
     if (getVisibleUploadedPhotoCount() > 0) {
       showBatchTabStatus(`${listingPrefix}: this tab already has photos.`, "error");
       hideBatchTabStatus(9000);
+      isBusy = false;
+      updateButtonUI();
       throw new Error("This Vinted listing tab already has photos.");
     }
 
@@ -6034,6 +6047,8 @@
       downloads.forEach((result) => {
         if (result.previewUrl) URL.revokeObjectURL(result.previewUrl);
       });
+      isBusy = false;
+      updateButtonUI();
     }
   }
 
