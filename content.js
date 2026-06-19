@@ -110,6 +110,7 @@
   let batchCapacityLoading = false;
   let batchTabStatusTimer = null;
   let isBatchPollInFlight = false;
+  let batchImagePreloadUrls = new Set();
 
   // --- HELPER FUNCTIONS ---
 
@@ -2572,7 +2573,6 @@
       #${BATCH_MODAL_ID}.organizing .batch-photo-wrap {
         display: block;
         min-width: 0;
-        animation: batchTileIn 180ms ease-out;
         opacity: 1;
         transform: scale(1);
         transition: opacity 160ms ease, transform 160ms ease;
@@ -2587,6 +2587,11 @@
       #${BATCH_MODAL_ID}.organizing .batch-gallery.is-empty {
         padding-bottom: 0;
         border-bottom-color: transparent;
+      }
+
+      #${BATCH_MODAL_ID}.organizing .batch-gallery.is-settling {
+        padding-bottom: 24px;
+        border-bottom-color: #e2e8f0;
       }
 
       #${BATCH_MODAL_ID}.organizing .batch-gallery .batch-photo {
@@ -2923,39 +2928,62 @@
         left: auto;
         right: auto;
         bottom: auto;
-        display: flex;
-        flex-wrap: wrap;
-        align-items: center;
+        display: grid;
+        grid-template-columns: 1fr;
+        align-items: stretch;
         gap: 10px;
         margin: 0 -18px;
-        padding: 14px 18px 16px;
+        padding: 12px 18px 14px;
         background: rgba(255, 255, 255, 0.98);
         box-shadow: 0 -10px 26px rgba(15, 23, 42, 0.08);
         border-top: 1px solid #e5e7eb;
+        transition: padding 160ms ease, gap 160ms ease;
       }
 
       #${BATCH_MODAL_ID}.organizing .batch-selection-count {
-        flex: 1 0 100%;
+        min-height: 18px;
         margin: 0;
         color: #64748b;
         font-size: 13px;
         font-weight: 650;
         text-align: center;
+        line-height: 1.35;
+        transition: color 160ms ease;
       }
 
       #${BATCH_MODAL_ID}.organizing .batch-secondary-actions {
         display: flex;
+        justify-content: center;
         align-items: center;
         flex-wrap: wrap;
         gap: 8px;
         max-width: 100%;
+        max-height: 44px;
+        opacity: 1;
+        transform: translateY(0);
         overflow: hidden;
+        transition: max-height 180ms ease, opacity 160ms ease, transform 160ms ease;
+      }
+
+      #${BATCH_MODAL_ID}.organizing .batch-secondary-actions.is-hidden {
+        max-height: 0;
+        opacity: 0;
+        pointer-events: none;
+        transform: translateY(4px);
       }
 
       #${BATCH_MODAL_ID}.organizing .batch-actions button {
         min-height: 44px;
         border-radius: 12px;
-        transition: transform 140ms ease, box-shadow 140ms ease, opacity 140ms ease, background 140ms ease;
+        transition:
+          max-height 180ms ease,
+          min-height 180ms ease,
+          padding 180ms ease,
+          border-width 180ms ease,
+          transform 140ms ease,
+          box-shadow 140ms ease,
+          opacity 140ms ease,
+          background 140ms ease;
       }
 
       #${BATCH_MODAL_ID}.organizing .batch-actions button:not(:disabled):active {
@@ -2964,12 +2992,27 @@
 
       #${BATCH_MODAL_ID}.organizing .batch-mark-group,
       #${BATCH_MODAL_ID}.organizing .batch-start {
-        flex: 1 1 100%;
         width: 100%;
         justify-content: center;
         background: ${PRIMARY_BUTTON_BACKGROUND};
         border-color: #4f46e5;
         box-shadow: 0 10px 24px rgba(79, 70, 229, 0.28);
+      }
+
+      #${BATCH_MODAL_ID}.organizing .footer-control.is-hidden {
+        max-height: 0;
+        max-width: 0;
+        min-height: 0;
+        margin: 0;
+        padding-left: 0;
+        padding-right: 0;
+        padding-top: 0;
+        padding-bottom: 0;
+        border-width: 0;
+        opacity: 0;
+        pointer-events: none;
+        transform: translateY(4px);
+        overflow: hidden;
       }
 
       #${BATCH_MODAL_ID}.organizing .batch-actions [hidden],
@@ -3283,17 +3326,6 @@
         #${BATCH_MODAL_ID}.generating .batch-progress-badge {
           width: fit-content;
           min-width: 0;
-        }
-      }
-
-      @keyframes batchTileIn {
-        from {
-          opacity: 0;
-          transform: scale(0.97);
-        }
-        to {
-          opacity: 1;
-          transform: scale(1);
         }
       }
 
@@ -4760,6 +4792,7 @@
     batchGenerationCapacity = null;
     batchCapacityLoading = false;
     isBatchPollInFlight = false;
+    batchImagePreloadUrls = new Set();
   }
 
   function isBatchGenerationActive() {
@@ -5054,6 +5087,21 @@
     return true;
   }
 
+  function preloadBatchImage(file) {
+    const url = file?.url;
+    if (!url || batchImagePreloadUrls.has(url)) return;
+    batchImagePreloadUrls.add(url);
+
+    const img = new Image();
+    img.decoding = "async";
+    img.loading = "eager";
+    img.src = url;
+  }
+
+  function preloadBatchImages(files = batchRemoteFiles) {
+    files.forEach(preloadBatchImage);
+  }
+
   function createBatchPhotoElement(file, index, itemNumber, options = {}) {
     const {
       badgeText = `Listing ${itemNumber}`,
@@ -5079,6 +5127,9 @@
       photo.addEventListener("click", onClick);
     }
     const img = document.createElement("img");
+    img.loading = "eager";
+    img.decoding = "async";
+    img.fetchPriority = "high";
     img.src = file.url;
     img.alt = `Batch photo ${index + 1}`;
     const badge = document.createElement("span");
@@ -5125,6 +5176,7 @@
       showToast("No photos were sent for this batch.", "error");
       return;
     }
+    preloadBatchImages(batchRemoteFiles);
     const modal = document.getElementById(BATCH_MODAL_ID);
     modal?.classList.remove("generating");
     modal?.classList.add("organizing");
@@ -5169,11 +5221,11 @@
       <div class="batch-actions">
         <span class="batch-selection-count"></span>
         <div class="batch-secondary-actions">
-          <button type="button" class="batch-clear-selection" hidden>Clear</button>
-          <button type="button" class="batch-reset-groups" hidden>Reset groups</button>
+          <button type="button" class="footer-control batch-clear-selection is-hidden" aria-hidden="true">Clear</button>
+          <button type="button" class="footer-control batch-reset-groups is-hidden" aria-hidden="true">Reset groups</button>
         </div>
-        <button type="button" class="primary batch-mark-group" disabled hidden>Group photos</button>
-        <button type="button" class="primary batch-start"></button>
+        <button type="button" class="primary footer-control batch-mark-group is-hidden" disabled aria-hidden="true">Group photos</button>
+        <button type="button" class="primary footer-control batch-start is-hidden" aria-hidden="true"></button>
       </div>
     `;
 
@@ -5210,6 +5262,7 @@
     groupsEl.textContent = "";
 
     const markedKeys = getMarkedBatchPhotoKeys();
+    const fragment = document.createDocumentFragment();
     batchRemoteFiles.forEach((file, index) => {
       const key = getPhoneUploadFileKey(file);
       const tile = createBatchPhotoElement(file, index, batchMarkedGroups.length + 1, {
@@ -5220,8 +5273,9 @@
         onDiscard: () => discardBatchPhoto(key),
       });
       batchPhotoTileByKey.set(key, tile.querySelector(".batch-photo"));
-      gallery.appendChild(tile);
+      fragment.appendChild(tile);
     });
+    gallery.appendChild(fragment);
 
     batchMarkedGroups.forEach((group) => renderBatchGroupRow(group));
     updateBatchGroupingControls();
@@ -5299,6 +5353,7 @@
         window.setTimeout(() => {
           if (wrapper.classList.contains("is-grouped")) {
             wrapper.hidden = true;
+            updateBatchGroupingControls();
           }
         }, 170);
       } else {
@@ -5343,6 +5398,12 @@
     }
   }
 
+  function setBatchControlHidden(control, hidden) {
+    if (!control) return;
+    control.classList.toggle("is-hidden", hidden);
+    control.setAttribute("aria-hidden", hidden ? "true" : "false");
+  }
+
   function updateBatchGroupingControls() {
     const subtitleEl = document.querySelector(`#${BATCH_MODAL_ID} .batch-subtitle`);
     const selectionCount = document.querySelector(
@@ -5350,6 +5411,9 @@
     );
     const clearButton = document.querySelector(`#${BATCH_MODAL_ID} .batch-clear-selection`);
     const resetButton = document.querySelector(`#${BATCH_MODAL_ID} .batch-reset-groups`);
+    const secondaryActions = document.querySelector(
+      `#${BATCH_MODAL_ID} .batch-secondary-actions`,
+    );
     const markButton = document.querySelector(`#${BATCH_MODAL_ID} .batch-mark-group`);
     const startButton = document.querySelector(`#${BATCH_MODAL_ID} .batch-start`);
     const review = document.querySelector(`#${BATCH_MODAL_ID} .batch-review`);
@@ -5366,6 +5430,9 @@
     const markedKeys = getMarkedBatchPhotoKeys();
     const selectedCount = batchSelectedPhotoKeys.size;
     const remainingCount = batchRemoteFiles.length - markedKeys.size;
+    const visibleGalleryCount = gallery
+      ? gallery.querySelectorAll(".batch-photo-wrap:not([hidden])").length
+      : remainingCount;
     const groupedPct = batchRemoteFiles.length
       ? Math.round((markedKeys.size / batchRemoteFiles.length) * 100)
       : 0;
@@ -5405,7 +5472,8 @@
       organizeTip.setAttribute("aria-hidden", remainingCount === 0 ? "true" : "false");
     }
     if (gallery) {
-      gallery.classList.toggle("is-empty", remainingCount === 0);
+      gallery.classList.toggle("is-settling", remainingCount === 0 && visibleGalleryCount > 0);
+      gallery.classList.toggle("is-empty", remainingCount === 0 && visibleGalleryCount === 0);
     }
     if (summaryHead) {
       summaryHead.classList.toggle("is-hidden", groups.length === 0);
@@ -5451,15 +5519,21 @@
       }
     }
     if (clearButton) {
-      clearButton.hidden = selectedCount === 0;
+      setBatchControlHidden(clearButton, selectedCount === 0);
     }
     if (resetButton) {
-      resetButton.hidden = groups.length === 0;
+      setBatchControlHidden(resetButton, groups.length === 0);
+    }
+    if (secondaryActions) {
+      secondaryActions.classList.toggle(
+        "is-hidden",
+        selectedCount === 0 && groups.length === 0,
+      );
     }
     if (markButton) {
       markButton.textContent = `Group ${selectedCount} photo${selectedCount === 1 ? "" : "s"}`;
       markButton.disabled = selectedCount === 0;
-      markButton.hidden = selectedCount === 0;
+      setBatchControlHidden(markButton, selectedCount === 0);
     }
     if (startButton) {
       const available = batchGenerationCapacity
@@ -5477,7 +5551,10 @@
         groups.length === 0 ||
         remainingCount > 0 ||
         (available !== null && effectiveCount <= 0);
-      startButton.hidden = selectedCount > 0 || groups.length === 0 || remainingCount > 0;
+      setBatchControlHidden(
+        startButton,
+        selectedCount > 0 || groups.length === 0 || remainingCount > 0,
+      );
     }
   }
 
@@ -5531,6 +5608,8 @@
     photos.slice(0, 5).forEach(({ file, index }) => {
       const chip = document.createElement("img");
       chip.className = "batch-thumb-chip";
+      chip.loading = "eager";
+      chip.decoding = "async";
       chip.src = file.url;
       chip.alt = `Listing ${groupIndex + 1} photo ${index + 1}`;
       chips.appendChild(chip);
@@ -5695,6 +5774,8 @@
           batchLastFileCount = batchRemoteFiles.length;
           batchLastFileChangeAt = Date.now();
         }
+
+        preloadBatchImages(files);
 
         const openedGrouping = maybeAutoOpenBatchGrouping();
 
@@ -5984,6 +6065,8 @@
       thumbs.className = "batch-progress-thumbs";
       group.slice(0, 3).forEach(({ file }, photoIndex) => {
         const img = document.createElement("img");
+        img.loading = "eager";
+        img.decoding = "async";
         img.src = file.url;
         img.alt = `Listing ${itemNumber} preview ${photoIndex + 1}`;
         thumbs.appendChild(img);
