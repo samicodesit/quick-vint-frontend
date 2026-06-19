@@ -4643,7 +4643,13 @@
     return Boolean(batchProgressStatus && isBatchProgressActive(batchProgressStatus));
   }
 
+  function isBatchProgressFinished() {
+    return Boolean(batchProgressStatus && !isBatchProgressActive(batchProgressStatus));
+  }
+
   function shouldWarnBeforeClosingBatch() {
+    if (isBatchProgressFinished()) return false;
+
     return (
       isBatchGenerationActive() ||
       batchRemoteFiles.length > 0 ||
