@@ -111,6 +111,7 @@
   let batchTabStatusTimer = null;
   let isBatchPollInFlight = false;
   let batchImagePreloadUrls = new Set();
+  let batchImagePreloadCache = new Map();
 
   // --- HELPER FUNCTIONS ---
 
@@ -4830,6 +4831,7 @@
     batchCapacityLoading = false;
     isBatchPollInFlight = false;
     batchImagePreloadUrls = new Set();
+    batchImagePreloadCache = new Map();
   }
 
   function isBatchGenerationActive() {
@@ -5133,10 +5135,23 @@
     img.decoding = "async";
     img.loading = "eager";
     img.src = url;
+    batchImagePreloadCache.set(url, img);
   }
 
   function preloadBatchImages(files = batchRemoteFiles) {
     files.forEach(preloadBatchImage);
+  }
+
+  function runAfterBatchRender(callback) {
+    let didRun = false;
+    const run = () => {
+      if (didRun) return;
+      didRun = true;
+      callback();
+    };
+
+    requestAnimationFrame(run);
+    window.setTimeout(run, 50);
   }
 
   function createBatchPhotoElement(file, index, itemNumber, options = {}) {
@@ -5395,7 +5410,7 @@
         }, 170);
       } else {
         wrapper.hidden = false;
-        requestAnimationFrame(() => {
+        runAfterBatchRender(() => {
           wrapper.classList.remove("is-grouped");
         });
       }
@@ -5463,7 +5478,7 @@
 
     control.hidden = false;
     control.setAttribute("aria-hidden", "false");
-    requestAnimationFrame(() => {
+    runAfterBatchRender(() => {
       control.classList.remove("is-hidden");
     });
   }
@@ -5695,7 +5710,7 @@
     });
 
     if (isNewRow) {
-      requestAnimationFrame(() => {
+      runAfterBatchRender(() => {
         row.classList.remove("is-entering");
       });
     }
