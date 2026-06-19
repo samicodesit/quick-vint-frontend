@@ -70,6 +70,9 @@
   const SUPPORT_EMAIL = "support@autolister.app";
   const TAILORED_LIMITS_CONTACT_URL =
     `mailto:${SUPPORT_EMAIL}?subject=AutoLister%20AI%20tailored%20limits`;
+  const PRIMARY_BUTTON_BACKGROUND =
+    "linear-gradient(135deg, #5b54f0 0%, #4338ca 100%)";
+  const BUSY_BUTTON_BACKGROUND = "#6b7280";
 
   // --- STATE ---
   let generateBtn = null;
@@ -724,17 +727,20 @@
         display: none;
         align-items: center;
         justify-content: center;
-        padding: 8px 16px;
-        background-color: #aaa;
+        gap: 7px;
+        min-height: 38px;
+        padding: 9px 18px;
+        background: #a1a1aa;
         color: white;
         border: none;
-        border-radius: 8px;
+        border-radius: 10px;
         font-size: 14px;
         font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
         cursor: not-allowed;
-        transition: background-color 0.2s, transform 0.2s, box-shadow 0.2s;
-        font-weight: 500;
-        box-shadow: rgba(0, 0, 0, 0.1) 0px 2px 4px;
+        transition: transform 0.16s ease, box-shadow 0.16s ease, filter 0.16s ease, opacity 0.16s ease;
+        font-weight: 650;
+        line-height: 1;
+        box-shadow: 0 7px 16px rgba(79, 70, 229, 0.22);
         text-align: center;
         white-space: nowrap;
       }
@@ -817,6 +823,11 @@
 
       #${PHONE_BTN_ID}, #${BATCH_BTN_ID} {
         margin-left: 8px;
+      }
+
+      #${BTN_ID}:disabled, #${PHONE_BTN_ID}:disabled, #${BATCH_BTN_ID}:disabled {
+        box-shadow: 0 3px 8px rgba(17, 24, 39, 0.1);
+        opacity: 0.82;
       }
 
       .quickvint-lang-field {
@@ -921,15 +932,30 @@
       }
 
       #${BTN_ID}:not(:disabled):hover, #${PHONE_BTN_ID}:not(:disabled):hover, #${BATCH_BTN_ID}:not(:disabled):hover {
-        background-color: #4338ca;
-        box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
+        box-shadow: 0 10px 22px rgba(79, 70, 229, 0.3);
+        filter: brightness(1.05);
         transform: translateY(-1px);
       }
 
+      #${BTN_ID}:not(:disabled):active, #${PHONE_BTN_ID}:not(:disabled):active, #${BATCH_BTN_ID}:not(:disabled):active {
+        box-shadow: 0 5px 12px rgba(79, 70, 229, 0.24);
+        filter: brightness(0.98);
+        transform: translateY(0);
+      }
+
       #${BTN_ID} .icon, #${PHONE_BTN_ID} .icon, #${BATCH_BTN_ID} .icon {
-        width: 16px;
-        height: 16px;
-        margin-right: 6px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 17px;
+        height: 17px;
+        flex: 0 0 17px;
+      }
+
+      #${BTN_ID} .icon svg, #${PHONE_BTN_ID} .icon svg, #${BATCH_BTN_ID} .icon svg {
+        display: block;
+        width: 100%;
+        height: 100%;
       }
 
       /* Modal Styles */
@@ -3727,12 +3753,12 @@
 
     if (phoneBtn) {
       phoneBtn.disabled = false;
-      phoneBtn.style.backgroundColor = "#4f46e5";
+      phoneBtn.style.background = PRIMARY_BUTTON_BACKGROUND;
       phoneBtn.style.cursor = "pointer";
     }
     if (batchBtn) {
       batchBtn.disabled = false;
-      batchBtn.style.backgroundColor = "#4f46e5";
+      batchBtn.style.background = PRIMARY_BUTTON_BACKGROUND;
       batchBtn.style.cursor = "pointer";
     }
 
@@ -3743,12 +3769,12 @@
       icon.style.display = "none";
       label.textContent = "⏳ Generating…";
       generateBtn.style.cursor = "progress";
-      generateBtn.style.backgroundColor = "#6b7280";
+      generateBtn.style.background = BUSY_BUTTON_BACKGROUND;
     } else {
       generateBtn.disabled = false;
       icon.style.display = "inline-block";
       label.textContent = "Generate";
-      generateBtn.style.backgroundColor = "#4f46e5";
+      generateBtn.style.background = PRIMARY_BUTTON_BACKGROUND;
       generateBtn.style.cursor = "pointer";
     }
   }
@@ -4478,8 +4504,12 @@
     resetBatchState();
     const batchLabel = batchBtn?.querySelector(".label");
     const previousBatchLabel = batchLabel?.textContent || "Batch";
+    const previousBatchCursor = batchBtn?.style.cursor || "pointer";
     batchCapacityLoading = true;
-    if (batchBtn) batchBtn.disabled = true;
+    if (batchBtn) {
+      batchBtn.disabled = true;
+      batchBtn.style.cursor = "progress";
+    }
     if (batchLabel) batchLabel.textContent = "Checking...";
 
     try {
@@ -4492,7 +4522,10 @@
       };
     } finally {
       batchCapacityLoading = false;
-      if (batchBtn) batchBtn.disabled = false;
+      if (batchBtn) {
+        batchBtn.disabled = false;
+        batchBtn.style.cursor = previousBatchCursor;
+      }
       if (batchLabel) batchLabel.textContent = previousBatchLabel;
     }
 
