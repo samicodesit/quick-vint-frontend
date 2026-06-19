@@ -2532,6 +2532,23 @@
         margin: 0 0 12px;
         color: #64748b;
         font-size: 14px;
+        max-height: 24px;
+        opacity: 1;
+        overflow: hidden;
+        transform: translateY(0);
+        transition:
+          max-height 180ms ease,
+          margin 180ms ease,
+          opacity 160ms ease,
+          transform 160ms ease;
+      }
+
+      #${BATCH_MODAL_ID}.organizing .organize-tip.is-hidden {
+        max-height: 0;
+        margin: 0;
+        opacity: 0;
+        pointer-events: none;
+        transform: translateY(-4px);
       }
 
       #${BATCH_MODAL_ID}.organizing .organize-tip-icon {
@@ -2549,16 +2566,27 @@
         margin: 0;
         padding: 0 0 24px;
         border-bottom: 1px solid #e2e8f0;
+        transition: padding 180ms ease, border-color 180ms ease;
       }
 
       #${BATCH_MODAL_ID}.organizing .batch-photo-wrap {
         display: block;
         min-width: 0;
         animation: batchTileIn 180ms ease-out;
+        opacity: 1;
+        transform: scale(1);
+        transition: opacity 160ms ease, transform 160ms ease;
       }
 
       #${BATCH_MODAL_ID}.organizing .batch-photo-wrap.is-grouped {
-        display: none;
+        opacity: 0;
+        pointer-events: none;
+        transform: scale(0.94);
+      }
+
+      #${BATCH_MODAL_ID}.organizing .batch-gallery.is-empty {
+        padding-bottom: 0;
+        border-bottom-color: transparent;
       }
 
       #${BATCH_MODAL_ID}.organizing .batch-gallery .batch-photo {
@@ -2678,7 +2706,8 @@
       }
 
       #${BATCH_MODAL_ID}.organizing .batch-empty-state {
-        margin: 0 0 24px;
+        max-height: 72px;
+        margin: 0 0 14px;
         padding: 18px;
         border: 1px solid #bbf7d0;
         border-radius: 12px;
@@ -2687,19 +2716,55 @@
         text-align: center;
         font-size: 13px;
         font-weight: 750;
+        opacity: 1;
+        overflow: hidden;
+        transform: translateY(0);
+        transition:
+          max-height 180ms ease,
+          margin 180ms ease,
+          padding 180ms ease,
+          border-width 180ms ease,
+          opacity 160ms ease,
+          transform 160ms ease;
         animation: batchCardIn 180ms ease-out;
+      }
+
+      #${BATCH_MODAL_ID}.organizing .batch-empty-state.is-hidden {
+        max-height: 0;
+        margin: 0;
+        padding-top: 0;
+        padding-bottom: 0;
+        border-width: 0;
+        opacity: 0;
+        transform: translateY(-4px);
       }
 
       #${BATCH_MODAL_ID}.organizing .batch-summary-head {
         display: flex;
         align-items: center;
         justify-content: space-between;
+        max-height: 28px;
         margin: 18px 0 8px;
         color: #94a3b8;
         font-size: 12px;
         font-weight: 850;
         letter-spacing: 0.06em;
         text-transform: uppercase;
+        opacity: 1;
+        overflow: hidden;
+        transform: translateY(0);
+        transition:
+          max-height 180ms ease,
+          margin 180ms ease,
+          opacity 160ms ease,
+          transform 160ms ease;
+      }
+
+      #${BATCH_MODAL_ID}.organizing .batch-summary-head.is-hidden {
+        max-height: 0;
+        margin: 0;
+        opacity: 0;
+        transform: translateY(-4px);
       }
 
       #${BATCH_MODAL_ID}.organizing .batch-summary-count {
@@ -2708,7 +2773,8 @@
       }
 
       #${BATCH_MODAL_ID} .batch-capacity-note {
-        margin: 12px 0 0;
+        max-height: 84px;
+        margin: 12px 0 14px;
         padding: 10px 12px;
         border: 1px solid #e0e7ff;
         border-radius: 12px;
@@ -2717,6 +2783,27 @@
         font-size: 12.5px;
         font-weight: 750;
         line-height: 1.35;
+        opacity: 1;
+        overflow: hidden;
+        transform: translateY(0);
+        transition:
+          max-height 180ms ease,
+          margin 180ms ease,
+          padding 180ms ease,
+          border-width 180ms ease,
+          opacity 160ms ease,
+          transform 160ms ease;
+      }
+
+      #${BATCH_MODAL_ID} .batch-capacity-note.is-hidden {
+        max-height: 0;
+        margin-top: 0;
+        margin-bottom: 0;
+        padding-top: 0;
+        padding-bottom: 0;
+        border-width: 0;
+        opacity: 0;
+        transform: translateY(-4px);
       }
 
       #${BATCH_MODAL_ID} .batch-capacity-note.warning {
@@ -2738,7 +2825,7 @@
         max-height: none;
         overflow: visible;
         margin: 0;
-        padding: 0 0 8px;
+        padding: 0 0 10px;
       }
 
       #${BATCH_MODAL_ID}.organizing .batch-item-card {
@@ -4978,6 +5065,7 @@
     const wrapper = document.createElement("div");
     wrapper.className = "batch-photo-wrap";
     wrapper.classList.toggle("is-grouped", marked);
+    wrapper.hidden = marked;
     wrapper.setAttribute("aria-hidden", marked ? "true" : "false");
 
     const photo = document.createElement("div");
@@ -5070,7 +5158,7 @@
           <span>Tap photos for one item</span>
         </div>
         <div class="batch-gallery" aria-live="polite"></div>
-        <div class="batch-empty-state" hidden>Review grouped items below.</div>
+        <div class="batch-empty-state is-hidden" aria-hidden="true">Review grouped items below.</div>
         <div class="batch-summary-head">
           <span>Items</span>
           <span class="batch-summary-count"></span>
@@ -5205,8 +5293,20 @@
     if (badge) badge.textContent = marked ? "Done" : `#${getBatchFileIndexByKey(key) + 1}`;
     const wrapper = photo.closest(".batch-photo-wrap");
     if (wrapper) {
-      wrapper.classList.toggle("is-grouped", marked);
       wrapper.setAttribute("aria-hidden", marked ? "true" : "false");
+      if (marked) {
+        wrapper.classList.add("is-grouped");
+        window.setTimeout(() => {
+          if (wrapper.classList.contains("is-grouped")) {
+            wrapper.hidden = true;
+          }
+        }, 170);
+      } else {
+        wrapper.hidden = false;
+        requestAnimationFrame(() => {
+          wrapper.classList.remove("is-grouped");
+        });
+      }
     }
   }
 
@@ -5252,6 +5352,9 @@
     const resetButton = document.querySelector(`#${BATCH_MODAL_ID} .batch-reset-groups`);
     const markButton = document.querySelector(`#${BATCH_MODAL_ID} .batch-mark-group`);
     const startButton = document.querySelector(`#${BATCH_MODAL_ID} .batch-start`);
+    const review = document.querySelector(`#${BATCH_MODAL_ID} .batch-review`);
+    const organizeTip = document.querySelector(`#${BATCH_MODAL_ID} .organize-tip`);
+    const gallery = document.querySelector(`#${BATCH_MODAL_ID} .batch-gallery`);
     const summaryHead = document.querySelector(`#${BATCH_MODAL_ID} .batch-summary-head`);
     const summaryCount = document.querySelector(`#${BATCH_MODAL_ID} .batch-summary-count`);
     const emptyState = document.querySelector(`#${BATCH_MODAL_ID} .batch-empty-state`);
@@ -5294,24 +5397,40 @@
           ? "Select photos for one item"
           : "Review grouped items";
     }
+    if (review) {
+      review.classList.toggle("is-all-grouped", remainingCount === 0);
+    }
+    if (organizeTip) {
+      organizeTip.classList.toggle("is-hidden", remainingCount === 0);
+      organizeTip.setAttribute("aria-hidden", remainingCount === 0 ? "true" : "false");
+    }
+    if (gallery) {
+      gallery.classList.toggle("is-empty", remainingCount === 0);
+    }
     if (summaryHead) {
-      summaryHead.hidden = groups.length === 0;
+      summaryHead.classList.toggle("is-hidden", groups.length === 0);
+      summaryHead.setAttribute("aria-hidden", groups.length === 0 ? "true" : "false");
     }
     if (summaryCount) {
       summaryCount.textContent = `(${groups.length})`;
     }
     if (emptyState) {
-      emptyState.hidden = remainingCount !== 0 || groups.length === 0;
+      const showEmptyState = remainingCount === 0 && groups.length > 0;
+      emptyState.classList.toggle("is-hidden", !showEmptyState);
+      emptyState.setAttribute("aria-hidden", showEmptyState ? "false" : "true");
     }
     if (capacityNote) {
       capacityNote.classList.remove("warning", "error");
-      capacityNote.hidden = false;
+      capacityNote.classList.remove("is-hidden");
+      capacityNote.setAttribute("aria-hidden", "false");
       if (!groups.length) {
-        capacityNote.hidden = true;
+        capacityNote.classList.add("is-hidden");
+        capacityNote.setAttribute("aria-hidden", "true");
       } else if (batchCapacityLoading) {
         capacityNote.textContent = "Checking availability...";
       } else if (!batchGenerationCapacity) {
-        capacityNote.hidden = true;
+        capacityNote.classList.add("is-hidden");
+        capacityNote.setAttribute("aria-hidden", "true");
       } else {
         const available = Math.max(
           0,
@@ -5324,9 +5443,10 @@
             "You cannot generate more listings right now.";
         } else if (groups.length > 0 && available < groups.length) {
           capacityNote.classList.add("warning");
-          capacityNote.textContent = `Available: ${available} of ${groups.length}. The first ${available} will be generated.`;
+          capacityNote.textContent = `Your balance allows ${available} of ${groups.length} listings. The first ${available} will be generated.`;
         } else {
-          capacityNote.hidden = true;
+          capacityNote.classList.add("is-hidden");
+          capacityNote.setAttribute("aria-hidden", "true");
         }
       }
     }
