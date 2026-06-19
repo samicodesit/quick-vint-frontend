@@ -2572,47 +2572,19 @@
           filter 180ms ease;
       }
 
-      #${BATCH_MODAL_ID}.organizing .batch-gallery .batch-photo.tap-target {
-        border-color: rgba(99, 102, 241, 0.24);
+      #${BATCH_MODAL_ID}.organizing .batch-gallery .batch-photo.tap-target:not(.selected) {
+        border-color: rgba(99, 102, 241, 0.34);
+        border-style: dashed;
         box-shadow: 0 5px 14px rgba(15, 23, 42, 0.08);
       }
 
-      #${BATCH_MODAL_ID}.organizing .batch-gallery .batch-photo.tap-target:not(.selected)::before {
-        content: "+";
-        position: absolute;
-        left: 8px;
-        bottom: 8px;
-        z-index: 1;
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-        width: 23px;
-        height: 23px;
-        border: 1px solid rgba(99, 102, 241, 0.22);
-        border-radius: 999px;
-        background: rgba(255, 255, 255, 0.93);
-        color: #4f46e5;
-        box-shadow: 0 6px 14px rgba(15, 23, 42, 0.16);
-        font-size: 17px;
-        font-weight: 900;
-        line-height: 1;
-        pointer-events: none;
-        transition:
-          background 160ms ease,
-          box-shadow 160ms ease,
-          transform 160ms ease;
-      }
-
-      #${BATCH_MODAL_ID}.organizing .batch-gallery .batch-photo:hover:not(.marked) {
-        border-color: rgba(79, 70, 229, 0.42);
+      #${BATCH_MODAL_ID}.organizing .batch-gallery .batch-photo.tap-target:not(.selected):hover,
+      #${BATCH_MODAL_ID}.organizing .batch-gallery .batch-photo.tap-target:not(.selected):focus-visible {
+        border-color: rgba(79, 70, 229, 0.48);
+        border-style: solid;
         box-shadow: 0 8px 18px rgba(79, 70, 229, 0.14);
+        outline: none;
         transform: translateY(-1px);
-      }
-
-      #${BATCH_MODAL_ID}.organizing .batch-gallery .batch-photo.tap-target:hover:not(.marked)::before {
-        background: #eef2ff;
-        box-shadow: 0 8px 18px rgba(79, 70, 229, 0.2);
-        transform: scale(1.06);
       }
 
       #${BATCH_MODAL_ID}.organizing .batch-gallery .batch-photo:active:not(.marked) {
@@ -2621,6 +2593,7 @@
 
       #${BATCH_MODAL_ID}.organizing .batch-gallery .batch-photo.selected {
         border-color: #2563eb;
+        border-style: solid;
         box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.22);
         transform: scale(0.96);
       }
