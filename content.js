@@ -72,7 +72,6 @@
     `mailto:${SUPPORT_EMAIL}?subject=AutoLister%20AI%20tailored%20limits`;
   const PRIMARY_BUTTON_BACKGROUND =
     "linear-gradient(135deg, #5b54f0 0%, #4338ca 100%)";
-  const BUSY_BUTTON_BACKGROUND = "#6b7280";
 
   // --- STATE ---
   let generateBtn = null;
@@ -108,6 +107,7 @@
   let batchProgressGroups = [];
   let batchGenerationCapacity = null;
   let batchCapacityLoading = false;
+  let batchTabStatusTimer = null;
   let isBatchPollInFlight = false;
 
   // --- HELPER FUNCTIONS ---
@@ -830,6 +830,89 @@
         opacity: 0.82;
       }
 
+      #${BTN_ID}.is-loading::before,
+      #${PHONE_BTN_ID}.is-loading::before,
+      #${BATCH_BTN_ID}.is-loading::before {
+        content: "";
+        width: 14px;
+        height: 14px;
+        border: 2px solid rgba(255, 255, 255, 0.38);
+        border-top-color: #ffffff;
+        border-radius: 999px;
+        animation: quickvintSpin 760ms linear infinite;
+      }
+
+      #${BTN_ID}.is-loading .icon,
+      #${PHONE_BTN_ID}.is-loading .icon,
+      #${BATCH_BTN_ID}.is-loading .icon {
+        display: none !important;
+      }
+
+      @keyframes quickvintSpin {
+        to {
+          transform: rotate(360deg);
+        }
+      }
+
+      #quickvint-batch-tab-status {
+        position: fixed;
+        right: 18px;
+        bottom: 18px;
+        z-index: 2147483646;
+        display: inline-flex;
+        align-items: center;
+        gap: 9px;
+        max-width: min(360px, calc(100vw - 36px));
+        min-height: 42px;
+        padding: 10px 13px;
+        border: 1px solid rgba(79, 70, 229, 0.18);
+        border-radius: 12px;
+        background: rgba(255, 255, 255, 0.97);
+        color: #111827;
+        box-shadow: 0 16px 42px rgba(15, 23, 42, 0.18), 0 8px 18px rgba(79, 70, 229, 0.12);
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        font-size: 13px;
+        font-weight: 780;
+        line-height: 1.2;
+        transform: translateY(10px);
+        opacity: 0;
+        pointer-events: none;
+        transition: opacity 160ms ease, transform 160ms ease;
+      }
+
+      #quickvint-batch-tab-status.visible {
+        opacity: 1;
+        transform: translateY(0);
+      }
+
+      #quickvint-batch-tab-status .batch-tab-status-icon {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        flex: 0 0 18px;
+        width: 18px;
+        height: 18px;
+        border-radius: 999px;
+        color: #ffffff;
+        font-size: 12px;
+        font-weight: 900;
+      }
+
+      #quickvint-batch-tab-status.loading .batch-tab-status-icon {
+        border: 2px solid rgba(79, 70, 229, 0.22);
+        border-top-color: #4f46e5;
+        background: transparent;
+        animation: quickvintSpin 760ms linear infinite;
+      }
+
+      #quickvint-batch-tab-status.success .batch-tab-status-icon {
+        background: #16a34a;
+      }
+
+      #quickvint-batch-tab-status.error .batch-tab-status-icon {
+        background: #dc2626;
+      }
+
       .quickvint-lang-field {
         display: none;
         align-items: center;
@@ -1106,7 +1189,7 @@
       }
 
       #${MODAL_ID} .generate-btn {
-        background: #4f46e5;
+        background: ${PRIMARY_BUTTON_BACKGROUND};
         color: white;
         box-shadow: 0 4px 12px rgba(79, 70, 229, 0.25);
       }
@@ -1117,7 +1200,8 @@
       }
 
       #${MODAL_ID} .generate-btn:hover {
-        background: #4338ca;
+        background: ${PRIMARY_BUTTON_BACKGROUND};
+        filter: brightness(1.05);
         transform: translateY(-1px);
         box-shadow: 0 6px 16px rgba(79, 70, 229, 0.35);
       }
@@ -1612,22 +1696,23 @@
 
       #${BATCH_MODAL_ID} .batch-actions .primary {
         border-color: #4f46e5;
-        background: #4f46e5;
+        background: ${PRIMARY_BUTTON_BACKGROUND};
         color: #ffffff;
         box-shadow: 0 8px 18px rgba(79, 70, 229, 0.22);
       }
 
       #${BATCH_MODAL_ID} .batch-inline-actions .primary {
         border-color: #4f46e5;
-        background: #4f46e5;
+        background: ${PRIMARY_BUTTON_BACKGROUND};
         color: #ffffff;
         box-shadow: 0 8px 18px rgba(79, 70, 229, 0.18);
       }
 
       #${BATCH_MODAL_ID} .batch-actions .primary:hover:not(:disabled),
       #${BATCH_MODAL_ID} .batch-inline-actions .primary:hover:not(:disabled) {
-        background: #4338ca;
+        background: ${PRIMARY_BUTTON_BACKGROUND};
         border-color: #4338ca;
+        filter: brightness(1.05);
       }
 
       #${BATCH_MODAL_ID} .batch-actions button:disabled {
@@ -2243,15 +2328,15 @@
       #${BATCH_MODAL_ID}.organizing .batch-mark-group {
         flex: 1 1 auto;
         min-width: 190px;
-        background: #2563eb;
-        border-color: #2563eb;
-        box-shadow: 0 10px 22px rgba(37, 99, 235, 0.28);
+        background: ${PRIMARY_BUTTON_BACKGROUND};
+        border-color: #4f46e5;
+        box-shadow: 0 10px 22px rgba(79, 70, 229, 0.28);
       }
 
       #${BATCH_MODAL_ID}.organizing .batch-start {
-        background: #16a34a;
-        border-color: #16a34a;
-        box-shadow: 0 10px 22px rgba(22, 163, 74, 0.22);
+        background: ${PRIMARY_BUTTON_BACKGROUND};
+        border-color: #4f46e5;
+        box-shadow: 0 10px 22px rgba(79, 70, 229, 0.24);
       }
 
       @media (max-width: 680px) {
@@ -2704,15 +2789,9 @@
         flex: 1 1 100%;
         width: 100%;
         justify-content: center;
-        background: #2563eb;
-        border-color: #2563eb;
-        box-shadow: 0 10px 24px rgba(37, 99, 235, 0.28);
-      }
-
-      #${BATCH_MODAL_ID}.organizing .batch-start {
-        background: #111827;
-        border-color: #111827;
-        box-shadow: 0 10px 24px rgba(17, 24, 39, 0.24);
+        background: ${PRIMARY_BUTTON_BACKGROUND};
+        border-color: #4f46e5;
+        box-shadow: 0 10px 24px rgba(79, 70, 229, 0.28);
       }
 
       #${BATCH_MODAL_ID}.organizing .batch-actions [hidden],
@@ -2993,6 +3072,10 @@
       #${BATCH_MODAL_ID}.generating .batch-dismiss {
         width: 100%;
         justify-content: center;
+        background: ${PRIMARY_BUTTON_BACKGROUND};
+        border-color: #4f46e5;
+        color: #ffffff;
+        box-shadow: 0 10px 24px rgba(79, 70, 229, 0.22);
       }
 
       @media (max-width: 560px) {
@@ -3148,7 +3231,7 @@
       #${DESCRIPTION_APPLY_PROMPT_ID} .quickvint-apply-add {
         min-width: 96px;
         border-color: #4f46e5;
-        background: #4f46e5;
+        background: ${PRIMARY_BUTTON_BACKGROUND};
         color: #ffffff;
       }
 
@@ -3542,6 +3625,30 @@
     return btn;
   }
 
+  function setActionButtonLoading(button, labelText) {
+    if (!button) return () => {};
+
+    const label = button.querySelector(".label");
+    const previousLabel = label?.textContent || "";
+    const previousDisabled = button.disabled;
+    const previousCursor = button.style.cursor;
+    const previousBackground = button.style.background;
+
+    button.classList.add("is-loading");
+    button.disabled = true;
+    button.style.cursor = "progress";
+    button.style.background = PRIMARY_BUTTON_BACKGROUND;
+    if (label) label.textContent = labelText;
+
+    return () => {
+      button.classList.remove("is-loading");
+      button.disabled = previousDisabled;
+      button.style.cursor = previousCursor;
+      button.style.background = previousBackground;
+      if (label) label.textContent = previousLabel;
+    };
+  }
+
   function createInlineLanguageField(label, title, selectId, storageKey) {
     const field = document.createElement("div");
     field.className = "quickvint-lang-field";
@@ -3752,27 +3859,31 @@
     const icon = generateBtn.querySelector(".icon");
 
     if (phoneBtn) {
-      phoneBtn.disabled = false;
+      phoneBtn.classList.remove("is-loading");
+      phoneBtn.disabled = isBusy;
       phoneBtn.style.background = PRIMARY_BUTTON_BACKGROUND;
-      phoneBtn.style.cursor = "pointer";
+      phoneBtn.style.cursor = isBusy ? "not-allowed" : "pointer";
     }
     if (batchBtn) {
-      batchBtn.disabled = false;
+      batchBtn.classList.remove("is-loading");
+      batchBtn.disabled = isBusy;
       batchBtn.style.background = PRIMARY_BUTTON_BACKGROUND;
-      batchBtn.style.cursor = "pointer";
+      batchBtn.style.cursor = isBusy ? "not-allowed" : "pointer";
     }
 
     if (!label || !icon) return;
 
     if (isBusy) {
+      generateBtn.classList.add("is-loading");
       generateBtn.disabled = true;
-      icon.style.display = "none";
-      label.textContent = "⏳ Generating…";
+      icon.style.display = "";
+      label.textContent = "Generating...";
       generateBtn.style.cursor = "progress";
-      generateBtn.style.background = BUSY_BUTTON_BACKGROUND;
+      generateBtn.style.background = PRIMARY_BUTTON_BACKGROUND;
     } else {
+      generateBtn.classList.remove("is-loading");
       generateBtn.disabled = false;
-      icon.style.display = "inline-block";
+      icon.style.display = "";
       label.textContent = "Generate";
       generateBtn.style.background = PRIMARY_BUTTON_BACKGROUND;
       generateBtn.style.cursor = "pointer";
@@ -3785,6 +3896,7 @@
     const icon = generateBtn.querySelector(".icon");
     if (!label || !icon) return;
 
+    generateBtn.classList.remove("is-loading");
     icon.style.display = "none";
     label.textContent = "✅ Done";
 
@@ -4502,15 +4614,8 @@
     }
 
     resetBatchState();
-    const batchLabel = batchBtn?.querySelector(".label");
-    const previousBatchLabel = batchLabel?.textContent || "Batch";
-    const previousBatchCursor = batchBtn?.style.cursor || "pointer";
+    const restoreBatchButton = setActionButtonLoading(batchBtn, "Checking...");
     batchCapacityLoading = true;
-    if (batchBtn) {
-      batchBtn.disabled = true;
-      batchBtn.style.cursor = "progress";
-    }
-    if (batchLabel) batchLabel.textContent = "Checking...";
 
     try {
       batchGenerationCapacity = await fetchBatchGenerationCapacity();
@@ -4522,11 +4627,7 @@
       };
     } finally {
       batchCapacityLoading = false;
-      if (batchBtn) {
-        batchBtn.disabled = false;
-        batchBtn.style.cursor = previousBatchCursor;
-      }
-      if (batchLabel) batchLabel.textContent = previousBatchLabel;
+      restoreBatchButton();
     }
 
     const available = Math.max(
@@ -5619,30 +5720,84 @@
     });
   }
 
+  function showBatchTabStatus(message, state = "loading") {
+    let status = document.getElementById("quickvint-batch-tab-status");
+    if (!status) {
+      status = document.createElement("div");
+      status.id = "quickvint-batch-tab-status";
+      document.body.appendChild(status);
+    }
+
+    if (batchTabStatusTimer) {
+      clearTimeout(batchTabStatusTimer);
+      batchTabStatusTimer = null;
+    }
+
+    const iconText = state === "success" ? "✓" : state === "error" ? "!" : "";
+    status.className = state;
+    status.innerHTML = `
+      <span class="batch-tab-status-icon" aria-hidden="true">${iconText}</span>
+      <span>${escapeHtml(message)}</span>
+    `;
+
+    requestAnimationFrame(() => {
+      status.classList.add("visible");
+    });
+  }
+
+  function hideBatchTabStatus(delayMs = 0) {
+    if (batchTabStatusTimer) {
+      clearTimeout(batchTabStatusTimer);
+      batchTabStatusTimer = null;
+    }
+
+    batchTabStatusTimer = setTimeout(() => {
+      const status = document.getElementById("quickvint-batch-tab-status");
+      if (!status) return;
+      status.classList.remove("visible");
+      setTimeout(() => status.remove(), 180);
+    }, delayMs);
+  }
+
   async function runBatchItem(message) {
     const remoteFiles = Array.isArray(message.files) ? message.files : [];
+    const itemIndex = Math.max(1, Number(message.itemIndex || 1));
+    const totalItems = Math.max(itemIndex, Number(message.totalItems || itemIndex));
+    const listingPrefix = totalItems > 1 ? `Listing ${itemIndex} of ${totalItems}` : "Listing";
     if (!remoteFiles.length) {
+      showBatchTabStatus(`${listingPrefix}: no photos were provided.`, "error");
+      hideBatchTabStatus(9000);
       throw new Error("Batch item has no photos.");
     }
     if (getVisibleUploadedPhotoCount() > 0) {
+      showBatchTabStatus(`${listingPrefix}: this tab already has photos.`, "error");
+      hideBatchTabStatus(9000);
       throw new Error("This Vinted listing tab already has photos.");
     }
 
     const initialPhotoCount = getVisibleUploadedPhotoCount();
-    const downloads = await Promise.all(remoteFiles.map(downloadPhoneUploadFile));
-    const filesToInject = downloads
-      .filter((result) => result.file)
-      .map((result) => result.file);
+    let downloads = [];
 
     try {
+      showBatchTabStatus(`${listingPrefix}: preparing photos...`);
+      downloads = await Promise.all(remoteFiles.map(downloadPhoneUploadFile));
+      const filesToInject = downloads
+        .filter((result) => result.file)
+        .map((result) => result.file);
+
       if (filesToInject.length !== remoteFiles.length) {
         throw new Error("Could not download every photo for this item.");
       }
+
+      showBatchTabStatus(`${listingPrefix}: adding photos...`);
       if (!injectFilesIntoVinted(filesToInject)) {
         throw new Error("Could not add photos to the Vinted listing.");
       }
 
+      showBatchTabStatus(`${listingPrefix}: waiting for Vinted to show photos...`);
       await waitForUploadedPhotoCount(initialPhotoCount + filesToInject.length);
+
+      showBatchTabStatus(`${listingPrefix}: writing title and description...`);
       await generateCurrentListing({
         descriptionApplyChoice: "replace",
         manageButtonState: false,
@@ -5650,7 +5805,16 @@
         throwOnLimit: true,
       });
 
+      showBatchTabStatus(`${listingPrefix}: ready to review.`, "success");
+      hideBatchTabStatus(3500);
       return { ok: true };
+    } catch (err) {
+      showBatchTabStatus(
+        err.message || `${listingPrefix}: generation failed.`,
+        "error",
+      );
+      hideBatchTabStatus(9000);
+      throw err;
     } finally {
       downloads.forEach((result) => {
         if (result.previewUrl) URL.revokeObjectURL(result.previewUrl);
