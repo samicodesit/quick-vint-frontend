@@ -37,10 +37,10 @@ let tokenRefreshTimeout = null;
 let activeBatchJob = null;
 
 const BATCH_DELAY_BY_TIER_MS = {
-  free: 22000,
-  starter: 7000,
-  pro: 4000,
-  business: 3000,
+  free: 21000,
+  starter: 6300,
+  pro: 3200,
+  business: 2200,
 };
 
 // --- SESSION & TOKEN MANAGEMENT ---
@@ -457,6 +457,26 @@ function sendTabMessage(tabId, message) {
   });
 }
 
+async function waitForBatchTabReady(tabId, timeoutMs = 30000) {
+  const startedAt = Date.now();
+  let lastError = null;
+
+  while (Date.now() - startedAt < timeoutMs) {
+    try {
+      const response = await sendTabMessage(tabId, { type: "BATCH_PING" });
+      if (response?.ok) return;
+    } catch (err) {
+      lastError = err;
+    }
+
+    await sleep(250);
+  }
+
+  throw new Error(
+    lastError?.message || "Duplicated Vinted tab was not ready in time.",
+  );
+}
+
 function notifyBatchProgress(job, payload) {
   if (!job?.sourceTabId) return;
   chrome.tabs.sendMessage(job.sourceTabId, {
@@ -483,7 +503,7 @@ async function cleanupBatchUploadSession(sessionId) {
 
 async function runBatchGenerationJob(job) {
   const { groups, delayMs } = job;
-  let currentTabId = job.sourceTabId;
+  let activeItemIndex = 0;
 
   notifyBatchProgress(job, {
     status: "queued",
@@ -493,21 +513,44 @@ async function runBatchGenerationJob(job) {
 
   try {
     for (let index = 0; index < groups.length; index += 1) {
-      let nextBlankTabId = null;
-      if (index < groups.length - 1) {
-        const nextTab = await duplicateTab(currentTabId);
-        nextBlankTabId = nextTab.id;
-        await waitForTabComplete(nextBlankTabId);
-        await sleep(800);
+      activeItemIndex = index + 1;
+      if (index > 0 && delayMs > 0) {
+        notifyBatchProgress(job, {
+          status: "waiting",
+          current: index,
+          total: groups.length,
+          itemIndex: index + 1,
+          delayMs,
+        });
+        await sleep(delayMs);
       }
 
       notifyBatchProgress(job, {
-        status: "running",
+        status: "opening_tab",
         current: index + 1,
         total: groups.length,
+        itemIndex: index + 1,
       });
 
-      const result = await sendTabMessage(currentTabId, {
+      const workTab = await duplicateTab(job.sourceTabId);
+      await waitForTabComplete(workTab.id);
+      await waitForBatchTabReady(workTab.id);
+
+      notifyBatchProgress(job, {
+        status: "tab_ready",
+        current: index + 1,
+        total: groups.length,
+        itemIndex: index + 1,
+      });
+
+      notifyBatchProgress(job, {
+        status: "generating",
+        current: index + 1,
+        total: groups.length,
+        itemIndex: index + 1,
+      });
+
+      const result = await sendTabMessage(workTab.id, {
         type: "RUN_BATCH_ITEM",
         itemIndex: index + 1,
         totalItems: groups.length,
@@ -520,10 +563,12 @@ async function runBatchGenerationJob(job) {
         );
       }
 
-      if (index < groups.length - 1) {
-        await sleep(delayMs);
-        currentTabId = nextBlankTabId;
-      }
+      notifyBatchProgress(job, {
+        status: "item_done",
+        current: index + 1,
+        total: groups.length,
+        itemIndex: index + 1,
+      });
     }
 
     await cleanupBatchUploadSession(job.sessionId);
@@ -536,8 +581,9 @@ async function runBatchGenerationJob(job) {
     console.error("[Background] Batch generation failed:", err);
     notifyBatchProgress(job, {
       status: "failed",
-      current: 0,
+      current: activeItemIndex,
       total: groups.length,
+      itemIndex: activeItemIndex,
       message: err.message || "Batch generation stopped.",
     });
   } finally {

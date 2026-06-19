@@ -101,6 +101,7 @@
   let batchNextGroupId = 1;
   let batchLastFileCount = 0;
   let batchLastFileChangeAt = 0;
+  let batchProgressGroups = [];
   let isBatchPollInFlight = false;
 
   // --- HELPER FUNCTIONS ---
@@ -684,6 +685,11 @@
   });
 
   chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+    if (message?.type === "BATCH_PING") {
+      sendResponse({ ok: true });
+      return false;
+    }
+
     if (message?.type === "RUN_BATCH_ITEM") {
       runBatchItem(message)
         .then((result) => sendResponse(result))
@@ -2661,6 +2667,293 @@
         display: none !important;
       }
 
+      #${BATCH_MODAL_ID}.generating .batch-content {
+        width: min(620px, calc(100vw - 24px));
+        max-height: min(760px, calc(100vh - 24px));
+        padding: 18px 18px 0;
+        border-radius: 16px;
+        background: #f8fafc;
+        overflow: hidden;
+      }
+
+      #${BATCH_MODAL_ID}.generating .batch-topbar {
+        align-items: flex-start;
+        margin: -18px -18px 0;
+        padding: 18px 18px 14px;
+        border-bottom: 1px solid #e2e8f0;
+        background: rgba(248, 250, 252, 0.97);
+        backdrop-filter: blur(10px);
+      }
+
+      #${BATCH_MODAL_ID}.generating .batch-heading {
+        flex: 1 1 auto;
+        min-width: 0;
+      }
+
+      #${BATCH_MODAL_ID}.generating .batch-title {
+        margin: 0;
+        font-size: 18px;
+        line-height: 1.2;
+      }
+
+      #${BATCH_MODAL_ID}.generating .batch-subtitle {
+        margin: 2px 0 0;
+        color: #64748b;
+        font-size: 13px;
+        font-weight: 750;
+      }
+
+      #${BATCH_MODAL_ID}.generating .batch-close:disabled {
+        cursor: wait;
+        opacity: 0.42;
+      }
+
+      #${BATCH_MODAL_ID}.generating .batch-body {
+        flex: 1 1 auto;
+        min-height: 0;
+        overflow: hidden;
+      }
+
+      #${BATCH_MODAL_ID}.generating .batch-progress-stage {
+        position: relative;
+        flex: 1 1 auto;
+        min-height: 0;
+        padding: 18px 0 16px;
+        overflow: hidden;
+      }
+
+      #${BATCH_MODAL_ID}.generating .batch-ambient {
+        position: absolute;
+        inset: 0;
+        pointer-events: none;
+        background:
+          linear-gradient(115deg, transparent 0%, rgba(79, 70, 229, 0.08) 42%, transparent 68%),
+          linear-gradient(180deg, rgba(255, 255, 255, 0.82), rgba(248, 250, 252, 0));
+        opacity: 0.75;
+        transform: translateX(-38%);
+      }
+
+      #${BATCH_MODAL_ID}.generating .batch-progress-stage.is-live .batch-ambient {
+        animation: batchAmbientSweep 3.6s ease-in-out infinite;
+      }
+
+      @keyframes batchAmbientSweep {
+        0% {
+          transform: translateX(-38%);
+          opacity: 0.45;
+        }
+        50% {
+          opacity: 0.82;
+        }
+        100% {
+          transform: translateX(38%);
+          opacity: 0.45;
+        }
+      }
+
+      #${BATCH_MODAL_ID}.generating .batch-progress-head {
+        position: relative;
+        z-index: 1;
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 14px;
+        margin-bottom: 14px;
+      }
+
+      #${BATCH_MODAL_ID}.generating .batch-progress-title {
+        color: #475569;
+        font-size: 13px;
+        font-weight: 700;
+      }
+
+      #${BATCH_MODAL_ID}.generating .batch-progress-count {
+        min-width: 54px;
+        padding: 6px 8px;
+        border: 1px solid #e2e8f0;
+        border-radius: 999px;
+        background: #ffffff;
+        color: #0f172a;
+        text-align: center;
+        font-size: 12px;
+        font-weight: 850;
+        box-shadow: 0 5px 14px rgba(15, 23, 42, 0.05);
+      }
+
+      #${BATCH_MODAL_ID}.generating .batch-live-progress {
+        position: relative;
+        z-index: 1;
+        height: 8px;
+        margin-bottom: 16px;
+        border-radius: 999px;
+        background: #e2e8f0;
+        overflow: hidden;
+      }
+
+      #${BATCH_MODAL_ID}.generating .batch-live-progress span {
+        display: block;
+        height: 100%;
+        border-radius: inherit;
+        background: linear-gradient(90deg, #4f46e5, #22c55e);
+        transition: width 360ms ease;
+      }
+
+      #${BATCH_MODAL_ID}.generating .batch-progress-list {
+        position: relative;
+        z-index: 1;
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+        max-height: min(46vh, 420px);
+        overflow-y: auto;
+        padding: 1px 2px 1px 1px;
+        scrollbar-width: thin;
+      }
+
+      #${BATCH_MODAL_ID}.generating .batch-progress-card {
+        display: grid;
+        grid-template-columns: auto minmax(0, 1fr) auto;
+        align-items: center;
+        gap: 12px;
+        min-height: 76px;
+        padding: 11px 12px;
+        border: 1px solid #e2e8f0;
+        border-radius: 14px;
+        background: rgba(255, 255, 255, 0.94);
+        box-shadow: 0 5px 16px rgba(15, 23, 42, 0.05);
+        transition: border-color 180ms ease, transform 180ms ease, box-shadow 180ms ease;
+      }
+
+      #${BATCH_MODAL_ID}.generating .batch-progress-card.active {
+        border-color: #818cf8;
+        box-shadow: 0 10px 24px rgba(79, 70, 229, 0.14);
+        transform: translateY(-1px);
+      }
+
+      #${BATCH_MODAL_ID}.generating .batch-progress-card.done {
+        border-color: #bbf7d0;
+        background: rgba(240, 253, 244, 0.9);
+      }
+
+      #${BATCH_MODAL_ID}.generating .batch-progress-card.failed {
+        border-color: #fed7aa;
+        background: #fff7ed;
+      }
+
+      #${BATCH_MODAL_ID}.generating .batch-progress-thumbs {
+        display: flex;
+        align-items: center;
+        min-width: 82px;
+      }
+
+      #${BATCH_MODAL_ID}.generating .batch-progress-thumbs img,
+      #${BATCH_MODAL_ID}.generating .batch-progress-thumbs span {
+        width: 38px;
+        height: 44px;
+        margin-left: -12px;
+        border: 2px solid #ffffff;
+        border-radius: 9px;
+        object-fit: cover;
+        background: #e2e8f0;
+        box-shadow: 0 4px 10px rgba(15, 23, 42, 0.1);
+      }
+
+      #${BATCH_MODAL_ID}.generating .batch-progress-thumbs img:first-child,
+      #${BATCH_MODAL_ID}.generating .batch-progress-thumbs span:first-child {
+        margin-left: 0;
+      }
+
+      #${BATCH_MODAL_ID}.generating .batch-progress-thumbs span {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        color: #475569;
+        font-size: 11px;
+        font-weight: 850;
+      }
+
+      #${BATCH_MODAL_ID}.generating .batch-progress-meta {
+        min-width: 0;
+      }
+
+      #${BATCH_MODAL_ID}.generating .batch-progress-meta strong {
+        display: block;
+        color: #0f172a;
+        font-size: 14px;
+        font-weight: 850;
+        line-height: 1.2;
+      }
+
+      #${BATCH_MODAL_ID}.generating .batch-progress-meta span {
+        display: block;
+        margin-top: 3px;
+        color: #64748b;
+        font-size: 12px;
+        font-weight: 650;
+      }
+
+      #${BATCH_MODAL_ID}.generating .batch-progress-badge {
+        min-width: 86px;
+        padding: 6px 8px;
+        border-radius: 999px;
+        background: #f1f5f9;
+        color: #475569;
+        text-align: center;
+        font-size: 11px;
+        font-weight: 850;
+      }
+
+      #${BATCH_MODAL_ID}.generating .batch-progress-card.active .batch-progress-badge {
+        background: #eef2ff;
+        color: #4f46e5;
+      }
+
+      #${BATCH_MODAL_ID}.generating .batch-progress-card.done .batch-progress-badge {
+        background: #dcfce7;
+        color: #15803d;
+      }
+
+      #${BATCH_MODAL_ID}.generating .batch-progress-card.failed .batch-progress-badge {
+        background: #ffedd5;
+        color: #c2410c;
+      }
+
+      #${BATCH_MODAL_ID}.generating .batch-progress-note {
+        position: relative;
+        z-index: 1;
+        margin-top: 14px;
+        color: #64748b;
+        font-size: 12.5px;
+        font-weight: 650;
+        line-height: 1.45;
+      }
+
+      #${BATCH_MODAL_ID}.generating .batch-actions {
+        flex: 0 0 auto;
+        margin: 0 -18px;
+        padding: 14px 18px 16px;
+        background: rgba(255, 255, 255, 0.98);
+        border-top: 1px solid #e5e7eb;
+        box-shadow: 0 -10px 26px rgba(15, 23, 42, 0.08);
+      }
+
+      #${BATCH_MODAL_ID}.generating .batch-dismiss {
+        width: 100%;
+        justify-content: center;
+      }
+
+      @media (max-width: 560px) {
+        #${BATCH_MODAL_ID}.generating .batch-progress-card {
+          grid-template-columns: 1fr;
+          gap: 8px;
+        }
+
+        #${BATCH_MODAL_ID}.generating .batch-progress-badge {
+          width: fit-content;
+          min-width: 0;
+        }
+      }
+
       @keyframes batchTileIn {
         from {
           opacity: 0;
@@ -4093,6 +4386,7 @@
     batchNextGroupId = 1;
     batchLastFileCount = 0;
     batchLastFileChangeAt = 0;
+    batchProgressGroups = [];
     isBatchPollInFlight = false;
   }
 
@@ -4795,7 +5089,8 @@
       return;
     }
 
-    const groups = getBatchGroups();
+    const groupsWithKeys = getBatchGroupsWithKeys();
+    const groups = groupsWithKeys.map((group) => group.map(({ file }) => file));
     if (!groups.length) {
       showToast("Add at least one photo before starting batch generation.", "error");
       return;
@@ -4821,6 +5116,7 @@
       batchAutoCloseTimer = null;
     }
 
+    batchProgressGroups = groupsWithKeys;
     renderBatchProgress({ status: "queued", current: 0, total: groups.length });
 
     const response = await sendMessage({
@@ -4839,31 +5135,183 @@
     }
   }
 
-  function renderBatchProgress({ status, current = 0, total = 0, message = "" }) {
+  function isBatchProgressActive(status) {
+    return !["done", "failed"].includes(status);
+  }
+
+  function getBatchProgressCopy({ status, current = 0, total = 0, message = "", delayMs = 0 }) {
+    if (message) return message;
+    const itemCopy = current > 0 ? `Listing ${current} of ${total}` : `${total} listing${total === 1 ? "" : "s"}`;
+    switch (status) {
+      case "done":
+        return `Generated ${total} listing${total === 1 ? "" : "s"}. Review each tab before publishing.`;
+      case "failed":
+        return "Batch generation stopped.";
+      case "opening_tab":
+        return `${itemCopy}: opening a fresh Vinted tab...`;
+      case "tab_ready":
+        return `${itemCopy}: tab ready, adding photos...`;
+      case "generating":
+        return `${itemCopy}: writing title and description...`;
+      case "item_done":
+        return `${itemCopy}: ready for review.`;
+      case "waiting":
+        return delayMs > 0
+          ? `Brief pause before the next listing...`
+          : "Preparing the next listing...";
+      case "queued":
+      default:
+        return `Preparing ${total} listing${total === 1 ? "" : "s"}...`;
+    }
+  }
+
+  function getBatchProgressPercent(status, current, total) {
+    if (!total) return 0;
+    if (status === "done") return 100;
+    if (status === "failed") {
+      return Math.max(0, Math.min(100, Math.round(((current || 0) / total) * 100)));
+    }
+
+    const currentIndex = Math.max(0, current - 1);
+    const phaseWeight =
+      status === "opening_tab"
+        ? 0.12
+        : status === "tab_ready"
+          ? 0.28
+          : status === "generating"
+            ? 0.64
+            : status === "item_done" || status === "waiting"
+              ? 1
+              : 0;
+    return Math.max(0, Math.min(99, Math.round(((currentIndex + phaseWeight) / total) * 100)));
+  }
+
+  function getBatchItemState(status, itemNumber, current) {
+    if (status === "done") return "done";
+    if (status === "failed") {
+      if (!current) return "pending";
+      if (itemNumber < current) return "done";
+      if (itemNumber === current) return "failed";
+      return "pending";
+    }
+    if (status === "item_done" || status === "waiting") {
+      if (itemNumber <= current) return "done";
+      return "pending";
+    }
+    if (itemNumber < current) return "done";
+    if (itemNumber === current && current > 0) return "active";
+    return "pending";
+  }
+
+  function getBatchItemStateLabel(state, status) {
+    if (state === "done") return "Ready";
+    if (state === "failed") return "Stopped";
+    if (state === "active") {
+      if (status === "opening_tab") return "Opening tab";
+      if (status === "tab_ready") return "Adding photos";
+      return "Writing";
+    }
+    return "Queued";
+  }
+
+  function getBatchReadyCount(status, current) {
+    if (status === "done") return current;
+    if (status === "item_done" || status === "waiting") return current;
+    if (status === "failed") return Math.max(0, current - 1);
+    return Math.max(0, current - 1);
+  }
+
+  function renderBatchProgress({ status, current = 0, total = 0, message = "", delayMs = 0 }) {
     const body = getBatchBody();
     if (!body) return;
 
-    const statusText =
-      message ||
-      (status === "done"
-        ? `Generated ${total} listing${total === 1 ? "" : "s"}. Review each tab before publishing.`
-        : status === "failed"
-          ? "Batch generation stopped."
-          : status === "running"
-            ? `Generating listing ${current} of ${total}...`
-            : `Preparing ${total} listing${total === 1 ? "" : "s"}...`);
+    const modal = document.getElementById(BATCH_MODAL_ID);
+    modal?.classList.remove("organizing");
+    modal?.classList.add("generating");
+
+    const closeButton = modal?.querySelector(".batch-close");
+    if (closeButton) {
+      closeButton.disabled = isBatchProgressActive(status);
+      closeButton.setAttribute(
+        "aria-label",
+        isBatchProgressActive(status)
+          ? "Batch generation in progress"
+          : "Close",
+      );
+    }
+
+    const titleEl = document.querySelector(`#${BATCH_MODAL_ID} .batch-title`);
+    const subtitleEl = document.querySelector(`#${BATCH_MODAL_ID} .batch-subtitle`);
+    if (titleEl) titleEl.textContent = "Generating listings";
+    if (subtitleEl) subtitleEl.textContent = `${getBatchReadyCount(status, current)}/${total} ready`;
+
+    const groups = batchProgressGroups.length
+      ? batchProgressGroups
+      : getBatchGroupsWithKeys();
+    const progressPercent = getBatchProgressPercent(status, current, total);
+    const statusText = getBatchProgressCopy({ status, current, total, message, delayMs });
+    const running = isBatchProgressActive(status);
 
     body.innerHTML = `
-      <div>
-        <div class="batch-status ${status === "done" ? "done" : ""}">${statusText}</div>
-        <div class="batch-strip">
-          <div class="batch-empty">${status === "done" ? "Tabs are ready for review." : "Keep this tab open while AutoLister prepares the listings."}</div>
+      <div class="batch-progress-stage ${running ? "is-live" : ""}">
+        <div class="batch-ambient" aria-hidden="true"></div>
+        <div class="batch-progress-head">
+          <div>
+            <div class="batch-status ${status === "done" ? "done" : status === "failed" ? "warning" : ""}">${statusText}</div>
+            <div class="batch-progress-title">${running ? "Keep this tab open" : status === "done" ? "Tabs are ready for review" : "Generation stopped"}</div>
+          </div>
+          <div class="batch-progress-count">${progressPercent}%</div>
+        </div>
+        <div class="batch-live-progress" aria-hidden="true">
+          <span style="width: ${progressPercent}%"></span>
+        </div>
+        <div class="batch-progress-list" aria-live="polite"></div>
+        <div class="batch-progress-note">
+          ${status === "done" ? "Review each generated tab before publishing on Vinted." : status === "failed" ? "No more tabs will be opened for this batch." : "AutoLister opens each listing tab only when it is ready to work on it."}
         </div>
       </div>
       <div class="batch-actions">
-        <button type="button" class="batch-dismiss" ${status === "running" || status === "queued" ? "disabled" : ""}>Done</button>
+        <button type="button" class="batch-dismiss" ${running ? "disabled" : ""}>Done</button>
       </div>
     `;
+
+    const list = body.querySelector(".batch-progress-list");
+    groups.forEach((group, index) => {
+      const itemNumber = index + 1;
+      const state = getBatchItemState(status, itemNumber, current);
+      const card = document.createElement("div");
+      card.className = `batch-progress-card ${state}`;
+
+      const thumbs = document.createElement("div");
+      thumbs.className = "batch-progress-thumbs";
+      group.slice(0, 3).forEach(({ file }, photoIndex) => {
+        const img = document.createElement("img");
+        img.src = file.url;
+        img.alt = `Listing ${itemNumber} preview ${photoIndex + 1}`;
+        thumbs.appendChild(img);
+      });
+      if (group.length > 3) {
+        const more = document.createElement("span");
+        more.textContent = `+${group.length - 3}`;
+        thumbs.appendChild(more);
+      }
+
+      const meta = document.createElement("div");
+      meta.className = "batch-progress-meta";
+      meta.innerHTML = `
+        <strong>Listing ${itemNumber}</strong>
+        <span>${group.length} photo${group.length === 1 ? "" : "s"}</span>
+      `;
+
+      const badge = document.createElement("div");
+      badge.className = "batch-progress-badge";
+      badge.textContent = getBatchItemStateLabel(state, status);
+
+      card.appendChild(thumbs);
+      card.appendChild(meta);
+      card.appendChild(badge);
+      list?.appendChild(card);
+    });
 
     body.querySelector(".batch-dismiss")?.addEventListener("click", () => {
       closeBatchModal({ cleanup: false });
