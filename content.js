@@ -4812,7 +4812,7 @@
         <div class="batch-topbar">
           <div class="batch-heading">
             <h3 class="batch-title">Batch upload</h3>
-            <p class="batch-subtitle">Scan the QR code. Photos upload automatically in gallery order.</p>
+            <p class="batch-subtitle">Scan the QR code to upload photos from your phone.</p>
           </div>
           <button class="batch-close" type="button" aria-label="Close">&times;</button>
         </div>
@@ -4848,7 +4848,7 @@
     if (titleEl) titleEl.textContent = "Batch upload";
     if (subtitleEl) {
       subtitleEl.textContent =
-        "Scan the QR code. Photos upload automatically in gallery order.";
+        "Scan the QR code to upload photos from your phone.";
     }
     document
       .querySelector(`#${BATCH_MODAL_ID} .organize-progress`)
@@ -4861,12 +4861,12 @@
           <div class="batch-qr-placeholder" data-qr-src="https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(
             uploadUrl,
           )}"></div>
-          <p class="batch-qr-note">Scan, select photos once, and keep the phone page open.</p>
+          <p class="batch-qr-note">Scan, select photos, and keep the phone page open.</p>
         </div>
         <div class="batch-wait-panel">
           <div class="batch-status">Waiting for photos...</div>
           <div class="batch-wait-title">Waiting for phone</div>
-          <div class="batch-wait-copy">Photos will upload automatically after selection.</div>
+          <div class="batch-wait-copy">Photos will appear here as they upload.</div>
           <div class="batch-capacity-note"></div>
         </div>
       </div>
@@ -4931,13 +4931,13 @@
         : "Waiting for phone";
     copy.textContent = batchIsComplete
       ? receivedCount
-        ? "Group the photos into listings when ready."
+        ? "Group photos into listings to continue."
         : "Select photos on your phone to begin."
       : receivedCount
         ? isStale
           ? "Reopen the phone page and keep it visible until it says photos were sent."
-          : "Keep the phone page open until the upload finishes."
-        : "Scan the QR code, choose photos, and upload will start immediately.";
+          : "Keep the phone page open until upload finishes."
+        : "Photos will appear here as they upload.";
 
     if (groupButton) {
       groupButton.disabled = !batchIsComplete || receivedCount === 0;
@@ -4983,7 +4983,7 @@
 
     capacityNote.textContent = `You can generate up to ${available} listing${
       available === 1 ? "" : "s"
-    } right now. Upload photos for up to ${available} item${
+    }. Upload photos for up to ${available} item${
       available === 1 ? "" : "s"
     }.`;
   }
@@ -5323,7 +5323,7 @@
         : !batchRemoteFiles.length
           ? "No photos left in this batch"
           : remainingCount
-          ? "Select photos to create an item"
+          ? "Select photos for one item"
           : "All photos sorted";
     }
     if (summaryHead) {
