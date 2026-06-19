@@ -2928,6 +2928,7 @@
       #${BATCH_MODAL_ID}.generating .batch-body {
         flex: 1 1 auto;
         min-height: 0;
+        margin: 0 -18px;
         overflow: hidden;
       }
 
@@ -2935,7 +2936,7 @@
         position: relative;
         flex: 1 1 auto;
         min-height: 0;
-        padding: 18px 0 16px;
+        padding: 18px;
         overflow: hidden;
       }
 
@@ -3023,7 +3024,7 @@
         gap: 10px;
         max-height: min(46vh, 420px);
         overflow-y: auto;
-        padding: 1px 2px 1px 1px;
+        padding: 1px;
         scrollbar-width: thin;
       }
 
@@ -3147,8 +3148,8 @@
 
       #${BATCH_MODAL_ID}.generating .batch-actions {
         flex: 0 0 auto;
-        margin: 0 -18px;
-        padding: 14px 18px 16px;
+        margin: 0;
+        padding: 14px 18px 18px;
         background: rgba(255, 255, 255, 0.98);
         border-top: 1px solid #e5e7eb;
         box-shadow: 0 -10px 26px rgba(15, 23, 42, 0.08);
@@ -3157,10 +3158,27 @@
       #${BATCH_MODAL_ID}.generating .batch-dismiss {
         width: 100%;
         justify-content: center;
-        background: ${PRIMARY_BUTTON_BACKGROUND};
-        border-color: #4f46e5;
-        color: #ffffff;
-        box-shadow: 0 10px 24px rgba(79, 70, 229, 0.22);
+        background: ${PRIMARY_BUTTON_BACKGROUND} !important;
+        border-color: #4f46e5 !important;
+        color: #ffffff !important;
+        box-shadow: 0 10px 24px rgba(79, 70, 229, 0.22) !important;
+      }
+
+      #${BATCH_MODAL_ID}.generating .batch-dismiss:hover:not(:disabled) {
+        background: ${PRIMARY_BUTTON_BACKGROUND} !important;
+        border-color: #4338ca !important;
+        color: #ffffff !important;
+        filter: brightness(1.04);
+      }
+
+      #${BATCH_MODAL_ID}.generating .batch-dismiss:disabled {
+        background: ${PRIMARY_BUTTON_BACKGROUND} !important;
+        border-color: #4f46e5 !important;
+        color: #ffffff !important;
+        cursor: wait !important;
+        opacity: 0.52;
+        box-shadow: none !important;
+        filter: none !important;
       }
 
       @media (max-width: 560px) {
@@ -5803,6 +5821,7 @@
     const modal = document.getElementById(BATCH_MODAL_ID);
     modal?.classList.remove("organizing");
     modal?.classList.add("generating");
+    modal?.querySelector(".organize-status-row")?.remove();
 
     const closeButton = modal?.querySelector(".batch-close");
     if (closeButton) {
