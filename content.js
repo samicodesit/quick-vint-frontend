@@ -2420,8 +2420,8 @@
 
       #${BATCH_MODAL_ID}.organizing .batch-content {
         width: min(520px, calc(100vw - 24px));
-        height: min(860px, calc(100vh - 20px));
-        max-height: calc(100vh - 20px);
+        height: auto;
+        max-height: min(860px, calc(100vh - 20px));
         padding: 18px 18px 0;
         border-radius: 16px;
         background: #f8fafc;
@@ -2835,13 +2835,33 @@
 
       #${BATCH_MODAL_ID}.organizing .batch-item-card {
         display: block;
+        max-height: 220px;
         min-height: 0;
         padding: 14px 16px 16px;
         border: 1px solid #e5e7eb;
         border-radius: 12px;
         background: #ffffff;
         box-shadow: 0 3px 12px rgba(15, 23, 42, 0.05);
-        animation: batchCardIn 180ms ease-out;
+        opacity: 1;
+        transform: translateY(0);
+        overflow: hidden;
+        transition:
+          max-height 210ms ease,
+          padding 180ms ease,
+          border-width 180ms ease,
+          opacity 170ms ease,
+          transform 170ms ease;
+      }
+
+      #${BATCH_MODAL_ID}.organizing .batch-item-card.is-entering,
+      #${BATCH_MODAL_ID}.organizing .batch-item-card.is-leaving {
+        max-height: 0;
+        min-height: 0;
+        padding-top: 0;
+        padding-bottom: 0;
+        border-width: 0;
+        opacity: 0;
+        transform: translateY(-5px);
       }
 
       #${BATCH_MODAL_ID}.organizing .batch-item-card-head {
@@ -2941,6 +2961,7 @@
       }
 
       #${BATCH_MODAL_ID}.organizing .batch-selection-count {
+        max-height: 22px;
         min-height: 18px;
         margin: 0;
         color: #64748b;
@@ -2948,7 +2969,22 @@
         font-weight: 650;
         text-align: center;
         line-height: 1.35;
-        transition: color 160ms ease;
+        opacity: 1;
+        overflow: hidden;
+        transform: translateY(0);
+        transition:
+          max-height 180ms ease,
+          min-height 180ms ease,
+          opacity 160ms ease,
+          transform 160ms ease,
+          color 160ms ease;
+      }
+
+      #${BATCH_MODAL_ID}.organizing .batch-selection-count.is-hidden {
+        max-height: 0;
+        min-height: 0;
+        opacity: 0;
+        transform: translateY(4px);
       }
 
       #${BATCH_MODAL_ID}.organizing .batch-secondary-actions {
@@ -5220,12 +5256,12 @@
       </div>
       <div class="batch-actions">
         <span class="batch-selection-count"></span>
-        <div class="batch-secondary-actions">
-          <button type="button" class="footer-control batch-clear-selection is-hidden" aria-hidden="true">Clear</button>
-          <button type="button" class="footer-control batch-reset-groups is-hidden" aria-hidden="true">Reset groups</button>
+        <div class="batch-secondary-actions is-hidden" hidden>
+          <button type="button" class="footer-control batch-clear-selection is-hidden" hidden aria-hidden="true">Clear</button>
+          <button type="button" class="footer-control batch-reset-groups is-hidden" hidden aria-hidden="true">Reset groups</button>
         </div>
-        <button type="button" class="primary footer-control batch-mark-group is-hidden" disabled aria-hidden="true">Group photos</button>
-        <button type="button" class="primary footer-control batch-start is-hidden" aria-hidden="true"></button>
+        <button type="button" class="primary footer-control batch-mark-group is-hidden" disabled hidden aria-hidden="true">Group photos</button>
+        <button type="button" class="primary footer-control batch-start is-hidden" hidden aria-hidden="true"></button>
       </div>
     `;
 
@@ -5400,8 +5436,35 @@
 
   function setBatchControlHidden(control, hidden) {
     if (!control) return;
-    control.classList.toggle("is-hidden", hidden);
-    control.setAttribute("aria-hidden", hidden ? "true" : "false");
+    const timerKey = "__quickvintHideTimer";
+    if (control[timerKey]) {
+      clearTimeout(control[timerKey]);
+      control[timerKey] = null;
+    }
+
+    if (hidden) {
+      if (control.hidden) {
+        control.classList.add("is-hidden");
+        control.setAttribute("aria-hidden", "true");
+        return;
+      }
+
+      control.classList.add("is-hidden");
+      control.setAttribute("aria-hidden", "true");
+      control[timerKey] = window.setTimeout(() => {
+        if (control.classList.contains("is-hidden")) {
+          control.hidden = true;
+        }
+        control[timerKey] = null;
+      }, 190);
+      return;
+    }
+
+    control.hidden = false;
+    control.setAttribute("aria-hidden", "false");
+    requestAnimationFrame(() => {
+      control.classList.remove("is-hidden");
+    });
   }
 
   function updateBatchGroupingControls() {
@@ -5463,6 +5526,16 @@
           : remainingCount
           ? "Select photos for one item"
           : "Review grouped items";
+      selectionCount.classList.toggle(
+        "is-hidden",
+        selectedCount === 0 && remainingCount === 0 && groups.length > 0,
+      );
+      selectionCount.setAttribute(
+        "aria-hidden",
+        selectedCount === 0 && remainingCount === 0 && groups.length > 0
+          ? "true"
+          : "false",
+      );
     }
     if (review) {
       review.classList.toggle("is-all-grouped", remainingCount === 0);
@@ -5585,9 +5658,10 @@
     if (groupIndex < 0) return;
 
     let row = batchGroupRowById.get(group.id);
+    const isNewRow = !row;
     if (!row) {
       row = document.createElement("div");
-      row.className = "batch-item-card";
+      row.className = "batch-item-card is-entering";
       batchGroupRowById.set(group.id, row);
       groupsEl.appendChild(row);
     }
@@ -5624,6 +5698,12 @@
     row.querySelector(".batch-ungroup")?.addEventListener("click", () => {
       ungroupBatchGroup(group.id);
     });
+
+    if (isNewRow) {
+      requestAnimationFrame(() => {
+        row.classList.remove("is-entering");
+      });
+    }
   }
 
   function rerenderBatchGroupRows() {
@@ -5636,7 +5716,10 @@
 
     const [group] = batchMarkedGroups.splice(groupIndex, 1);
     const row = batchGroupRowById.get(group.id);
-    if (row) row.remove();
+    if (row) {
+      row.classList.add("is-leaving");
+      window.setTimeout(() => row.remove(), 190);
+    }
     batchGroupRowById.delete(group.id);
     const markedKeys = getMarkedBatchPhotoKeys();
     group.keys.forEach((key) => updateBatchPhotoMarkedTile(key, markedKeys));
