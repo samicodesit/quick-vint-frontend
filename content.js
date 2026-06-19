@@ -102,6 +102,8 @@
   let batchLastFileCount = 0;
   let batchLastFileChangeAt = 0;
   let batchProgressGroups = [];
+  let batchGenerationCapacity = null;
+  let batchCapacityLoading = false;
   let isBatchPollInFlight = false;
 
   // --- HELPER FUNCTIONS ---
@@ -2502,6 +2504,30 @@
         text-transform: none;
       }
 
+      #${BATCH_MODAL_ID}.organizing .batch-capacity-note {
+        margin: 12px 0 0;
+        padding: 10px 12px;
+        border: 1px solid #e0e7ff;
+        border-radius: 12px;
+        background: #eef2ff;
+        color: #3730a3;
+        font-size: 12.5px;
+        font-weight: 750;
+        line-height: 1.35;
+      }
+
+      #${BATCH_MODAL_ID}.organizing .batch-capacity-note.warning {
+        border-color: #fed7aa;
+        background: #fff7ed;
+        color: #9a3412;
+      }
+
+      #${BATCH_MODAL_ID}.organizing .batch-capacity-note.error {
+        border-color: #fecaca;
+        background: #fef2f2;
+        color: #991b1b;
+      }
+
       #${BATCH_MODAL_ID}.organizing .batch-groups {
         display: flex;
         flex-direction: column;
@@ -4387,6 +4413,8 @@
     batchLastFileCount = 0;
     batchLastFileChangeAt = 0;
     batchProgressGroups = [];
+    batchGenerationCapacity = null;
+    batchCapacityLoading = false;
     isBatchPollInFlight = false;
   }
 
@@ -4696,6 +4724,7 @@
           <span>Ready to submit</span>
           <span class="batch-summary-count"></span>
         </div>
+        <div class="batch-capacity-note">Checking how many listings you can generate...</div>
         <div class="batch-groups" aria-live="polite"></div>
       </div>
       <div class="batch-actions">
@@ -4728,6 +4757,7 @@
     });
     body.querySelector(".batch-start")?.addEventListener("click", startBatchGeneration);
     buildBatchGroupingGallery();
+    refreshBatchGenerationCapacity();
   }
 
   function buildBatchGroupingGallery() {
@@ -4804,6 +4834,35 @@
     }
   }
 
+  async function refreshBatchGenerationCapacity() {
+    if (batchCapacityLoading) return;
+    batchCapacityLoading = true;
+    batchGenerationCapacity = null;
+    updateBatchGroupingControls();
+
+    try {
+      const response = await sendMessage({ type: "GET_BATCH_CAPACITY" });
+      batchGenerationCapacity = response?.ok
+        ? response.capacity
+        : {
+            allowed: false,
+            available: 0,
+            message:
+              response?.error ||
+              "Could not check how many listings are available.",
+          };
+    } catch (err) {
+      batchGenerationCapacity = {
+        allowed: false,
+        available: 0,
+        message: "Could not check how many listings are available.",
+      };
+    } finally {
+      batchCapacityLoading = false;
+      updateBatchGroupingControls();
+    }
+  }
+
   function updateBatchGroupingControls() {
     const subtitleEl = document.querySelector(`#${BATCH_MODAL_ID} .batch-subtitle`);
     const selectionCount = document.querySelector(
@@ -4816,6 +4875,7 @@
     const summaryHead = document.querySelector(`#${BATCH_MODAL_ID} .batch-summary-head`);
     const summaryCount = document.querySelector(`#${BATCH_MODAL_ID} .batch-summary-count`);
     const emptyState = document.querySelector(`#${BATCH_MODAL_ID} .batch-empty-state`);
+    const capacityNote = document.querySelector(`#${BATCH_MODAL_ID} .batch-capacity-note`);
     const progressDone = document.querySelector(`#${BATCH_MODAL_ID} .organize-progress-done`);
     const progressActive = document.querySelector(`#${BATCH_MODAL_ID} .organize-progress-active`);
     const groups = getBatchGroups();
@@ -4855,6 +4915,32 @@
     if (emptyState) {
       emptyState.hidden = remainingCount !== 0 || groups.length === 0;
     }
+    if (capacityNote) {
+      capacityNote.classList.remove("warning", "error");
+      if (batchCapacityLoading) {
+        capacityNote.textContent = "Checking how many listings you can generate...";
+      } else if (!batchGenerationCapacity) {
+        capacityNote.textContent = "Capacity will be checked before generation starts.";
+      } else {
+        const available = Math.max(
+          0,
+          Math.floor(Number(batchGenerationCapacity.available || 0)),
+        );
+        if (!batchGenerationCapacity.allowed || available <= 0) {
+          capacityNote.classList.add("error");
+          capacityNote.textContent =
+            batchGenerationCapacity.message ||
+            "You cannot generate more listings right now.";
+        } else if (groups.length > 0 && available < groups.length) {
+          capacityNote.classList.add("warning");
+          capacityNote.textContent = `You can generate ${available} of ${groups.length} listings right now. The first ${available} will be processed if you continue.`;
+        } else if (groups.length > 0) {
+          capacityNote.textContent = `You can generate all ${groups.length} listing${groups.length === 1 ? "" : "s"} in this batch.`;
+        } else {
+          capacityNote.textContent = `You have ${available} listing${available === 1 ? "" : "s"} available.`;
+        }
+      }
+    }
     if (clearButton) {
       clearButton.hidden = selectedCount === 0;
     }
@@ -4867,8 +4953,21 @@
       markButton.hidden = selectedCount === 0;
     }
     if (startButton) {
-      startButton.textContent = `Generate ${groups.length} listing${groups.length === 1 ? "" : "s"}`;
-      startButton.disabled = groups.length === 0 || remainingCount > 0;
+      const available = batchGenerationCapacity
+        ? Math.max(0, Math.floor(Number(batchGenerationCapacity.available || 0)))
+        : null;
+      const effectiveCount =
+        available === null ? groups.length : Math.min(groups.length, available);
+      startButton.textContent = batchCapacityLoading
+        ? "Checking availability..."
+        : available !== null && groups.length > 0 && available < groups.length && available > 0
+          ? `Generate first ${available} of ${groups.length}`
+          : `Generate ${groups.length} listing${groups.length === 1 ? "" : "s"}`;
+      startButton.disabled =
+        batchCapacityLoading ||
+        groups.length === 0 ||
+        remainingCount > 0 ||
+        (available !== null && effectiveCount <= 0);
       startButton.hidden = selectedCount > 0 || groups.length === 0 || remainingCount > 0;
     }
   }
