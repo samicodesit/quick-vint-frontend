@@ -105,6 +105,7 @@
   let batchLastFileCount = 0;
   let batchLastFileChangeAt = 0;
   let batchProgressGroups = [];
+  let batchProgressStatus = null;
   let batchGenerationCapacity = null;
   let batchCapacityLoading = false;
   let batchTabStatusTimer = null;
@@ -2423,6 +2424,7 @@
       #${BATCH_MODAL_ID}.organizing .batch-topbar {
         flex: 0 0 auto;
         align-items: flex-start;
+        flex-wrap: wrap;
         margin: -18px -18px 14px;
         padding: 18px 18px 14px;
         border-bottom: 1px solid #e2e8f0;
@@ -2466,8 +2468,10 @@
       }
 
       #${BATCH_MODAL_ID}.organizing .organize-progress {
+        flex: 1 0 100%;
+        width: 100%;
         height: 5px;
-        margin: 12px 0 0;
+        margin: 10px 0 0;
         border-radius: 999px;
         background: #e2e8f0;
         overflow: hidden;
@@ -2586,6 +2590,41 @@
         transform: translate(-50%, -50%) scale(1);
       }
 
+      #${BATCH_MODAL_ID}.organizing .batch-discard-photo {
+        position: absolute;
+        right: 7px;
+        top: 7px;
+        z-index: 2;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 24px;
+        height: 24px;
+        min-height: 24px;
+        padding: 0;
+        border: 1px solid rgba(255, 255, 255, 0.82);
+        border-radius: 999px;
+        background: rgba(15, 23, 42, 0.68);
+        color: #ffffff;
+        box-shadow: 0 6px 14px rgba(15, 23, 42, 0.2);
+        cursor: pointer;
+        font-size: 16px;
+        font-weight: 850;
+        line-height: 1;
+        opacity: 0.82;
+        transform: scale(1);
+        transition: opacity 140ms ease, transform 140ms ease, background 140ms ease;
+      }
+
+      #${BATCH_MODAL_ID}.organizing .batch-gallery .batch-photo:hover .batch-discard-photo,
+      #${BATCH_MODAL_ID}.organizing .batch-discard-photo:focus-visible {
+        opacity: 1;
+      }
+
+      #${BATCH_MODAL_ID}.organizing .batch-discard-photo:hover {
+        background: #dc2626;
+      }
+
       #${BATCH_MODAL_ID}.organizing .batch-empty-state {
         margin: 0 0 24px;
         padding: 18px;
@@ -2603,7 +2642,7 @@
         display: flex;
         align-items: center;
         justify-content: space-between;
-        margin: 24px 0 12px;
+        margin: 18px 0 8px;
         color: #94a3b8;
         font-size: 12px;
         font-weight: 850;
@@ -4552,9 +4591,46 @@
     batchLastFileCount = 0;
     batchLastFileChangeAt = 0;
     batchProgressGroups = [];
+    batchProgressStatus = null;
     batchGenerationCapacity = null;
     batchCapacityLoading = false;
     isBatchPollInFlight = false;
+  }
+
+  function isBatchGenerationActive() {
+    return Boolean(batchProgressStatus && isBatchProgressActive(batchProgressStatus));
+  }
+
+  function shouldWarnBeforeClosingBatch() {
+    return (
+      isBatchGenerationActive() ||
+      batchRemoteFiles.length > 0 ||
+      batchSelectedPhotoKeys.size > 0 ||
+      batchMarkedGroups.length > 0
+    );
+  }
+
+  function getBatchCloseWarningMessage() {
+    if (isBatchGenerationActive()) {
+      return "Batch generation is still running. Closing this panel will hide progress, but opened listing tabs may continue. Close anyway?";
+    }
+
+    if (!batchIsComplete && batchRemoteFiles.length > 0) {
+      return "Photos are still uploading. Closing now will discard this batch upload. Close anyway?";
+    }
+
+    return "Closing now will discard this batch setup, including uploaded photos and grouped items. Close anyway?";
+  }
+
+  function requestCloseBatchModal({ cleanup = true } = {}) {
+    if (shouldWarnBeforeClosingBatch() && !window.confirm(getBatchCloseWarningMessage())) {
+      return false;
+    }
+
+    closeBatchModal({
+      cleanup: cleanup && !isBatchGenerationActive(),
+    });
+    return true;
   }
 
   function closeBatchModal({ cleanup = true } = {}) {
@@ -4610,7 +4686,8 @@
     }
 
     if (document.getElementById(BATCH_MODAL_ID)) {
-      closeBatchModal({ cleanup: true });
+      const closed = requestCloseBatchModal({ cleanup: true });
+      if (!closed) return;
     }
 
     resetBatchState();
@@ -4667,10 +4744,10 @@
 
     document.body.appendChild(modal);
     modal.querySelector(".batch-close")?.addEventListener("click", () => {
-      closeBatchModal({ cleanup: true });
+      requestCloseBatchModal({ cleanup: true });
     });
     modal.addEventListener("click", (event) => {
-      if (event.target === modal) closeBatchModal({ cleanup: true });
+      if (event.target === modal) requestCloseBatchModal({ cleanup: true });
     });
 
     renderBatchUploadPhase(sessionId);
@@ -4696,7 +4773,7 @@
         "Scan the QR code. Photos upload automatically in gallery order.";
     }
     document
-      .querySelector(`#${BATCH_MODAL_ID} .batch-heading .organize-progress`)
+      .querySelector(`#${BATCH_MODAL_ID} .organize-progress`)
       ?.remove();
 
     const uploadUrl = getBatchUploadUrl(sessionId);
@@ -4731,7 +4808,7 @@
     });
 
     body.querySelector(".batch-cancel")?.addEventListener("click", () => {
-      closeBatchModal({ cleanup: true });
+      requestCloseBatchModal({ cleanup: true });
     });
     body.querySelector(".batch-group")?.addEventListener("click", () => {
       renderBatchGroupingPhase();
@@ -4851,6 +4928,7 @@
       badgeText = `Listing ${itemNumber}`,
       marked = false,
       onClick = null,
+      onDiscard = null,
       selected = false,
     } = options;
     const wrapper = document.createElement("div");
@@ -4875,6 +4953,21 @@
     badge.textContent = badgeText;
     photo.appendChild(img);
     photo.appendChild(badge);
+
+    if (onDiscard) {
+      const discardButton = document.createElement("button");
+      discardButton.type = "button";
+      discardButton.className = "batch-discard-photo";
+      discardButton.setAttribute("aria-label", `Discard photo ${index + 1}`);
+      discardButton.title = "Discard photo";
+      discardButton.textContent = "×";
+      discardButton.addEventListener("click", (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        onDiscard();
+      });
+      photo.appendChild(discardButton);
+    }
 
     if (onClick) {
       const check = document.createElement("span");
@@ -4904,9 +4997,9 @@
     const subtitleEl = document.querySelector(`#${BATCH_MODAL_ID} .batch-subtitle`);
     if (titleEl) titleEl.textContent = "Organize Items";
     if (subtitleEl) subtitleEl.textContent = "";
-    const headingEl = document.querySelector(`#${BATCH_MODAL_ID} .batch-heading`);
-    if (headingEl && !headingEl.querySelector(".organize-progress")) {
-      headingEl.insertAdjacentHTML(
+    const topbarEl = document.querySelector(`#${BATCH_MODAL_ID} .batch-topbar`);
+    if (topbarEl && !topbarEl.querySelector(".organize-progress")) {
+      topbarEl.insertAdjacentHTML(
         "beforeend",
         `
           <div class="organize-progress" aria-hidden="true">
@@ -4983,6 +5076,7 @@
         marked: markedKeys.has(key),
         selected: batchSelectedPhotoKeys.has(key),
         onClick: () => toggleBatchPhotoSelection(key),
+        onDiscard: () => discardBatchPhoto(key),
       });
       batchPhotoTileByKey.set(key, tile.querySelector(".batch-photo"));
       gallery.appendChild(tile);
@@ -5009,6 +5103,30 @@
     }
     updateBatchPhotoSelectionTile(key);
     updateBatchGroupingControls();
+  }
+
+  function discardBatchPhoto(key) {
+    if (!key) return;
+
+    const index = batchRemoteFiles.findIndex(
+      (file) => getPhoneUploadFileKey(file) === key,
+    );
+    if (index < 0) return;
+
+    batchRemoteFiles.splice(index, 1);
+    batchRemoteFileKeys.delete(key);
+    batchSelectedPhotoKeys.delete(key);
+    batchLastFileCount = batchRemoteFiles.length;
+    batchLastFileChangeAt = Date.now();
+
+    batchMarkedGroups = batchMarkedGroups
+      .map((group) => ({
+        ...group,
+        keys: group.keys.filter((itemKey) => itemKey !== key),
+      }))
+      .filter((group) => group.keys.length > 0);
+
+    buildBatchGroupingGallery();
   }
 
   function updateBatchPhotoSelectionTile(key) {
@@ -5111,7 +5229,9 @@
     if (selectionCount) {
       selectionCount.textContent = selectedCount
         ? `${selectedCount} selected`
-        : remainingCount
+        : !batchRemoteFiles.length
+          ? "No photos left in this batch"
+          : remainingCount
           ? "Select photos to create an item"
           : "All photos sorted";
     }
@@ -5126,10 +5246,13 @@
     }
     if (capacityNote) {
       capacityNote.classList.remove("warning", "error");
-      if (batchCapacityLoading) {
+      capacityNote.hidden = false;
+      if (!groups.length) {
+        capacityNote.hidden = true;
+      } else if (batchCapacityLoading) {
         capacityNote.textContent = "Checking how many listings you can generate...";
       } else if (!batchGenerationCapacity) {
-        capacityNote.textContent = "Capacity will be checked before generation starts.";
+        capacityNote.hidden = true;
       } else {
         const available = Math.max(
           0,
@@ -5143,10 +5266,8 @@
         } else if (groups.length > 0 && available < groups.length) {
           capacityNote.classList.add("warning");
           capacityNote.textContent = `You can generate ${available} of ${groups.length} listings right now. The first ${available} will be processed if you continue.`;
-        } else if (groups.length > 0) {
-          capacityNote.textContent = `You can generate all ${groups.length} listing${groups.length === 1 ? "" : "s"} in this batch.`;
         } else {
-          capacityNote.textContent = `You have ${available} listing${available === 1 ? "" : "s"} available.`;
+          capacityNote.hidden = true;
         }
       }
     }
@@ -5171,13 +5292,13 @@
         ? "Checking availability..."
         : available !== null && groups.length > 0 && available < groups.length && available > 0
           ? `Generate first ${available} of ${groups.length}`
-          : `Generate ${groups.length} listing${groups.length === 1 ? "" : "s"}`;
+          : `Generate ${effectiveCount} listing${effectiveCount === 1 ? "" : "s"}`;
       startButton.disabled =
         batchCapacityLoading ||
         groups.length === 0 ||
         remainingCount > 0 ||
         (available !== null && effectiveCount <= 0);
-      startButton.hidden = selectedCount > 0 || groups.length === 0 || remainingCount > 0;
+      startButton.hidden = false;
     }
   }
 
@@ -5597,17 +5718,17 @@
     const body = getBatchBody();
     if (!body) return;
 
+    batchProgressStatus = status;
     const modal = document.getElementById(BATCH_MODAL_ID);
     modal?.classList.remove("organizing");
     modal?.classList.add("generating");
 
     const closeButton = modal?.querySelector(".batch-close");
     if (closeButton) {
-      closeButton.disabled = isBatchProgressActive(status);
       closeButton.setAttribute(
         "aria-label",
         isBatchProgressActive(status)
-          ? "Batch generation in progress"
+          ? "Close batch generation progress"
           : "Close",
       );
     }
