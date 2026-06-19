@@ -856,15 +856,14 @@
       }
 
       #quickvint-batch-tab-status {
-        position: fixed;
-        right: 18px;
-        bottom: 18px;
-        z-index: 2147483646;
+        position: static;
         display: inline-flex;
         align-items: center;
         gap: 9px;
-        max-width: min(360px, calc(100vw - 36px));
+        width: 100%;
+        max-width: 100%;
         min-height: 42px;
+        margin: 8px 0 10px;
         padding: 10px 13px;
         border: 1px solid rgba(79, 70, 229, 0.18);
         border-radius: 12px;
@@ -875,7 +874,7 @@
         font-size: 13px;
         font-weight: 780;
         line-height: 1.2;
-        transform: translateY(10px);
+        transform: translateY(-4px);
         opacity: 0;
         pointer-events: none;
         transition: opacity 160ms ease, transform 160ms ease;
@@ -2477,6 +2476,41 @@
         overflow: hidden;
       }
 
+      #${BATCH_MODAL_ID}.organizing .organize-status-row {
+        flex: 1 0 100%;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        width: 100%;
+        margin: 10px 0 0;
+      }
+
+      #${BATCH_MODAL_ID}.organizing .organize-status-row .organize-progress {
+        flex: 1 1 auto;
+        margin: 0;
+      }
+
+      #${BATCH_MODAL_ID}.organizing .organize-unsorted-badge {
+        flex: 0 0 auto;
+        min-width: 92px;
+        padding: 5px 8px;
+        border: 1px solid #fecaca;
+        border-radius: 999px;
+        background: #fef2f2;
+        color: #b91c1c;
+        text-align: center;
+        font-size: 12px;
+        font-weight: 850;
+        line-height: 1;
+        white-space: nowrap;
+      }
+
+      #${BATCH_MODAL_ID}.organizing .organize-unsorted-badge.done {
+        border-color: #bbf7d0;
+        background: #ecfdf5;
+        color: #047857;
+      }
+
       #${BATCH_MODAL_ID}.organizing .organize-progress-done {
         background: #22c55e;
       }
@@ -3668,7 +3702,7 @@
     if (!button) return () => {};
 
     const label = button.querySelector(".label");
-    const previousLabel = label?.textContent || "";
+    const previousLabel = label?.textContent || button.textContent || "";
     const previousDisabled = button.disabled;
     const previousCursor = button.style.cursor;
     const previousBackground = button.style.background;
@@ -3677,14 +3711,22 @@
     button.disabled = true;
     button.style.cursor = "progress";
     button.style.background = PRIMARY_BUTTON_BACKGROUND;
-    if (label) label.textContent = labelText;
+    if (label) {
+      label.textContent = labelText;
+    } else {
+      button.textContent = labelText;
+    }
 
     return () => {
       button.classList.remove("is-loading");
       button.disabled = previousDisabled;
       button.style.cursor = previousCursor;
       button.style.background = previousBackground;
-      if (label) label.textContent = previousLabel;
+      if (label) {
+        label.textContent = previousLabel;
+      } else {
+        button.textContent = previousLabel;
+      }
     };
   }
 
@@ -5002,9 +5044,12 @@
       topbarEl.insertAdjacentHTML(
         "beforeend",
         `
-          <div class="organize-progress" aria-hidden="true">
-            <span class="organize-progress-done"></span>
-            <span class="organize-progress-active"></span>
+          <div class="organize-status-row" aria-live="polite">
+            <div class="organize-progress" aria-hidden="true">
+              <span class="organize-progress-done"></span>
+              <span class="organize-progress-active"></span>
+            </div>
+            <span class="organize-unsorted-badge"></span>
           </div>
         `,
       );
@@ -5205,6 +5250,7 @@
     const capacityNote = document.querySelector(`#${BATCH_MODAL_ID} .batch-capacity-note`);
     const progressDone = document.querySelector(`#${BATCH_MODAL_ID} .organize-progress-done`);
     const progressActive = document.querySelector(`#${BATCH_MODAL_ID} .organize-progress-active`);
+    const unsortedBadge = document.querySelector(`#${BATCH_MODAL_ID} .organize-unsorted-badge`);
     const groups = getBatchGroups();
     const markedKeys = getMarkedBatchPhotoKeys();
     const selectedCount = batchSelectedPhotoKeys.size;
@@ -5217,7 +5263,15 @@
       : 0;
 
     if (subtitleEl) {
-      subtitleEl.textContent = `${remainingCount} Unsorted`;
+      subtitleEl.textContent = remainingCount
+        ? "Finish grouping all photos to generate listings."
+        : "Ready to generate listings.";
+    }
+    if (unsortedBadge) {
+      unsortedBadge.classList.toggle("done", remainingCount === 0);
+      unsortedBadge.textContent = remainingCount
+        ? `${remainingCount} unsorted`
+        : "All sorted";
     }
     if (progressDone) {
       progressDone.style.width = `${groupedPct}%`;
@@ -5298,7 +5352,7 @@
         groups.length === 0 ||
         remainingCount > 0 ||
         (available !== null && effectiveCount <= 0);
-      startButton.hidden = false;
+      startButton.hidden = selectedCount > 0 || groups.length === 0 || remainingCount > 0;
     }
   }
 
@@ -5546,6 +5600,7 @@
   async function startBatchGeneration() {
     const modal = document.getElementById(BATCH_MODAL_ID);
     if (!modal || !batchUploadSessionId) return;
+    const startButton = modal.querySelector(".batch-start");
 
     if (!batchIsComplete) {
       showToast("Phone upload is still running.", "info");
@@ -5570,6 +5625,8 @@
       return;
     }
 
+    const restoreStartButton = setActionButtonLoading(startButton, "Starting...");
+
     let capacity;
     try {
       capacity = await fetchBatchGenerationCapacity();
@@ -5582,6 +5639,7 @@
     }
     const available = Math.max(0, Math.floor(Number(capacity.available || 0)));
     if (!capacity.allowed || available <= 0) {
+      restoreStartButton();
       await showBatchCapacityBlocked(capacity);
       return;
     }
@@ -5590,7 +5648,10 @@
       const confirmed = window.confirm(
         `You can generate ${available} of ${groups.length} listings right now. Generate the first ${available}?`,
       );
-      if (!confirmed) return;
+      if (!confirmed) {
+        restoreStartButton();
+        return;
+      }
 
       groupsWithKeys = groupsWithKeys.slice(0, available);
       groups = groups.slice(0, available);
@@ -5611,6 +5672,7 @@
 
     batchProgressGroups = groupsWithKeys;
     renderBatchProgress({ status: "queued", current: 0, total: groups.length });
+    restoreStartButton();
 
     const response = await sendMessage({
       type: "START_BATCH_GENERATION",
@@ -5846,6 +5908,19 @@
     if (!status) {
       status = document.createElement("div");
       status.id = "quickvint-batch-tab-status";
+    }
+
+    const titleInput = document.querySelector(SELECTORS.title);
+    const descriptionInput = document.querySelector(SELECTORS.description);
+    const anchor =
+      titleInput?.closest("label") ||
+      titleInput ||
+      descriptionInput?.closest("label") ||
+      descriptionInput;
+
+    if (anchor?.parentElement && status.parentElement !== anchor.parentElement) {
+      anchor.parentElement.insertBefore(status, anchor);
+    } else if (!status.parentElement) {
       document.body.appendChild(status);
     }
 
