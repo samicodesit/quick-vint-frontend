@@ -575,11 +575,33 @@ async function startBatchGeneration(message, sender) {
     return { ok: false, error: "Could not find the current Vinted tab." };
   }
 
-  const groups = Array.isArray(message.groups)
+  let groups = Array.isArray(message.groups)
     ? message.groups.filter((group) => Array.isArray(group) && group.length > 0)
     : [];
   if (!groups.length) {
     return { ok: false, error: "No grouped photos were provided." };
+  }
+
+  const capacityResult = await getBatchCapacity();
+  if (!capacityResult.ok) {
+    return {
+      ok: false,
+      error: capacityResult.error || "Could not check generation capacity.",
+    };
+  }
+
+  const capacity = capacityResult.capacity || {};
+  const available = Math.max(0, Math.floor(Number(capacity.available || 0)));
+  if (!capacity.allowed || available <= 0) {
+    return {
+      ok: false,
+      error: capacity.message || "You cannot generate more listings right now.",
+    };
+  }
+
+  const requestedCount = groups.length;
+  if (available < requestedCount) {
+    groups = groups.slice(0, available);
   }
 
   activeBatchJob = {
@@ -589,7 +611,12 @@ async function startBatchGeneration(message, sender) {
   };
 
   runBatchGenerationJob(activeBatchJob);
-  return { ok: true };
+  return {
+    ok: true,
+    requestedCount,
+    startedCount: groups.length,
+    limited: groups.length < requestedCount,
+  };
 }
 
 async function getBatchCapacity() {

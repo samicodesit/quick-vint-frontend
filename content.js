@@ -4873,7 +4873,6 @@
           <div class="batch-status">Waiting</div>
           <div class="batch-wait-title">Scan QR code</div>
           <div class="batch-wait-copy">Choose photos on your phone. They will appear here.</div>
-          <div class="batch-capacity-note"></div>
         </div>
       </div>
       <div class="batch-actions">
@@ -4898,7 +4897,6 @@
       renderBatchGroupingPhase();
     });
     renderBatchUploadStrip();
-    updateBatchUploadCapacityNote();
   }
 
   function renderBatchUploadStrip() {
@@ -4954,43 +4952,6 @@
           : "Receiving photos"
         : "Group photos";
     }
-  }
-
-  function updateBatchUploadCapacityNote() {
-    const capacityNote = document.querySelector(
-      `#${BATCH_MODAL_ID} .batch-wait-panel .batch-capacity-note`,
-    );
-    if (!capacityNote) return;
-
-    capacityNote.classList.remove("warning", "error");
-    if (batchCapacityLoading) {
-      capacityNote.textContent = "Checking availability...";
-      return;
-    }
-
-    if (!batchGenerationCapacity) {
-      capacityNote.classList.add("warning");
-      capacityNote.textContent = "Availability will be checked before generation.";
-      return;
-    }
-
-    const available = Math.max(
-      0,
-      Math.floor(Number(batchGenerationCapacity.available || 0)),
-    );
-    if (!batchGenerationCapacity.allowed || available <= 0) {
-      capacityNote.classList.add("error");
-      capacityNote.textContent =
-        batchGenerationCapacity.message ||
-        "You cannot generate more listings right now.";
-      return;
-    }
-
-    capacityNote.textContent = `Available: ${available} listing${
-      available === 1 ? "" : "s"
-    }. Upload up to ${available} item${
-      available === 1 ? "" : "s"
-    }.`;
   }
 
   function refreshBatchWaitingState() {
@@ -5731,6 +5692,22 @@
         total: groups.length,
         message: response?.error || "Could not start batch generation.",
       });
+    } else if (response.limited) {
+      const startedCount = Math.max(
+        0,
+        Math.floor(Number(response.startedCount || 0)),
+      );
+      if (startedCount > 0 && startedCount < groups.length) {
+        batchProgressGroups = groupsWithKeys.slice(0, startedCount);
+        renderBatchProgress({
+          status: "queued",
+          current: 0,
+          total: startedCount,
+          message: `Generating first ${startedCount} listing${
+            startedCount === 1 ? "" : "s"
+          }.`,
+        });
+      }
     }
   }
 
