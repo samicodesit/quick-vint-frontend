@@ -4818,7 +4818,7 @@
         <div class="batch-topbar">
           <div class="batch-heading">
             <h3 class="batch-title">Batch upload</h3>
-            <p class="batch-subtitle">Scan the QR code to upload photos from your phone.</p>
+            <p class="batch-subtitle">Create several listings at once.</p>
           </div>
           <button class="batch-close" type="button" aria-label="Close">&times;</button>
         </div>
@@ -4848,13 +4848,13 @@
   function renderBatchUploadPhase(sessionId) {
     const body = getBatchBody();
     if (!body) return;
-    document.getElementById(BATCH_MODAL_ID)?.classList.remove("organizing");
+    document.getElementById(BATCH_MODAL_ID)?.classList.remove("organizing", "generating");
     const titleEl = document.querySelector(`#${BATCH_MODAL_ID} .batch-title`);
     const subtitleEl = document.querySelector(`#${BATCH_MODAL_ID} .batch-subtitle`);
     if (titleEl) titleEl.textContent = "Batch upload";
     if (subtitleEl) {
-      subtitleEl.textContent =
-        "Scan the QR code to upload photos from your phone.";
+      subtitleEl.hidden = false;
+      subtitleEl.textContent = "Create several listings at once.";
     }
     document
       .querySelector(`#${BATCH_MODAL_ID} .organize-progress`)
@@ -4867,12 +4867,12 @@
           <div class="batch-qr-placeholder" data-qr-src="https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(
             uploadUrl,
           )}"></div>
-          <p class="batch-qr-note">Scan, select photos, and keep the phone page open.</p>
+          <p class="batch-qr-note">Keep the phone page open.</p>
         </div>
         <div class="batch-wait-panel">
-          <div class="batch-status">Waiting for photos...</div>
-          <div class="batch-wait-title">Waiting for phone</div>
-          <div class="batch-wait-copy">Photos will appear here as they upload.</div>
+          <div class="batch-status">Waiting</div>
+          <div class="batch-wait-title">Scan QR code</div>
+          <div class="batch-wait-copy">Choose photos on your phone. They will appear here.</div>
           <div class="batch-capacity-note"></div>
         </div>
       </div>
@@ -4918,13 +4918,13 @@
     status.classList.toggle("warning", isStale);
     status.textContent = batchIsComplete
       ? receivedCount
-        ? `${receivedCount} photo${receivedCount === 1 ? "" : "s"} ready`
-        : "No photos were sent"
+        ? `${receivedCount} ready`
+        : "No photos"
       : receivedCount
         ? isStale
-          ? "Phone paused or connection interrupted"
-          : `Receiving photos... ${receivedCount} received`
-        : "Waiting for phone";
+          ? "Connection paused"
+          : `${receivedCount} received`
+        : "Waiting";
 
     title.textContent = batchIsComplete
       ? receivedCount
@@ -4932,18 +4932,18 @@
         : "No photos received"
       : receivedCount
         ? isStale
-          ? "Check the phone page"
+          ? "Check phone"
           : "Receiving photos"
-        : "Waiting for phone";
+        : "Scan QR code";
     copy.textContent = batchIsComplete
       ? receivedCount
-        ? "Group photos into listings to continue."
+        ? "Group photos into listings."
         : "Select photos on your phone to begin."
       : receivedCount
         ? isStale
-          ? "Reopen the phone page and keep it visible until it says photos were sent."
-          : "Keep the phone page open until upload finishes."
-        : "Photos will appear here as they upload.";
+          ? "Reopen the phone page, then leave it visible."
+          : "Keep the phone page open."
+        : "Choose photos on your phone. They will appear here.";
 
     if (groupButton) {
       groupButton.disabled = !batchIsComplete || receivedCount === 0;
@@ -4964,14 +4964,13 @@
 
     capacityNote.classList.remove("warning", "error");
     if (batchCapacityLoading) {
-      capacityNote.textContent = "Checking how many listings you can generate...";
+      capacityNote.textContent = "Checking availability...";
       return;
     }
 
     if (!batchGenerationCapacity) {
       capacityNote.classList.add("warning");
-      capacityNote.textContent =
-        "Listing availability will be checked before generation starts.";
+      capacityNote.textContent = "Availability will be checked before generation.";
       return;
     }
 
@@ -4987,9 +4986,9 @@
       return;
     }
 
-    capacityNote.textContent = `You can generate up to ${available} listing${
+    capacityNote.textContent = `Available: ${available} listing${
       available === 1 ? "" : "s"
-    }. Upload photos for up to ${available} item${
+    }. Upload up to ${available} item${
       available === 1 ? "" : "s"
     }.`;
   }
@@ -5077,11 +5076,16 @@
       showToast("No photos were sent for this batch.", "error");
       return;
     }
-    document.getElementById(BATCH_MODAL_ID)?.classList.add("organizing");
+    const modal = document.getElementById(BATCH_MODAL_ID);
+    modal?.classList.remove("generating");
+    modal?.classList.add("organizing");
     const titleEl = document.querySelector(`#${BATCH_MODAL_ID} .batch-title`);
     const subtitleEl = document.querySelector(`#${BATCH_MODAL_ID} .batch-subtitle`);
-    if (titleEl) titleEl.textContent = "Organize Items";
-    if (subtitleEl) subtitleEl.textContent = "";
+    if (titleEl) titleEl.textContent = "Organize items";
+    if (subtitleEl) {
+      subtitleEl.hidden = true;
+      subtitleEl.textContent = "";
+    }
     const topbarEl = document.querySelector(`#${BATCH_MODAL_ID} .batch-topbar`);
     if (topbarEl && !topbarEl.querySelector(".organize-progress")) {
       topbarEl.insertAdjacentHTML(
@@ -5102,15 +5106,15 @@
       <div class="batch-review">
         <div class="organize-tip">
           <span class="organize-tip-icon">▧</span>
-          <span>Tap photos belonging to the same item</span>
+          <span>Tap photos for one item</span>
         </div>
         <div class="batch-gallery" aria-live="polite"></div>
-        <div class="batch-empty-state" hidden>All photos sorted. Review your items below.</div>
+        <div class="batch-empty-state" hidden>Review grouped items below.</div>
         <div class="batch-summary-head">
-          <span>Ready to submit</span>
+          <span>Items</span>
           <span class="batch-summary-count"></span>
         </div>
-        <div class="batch-capacity-note">Checking how many listings you can generate...</div>
+        <div class="batch-capacity-note">Checking availability...</div>
         <div class="batch-groups" aria-live="polite"></div>
       </div>
       <div class="batch-actions">
@@ -5306,15 +5310,12 @@
       : 0;
 
     if (subtitleEl) {
-      subtitleEl.textContent = remainingCount
-        ? "Finish grouping all photos to generate listings."
-        : "Ready to generate listings.";
+      subtitleEl.textContent = "";
     }
     if (unsortedBadge) {
+      unsortedBadge.hidden = remainingCount === 0;
       unsortedBadge.classList.toggle("done", remainingCount === 0);
-      unsortedBadge.textContent = remainingCount
-        ? `${remainingCount} unsorted`
-        : "All sorted";
+      unsortedBadge.textContent = `${remainingCount} unsorted`;
     }
     if (progressDone) {
       progressDone.style.width = `${groupedPct}%`;
@@ -5330,7 +5331,7 @@
           ? "No photos left in this batch"
           : remainingCount
           ? "Select photos for one item"
-          : "All photos sorted";
+          : "Review grouped items";
     }
     if (summaryHead) {
       summaryHead.hidden = groups.length === 0;
@@ -5347,7 +5348,7 @@
       if (!groups.length) {
         capacityNote.hidden = true;
       } else if (batchCapacityLoading) {
-        capacityNote.textContent = "Checking how many listings you can generate...";
+        capacityNote.textContent = "Checking availability...";
       } else if (!batchGenerationCapacity) {
         capacityNote.hidden = true;
       } else {
@@ -5362,7 +5363,7 @@
             "You cannot generate more listings right now.";
         } else if (groups.length > 0 && available < groups.length) {
           capacityNote.classList.add("warning");
-          capacityNote.textContent = `You can generate ${available} of ${groups.length} listings right now. The first ${available} will be processed if you continue.`;
+          capacityNote.textContent = `Available: ${available} of ${groups.length}. The first ${available} will be generated.`;
         } else {
           capacityNote.hidden = true;
         }
@@ -5689,7 +5690,7 @@
 
     if (available < groups.length) {
       const confirmed = window.confirm(
-        `You can generate ${available} of ${groups.length} listings right now. Generate the first ${available}?`,
+        `You have ${available} of ${groups.length} listings available. Generate the first ${available}?`,
       );
       if (!confirmed) {
         restoreStartButton();
@@ -5699,7 +5700,7 @@
       groupsWithKeys = groupsWithKeys.slice(0, available);
       groups = groups.slice(0, available);
       showToast(
-        `Generating the first ${available} listing${available === 1 ? "" : "s"}.`,
+        `Generating first ${available} listing${available === 1 ? "" : "s"}.`,
         "info",
       );
     }
@@ -5742,21 +5743,21 @@
     const itemCopy = current > 0 ? `Listing ${current} of ${total}` : `${total} listing${total === 1 ? "" : "s"}`;
     switch (status) {
       case "done":
-        return `Generated ${total} listing${total === 1 ? "" : "s"}. Review each tab before publishing.`;
+        return `${total} listing${total === 1 ? "" : "s"} ready`;
       case "failed":
         return "Batch generation stopped.";
       case "opening_tab":
-        return `${itemCopy}: opening a fresh Vinted tab...`;
+        return `${itemCopy}: opening tab...`;
       case "tab_ready":
-        return `${itemCopy}: tab ready, adding photos...`;
+        return `${itemCopy}: adding photos...`;
       case "generating":
-        return `${itemCopy}: writing title and description...`;
+        return `${itemCopy}: writing details...`;
       case "item_done":
-        return `${itemCopy}: ready for review.`;
+        return `${itemCopy}: ready.`;
       case "waiting":
         return delayMs > 0
-          ? `Brief pause before the next listing...`
-          : "Preparing the next listing...";
+          ? "Brief pause..."
+          : "Preparing next listing...";
       case "queued":
       default:
         return `Preparing ${total} listing${total === 1 ? "" : "s"}...`;
@@ -5842,7 +5843,10 @@
     const titleEl = document.querySelector(`#${BATCH_MODAL_ID} .batch-title`);
     const subtitleEl = document.querySelector(`#${BATCH_MODAL_ID} .batch-subtitle`);
     if (titleEl) titleEl.textContent = "Generating listings";
-    if (subtitleEl) subtitleEl.textContent = `${getBatchReadyCount(status, current)}/${total} ready`;
+    if (subtitleEl) {
+      subtitleEl.hidden = false;
+      subtitleEl.textContent = `${getBatchReadyCount(status, current)}/${total} ready`;
+    }
 
     const groups = batchProgressGroups.length
       ? batchProgressGroups
@@ -5857,7 +5861,7 @@
         <div class="batch-progress-head">
           <div>
             <div class="batch-status ${status === "done" ? "done" : status === "failed" ? "warning" : ""}">${statusText}</div>
-            <div class="batch-progress-title">${running ? "Keep this tab open" : status === "done" ? "Tabs are ready for review" : "Generation stopped"}</div>
+            <div class="batch-progress-title">${running ? "Keep this tab open" : status === "done" ? "Review tabs before publishing" : "Generation stopped"}</div>
           </div>
           <div class="batch-progress-count">${progressPercent}%</div>
         </div>
@@ -5865,9 +5869,7 @@
           <span style="width: ${progressPercent}%"></span>
         </div>
         <div class="batch-progress-list" aria-live="polite"></div>
-        <div class="batch-progress-note">
-          ${status === "done" ? "Review each generated tab before publishing on Vinted." : status === "failed" ? "No more tabs will be opened for this batch." : "AutoLister opens each listing tab only when it is ready to work on it."}
-        </div>
+        ${status === "done" ? "" : `<div class="batch-progress-note">${status === "failed" ? "No more tabs will open." : "Tabs open one at a time."}</div>`}
       </div>
       <div class="batch-actions">
         <button type="button" class="batch-dismiss" ${running ? "disabled" : ""}>Done</button>
@@ -5922,8 +5924,6 @@
     renderBatchProgress(message);
     if (message.status === "failed") {
       showToast(message.message || "Batch generation stopped.", "error");
-    } else if (message.status === "done") {
-      showToast("Batch generation finished. Review each tab before publishing.", "success");
     }
   }
 
