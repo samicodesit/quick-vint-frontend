@@ -4495,13 +4495,36 @@
       return;
     }
 
+    const restorePhoneButton = setActionButtonLoading(phoneBtn, "Checking...");
+    let capacity;
+    try {
+      capacity = await fetchBatchGenerationCapacity();
+    } catch (err) {
+      capacity = {
+        allowed: false,
+        available: 0,
+        message: "Could not check how many listings are available.",
+      };
+    }
+
+    const available = Math.max(0, Math.floor(Number(capacity.available || 0)));
+    if (!capacity.allowed || available <= 0) {
+      restorePhoneButton();
+      await showBatchCapacityBlocked(capacity);
+      return;
+    }
+
     if (document.getElementById(MODAL_ID)) {
       closeModal();
     }
 
     const sessionId = generateSessionId();
-    await createModal(sessionId);
-    startPolling(sessionId);
+    try {
+      await createModal(sessionId);
+      startPolling(sessionId);
+    } finally {
+      restorePhoneButton();
+    }
   }
 
   function startPolling(sessionId) {
