@@ -3037,7 +3037,13 @@
         max-height: min(46vh, 420px);
         overflow-y: auto;
         padding: 1px;
-        scrollbar-width: thin;
+        overscroll-behavior: contain;
+        scrollbar-width: none;
+      }
+
+      #${BATCH_MODAL_ID}.generating .batch-progress-list::-webkit-scrollbar {
+        width: 0;
+        height: 0;
       }
 
       #${BATCH_MODAL_ID}.generating .batch-progress-card {
