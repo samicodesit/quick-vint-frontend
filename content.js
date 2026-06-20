@@ -2531,6 +2531,7 @@
         overflow-y: auto;
         overscroll-behavior: contain;
         padding: 0 0 18px;
+        scrollbar-gutter: stable;
         scrollbar-width: none;
       }
 
@@ -2608,8 +2609,8 @@
         overflow: hidden;
         transform: translateY(0);
         transition:
-          max-height 180ms ease,
-          margin 180ms ease,
+          max-height 120ms ease,
+          margin 120ms ease,
           opacity 160ms ease,
           transform 160ms ease;
       }
@@ -2831,8 +2832,8 @@
         overflow: hidden;
         transform: translateY(0);
         transition:
-          max-height 180ms ease,
-          margin 180ms ease,
+          max-height 120ms ease,
+          margin 120ms ease,
           opacity 160ms ease,
           transform 160ms ease;
       }
@@ -2864,10 +2865,10 @@
         overflow: hidden;
         transform: translateY(0);
         transition:
-          max-height 180ms ease,
-          margin 180ms ease,
-          padding 180ms ease,
-          border-width 180ms ease,
+          max-height 120ms ease,
+          margin 120ms ease,
+          padding 120ms ease,
+          border-width 120ms ease,
           opacity 160ms ease,
           transform 160ms ease;
       }
@@ -3014,12 +3015,13 @@
         right: auto;
         bottom: auto;
         display: grid;
-        grid-template-columns: minmax(0, auto) minmax(0, auto) minmax(170px, 300px);
+        grid-template-columns: minmax(0, auto) minmax(0, auto) minmax(170px, 280px);
         grid-template-areas: "status secondary primary";
         align-items: center;
         gap: 10px;
         margin: 0 -18px;
-        padding: 12px 20px 16px;
+        min-height: 76px;
+        padding: 14px 24px 18px;
         background: rgba(255, 255, 255, 0.98);
         box-shadow: 0 -10px 26px rgba(15, 23, 42, 0.08);
         border-top: 1px solid #e5e7eb;
@@ -3031,7 +3033,7 @@
       }
 
       #${BATCH_MODAL_ID}.organizing .batch-actions:not(.has-status-line) {
-        grid-template-columns: minmax(0, auto) minmax(170px, 300px);
+        grid-template-columns: minmax(0, auto) minmax(170px, 280px);
         grid-template-areas: "secondary primary";
       }
 
@@ -3101,7 +3103,7 @@
       }
 
       #${BATCH_MODAL_ID}.organizing .batch-actions button {
-        min-height: 42px;
+        min-height: 40px;
         border-radius: 12px;
         transition:
           transform 140ms ease,
@@ -3118,7 +3120,7 @@
       #${BATCH_MODAL_ID}.organizing .batch-start {
         grid-area: primary;
         width: 100%;
-        max-width: 300px;
+        max-width: 280px;
         justify-self: end;
         justify-content: center;
         background: ${PRIMARY_BUTTON_BACKGROUND};
@@ -3413,14 +3415,15 @@
         flex: 0 0 auto;
         justify-content: flex-end;
         margin: 0;
-        padding: 14px 20px 18px;
+        min-height: 76px;
+        padding: 14px 24px 18px;
         background: rgba(255, 255, 255, 0.98);
         border-top: 1px solid #e5e7eb;
         box-shadow: 0 -10px 26px rgba(15, 23, 42, 0.08);
       }
 
       #${BATCH_MODAL_ID}.generating .batch-dismiss {
-        width: min(100%, 300px);
+        width: min(100%, 280px);
         justify-content: center;
         background: ${PRIMARY_BUTTON_BACKGROUND} !important;
         border-color: #4f46e5 !important;
@@ -3468,7 +3471,8 @@
             "primary primary";
           gap: 8px;
           margin: 0 -14px;
-          padding: 12px 14px 14px;
+          min-height: 96px;
+          padding: 12px 18px 16px;
         }
 
         #${BATCH_MODAL_ID}.organizing .batch-actions:not(.has-primary-action) {
@@ -3503,7 +3507,8 @@
         }
 
         #${BATCH_MODAL_ID}.generating .batch-actions {
-          padding: 12px 14px 14px;
+          min-height: 74px;
+          padding: 12px 18px 16px;
         }
 
         #${BATCH_MODAL_ID}.generating .batch-dismiss {
