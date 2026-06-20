@@ -5481,7 +5481,7 @@
     const remainingPct = batchRemoteFiles.length
       ? Math.max(0, 100 - groupedPct)
       : 0;
-    const hasStatusLine = !(selectedCount === 0 && remainingCount === 0 && groups.length > 0);
+    const hasStatusLine = true;
     const hasSecondaryAction = selectedCount > 0 || groups.length > 0;
     const hasPrimaryAction =
       selectedCount > 0 || (groups.length > 0 && remainingCount === 0);
