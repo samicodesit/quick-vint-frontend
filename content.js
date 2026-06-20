@@ -1828,10 +1828,62 @@
       }
 
       #${BATCH_MODAL_ID} .batch-qr-placeholder {
+        position: relative;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
         width: 164px;
         height: 164px;
         border-radius: 8px;
         background: linear-gradient(135deg, #f8fafc, #eef2ff);
+        overflow: hidden;
+        color: #4f46e5;
+        font-size: 12px;
+        font-weight: 850;
+      }
+
+      #${BATCH_MODAL_ID} .batch-qr-placeholder::before {
+        content: "";
+        position: absolute;
+        inset: 0;
+        background: linear-gradient(90deg, transparent 0%, rgba(255, 255, 255, 0.72) 50%, transparent 100%);
+        transform: translateX(-100%);
+        animation: batchQrShimmer 1.4s ease-in-out infinite;
+      }
+
+      #${BATCH_MODAL_ID} .batch-qr-placeholder::after {
+        content: "QR";
+        position: relative;
+        z-index: 1;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 42px;
+        height: 42px;
+        border: 1px solid #c7d2fe;
+        border-radius: 12px;
+        background: rgba(255, 255, 255, 0.82);
+        box-shadow: 0 8px 18px rgba(79, 70, 229, 0.1);
+      }
+
+      #${BATCH_MODAL_ID} .batch-qr-placeholder.error {
+        background: #fff7ed;
+        color: #c2410c;
+      }
+
+      #${BATCH_MODAL_ID} .batch-qr-placeholder.error::before {
+        display: none;
+      }
+
+      #${BATCH_MODAL_ID} .batch-qr-placeholder.error::after {
+        content: "QR";
+        border-color: #fed7aa;
+      }
+
+      @keyframes batchQrShimmer {
+        to {
+          transform: translateX(100%);
+        }
       }
 
       #${BATCH_MODAL_ID} .batch-wait-panel {
@@ -5154,8 +5206,13 @@
       if (!placeholder?.dataset.qrSrc) return;
       const img = document.createElement("img");
       img.alt = "Batch upload QR Code";
+      img.onload = () => {
+        placeholder.replaceWith(img);
+      };
+      img.onerror = () => {
+        placeholder.classList.add("error");
+      };
       img.src = placeholder.dataset.qrSrc;
-      placeholder.replaceWith(img);
     });
 
     body.querySelector(".batch-cancel")?.addEventListener("click", () => {
