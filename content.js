@@ -2765,10 +2765,10 @@
         grid-template-columns: minmax(0, auto) minmax(0, auto) minmax(170px, 280px);
         grid-template-areas: "status secondary primary";
         align-items: center;
-        gap: 10px;
+        gap: 12px;
         margin: 0 -18px;
-        min-height: 76px;
-        padding: 14px 24px 18px;
+        min-height: 82px;
+        padding: 16px 28px 20px;
         background: rgba(255, 255, 255, 0.98);
         box-shadow: 0 -10px 26px rgba(15, 23, 42, 0.08);
         border-top: 1px solid #e5e7eb;
@@ -2852,7 +2852,7 @@
       #${BATCH_MODAL_ID}.organizing .batch-start {
         grid-area: primary;
         width: 100%;
-        max-width: 280px;
+        max-width: 300px;
         justify-self: end;
         justify-content: center;
         background: ${PRIMARY_BUTTON_BACKGROUND};
@@ -3209,8 +3209,8 @@
             "primary primary";
           gap: 8px;
           margin: 0 -14px;
-          min-height: 96px;
-          padding: 12px 18px 16px;
+          min-height: 100px;
+          padding: 14px 20px 18px;
         }
 
         #${BATCH_MODAL_ID}.organizing .batch-selection-count {
@@ -3230,8 +3230,8 @@
         }
 
         #${BATCH_MODAL_ID}.generating .batch-actions {
-          min-height: 74px;
-          padding: 12px 18px 16px;
+          min-height: 80px;
+          padding: 14px 20px 18px;
         }
 
         #${BATCH_MODAL_ID}.generating .batch-dismiss {
