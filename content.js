@@ -2778,8 +2778,9 @@
         grid-area: status;
         display: inline-flex;
         align-items: center;
-        max-height: 42px;
-        min-height: 42px;
+        min-width: 160px;
+        max-height: 44px;
+        min-height: 44px;
         margin: 0;
         color: #64748b;
         font-size: 13px;
@@ -2811,8 +2812,8 @@
         flex-wrap: nowrap;
         gap: 10px;
         max-width: 100%;
-        max-height: 42px;
-        min-height: 42px;
+        max-height: 44px;
+        min-height: 44px;
         opacity: 1;
         transform: translateY(0);
         overflow: hidden;
@@ -3215,12 +3216,12 @@
 
         #${BATCH_MODAL_ID}.organizing .batch-selection-count {
           min-width: 0;
-          min-height: 38px;
+          min-height: 40px;
           white-space: normal;
         }
 
         #${BATCH_MODAL_ID}.organizing .batch-secondary-actions {
-          min-height: 38px;
+          min-height: 40px;
         }
 
         #${BATCH_MODAL_ID}.organizing .batch-mark-group,
