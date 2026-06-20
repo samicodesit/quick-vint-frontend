@@ -2762,12 +2762,15 @@
         right: auto;
         bottom: auto;
         display: grid;
-        grid-template-columns: minmax(0, auto) minmax(0, auto) minmax(170px, 280px);
-        grid-template-areas: "status secondary primary";
+        grid-template-columns: minmax(0, 1fr) minmax(0, 320px);
+        grid-template-areas:
+          "status status"
+          "secondary primary";
         align-items: center;
-        gap: 14px;
+        row-gap: 10px;
+        column-gap: 12px;
         margin: 0 -18px;
-        min-height: 86px;
+        min-height: 104px;
         padding: 18px 32px 22px;
         background: rgba(255, 255, 255, 0.98);
         box-shadow: 0 -10px 26px rgba(15, 23, 42, 0.08);
@@ -2778,6 +2781,7 @@
         grid-area: status;
         display: inline-flex;
         align-items: center;
+        justify-content: flex-start;
         min-width: 160px;
         max-height: 44px;
         min-height: 44px;
@@ -3206,22 +3210,23 @@
         #${BATCH_MODAL_ID}.organizing .batch-actions {
           grid-template-columns: minmax(0, 1fr) minmax(0, auto);
           grid-template-areas:
-            "status secondary"
-            "primary primary";
-          gap: 8px;
+            "status status"
+            "secondary primary";
+          row-gap: 8px;
+          column-gap: 8px;
           margin: 0 -14px;
-          min-height: 104px;
+          min-height: 116px;
           padding: 16px 22px 20px;
         }
 
         #${BATCH_MODAL_ID}.organizing .batch-selection-count {
           min-width: 0;
-          min-height: 40px;
+          min-height: 42px;
           white-space: normal;
         }
 
         #${BATCH_MODAL_ID}.organizing .batch-secondary-actions {
-          min-height: 40px;
+          min-height: 42px;
         }
 
         #${BATCH_MODAL_ID}.organizing .batch-mark-group,
