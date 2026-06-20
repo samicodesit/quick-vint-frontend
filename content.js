@@ -2395,6 +2395,12 @@
         box-sizing: border-box;
       }
 
+      html.quickvint-batch-modal-open,
+      body.quickvint-batch-modal-open {
+        overflow: hidden !important;
+        scrollbar-gutter: stable;
+      }
+
       #${BATCH_MODAL_ID} .batch-content {
         display: flex;
         flex-direction: column;
@@ -2954,59 +2960,57 @@
         right: auto;
         bottom: auto;
         display: grid;
-        grid-template-columns: minmax(0, auto) minmax(0, 1fr);
-        grid-template-areas:
-          "status status"
-          "secondary primary";
-        align-items: stretch;
-        gap: 8px 10px;
+        grid-template-columns: minmax(0, auto) minmax(0, auto) minmax(170px, 300px);
+        grid-template-areas: "status secondary primary";
+        align-items: center;
+        gap: 10px;
         margin: 0 -18px;
-        padding: 12px 18px 14px;
+        padding: 12px 20px 16px;
         background: rgba(255, 255, 255, 0.98);
         box-shadow: 0 -10px 26px rgba(15, 23, 42, 0.08);
         border-top: 1px solid #e5e7eb;
       }
 
       #${BATCH_MODAL_ID}.organizing .batch-actions:not(.has-primary-action) {
-        grid-template-columns: 1fr;
-        grid-template-areas:
-          "status"
-          "secondary";
+        grid-template-columns: minmax(0, 1fr) minmax(0, auto);
+        grid-template-areas: "status secondary";
       }
 
       #${BATCH_MODAL_ID}.organizing .batch-actions:not(.has-status-line) {
-        grid-template-areas:
-          "secondary primary";
+        grid-template-columns: minmax(0, auto) minmax(170px, 300px);
+        grid-template-areas: "secondary primary";
       }
 
       #${BATCH_MODAL_ID}.organizing .batch-actions:not(.has-status-line):not(.has-primary-action) {
+        grid-template-columns: 1fr;
         grid-template-areas: "secondary";
       }
 
       #${BATCH_MODAL_ID}.organizing .batch-selection-count {
         grid-area: status;
-        max-height: 22px;
-        min-height: 18px;
+        display: inline-flex;
+        align-items: center;
+        max-height: 42px;
+        min-height: 42px;
         margin: 0;
         color: #64748b;
         font-size: 13px;
         font-weight: 650;
-        text-align: center;
+        text-align: left;
         line-height: 1.35;
         opacity: 1;
         overflow: hidden;
         transform: translateY(0);
+        white-space: nowrap;
         transition:
-          max-height 180ms ease,
-          min-height 180ms ease,
+          max-width 140ms ease,
           opacity 160ms ease,
           transform 160ms ease,
           color 160ms ease;
       }
 
       #${BATCH_MODAL_ID}.organizing .batch-selection-count.is-hidden {
-        max-height: 0;
-        min-height: 0;
+        max-width: 0;
         opacity: 0;
         transform: translateY(4px);
       }
@@ -3028,7 +3032,7 @@
       }
 
       #${BATCH_MODAL_ID}.organizing .batch-actions:not(.has-primary-action) .batch-secondary-actions {
-        justify-content: center;
+        justify-content: flex-end;
       }
 
       #${BATCH_MODAL_ID}.organizing .batch-secondary-actions.is-hidden {
@@ -3061,6 +3065,8 @@
       #${BATCH_MODAL_ID}.organizing .batch-start {
         grid-area: primary;
         width: 100%;
+        max-width: 300px;
+        justify-self: end;
         justify-content: center;
         background: ${PRIMARY_BUTTON_BACKGROUND};
         border-color: #4f46e5;
@@ -4864,6 +4870,11 @@
     batchImagePreloadCache = new Map();
   }
 
+  function setBatchModalScrollLock(locked) {
+    document.documentElement.classList.toggle("quickvint-batch-modal-open", locked);
+    document.body?.classList.toggle("quickvint-batch-modal-open", locked);
+  }
+
   function isBatchGenerationActive() {
     return Boolean(batchProgressStatus && isBatchProgressActive(batchProgressStatus));
   }
@@ -4909,6 +4920,7 @@
   function closeBatchModal({ cleanup = true } = {}) {
     const sessionId = batchUploadSessionId;
     document.getElementById(BATCH_MODAL_ID)?.remove();
+    setBatchModalScrollLock(false);
 
     if (batchPollInterval) {
       clearInterval(batchPollInterval);
@@ -5001,6 +5013,7 @@
     const modal = document.createElement("div");
     modal.id = BATCH_MODAL_ID;
     modal.dataset.sessionId = sessionId;
+    setBatchModalScrollLock(true);
 
     modal.innerHTML = `
       <div class="batch-content">
