@@ -2580,6 +2580,7 @@
         display: grid;
         grid-template-columns: repeat(3, minmax(0, 1fr));
         gap: 10px;
+        min-height: var(--quickvint-batch-gallery-min-height, 0);
         max-height: none;
         overflow: hidden;
         margin: 0;
@@ -2603,6 +2604,7 @@
       }
 
       #${BATCH_MODAL_ID}.organizing .batch-gallery.is-empty {
+        min-height: 0;
         padding-bottom: 0;
         border-bottom-color: transparent;
       }
@@ -3036,11 +3038,14 @@
       }
 
       #${BATCH_MODAL_ID}.organizing .batch-secondary-actions.is-hidden {
+        max-width: 0;
         max-height: 0;
         min-height: 0;
+        gap: 0;
         opacity: 0;
         pointer-events: none;
         transform: translateY(4px);
+        visibility: hidden;
       }
 
       #${BATCH_MODAL_ID}.organizing .batch-actions button {
@@ -5202,8 +5207,21 @@
     if (!review) return;
 
     const timerKey = "__quickvintReflowTimer";
+    const galleryTimerKey = "__quickvintGalleryHeightTimer";
+    const gallery = document.querySelector(`#${BATCH_MODAL_ID}.organizing .batch-gallery`);
     if (review[timerKey]) {
       clearTimeout(review[timerKey]);
+    }
+    if (gallery?.[galleryTimerKey]) {
+      clearTimeout(gallery[galleryTimerKey]);
+    }
+
+    const galleryHeight = gallery?.getBoundingClientRect().height || 0;
+    if (galleryHeight) {
+      gallery.style.setProperty(
+        "--quickvint-batch-gallery-min-height",
+        `${Math.round(galleryHeight)}px`,
+      );
     }
 
     review.classList.add("is-reflowing");
@@ -5211,6 +5229,13 @@
       review.classList.remove("is-reflowing");
       review[timerKey] = null;
     }, durationMs);
+
+    if (gallery) {
+      gallery[galleryTimerKey] = window.setTimeout(() => {
+        gallery.style.removeProperty("--quickvint-batch-gallery-min-height");
+        gallery[galleryTimerKey] = null;
+      }, durationMs);
+    }
   }
 
   function createBatchPhotoElement(file, index, itemNumber, options = {}) {
@@ -5638,13 +5663,12 @@
     }
     if (capacityNote) {
       capacityNote.classList.remove("warning", "error");
-      capacityNote.classList.remove("is-hidden");
-      capacityNote.setAttribute("aria-hidden", "false");
       if (!groups.length) {
         capacityNote.classList.add("is-hidden");
         capacityNote.setAttribute("aria-hidden", "true");
       } else if (batchCapacityLoading) {
-        capacityNote.textContent = "Checking availability...";
+        capacityNote.classList.add("is-hidden");
+        capacityNote.setAttribute("aria-hidden", "true");
       } else if (!batchGenerationCapacity) {
         capacityNote.classList.add("is-hidden");
         capacityNote.setAttribute("aria-hidden", "true");
@@ -5654,12 +5678,16 @@
           Math.floor(Number(batchGenerationCapacity.available || 0)),
         );
         if (!batchGenerationCapacity.allowed || available <= 0) {
+          capacityNote.classList.remove("is-hidden");
           capacityNote.classList.add("error");
+          capacityNote.setAttribute("aria-hidden", "false");
           capacityNote.textContent =
             batchGenerationCapacity.message ||
             "You cannot generate more listings right now.";
         } else if (groups.length > 0 && available < groups.length) {
+          capacityNote.classList.remove("is-hidden");
           capacityNote.classList.add("warning");
+          capacityNote.setAttribute("aria-hidden", "false");
           capacityNote.textContent = `Your balance allows ${available} of ${groups.length} listings. The first ${available} will be generated.`;
         } else {
           capacityNote.classList.add("is-hidden");
