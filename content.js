@@ -2765,10 +2765,10 @@
         grid-template-columns: minmax(0, auto) minmax(0, auto) minmax(170px, 280px);
         grid-template-areas: "status secondary primary";
         align-items: center;
-        gap: 12px;
+        gap: 14px;
         margin: 0 -18px;
-        min-height: 82px;
-        padding: 16px 28px 20px;
+        min-height: 86px;
+        padding: 18px 32px 22px;
         background: rgba(255, 255, 255, 0.98);
         box-shadow: 0 -10px 26px rgba(15, 23, 42, 0.08);
         border-top: 1px solid #e5e7eb;
@@ -2809,7 +2809,7 @@
         justify-content: flex-start;
         align-items: center;
         flex-wrap: nowrap;
-        gap: 8px;
+        gap: 10px;
         max-width: 100%;
         max-height: 42px;
         min-height: 42px;
@@ -2852,7 +2852,7 @@
       #${BATCH_MODAL_ID}.organizing .batch-start {
         grid-area: primary;
         width: 100%;
-        max-width: 300px;
+        max-width: 320px;
         justify-self: end;
         justify-content: center;
         background: ${PRIMARY_BUTTON_BACKGROUND};
@@ -3153,15 +3153,15 @@
         flex: 0 0 auto;
         justify-content: flex-end;
         margin: 0;
-        min-height: 76px;
-        padding: 14px 24px 18px;
+        min-height: 86px;
+        padding: 18px 32px 22px;
         background: rgba(255, 255, 255, 0.98);
         border-top: 1px solid #e5e7eb;
         box-shadow: 0 -10px 26px rgba(15, 23, 42, 0.08);
       }
 
       #${BATCH_MODAL_ID}.generating .batch-dismiss {
-        width: min(100%, 280px);
+        width: min(100%, 320px);
         justify-content: center;
         background: ${PRIMARY_BUTTON_BACKGROUND} !important;
         border-color: #4f46e5 !important;
@@ -3209,8 +3209,8 @@
             "primary primary";
           gap: 8px;
           margin: 0 -14px;
-          min-height: 100px;
-          padding: 14px 20px 18px;
+          min-height: 104px;
+          padding: 16px 22px 20px;
         }
 
         #${BATCH_MODAL_ID}.organizing .batch-selection-count {
@@ -3230,8 +3230,8 @@
         }
 
         #${BATCH_MODAL_ID}.generating .batch-actions {
-          min-height: 80px;
-          padding: 14px 20px 18px;
+          min-height: 84px;
+          padding: 16px 22px 20px;
         }
 
         #${BATCH_MODAL_ID}.generating .batch-dismiss {
