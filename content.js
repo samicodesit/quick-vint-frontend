@@ -2043,7 +2043,7 @@
       }
 
       #${BATCH_MODAL_ID} .batch-content {
-        width: min(680px, calc(100vw - 32px));
+        width: min(620px, calc(100vw - 32px));
         background: #ffffff;
         border-color: #dfe3ea;
         border-radius: 10px;
