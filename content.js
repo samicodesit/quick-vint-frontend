@@ -3359,15 +3359,16 @@
 
       #${BATCH_MODAL_ID}.generating .batch-actions {
         flex: 0 0 auto;
+        justify-content: flex-end;
         margin: 0;
-        padding: 14px 18px 18px;
+        padding: 14px 20px 18px;
         background: rgba(255, 255, 255, 0.98);
         border-top: 1px solid #e5e7eb;
         box-shadow: 0 -10px 26px rgba(15, 23, 42, 0.08);
       }
 
       #${BATCH_MODAL_ID}.generating .batch-dismiss {
-        width: 100%;
+        width: min(100%, 300px);
         justify-content: center;
         background: ${PRIMARY_BUTTON_BACKGROUND} !important;
         border-color: #4f46e5 !important;
@@ -3446,6 +3447,14 @@
         #${BATCH_MODAL_ID}.organizing .batch-mark-group,
         #${BATCH_MODAL_ID}.organizing .batch-start {
           max-width: none;
+          width: 100%;
+        }
+
+        #${BATCH_MODAL_ID}.generating .batch-actions {
+          padding: 12px 14px 14px;
+        }
+
+        #${BATCH_MODAL_ID}.generating .batch-dismiss {
           width: 100%;
         }
 
@@ -6275,7 +6284,7 @@
         ${status === "done" ? "" : `<div class="batch-progress-note">${status === "failed" ? "No more tabs will open." : "Tabs open one at a time."}</div>`}
       </div>
       <div class="batch-actions">
-        <button type="button" class="batch-dismiss" ${running ? "disabled" : ""}>Done</button>
+        <button type="button" class="batch-dismiss" ${running ? "disabled" : ""}>${running ? "Working..." : "Done"}</button>
       </div>
     `;
 
