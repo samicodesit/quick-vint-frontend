@@ -5483,11 +5483,8 @@
           ? "No photos left in this batch"
           : remainingCount
           ? "Select photos for one item"
-          : "Review grouped items";
-      setBatchControlHidden(
-        selectionCount,
-        selectedCount === 0 && remainingCount === 0 && groups.length > 0,
-      );
+          : "Ready to generate";
+      setBatchControlHidden(selectionCount, false);
     }
     if (review) {
       review.classList.toggle("is-all-grouped", remainingCount === 0);
