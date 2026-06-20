@@ -2774,21 +2774,6 @@
         border-top: 1px solid #e5e7eb;
       }
 
-      #${BATCH_MODAL_ID}.organizing .batch-actions:not(.has-primary-action) {
-        grid-template-columns: minmax(0, 1fr) minmax(0, auto);
-        grid-template-areas: "status secondary";
-      }
-
-      #${BATCH_MODAL_ID}.organizing .batch-actions:not(.has-status-line) {
-        grid-template-columns: minmax(0, auto) minmax(170px, 280px);
-        grid-template-areas: "secondary primary";
-      }
-
-      #${BATCH_MODAL_ID}.organizing .batch-actions:not(.has-status-line):not(.has-primary-action) {
-        grid-template-columns: 1fr;
-        grid-template-areas: "secondary";
-      }
-
       #${BATCH_MODAL_ID}.organizing .batch-selection-count {
         grid-area: status;
         display: inline-flex;
@@ -3226,21 +3211,6 @@
           margin: 0 -14px;
           min-height: 96px;
           padding: 12px 18px 16px;
-        }
-
-        #${BATCH_MODAL_ID}.organizing .batch-actions:not(.has-primary-action) {
-          grid-template-columns: minmax(0, 1fr) minmax(0, auto);
-          grid-template-areas: "status secondary";
-        }
-
-        #${BATCH_MODAL_ID}.organizing .batch-actions:not(.has-status-line) {
-          grid-template-columns: minmax(0, auto) minmax(0, 1fr);
-          grid-template-areas: "secondary primary";
-        }
-
-        #${BATCH_MODAL_ID}.organizing .batch-actions:not(.has-status-line):not(.has-primary-action) {
-          grid-template-columns: 1fr;
-          grid-template-areas: "secondary";
         }
 
         #${BATCH_MODAL_ID}.organizing .batch-selection-count {
