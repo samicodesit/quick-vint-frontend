@@ -29,6 +29,7 @@ const LEGACY_TIER_LIMITS = {
   pro: { daily: 40, monthly: 800 },
   business: { daily: null, monthly: 1500 },
 };
+const BATCH_ITEM_REVIEW_SETTLE_MS = 900;
 
 // --- STATE ---
 const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
@@ -543,6 +544,17 @@ async function runBatchGenerationJob(job) {
         total: groups.length,
         itemIndex: index + 1,
       });
+
+      if (index < groups.length - 1) {
+        notifyBatchProgress(job, {
+          status: "waiting",
+          current: index + 1,
+          total: groups.length,
+          itemIndex: index + 1,
+          delayMs: BATCH_ITEM_REVIEW_SETTLE_MS,
+        });
+        await sleep(BATCH_ITEM_REVIEW_SETTLE_MS);
+      }
     }
 
     await cleanupBatchUploadSession(job.sessionId);

@@ -1050,8 +1050,7 @@
         left: 0;
         width: 100%;
         height: 100%;
-        background: rgba(0, 0, 0, 0.4);
-        backdrop-filter: blur(5px);
+        background: rgba(0, 0, 0, 0.48);
         display: flex;
         align-items: center;
         justify-content: center;
@@ -1079,7 +1078,7 @@
         width: 90%;
         max-height: calc(100vh - 32px);
         overflow-y: auto;
-        box-shadow: 0 20px 60px -10px rgba(0, 0, 0, 0.3);
+        box-shadow: 0 18px 42px -12px rgba(0, 0, 0, 0.32);
         animation: slideUp 0.3s ease-out;
         position: relative;
       }
@@ -1291,6 +1290,33 @@
         white-space: nowrap;
       }
 
+      #${MODAL_ID} .waiting-dots,
+      #${BATCH_MODAL_ID} .waiting-dots {
+        display: inline-flex;
+        width: 18px;
+        margin-left: 1px;
+      }
+
+      #${MODAL_ID} .waiting-dots span,
+      #${BATCH_MODAL_ID} .waiting-dots span {
+        animation: waitingDot 1.15s ease-in-out infinite;
+      }
+
+      #${MODAL_ID} .waiting-dots span:nth-child(2),
+      #${BATCH_MODAL_ID} .waiting-dots span:nth-child(2) {
+        animation-delay: 0.16s;
+      }
+
+      #${MODAL_ID} .waiting-dots span:nth-child(3),
+      #${BATCH_MODAL_ID} .waiting-dots span:nth-child(3) {
+        animation-delay: 0.32s;
+      }
+
+      @keyframes waitingDot {
+        0%, 80%, 100% { opacity: 0.28; }
+        40% { opacity: 1; }
+      }
+
       #${MODAL_ID} .preview-pulse {
         width: 28px;
         height: 28px;
@@ -1345,8 +1371,7 @@
       #${BATCH_MODAL_ID} {
         position: fixed;
         inset: 0;
-        background: rgba(17, 24, 39, 0.38);
-        backdrop-filter: blur(5px);
+        background: rgba(17, 24, 39, 0.46);
         display: flex;
         align-items: center;
         justify-content: center;
@@ -1362,7 +1387,7 @@
         background: #fbfcff;
         border: 1px solid rgba(229, 231, 235, 0.9);
         border-radius: 16px;
-        box-shadow: 0 28px 80px rgba(17, 24, 39, 0.26);
+        box-shadow: 0 22px 54px rgba(17, 24, 39, 0.24);
         padding: 18px;
         color: #111827;
         animation: slideUp 0.24s ease-out;
@@ -1804,9 +1829,8 @@
         z-index: 2;
         margin: 16px -18px -18px;
         padding: 12px 18px;
-        background: rgba(251, 252, 255, 0.96);
+        background: #fbfcff;
         border-top: 1px solid #e5e7eb;
-        backdrop-filter: blur(8px);
       }
 
       #${BATCH_MODAL_ID} .batch-content {
@@ -1902,6 +1926,27 @@
         font-size: 18px;
         font-weight: 850;
         letter-spacing: 0;
+      }
+
+      #${BATCH_MODAL_ID} .batch-count-number {
+        display: inline-block;
+        min-width: 0.7em;
+        text-align: right;
+      }
+
+      #${BATCH_MODAL_ID} .batch-count-number.bump {
+        animation: batchCountBump 220ms cubic-bezier(0.16, 1, 0.3, 1);
+      }
+
+      @keyframes batchCountBump {
+        0% {
+          opacity: 0.35;
+          transform: translateY(7px) scale(0.96);
+        }
+        100% {
+          opacity: 1;
+          transform: translateY(0) scale(1);
+        }
       }
 
       #${BATCH_MODAL_ID} .batch-wait-copy,
@@ -2038,8 +2083,7 @@
       }
 
       #${BATCH_MODAL_ID} {
-        background: rgba(17, 24, 39, 0.3);
-        backdrop-filter: blur(3px);
+        background: rgba(17, 24, 39, 0.42);
       }
 
       #${BATCH_MODAL_ID} .batch-content {
@@ -2047,7 +2091,7 @@
         background: #ffffff;
         border-color: #dfe3ea;
         border-radius: 10px;
-        box-shadow: 0 22px 56px rgba(17, 24, 39, 0.22);
+        box-shadow: 0 18px 42px rgba(17, 24, 39, 0.2);
         padding: 16px 18px 0;
       }
 
@@ -2138,11 +2182,11 @@
       @keyframes batchCardIn {
         from {
           opacity: 0;
-          transform: translateY(6px);
+          transform: translateX(14px);
         }
         to {
           opacity: 1;
-          transform: translateY(0);
+          transform: translateX(0);
         }
       }
 
@@ -2220,8 +2264,7 @@
         margin: 16px -18px 0;
         padding: 12px 18px 14px;
         border-top: 1px solid #e5e7eb;
-        background: rgba(255, 255, 255, 0.98);
-        backdrop-filter: blur(8px);
+        background: #ffffff;
       }
 
       #${BATCH_MODAL_ID}.organizing .batch-content {
@@ -2240,8 +2283,7 @@
         margin: -18px -18px 14px;
         padding: 18px 18px 14px;
         border-bottom: 1px solid #e2e8f0;
-        background: rgba(248, 250, 252, 0.96);
-        backdrop-filter: blur(10px);
+        background: #f8fafc;
         z-index: 2;
       }
 
@@ -2292,6 +2334,7 @@
       }
 
       #${BATCH_MODAL_ID}.organizing .organize-progress {
+        position: relative;
         flex: 1 0 100%;
         width: 100%;
         height: 5px;
@@ -2299,6 +2342,15 @@
         border-radius: 999px;
         background: #e2e8f0;
         overflow: hidden;
+      }
+
+      #${BATCH_MODAL_ID}.organizing .organize-progress span {
+        position: absolute;
+        top: 0;
+        bottom: 0;
+        display: block;
+        border-radius: inherit;
+        transition: left 180ms ease, width 180ms ease;
       }
 
       #${BATCH_MODAL_ID}.organizing .organize-status-row {
@@ -2330,6 +2382,11 @@
         white-space: nowrap;
       }
 
+      #${BATCH_MODAL_ID}.organizing .organize-unsorted-badge[hidden] {
+        display: inline-block !important;
+        visibility: hidden;
+      }
+
       #${BATCH_MODAL_ID}.organizing .organize-unsorted-badge.done {
         border-color: #bbf7d0;
         background: #ecfdf5;
@@ -2337,6 +2394,7 @@
       }
 
       #${BATCH_MODAL_ID}.organizing .organize-progress-done {
+        left: 0;
         background: #22c55e;
       }
 
@@ -2392,15 +2450,10 @@
       #${BATCH_MODAL_ID}.organizing .batch-photo-wrap {
         display: block;
         min-width: 0;
-        opacity: 1;
-        transform: scale(1);
-        transition: opacity 120ms ease, transform 120ms ease;
       }
 
       #${BATCH_MODAL_ID}.organizing .batch-photo-wrap.is-grouped {
-        opacity: 0;
         pointer-events: none;
-        transform: scale(0.94);
       }
 
       #${BATCH_MODAL_ID}.organizing .batch-gallery.is-empty {
@@ -2426,9 +2479,7 @@
         transition:
           border-color 180ms ease,
           box-shadow 180ms ease,
-          opacity 180ms ease,
-          transform 180ms ease,
-          filter 180ms ease;
+          transform 180ms ease;
       }
 
       #${BATCH_MODAL_ID}.organizing .batch-gallery .batch-photo.tap-target:not(.selected) {
@@ -2467,7 +2518,6 @@
 
       #${BATCH_MODAL_ID}.organizing .batch-gallery .batch-photo.marked {
         opacity: 1;
-        filter: none;
       }
 
       #${BATCH_MODAL_ID}.organizing .batch-photo-badge {
@@ -2564,11 +2614,19 @@
         transform: translateY(-4px);
       }
 
+      #${BATCH_MODAL_ID}.organizing .batch-empty-state.is-hidden.is-reserved {
+        max-height: 44px;
+        margin: 0 0 10px;
+        padding: 10px 12px;
+        border-width: 1px;
+        visibility: hidden;
+      }
+
       #${BATCH_MODAL_ID}.organizing .batch-summary-head {
         display: flex;
         align-items: center;
         justify-content: space-between;
-        max-height: 28px;
+        max-height: 36px;
         margin: 18px 0 8px;
         color: #94a3b8;
         font-size: 12px;
@@ -2585,6 +2643,13 @@
           transform 160ms ease;
       }
 
+      #${BATCH_MODAL_ID}.organizing .batch-summary-title {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        min-width: 0;
+      }
+
       #${BATCH_MODAL_ID}.organizing .batch-summary-head.is-hidden {
         max-height: 0;
         margin: 0;
@@ -2595,6 +2660,35 @@
       #${BATCH_MODAL_ID}.organizing .batch-summary-count {
         letter-spacing: 0;
         text-transform: none;
+      }
+
+      #${BATCH_MODAL_ID}.organizing .batch-summary-reset {
+        flex: 0 0 auto;
+        width: auto !important;
+        max-width: max-content;
+        min-height: 30px;
+        padding: 0 10px;
+        border: 1px solid #cbd5e1;
+        border-radius: 999px;
+        background: #ffffff;
+        color: #475569;
+        cursor: pointer;
+        font-size: 11px;
+        font-weight: 850;
+        letter-spacing: 0;
+        text-transform: none;
+        transition:
+          opacity 140ms ease,
+          transform 140ms ease,
+          background 140ms ease,
+          border-color 140ms ease,
+          color 140ms ease;
+      }
+
+      #${BATCH_MODAL_ID}.organizing .batch-summary-reset:hover:not(:disabled) {
+        border-color: #94a3b8;
+        background: #f8fafc;
+        color: #0f172a;
       }
 
       #${BATCH_MODAL_ID} .batch-capacity-note {
@@ -2662,19 +2756,17 @@
         background: #ffffff;
         box-shadow: 0 3px 12px rgba(15, 23, 42, 0.05);
         opacity: 1;
-        transform: translateY(0);
+        transform: translateX(0);
         overflow: hidden;
         transition:
           border-color 150ms ease,
           box-shadow 150ms ease,
-          opacity 150ms ease,
-          transform 150ms ease;
+          transform 260ms cubic-bezier(0.16, 1, 0.3, 1);
       }
 
       #${BATCH_MODAL_ID}.organizing .batch-item-card.is-entering,
       #${BATCH_MODAL_ID}.organizing .batch-item-card.is-leaving {
-        opacity: 0;
-        transform: translateY(4px);
+        transform: translateX(34px);
       }
 
       #${BATCH_MODAL_ID}.organizing .batch-item-card-head {
@@ -2762,16 +2854,16 @@
         right: auto;
         bottom: auto;
         display: grid;
-        grid-template-columns: minmax(0, 1fr) minmax(0, 320px);
+        grid-template-columns: minmax(0, 1fr) minmax(160px, 240px);
         grid-template-areas:
-          "status status"
+          "status primary"
           "secondary primary";
         align-items: center;
-        row-gap: 10px;
-        column-gap: 12px;
+        row-gap: 8px;
+        column-gap: 14px;
         margin: 0 -18px;
-        min-height: 104px;
-        padding: 18px 32px 22px;
+        min-height: 94px;
+        padding: 14px 24px 16px;
         background: rgba(255, 255, 255, 0.98);
         box-shadow: 0 -10px 26px rgba(15, 23, 42, 0.08);
         border-top: 1px solid #e5e7eb;
@@ -2782,12 +2874,12 @@
         display: inline-flex;
         align-items: center;
         justify-content: flex-start;
-        min-width: 160px;
-        max-height: 44px;
-        min-height: 44px;
+        min-width: 0;
+        max-height: 32px;
+        min-height: 24px;
         margin: 0;
         color: #64748b;
-        font-size: 13px;
+        font-size: 12.5px;
         font-weight: 650;
         text-align: left;
         line-height: 1.35;
@@ -2816,8 +2908,8 @@
         flex-wrap: nowrap;
         gap: 10px;
         max-width: 100%;
-        max-height: 44px;
-        min-height: 44px;
+        max-height: 34px;
+        min-height: 34px;
         opacity: 1;
         transform: translateY(0);
         overflow: hidden;
@@ -2826,6 +2918,14 @@
 
       #${BATCH_MODAL_ID}.organizing .batch-actions:not(.has-primary-action) .batch-secondary-actions {
         justify-content: flex-end;
+      }
+
+      #${BATCH_MODAL_ID}.organizing .batch-actions:not(.has-primary-action) {
+        grid-template-columns: minmax(0, 1fr);
+        grid-template-areas:
+          "status"
+          "secondary";
+        min-height: 94px;
       }
 
       #${BATCH_MODAL_ID}.organizing .batch-secondary-actions.is-hidden {
@@ -2840,7 +2940,7 @@
       }
 
       #${BATCH_MODAL_ID}.organizing .batch-actions button {
-        min-height: 40px;
+        min-height: 34px;
         border-radius: 12px;
         transition:
           transform 140ms ease,
@@ -2857,8 +2957,8 @@
       #${BATCH_MODAL_ID}.organizing .batch-start {
         grid-area: primary;
         width: 100%;
-        max-width: 320px;
-        justify-self: end;
+        max-width: none;
+        justify-self: stretch;
         justify-content: center;
         background: ${PRIMARY_BUTTON_BACKGROUND};
         border-color: #4f46e5;
@@ -2874,6 +2974,18 @@
         padding-right: 0;
         padding-top: 0;
         padding-bottom: 0;
+        border-width: 0;
+        opacity: 0;
+        pointer-events: none;
+        transform: translateY(4px);
+        overflow: hidden;
+      }
+
+      #${BATCH_MODAL_ID}.organizing .batch-summary-reset.is-hidden {
+        max-width: 0;
+        min-height: 0;
+        padding-left: 0;
+        padding-right: 0;
         border-width: 0;
         opacity: 0;
         pointer-events: none;
@@ -2900,8 +3012,7 @@
         margin: -18px -18px 0;
         padding: 18px 18px 14px;
         border-bottom: 1px solid #e2e8f0;
-        background: rgba(248, 250, 252, 0.97);
-        backdrop-filter: blur(10px);
+        background: #f8fafc;
       }
 
       #${BATCH_MODAL_ID}.generating .batch-heading {
@@ -3208,25 +3319,26 @@
         }
 
         #${BATCH_MODAL_ID}.organizing .batch-actions {
-          grid-template-columns: minmax(0, 1fr) minmax(0, auto);
+          grid-template-columns: minmax(0, 1fr);
           grid-template-areas:
-            "status status"
-            "secondary primary";
-          row-gap: 8px;
-          column-gap: 8px;
+            "status"
+            "primary"
+            "secondary";
+          row-gap: 10px;
+          column-gap: 0;
           margin: 0 -14px;
-          min-height: 116px;
-          padding: 16px 22px 20px;
+          min-height: 126px;
+          padding: 14px 18px 18px;
         }
 
         #${BATCH_MODAL_ID}.organizing .batch-selection-count {
           min-width: 0;
-          min-height: 42px;
+          min-height: 24px;
           white-space: normal;
         }
 
         #${BATCH_MODAL_ID}.organizing .batch-secondary-actions {
-          min-height: 42px;
+          min-height: 34px;
         }
 
         #${BATCH_MODAL_ID}.organizing .batch-mark-group,
@@ -4242,8 +4354,7 @@
           <div class="preview-grid">
             <span class="preview-empty">
               <span class="preview-pulse"></span>
-              <span>Waiting for photos</span>
-              <span class="preview-dot"></span>
+              <span>Waiting for photos<span class="waiting-dots" aria-hidden="true"><span>.</span><span>.</span><span>.</span></span></span>
             </span>
           </div>
         </div>
@@ -4639,8 +4750,7 @@
     emptyEl.className = "preview-empty";
     emptyEl.innerHTML = `
       <span class="preview-pulse"></span>
-      <span>Waiting for photos</span>
-      <span class="preview-dot"></span>
+      <span>Waiting for photos<span class="waiting-dots" aria-hidden="true"><span>.</span><span>.</span><span>.</span></span></span>
     `;
     return emptyEl;
   }
@@ -4924,8 +5034,7 @@
           <p class="batch-qr-note">Keep the phone page open.</p>
         </div>
         <div class="batch-wait-panel">
-          <div class="batch-status">Waiting</div>
-          <div class="batch-wait-title">Scan QR code</div>
+          <div class="batch-wait-title">Waiting for photos<span class="waiting-dots" aria-hidden="true"><span>.</span><span>.</span><span>.</span></span></div>
           <div class="batch-wait-copy">Choose photos on your phone. They will appear here.</div>
         </div>
       </div>
@@ -4963,7 +5072,7 @@
     const groupButton = document.querySelector(`#${BATCH_MODAL_ID} .batch-group`);
     const title = document.querySelector(`#${BATCH_MODAL_ID} .batch-wait-title`);
     const copy = document.querySelector(`#${BATCH_MODAL_ID} .batch-wait-copy`);
-    if (!status || !title || !copy) return;
+    if (!title || !copy) return;
 
     const receivedCount = batchRemoteFiles.length;
     const isStale =
@@ -4971,27 +5080,40 @@
       receivedCount > 0 &&
       Date.now() - batchLastFileChangeAt > BATCH_UPLOAD_STALE_MS;
 
-    status.classList.toggle("done", batchIsComplete && receivedCount > 0);
-    status.classList.toggle("warning", isStale);
-    status.textContent = batchIsComplete
-      ? receivedCount
-        ? `${receivedCount} ready`
-        : "No photos"
-      : receivedCount
-        ? isStale
-          ? "Connection paused"
-          : `${receivedCount} received`
-        : "Waiting";
+    if (status) {
+      status.classList.toggle("done", batchIsComplete && receivedCount > 0);
+      status.classList.toggle("warning", isStale);
+      status.textContent = batchIsComplete
+        ? receivedCount
+          ? `${receivedCount} ready`
+          : "No photos"
+        : receivedCount
+          ? isStale
+            ? "Connection paused"
+            : `${receivedCount} received`
+          : "Waiting";
+    }
 
-    title.textContent = batchIsComplete
-      ? receivedCount
-        ? "Ready to group"
-        : "No photos received"
-      : receivedCount
-        ? isStale
-          ? "Check phone"
-          : "Receiving photos"
-        : "Scan QR code";
+    const previousCount = Number(title.dataset.receivedCount || "0");
+    const countChanged = receivedCount > 0 && receivedCount !== previousCount;
+    title.dataset.receivedCount = String(receivedCount);
+
+    if (batchIsComplete) {
+      title.innerHTML = receivedCount
+        ? `<span class="batch-count-number">${receivedCount}</span> photo${receivedCount === 1 ? "" : "s"} ready`
+        : "No photos received";
+    } else if (receivedCount) {
+      title.innerHTML = isStale
+        ? `Check phone (<span class="batch-count-number">${receivedCount}</span> received)`
+        : `Receiving <span class="batch-count-number">${receivedCount}</span> photo${receivedCount === 1 ? "" : "s"}<span class="waiting-dots" aria-hidden="true"><span>.</span><span>.</span><span>.</span></span>`;
+    } else {
+      title.innerHTML =
+        'Waiting for photos<span class="waiting-dots" aria-hidden="true"><span>.</span><span>.</span><span>.</span></span>';
+    }
+    if (countChanged) {
+      const countEl = title.querySelector(".batch-count-number");
+      countEl?.classList.add("bump");
+    }
     copy.textContent = batchIsComplete
       ? receivedCount
         ? "Group photos into listings."
@@ -5088,6 +5210,52 @@
         gallery[galleryTimerKey] = null;
       }, durationMs);
     }
+  }
+
+  function measureBatchGalleryPositions() {
+    const gallery = document.querySelector(`#${BATCH_MODAL_ID}.organizing .batch-gallery`);
+    if (!gallery) return new Map();
+
+    const positions = new Map();
+    gallery.querySelectorAll(".batch-photo-wrap:not([hidden])").forEach((wrapper) => {
+      const key = wrapper.querySelector(".batch-photo")?.dataset?.photoKey;
+      if (!key) return;
+      const rect = wrapper.getBoundingClientRect();
+      positions.set(key, { left: rect.left, top: rect.top });
+    });
+    return positions;
+  }
+
+  function animateBatchGalleryFromPositions(beforePositions) {
+    const gallery = document.querySelector(`#${BATCH_MODAL_ID}.organizing .batch-gallery`);
+    if (!gallery || !beforePositions?.size) return;
+
+    const movingItems = [];
+    gallery.querySelectorAll(".batch-photo-wrap:not([hidden])").forEach((wrapper) => {
+      const key = wrapper.querySelector(".batch-photo")?.dataset?.photoKey;
+      const before = key ? beforePositions.get(key) : null;
+      if (!before) return;
+      const rect = wrapper.getBoundingClientRect();
+      const dx = before.left - rect.left;
+      const dy = before.top - rect.top;
+      if (Math.abs(dx) < 1 && Math.abs(dy) < 1) return;
+      movingItems.push({ wrapper, dx, dy });
+    });
+
+    movingItems.forEach(({ wrapper, dx, dy }) => {
+      wrapper.style.transition = "none";
+      wrapper.style.transform = `translate(${Math.round(dx)}px, ${Math.round(dy)}px)`;
+    });
+
+    requestAnimationFrame(() => {
+      movingItems.forEach(({ wrapper }) => {
+        wrapper.style.transition = "transform 180ms ease";
+        wrapper.style.transform = "";
+        window.setTimeout(() => {
+          wrapper.style.transition = "";
+        }, 200);
+      });
+    });
   }
 
   function createBatchPhotoElement(file, index, itemNumber, options = {}) {
@@ -5200,8 +5368,11 @@
         <div class="batch-gallery" aria-live="polite"></div>
         <div class="batch-empty-state is-hidden" aria-hidden="true">Review grouped items below.</div>
         <div class="batch-summary-head">
-          <span>Items</span>
-          <span class="batch-summary-count"></span>
+          <span class="batch-summary-title">
+            <span>Items</span>
+            <span class="batch-summary-count"></span>
+          </span>
+          <button type="button" class="batch-summary-reset batch-reset-groups is-hidden" hidden aria-hidden="true">Reset groups</button>
         </div>
         <div class="batch-capacity-note">Checking availability...</div>
         <div class="batch-groups" aria-live="polite"></div>
@@ -5210,7 +5381,6 @@
         <span class="batch-selection-count"></span>
         <div class="batch-secondary-actions is-hidden" hidden>
           <button type="button" class="footer-control batch-clear-selection is-hidden" hidden aria-hidden="true">Clear</button>
-          <button type="button" class="footer-control batch-reset-groups is-hidden" hidden aria-hidden="true">Reset groups</button>
         </div>
         <button type="button" class="primary footer-control batch-mark-group is-hidden" disabled hidden aria-hidden="true">Group photos</button>
         <button type="button" class="primary footer-control batch-start is-hidden" hidden aria-hidden="true"></button>
@@ -5297,6 +5467,7 @@
     );
     if (index < 0) return;
 
+    const beforePositions = measureBatchGalleryPositions();
     steadyBatchReviewLayout();
     batchRemoteFiles.splice(index, 1);
     batchRemoteFileKeys.delete(key);
@@ -5312,6 +5483,7 @@
       .filter((group) => group.keys.length > 0);
 
     buildBatchGroupingGallery();
+    animateBatchGalleryFromPositions(beforePositions);
   }
 
   function updateBatchPhotoSelectionTile(key) {
@@ -5458,7 +5630,7 @@
       ? Math.max(0, 100 - groupedPct)
       : 0;
     const hasStatusLine = true;
-    const hasSecondaryAction = selectedCount > 0 || groups.length > 0;
+    const hasSecondaryAction = selectedCount > 0;
     const hasPrimaryAction =
       selectedCount > 0 || (groups.length > 0 && remainingCount === 0);
 
@@ -5471,9 +5643,10 @@
       actions.classList.toggle("has-primary-action", hasPrimaryAction);
     }
     if (unsortedBadge) {
-      unsortedBadge.hidden = remainingCount === 0;
       unsortedBadge.classList.toggle("done", remainingCount === 0);
-      unsortedBadge.textContent = `${remainingCount} unsorted`;
+      unsortedBadge.hidden = false;
+      unsortedBadge.textContent =
+        remainingCount === 0 ? "All sorted" : `${remainingCount} unsorted`;
     }
     if (progressDone) {
       progressDone.style.width = `${groupedPct}%`;
@@ -5512,6 +5685,10 @@
     }
     if (emptyState) {
       const showEmptyState = remainingCount === 0 && groups.length > 0;
+      emptyState.classList.toggle(
+        "is-reserved",
+        groups.length > 0 && remainingCount <= 1,
+      );
       emptyState.classList.toggle("is-hidden", !showEmptyState);
       emptyState.setAttribute("aria-hidden", showEmptyState ? "false" : "true");
     }
@@ -5558,7 +5735,7 @@
     if (secondaryActions) {
       setBatchControlHidden(
         secondaryActions,
-        selectedCount === 0 && groups.length === 0,
+        selectedCount === 0,
       );
     }
     if (markButton) {
@@ -5596,6 +5773,7 @@
       .sort((a, b) => getBatchFileIndexByKey(a) - getBatchFileIndexByKey(b));
     if (!keys.length) return;
 
+    const beforePositions = measureBatchGalleryPositions();
     steadyBatchReviewLayout();
     const group = { id: `group-${batchNextGroupId++}`, keys };
     batchMarkedGroups.push(group);
@@ -5607,6 +5785,9 @@
     });
     renderBatchGroupRow(group);
     updateBatchGroupingControls();
+    window.setTimeout(() => {
+      animateBatchGalleryFromPositions(beforePositions);
+    }, 145);
   }
 
   function renderBatchGroupRow(group) {
@@ -5659,8 +5840,10 @@
     });
 
     if (isNewRow) {
-      runAfterBatchRender(() => {
-        row.classList.remove("is-entering");
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          row.classList.remove("is-entering");
+        });
       });
     }
   }
@@ -6170,6 +6353,39 @@
     });
   }
 
+  function waitForGeneratedListingFields(expectedTitle, expectedDescription, timeoutMs = 2500) {
+    const normalize = (value) => String(value || "").trim();
+    const expectedTitleText = normalize(expectedTitle);
+    const expectedDescriptionText = normalize(expectedDescription);
+
+    return new Promise((resolve, reject) => {
+      const startedAt = Date.now();
+      const check = () => {
+        const titleInput = document.querySelector(SELECTORS.title);
+        const descInput = document.querySelector(SELECTORS.description);
+        const titleMatches =
+          !expectedTitleText || normalize(titleInput?.value) === expectedTitleText;
+        const descriptionMatches =
+          !expectedDescriptionText ||
+          normalize(descInput?.value).includes(expectedDescriptionText);
+
+        if (titleMatches && descriptionMatches) {
+          resolve();
+          return;
+        }
+
+        if (Date.now() - startedAt > timeoutMs) {
+          reject(new Error("Generated listing details were not visible in time."));
+          return;
+        }
+
+        requestAnimationFrame(check);
+      };
+
+      requestAnimationFrame(check);
+    });
+  }
+
   function showBatchTabStatus(message, state = "loading") {
     let status = document.getElementById("quickvint-batch-tab-status");
     if (!status) {
@@ -6274,12 +6490,17 @@
       await waitForUploadedPhotoCount(initialPhotoCount + filesToInject.length);
 
       showBatchTabStatus(`${listingPrefix}: writing title and description...`);
-      await generateCurrentListing({
+      const generatedListing = await generateCurrentListing({
         descriptionApplyChoice: "replace",
         manageButtonState: false,
         showMeasurementAdvice: false,
         throwOnLimit: true,
       });
+      showBatchTabStatus(`${listingPrefix}: checking listing details...`);
+      await waitForGeneratedListingFields(
+        generatedListing?.title,
+        generatedListing?.description,
+      );
 
       showBatchTabStatus(`${listingPrefix}: ready to review.`, "success");
       hideBatchTabStatus(3500);
