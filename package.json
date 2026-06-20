@@ -4,7 +4,9 @@
   "description": "",
   "main": "content.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
+    "test": "npm run test:e2e",
+    "test:e2e": "playwright test",
+    "test:e2e:install": "playwright install chromium",
     "build": "node scripts/set-env.js && terser content.js -o content.min.js --compress --mangle",
     "build:prod": "API_BASE_URL=https://autolister.app node scripts/set-env.js && terser content.js -o content.min.js --compress --mangle",
     "build:local": "API_BASE_URL=http://localhost:5000 node scripts/set-env.js && terser content.js -o content.min.js --compress --mangle",
@@ -24,6 +26,7 @@
   },
   "homepage": "https://github.com/samicodesit/quick-vint-frontend#readme",
   "devDependencies": {
+    "@playwright/test": "^1.61.0",
     "terser": "^5.39.2"
   },
   "dependencies": {

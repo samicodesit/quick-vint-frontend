@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Fake Vinted Listing</title>
+    <style>
+      body {
+        margin: 0;
+        padding: 32px;
+        font-family: Arial, sans-serif;
+        background: #f6f7f9;
+      }
+
+      main {
+        max-width: 760px;
+        margin: 0 auto;
+        padding: 24px;
+        background: #fff;
+      }
+
+      label {
+        display: block;
+        margin-bottom: 18px;
+      }
+
+      input,
+      textarea {
+        display: block;
+        box-sizing: border-box;
+        width: 100%;
+        margin-top: 6px;
+        padding: 10px;
+      }
+
+      textarea {
+        min-height: 180px;
+      }
+
+      .photo-box {
+        width: 120px;
+        height: 120px;
+        border: 1px solid #d1d5db;
+      }
+
+      .photo-box img {
+        display: block;
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <div>
+        <label>
+          Title
+          <input data-testid="title--input" />
+        </label>
+      </div>
+
+      <section data-testid="media-upload-grid">
+        <input
+          data-testid="add-photos-input"
+          name="photos"
+          type="file"
+          multiple
+        />
+        <div class="photo-box">
+          <div
+            class="photo-box__image-container"
+            data-testid="image-wrapper-1"
+          >
+            <img
+              class="web_ui__Image__content"
+              alt="Uploaded photo 1"
+              src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAFgwJ/l1utxQAAAABJRU5ErkJggg=="
+            />
+          </div>
+        </div>
+      </section>
+
+      <label>
+        Description
+        <textarea data-testid="description--input"></textarea>
+      </label>
+    </main>
+  </body>
+</html>
