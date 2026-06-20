@@ -5355,10 +5355,21 @@
     if (badge) badge.textContent = marked ? "Done" : `#${getBatchFileIndexByKey(key) + 1}`;
     const wrapper = photo.closest(".batch-photo-wrap");
     if (wrapper) {
+      const timerKey = "__quickvintHiddenTimer";
+      if (wrapper[timerKey]) {
+        clearTimeout(wrapper[timerKey]);
+        wrapper[timerKey] = null;
+      }
       wrapper.setAttribute("aria-hidden", marked ? "true" : "false");
       if (marked) {
         wrapper.classList.add("is-grouped");
-        wrapper.hidden = true;
+        wrapper[timerKey] = window.setTimeout(() => {
+          if (wrapper.classList.contains("is-grouped")) {
+            wrapper.hidden = true;
+            updateBatchGroupingControls();
+          }
+          wrapper[timerKey] = null;
+        }, 130);
       } else {
         wrapper.hidden = false;
         runAfterBatchRender(() => {
@@ -5403,11 +5414,21 @@
 
   function setBatchControlHidden(control, hidden) {
     if (!control) return;
+    const timerKey = "__quickvintHiddenTimer";
+    if (control[timerKey]) {
+      clearTimeout(control[timerKey]);
+      control[timerKey] = null;
+    }
 
     if (hidden) {
       control.classList.add("is-hidden");
       control.setAttribute("aria-hidden", "true");
-      control.hidden = true;
+      control[timerKey] = window.setTimeout(() => {
+        if (control.classList.contains("is-hidden")) {
+          control.hidden = true;
+        }
+        control[timerKey] = null;
+      }, 160);
       return;
     }
 
