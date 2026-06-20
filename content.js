@@ -3030,7 +3030,7 @@
         opacity: 1;
         transform: translateY(0);
         overflow: hidden;
-        transition: max-height 150ms ease, min-height 150ms ease, opacity 140ms ease, transform 140ms ease;
+        transition: opacity 120ms ease, transform 120ms ease;
       }
 
       #${BATCH_MODAL_ID}.organizing .batch-actions:not(.has-primary-action) .batch-secondary-actions {
@@ -3052,10 +3052,6 @@
         min-height: 42px;
         border-radius: 12px;
         transition:
-          max-height 150ms ease,
-          min-height 150ms ease,
-          padding 150ms ease,
-          border-width 150ms ease,
           transform 140ms ease,
           box-shadow 140ms ease,
           opacity 140ms ease,
@@ -5533,27 +5529,11 @@
 
   function setBatchControlHidden(control, hidden) {
     if (!control) return;
-    const timerKey = "__quickvintHideTimer";
-    if (control[timerKey]) {
-      clearTimeout(control[timerKey]);
-      control[timerKey] = null;
-    }
 
     if (hidden) {
-      if (control.hidden) {
-        control.classList.add("is-hidden");
-        control.setAttribute("aria-hidden", "true");
-        return;
-      }
-
       control.classList.add("is-hidden");
       control.setAttribute("aria-hidden", "true");
-      control[timerKey] = window.setTimeout(() => {
-        if (control.classList.contains("is-hidden")) {
-          control.hidden = true;
-        }
-        control[timerKey] = null;
-      }, 190);
+      control.hidden = true;
       return;
     }
 
