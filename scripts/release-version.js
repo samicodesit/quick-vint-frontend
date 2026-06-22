@@ -5,7 +5,8 @@ const path = require("path");
 
 const rootDir = path.join(__dirname, "..");
 const manifestPath = path.join(rootDir, "manifest.json");
-const publishedVersionPath = path.join(rootDir, "CHROME_WEB_STORE_VERSION");
+const storeVersionPath = path.join(rootDir, "CHROME_WEB_STORE_VERSION");
+const pendingVersionPath = path.join(rootDir, "CHROME_WEB_STORE_PENDING_VERSION");
 
 function readJson(filePath) {
   return JSON.parse(fs.readFileSync(filePath, "utf8"));
@@ -48,22 +49,29 @@ function getVersions() {
     throw new Error("manifest.json not found");
   }
 
-  if (!fs.existsSync(publishedVersionPath)) {
+  if (!fs.existsSync(storeVersionPath)) {
     throw new Error("CHROME_WEB_STORE_VERSION not found");
   }
 
   const manifest = readJson(manifestPath);
   const manifestVersion = manifest.version;
-  const publishedVersion = readVersionFile(publishedVersionPath);
+  const storeVersion = readVersionFile(storeVersionPath);
+  const pendingVersion = fs.existsSync(pendingVersionPath)
+    ? readVersionFile(pendingVersionPath)
+    : null;
 
   assertVersion(manifestVersion, "manifest.json version");
-  assertVersion(publishedVersion, "CHROME_WEB_STORE_VERSION");
+  assertVersion(storeVersion, "CHROME_WEB_STORE_VERSION");
+  if (pendingVersion) {
+    assertVersion(pendingVersion, "CHROME_WEB_STORE_PENDING_VERSION");
+  }
 
   return {
     manifest,
     manifestVersion,
-    publishedVersion,
-    suggestedNextVersion: nextPatch(publishedVersion),
+    storeVersion,
+    pendingVersion,
+    suggestedNextVersion: nextPatch(storeVersion),
   };
 }
 
@@ -75,38 +83,68 @@ function writeManifestVersion(version) {
   fs.writeFileSync(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
 }
 
-function writePublishedVersion(version) {
-  assertVersion(version, "Published version");
-  fs.writeFileSync(publishedVersionPath, `${version}\n`);
+function writeStoreVersion(version) {
+  assertVersion(version, "Chrome Web Store version");
+  fs.writeFileSync(storeVersionPath, `${version}\n`);
+}
+
+function writePendingVersion(version) {
+  assertVersion(version, "Pending version");
+  fs.writeFileSync(pendingVersionPath, `${version}\n`);
+}
+
+function clearPendingVersion() {
+  if (fs.existsSync(pendingVersionPath)) {
+    fs.unlinkSync(pendingVersionPath);
+  }
 }
 
 function printStatus() {
-  const { manifestVersion, publishedVersion, suggestedNextVersion } = getVersions();
-  const uploadable = compareVersions(manifestVersion, publishedVersion) > 0;
+  const { manifestVersion, storeVersion, pendingVersion, suggestedNextVersion } = getVersions();
+  const uploadable =
+    compareVersions(manifestVersion, storeVersion) > 0 && !pendingVersion;
 
-  console.log(`Published Chrome Web Store version: ${publishedVersion}`);
+  console.log(`Last Chrome Web Store upload:       ${storeVersion}`);
   console.log(`manifest.json version:              ${manifestVersion}`);
+  console.log(`Pending uploaded package:           ${pendingVersion || "none"}`);
   console.log(`Next upload version:                ${suggestedNextVersion}`);
   console.log(`Ready to upload:                    ${uploadable ? "yes" : "no"}`);
 
-  if (!uploadable) {
+  if (pendingVersion) {
+    console.log("");
+    console.log(
+      `Finish pending ${pendingVersion}: npm run release:mark-uploaded -- ${pendingVersion}`,
+    );
+    console.log("If the upload was discarded: npm run release:clear-pending");
+  } else if (!uploadable) {
     console.log("");
     console.log(`Run: npm run release:bump`);
   }
 }
 
 function checkUploadable() {
-  const { manifestVersion, publishedVersion, suggestedNextVersion } = getVersions();
+  const { manifestVersion, storeVersion, pendingVersion, suggestedNextVersion } = getVersions();
 
-  checkVersionAgainstPublished(manifestVersion, publishedVersion, suggestedNextVersion);
+  if (pendingVersion) {
+    console.error("Release version check failed.");
+    console.error(`Pending uploaded package: ${pendingVersion}`);
+    console.error("");
+    console.error(
+      `Finish it first: npm run release:mark-uploaded -- ${pendingVersion}`,
+    );
+    console.error("If the upload was discarded: npm run release:clear-pending");
+    process.exit(1);
+  }
 
-  console.log(`Release version check passed: ${manifestVersion} > ${publishedVersion}`);
+  checkVersionAgainstStore(manifestVersion, storeVersion, suggestedNextVersion);
+
+  console.log(`Release version check passed: ${manifestVersion} > ${storeVersion}`);
 }
 
-function checkVersionAgainstPublished(version, publishedVersion, suggestedNextVersion) {
-  if (compareVersions(version, publishedVersion) <= 0) {
+function checkVersionAgainstStore(version, storeVersion, suggestedNextVersion) {
+  if (compareVersions(version, storeVersion) <= 0) {
     console.error("Release version check failed.");
-    console.error(`Published Chrome Web Store version: ${publishedVersion}`);
+    console.error(`Last Chrome Web Store upload:       ${storeVersion}`);
     console.error(`Upload version:                     ${version}`);
     console.error(`Next upload version should be:       ${suggestedNextVersion}`);
     console.error("");
@@ -121,11 +159,13 @@ function bumpPatch() {
   console.log(`manifest.json bumped to ${suggestedNextVersion}`);
 }
 
-function markPublished(versionArg) {
+function markUploaded(versionArg) {
   const { manifestVersion } = getVersions();
   const version = versionArg || manifestVersion;
-  writePublishedVersion(version);
+  writeStoreVersion(version);
+  clearPendingVersion();
   console.log(`CHROME_WEB_STORE_VERSION updated to ${version}`);
+  console.log("Pending release cleared.");
 }
 
 function checkVersion(versionArg) {
@@ -134,9 +174,35 @@ function checkVersion(versionArg) {
   }
 
   assertVersion(versionArg, "Upload version");
-  const { publishedVersion, suggestedNextVersion } = getVersions();
-  checkVersionAgainstPublished(versionArg, publishedVersion, suggestedNextVersion);
-  console.log(`Release version check passed: ${versionArg} > ${publishedVersion}`);
+  const { storeVersion, pendingVersion, suggestedNextVersion } = getVersions();
+  if (pendingVersion) {
+    console.error("Release version check failed.");
+    console.error(`Pending uploaded package: ${pendingVersion}`);
+    console.error("");
+    console.error(
+      `Finish it first: npm run release:mark-uploaded -- ${pendingVersion}`,
+    );
+    console.error("If the upload was discarded: npm run release:clear-pending");
+    process.exit(1);
+  }
+
+  checkVersionAgainstStore(versionArg, storeVersion, suggestedNextVersion);
+  console.log(`Release version check passed: ${versionArg} > ${storeVersion}`);
+}
+
+function markPending(versionArg) {
+  if (!versionArg) {
+    throw new Error("mark-pending requires a version argument");
+  }
+
+  assertVersion(versionArg, "Pending version");
+  writePendingVersion(versionArg);
+  console.log(`CHROME_WEB_STORE_PENDING_VERSION updated to ${versionArg}`);
+}
+
+function clearPending() {
+  clearPendingVersion();
+  console.log("Pending release cleared.");
 }
 
 function main() {
@@ -152,14 +218,21 @@ function main() {
     case "bump-patch":
       bumpPatch();
       break;
+    case "mark-uploaded":
     case "mark-published":
-      markPublished(versionArg);
+      markUploaded(versionArg);
       break;
     case "check-version":
       checkVersion(versionArg);
       break;
+    case "mark-pending":
+      markPending(versionArg);
+      break;
+    case "clear-pending":
+      clearPending();
+      break;
     default:
-      console.error("Usage: node scripts/release-version.js <status|check|check-version|bump-patch|mark-published> [version]");
+      console.error("Usage: node scripts/release-version.js <status|check|check-version|bump-patch|mark-pending|mark-uploaded|mark-published|clear-pending> [version]");
       process.exit(1);
   }
 }

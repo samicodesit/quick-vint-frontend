@@ -14,7 +14,9 @@
     "release:status": "node scripts/release-version.js status",
     "release:check": "node scripts/release-version.js check",
     "release:bump": "node scripts/release-version.js bump-patch",
+    "release:mark-uploaded": "node scripts/release-version.js mark-uploaded",
     "release:mark-published": "node scripts/release-version.js mark-published",
+    "release:clear-pending": "node scripts/release-version.js clear-pending",
     "package": "node build.js",
     "package:bash": "./build.sh"
   },

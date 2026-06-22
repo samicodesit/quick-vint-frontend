@@ -9,7 +9,7 @@ Both scripts include the files needed by the Chrome extension, including `images
 
 ## Version rule
 
-The source of truth for the currently published Chrome Web Store version is:
+The source of truth for version bumping is the latest version uploaded or submitted to Chrome Web Store:
 
 ```bash
 CHROME_WEB_STORE_VERSION
@@ -29,13 +29,21 @@ npm run release:bump
 
 Packaging will fail if `manifest.json` is not higher than `CHROME_WEB_STORE_VERSION`.
 
-After Chrome Web Store accepts and publishes the upload, mark that version as published:
+After you upload the ZIP to Chrome Web Store, mark that version as uploaded:
 
 ```bash
-npm run release:mark-published
+npm run release:mark-uploaded
 ```
 
-Commit and push the `CHROME_WEB_STORE_VERSION` update after marking it published.
+Packaging creates a local pending-release lock. Until you run `release:mark-uploaded`, the next package build will fail and remind you to finish the previous upload.
+
+If you created a package but decided not to upload it:
+
+```bash
+npm run release:clear-pending
+```
+
+Commit and push the `CHROME_WEB_STORE_VERSION` update after marking a version uploaded.
 
 ## Recommended flow
 

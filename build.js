@@ -238,6 +238,11 @@ async function main() {
             } catch (e) {
                 log('  (run "unzip -l dist/autolister-ai-vX.X.X.zip" to see contents)', 'yellow');
             }
+
+            execSync(`node scripts/release-version.js mark-pending ${currentVersion}`, {
+                cwd: scriptDir,
+                stdio: 'inherit',
+            });
         } else {
             log('❌ Failed to create package', 'red');
             process.exit(1);

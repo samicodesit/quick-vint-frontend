@@ -136,6 +136,7 @@ if [ -f "$OUTPUT_FILE" ]; then
     echo ""
     echo "📋 Package contents:"
     unzip -l "$OUTPUT_FILE" | tail -n +4 | head -n -2
+    node "$SCRIPT_DIR/scripts/release-version.js" mark-pending "$CURRENT_VERSION"
 else
     echo -e "${RED}❌ Failed to create package${NC}"
     exit 1

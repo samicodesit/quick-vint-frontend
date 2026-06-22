@@ -5,3 +5,4 @@ dist /
 content.min.js
 test-results/
 playwright-report/
+CHROME_WEB_STORE_PENDING_VERSION
