@@ -1,12 +1,30 @@
 // --- IMPORTS & INITIALIZATION ---
 importScripts("lib/supabase.js");
 
+function setAutolisterUninstallUrl() {
+  const extensionVersion = chrome.runtime.getManifest().version;
+  const uninstallUrl = `https://autolister.app/uninstall?version=${encodeURIComponent(extensionVersion)}`;
+
+  chrome.runtime.setUninstallURL(uninstallUrl, () => {
+    if (chrome.runtime.lastError) {
+      console.warn(
+        "Failed to set AutoLister uninstall URL:",
+        chrome.runtime.lastError.message,
+      );
+    }
+  });
+}
+
 // --- FIRST RUN: open welcome/onboarding page on install ---
 chrome.runtime.onInstalled.addListener((details) => {
+  setAutolisterUninstallUrl();
+
   if (details.reason === "install") {
     chrome.tabs.create({ url: "https://autolister.app/welcome" });
   }
 });
+
+setAutolisterUninstallUrl();
 
 // --- CONSTANTS ---
 const SUPABASE_URL = "https://jqloiovdwjaornnfvmyu.supabase.co";
