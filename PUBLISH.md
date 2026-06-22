@@ -5,12 +5,37 @@ This repo has two packaging scripts:
 - `npm run package` -> runs `node build.js`
 - `npm run package:bash` -> runs `./build.sh`
 
-Use `npm run package:bash` for releases right now.
+Both scripts include the files needed by the Chrome extension, including `images/`.
 
-Why:
-- `callback.js` references `images/onboard.png`
-- `build.sh` includes `images/` in the ZIP
-- `build.js` currently does not include `images/`
+## Version rule
+
+The source of truth for the currently published Chrome Web Store version is:
+
+```bash
+CHROME_WEB_STORE_VERSION
+```
+
+Before preparing an upload, check the next required version:
+
+```bash
+npm run release:status
+```
+
+If the store already has the same version as `manifest.json`, bump automatically:
+
+```bash
+npm run release:bump
+```
+
+Packaging will fail if `manifest.json` is not higher than `CHROME_WEB_STORE_VERSION`.
+
+After Chrome Web Store accepts and publishes the upload, mark that version as published:
+
+```bash
+npm run release:mark-published
+```
+
+Commit and push the `CHROME_WEB_STORE_VERSION` update after marking it published.
 
 ## Recommended flow
 
@@ -20,24 +45,25 @@ Why:
 npm install
 ```
 
-2. Ensure production API URLs are set in source files
+2. Check and bump the upload version
+
+```bash
+npm run release:status
+npm run release:bump
+```
+
+3. Ensure production API URLs are set in source files
 
 ```bash
 npm run build:prod
 ```
 
-3. Build release ZIP
+4. Build release ZIP
 
-- Keep current version from `manifest.json`:
+Use the current version from `manifest.json`:
 
 ```bash
 npm run package:bash
-```
-
-- Or bump version while packaging:
-
-```bash
-npm run package:bash -- 1.3.4
 ```
 
 Output ZIP:

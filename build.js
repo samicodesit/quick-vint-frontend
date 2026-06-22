@@ -21,6 +21,7 @@ const INCLUDE_LIST = [
     'callback.js',
     'lib',
     'icons',
+    'images',
     '_locales',
 ];
 
@@ -160,11 +161,21 @@ async function main() {
             process.exit(1);
         }
 
+        execSync(`node scripts/release-version.js check-version ${versionArg}`, {
+            cwd: scriptDir,
+            stdio: 'inherit',
+        });
+
         log(`📝 Updating version to: ${versionArg}`, 'yellow');
         manifest.version = versionArg;
         fs.writeFileSync(manifestPath, JSON.stringify(manifest, null, 2) + '\n');
         currentVersion = versionArg;
     }
+
+    execSync('node scripts/release-version.js check', {
+        cwd: scriptDir,
+        stdio: 'inherit',
+    });
 
     // Create dist directory
     const distDir = path.join(scriptDir, 'dist');

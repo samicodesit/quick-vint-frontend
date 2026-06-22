@@ -11,6 +11,10 @@
     "build:prod": "API_BASE_URL=https://autolister.app node scripts/set-env.js && terser content.js -o content.min.js --compress --mangle",
     "build:local": "API_BASE_URL=http://localhost:5000 node scripts/set-env.js && terser content.js -o content.min.js --compress --mangle",
     "prepare": "npm run build",
+    "release:status": "node scripts/release-version.js status",
+    "release:check": "node scripts/release-version.js check",
+    "release:bump": "node scripts/release-version.js bump-patch",
+    "release:mark-published": "node scripts/release-version.js mark-published",
     "package": "node build.js",
     "package:bash": "./build.sh"
   },

@@ -60,11 +60,15 @@ if [ -n "$VERSION" ]; then
         exit 1
     fi
 
+    node "$SCRIPT_DIR/scripts/release-version.js" check-version "$VERSION"
+
     echo -e "📝 Updating version to: ${YELLOW}$VERSION${NC}"
     sed -i.bak "s/\"version\": \"$CURRENT_VERSION\"/\"version\": \"$VERSION\"/" "$SCRIPT_DIR/manifest.json"
     rm -f "$SCRIPT_DIR/manifest.json.bak"
     CURRENT_VERSION=$VERSION
 fi
+
+node "$SCRIPT_DIR/scripts/release-version.js" check
 
 # Create dist directory
 DIST_DIR="$SCRIPT_DIR/dist"
