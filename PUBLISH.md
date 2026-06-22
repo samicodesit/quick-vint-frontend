@@ -1,4 +1,8 @@
-# Publish Runbook (Chrome Web Store)
+# AI Agent Publish Runbook (Chrome Web Store)
+
+This runbook is written for AI agents. The human operator should not have to decide the next extension version manually.
+
+Never infer the next version from memory, previous chat context, old ZIP files, or the public Chrome Web Store listing. Always use the release commands below.
 
 This repo has two packaging scripts:
 
@@ -45,18 +49,17 @@ npm run release:clear-pending
 
 Commit and push the `CHROME_WEB_STORE_VERSION` update after marking a version uploaded.
 
-## Recommended flow
+## Required Agent Flow
 
-1. Install dependencies (if needed)
-
-```bash
-npm install
-```
-
-2. Check and bump the upload version
+1. Confirm release state
 
 ```bash
 npm run release:status
+```
+
+2. If `Ready to upload` is `no` because the manifest version is not higher than the store upload version, bump it
+
+```bash
 npm run release:bump
 ```
 
@@ -76,6 +79,19 @@ npm run package:bash
 
 Output ZIP:
 - `dist/autolister-ai-v<version>.zip`
+
+5. Upload or hand off clearly
+
+If the agent has Chrome Web Store access, upload the ZIP and submit it. Immediately after upload/submission:
+
+```bash
+npm run release:mark-uploaded
+git add CHROME_WEB_STORE_VERSION
+git commit -m "Mark Chrome Store upload <version>"
+git push origin main
+```
+
+If the agent does not have Chrome Web Store access, do not run `release:mark-uploaded`. Leave the pending lock created by packaging and report the exact ZIP path and version to upload.
 
 ## Quick verification before upload
 
@@ -106,4 +122,4 @@ Confirm at least:
 
 - `build.sh` edits `manifest.json` when a version argument is provided.
 - Keep semantic versioning (`major.minor.patch`), for example `1.3.4`.
-- If you switch to `npm run package` later, first update `build.js` to include `images/`.
+- `main` is the production frontend branch. Release-critical changes must be pushed to `main`, not only a feature branch.

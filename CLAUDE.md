@@ -22,6 +22,48 @@ npm run prepare
 
 Note: There is no test suite or linting configured in this project.
 
+## Release Agent Rules
+
+This repository is mostly operated by AI agents. Do not guess Chrome extension versions from memory, screenshots, old ZIP names, or the public store listing.
+
+Before preparing any Chrome Web Store upload, an agent must run:
+
+```bash
+npm run release:status
+```
+
+The version rule is:
+
+- `CHROME_WEB_STORE_VERSION` means the latest version already uploaded/submitted to Chrome Web Store, not merely the public version visible to users.
+- `manifest.json` must be strictly higher than `CHROME_WEB_STORE_VERSION` before packaging.
+- If `release:status` says `Ready to upload: no` because versions match, run `npm run release:bump`.
+- If `release:status` shows a pending uploaded package, do not create another package. Either mark it uploaded with `npm run release:mark-uploaded -- <version>` after confirming it was uploaded/submitted, or clear it with `npm run release:clear-pending` only if the package was discarded.
+
+Agent release flow:
+
+```bash
+npm run release:status
+npm run build:prod
+npm run package:bash
+```
+
+After the ZIP is uploaded/submitted to Chrome Web Store, the agent must immediately run:
+
+```bash
+npm run release:mark-uploaded
+git add CHROME_WEB_STORE_VERSION
+git commit -m "Mark Chrome Store upload <version>"
+git push origin main
+```
+
+If an agent cannot access Chrome Web Store to upload the ZIP, it must not mark the version uploaded. It should leave the pending-release lock in place and tell the operator the exact ZIP path and version.
+
+Production branch rule:
+
+- `main` is the production frontend branch.
+- Release/version/process fixes must land on `main`.
+- If working from a feature branch that is already the published code line, fast-forward or merge `main` deliberately; do not leave release-critical fixes only on the feature branch.
+
 ## Development Workflow
 
 This is a Chrome Extension that must be loaded manually for development:
