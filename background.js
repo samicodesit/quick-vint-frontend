@@ -367,7 +367,13 @@ async function createCheckout(message = {}) {
   const endpoint = isCreditPack
     ? `${API_BASE}/api/stripe/create-credit-checkout`
     : `${API_BASE}/api/stripe/create-checkout`;
-  const body = isCreditPack ? { email } : { email, tier };
+  const body = {
+    email,
+    source: message.source || "extension_background",
+  };
+  if (!isCreditPack) {
+    body.tier = tier;
+  }
 
   try {
     const response = await fetch(endpoint, {

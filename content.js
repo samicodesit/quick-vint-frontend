@@ -18,6 +18,8 @@
   const BATCH_UPLOAD_STALE_MS = 15000;
   const BATCH_UPLOAD_IDLE_TIMEOUT_MS = 5 * 60 * 1000;
   const BATCH_UPLOAD_WAIT_TIMEOUT_MS = 60000;
+  const MEASUREMENT_ADVICE_HIDDEN_KEY = "quickvintHideMeasurementAdvice";
+  const MEASUREMENT_ADVICE_LAST_SHOWN_KEY = "quickvintMeasurementAdviceLastShown";
   const SELECTORS = {
     title: 'input[data-testid="title--input"]',
     description: 'textarea[data-testid="description--input"]',
@@ -70,6 +72,8 @@
   const SUPPORT_EMAIL = "support@autolister.app";
   const TAILORED_LIMITS_CONTACT_URL =
     `mailto:${SUPPORT_EMAIL}?subject=AutoLister%20AI%20tailored%20limits`;
+  const ACCOUNT_REVIEW_CONTACT_URL =
+    `mailto:${SUPPORT_EMAIL}?subject=AutoLister%20AI%20account%20review`;
   const PRIMARY_BUTTON_BACKGROUND =
     "linear-gradient(135deg, #5b54f0 0%, #4338ca 100%)";
 
@@ -128,6 +132,11 @@
 
     if (action && action.text && action.url) {
       messageHtml += `<a href="${action.url}" target="_blank" style="margin-left: 12px; color: inherit; text-decoration: underline; font-weight: 700; white-space: nowrap;">${action.text} &rarr;</a>`;
+      if (action.secondaryText && action.secondaryUrl) {
+        messageHtml += `<a href="${action.secondaryUrl}" target="_blank" style="margin-left: 10px; color: inherit; text-decoration: underline; font-weight: 700; white-space: nowrap;">${action.secondaryText} &rarr;</a>`;
+      }
+    } else if (action && action.text && typeof action.onClick === "function") {
+      messageHtml += `<button type="button" class="toast-action-button">${escapeHtml(action.text)}</button>`;
     }
 
     // Updated HTML structure with close button
@@ -137,16 +146,33 @@
       <button class="toast-close" aria-label="Close">×</button>
     `;
 
+    function hideToast() {
+      toast.classList.remove("visible");
+      if (window.quickvintToastTimeout)
+        clearTimeout(window.quickvintToastTimeout);
+      if (window.quickvintToastVisibilityTimeout)
+        clearTimeout(window.quickvintToastVisibilityTimeout);
+      window.quickvintToastVisibilityTimeout = setTimeout(() => {
+        if (!toast.classList.contains("visible")) {
+          toast.style.visibility = "hidden";
+        }
+      }, 300);
+    }
+
     toast.className = type;
     toast.style.visibility = "visible"; // Ensure it's visible for the transition
 
     // Add close handler
     const closeBtn = toast.querySelector(".toast-close");
     if (closeBtn) {
-      closeBtn.onclick = () => {
-        toast.classList.remove("visible");
-        if (window.quickvintToastTimeout)
-          clearTimeout(window.quickvintToastTimeout);
+      closeBtn.onclick = hideToast;
+    }
+
+    const actionButton = toast.querySelector(".toast-action-button");
+    if (actionButton && action && typeof action.onClick === "function") {
+      actionButton.onclick = () => {
+        action.onClick();
+        hideToast();
       };
     }
 
@@ -157,14 +183,85 @@
 
     if (window.quickvintToastTimeout)
       clearTimeout(window.quickvintToastTimeout);
+    if (window.quickvintToastVisibilityTimeout)
+      clearTimeout(window.quickvintToastVisibilityTimeout);
 
     // Only auto-hide if autoHide is true and there is NO action.
     // If there IS an action or autoHide is false, it stays until manually closed.
     if (autoHide && !action) {
-      window.quickvintToastTimeout = setTimeout(() => {
-        toast.classList.remove("visible");
-      }, 4000);
+      window.quickvintToastTimeout = setTimeout(hideToast, 4000);
     }
+  }
+
+  function getTodayKey() {
+    return new Date().toISOString().slice(0, 10);
+  }
+
+  async function shouldShowMeasurementAdvice() {
+    const {
+      [MEASUREMENT_ADVICE_HIDDEN_KEY]: hidden,
+      [MEASUREMENT_ADVICE_LAST_SHOWN_KEY]: lastShown,
+    } = await chrome.storage.local.get([
+      MEASUREMENT_ADVICE_HIDDEN_KEY,
+      MEASUREMENT_ADVICE_LAST_SHOWN_KEY,
+    ]);
+
+    return !hidden && lastShown !== getTodayKey();
+  }
+
+  async function markMeasurementAdviceShown() {
+    await chrome.storage.local.set({
+      [MEASUREMENT_ADVICE_LAST_SHOWN_KEY]: getTodayKey(),
+    });
+  }
+
+  async function trackGrowthEvent(event, context = {}) {
+    try {
+      const { supabaseSession, userProfile } = await chrome.storage.local.get([
+        "supabaseSession",
+        "userProfile",
+      ]);
+      const headers = { "Content-Type": "application/json" };
+      if (supabaseSession?.access_token) {
+        headers.Authorization = `Bearer ${supabaseSession.access_token}`;
+      }
+
+      fetch(`${API_BASE}/api/events/track`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({
+          event,
+          source: "extension_content",
+          page: `${window.location.origin}${window.location.pathname}`,
+          plan: userProfile?.subscription_tier || "free",
+          context,
+          extensionVersion: chrome.runtime.getManifest().version,
+        }),
+      }).catch(() => {});
+    } catch (err) {
+      // Analytics must never block listing creation.
+    }
+  }
+
+  function hideMeasurementAdviceForever() {
+    chrome.storage.local.set({
+      [MEASUREMENT_ADVICE_HIDDEN_KEY]: true,
+    });
+  }
+
+  async function maybeShowMeasurementAdvice(measurementAdvice) {
+    if (!measurementAdvice || !measurementAdvice.trim()) return;
+    if (!(await shouldShowMeasurementAdvice())) return;
+
+    await markMeasurementAdviceShown();
+    setTimeout(() => {
+      showToast(
+        "Tip: for clothing, adding simple measurements can reduce buyer questions.",
+        "info",
+        { text: "Don't show again", onClick: hideMeasurementAdviceForever },
+        false,
+      );
+    }, 300);
   }
 
   function escapeHtml(value) {
@@ -186,6 +283,12 @@
     secondaryActionText,
     secondaryActionUrl,
   }) {
+    trackGrowthEvent("paywall_shown", {
+      title,
+      optionCount: options.length,
+      actionText,
+    });
+
     let toast = document.getElementById("quickvint-toast");
     if (!toast) {
       toast = document.createElement("div");
@@ -303,7 +406,13 @@
 
     optionButtons.forEach((button) => {
       button.addEventListener("click", () => {
-        setSelectedOption(Number(button.dataset.paywallOptionIndex));
+        const optionIndex = Number(button.dataset.paywallOptionIndex);
+        setSelectedOption(optionIndex);
+        const option = options[optionIndex];
+        trackGrowthEvent("paywall_option_select", {
+          tier: option?.tier || null,
+          checkoutType: option?.checkoutType || null,
+        });
       });
     });
 
@@ -316,6 +425,10 @@
             : null;
 
         if (!checkoutOption?.checkoutType) {
+          trackGrowthEvent("paywall_action_click", {
+            action: "external_link",
+            tier: checkoutOption?.tier || null,
+          });
           window.open(
             checkoutOption?.actionUrl || actionUrl,
             "_blank",
@@ -328,9 +441,19 @@
         const checkoutWindow = window.open("about:blank", "_blank");
         actionBtn.disabled = true;
         if (actionTextEl) actionTextEl.textContent = "Opening checkout...";
+        trackGrowthEvent("checkout_start", {
+          source: "extension_paywall",
+          tier: checkoutOption.tier,
+          checkoutType: checkoutOption.checkoutType,
+        });
 
         try {
           const checkoutUrl = await createCheckoutForPaywall(checkoutOption);
+          trackGrowthEvent("checkout_opened", {
+            source: "extension_paywall",
+            tier: checkoutOption.tier,
+            checkoutType: checkoutOption.checkoutType,
+          });
           if (checkoutWindow) {
             checkoutWindow.location.href = checkoutUrl;
           } else {
@@ -454,6 +577,7 @@
       type: "CREATE_CHECKOUT",
       checkoutType: option.checkoutType,
       tier: option.tier,
+      source: "extension_paywall",
     });
     if (!response?.ok || !response.url) {
       throw new Error(response?.error || "Unable to open the payment page.");
@@ -478,6 +602,19 @@
       return {
         message: limitData.error || "Service temporarily unavailable. Please try again later.",
         actionText: null,
+        paywall: false,
+      };
+    }
+
+    if (code === "account_paused") {
+      return {
+        title: "Account paused",
+        message:
+          limitData.error ||
+          "This account is paused because it appears linked to duplicate free-trial usage. To continue, contact support or choose a paid option.",
+        actionText: "View paid options",
+        secondaryActionText: "Contact support",
+        secondaryActionUrl: ACCOUNT_REVIEW_CONTACT_URL,
         paywall: false,
       };
     }
@@ -3588,6 +3725,24 @@
         /* Allow wrapping normally */
       }
 
+      #quickvint-toast .toast-action-button {
+        appearance: none;
+        border: 0;
+        background: transparent;
+        color: inherit;
+        cursor: pointer;
+        font: inherit;
+        font-weight: 700;
+        margin-left: 12px;
+        padding: 0;
+        text-decoration: underline;
+        white-space: nowrap;
+      }
+
+      #quickvint-toast .toast-action-button:hover {
+        opacity: 0.86;
+      }
+
       #quickvint-toast.paywall .paywall-logo {
         flex: 0 0 auto;
         width: 38px;
@@ -4946,11 +5101,13 @@
 
   async function onBatchUploadClick() {
     if (!isAuthenticated) {
+      trackGrowthEvent("phone_upload_blocked", { reason: "signed_out" });
       showToast("Please sign in via the extension popup first.", "error");
       return;
     }
 
     if (getVisibleUploadedPhotoCount() > 0) {
+      trackGrowthEvent("phone_upload_blocked", { reason: "listing_not_empty" });
       showToast("Start batch upload from an empty Vinted listing tab.", "error");
       return;
     }
@@ -4990,6 +5147,7 @@
     const sessionId = generateSessionId();
     batchUploadSessionId = sessionId;
     batchLastFileChangeAt = Date.now();
+    trackGrowthEvent("phone_upload_start", { mode: "batch", available });
     createBatchModal(sessionId);
     startBatchPolling(sessionId);
   }
@@ -5959,7 +6117,12 @@
         "You do not have enough listings available right now.",
       "error",
       pricingUrl && limitMessage.actionText
-        ? { text: limitMessage.actionText, url: pricingUrl }
+        ? {
+            text: limitMessage.actionText,
+            url: pricingUrl,
+            secondaryText: limitMessage.secondaryActionText,
+            secondaryUrl: limitMessage.secondaryActionUrl,
+          }
         : null,
     );
   }
@@ -6065,17 +6228,23 @@
     let groupsWithKeys = getBatchGroupsWithKeys();
     let groups = groupsWithKeys.map((group) => group.map(({ file }) => file));
     if (!groups.length) {
+      trackGrowthEvent("batch_start_blocked", { reason: "no_groups" });
       showToast("Add at least one photo before starting batch generation.", "error");
       return;
     }
 
     const remainingCount = batchRemoteFiles.length - getMarkedBatchPhotoKeys().size;
     if (remainingCount > 0) {
+      trackGrowthEvent("batch_start_blocked", {
+        reason: "ungrouped_photos",
+        remainingCount,
+      });
       showToast("Group every photo before generating listings.", "error");
       return;
     }
 
     if (getVisibleUploadedPhotoCount() > 0) {
+      trackGrowthEvent("batch_start_blocked", { reason: "listing_not_empty" });
       showToast("Start batch generation from an empty Vinted listing tab.", "error");
       return;
     }
@@ -6095,6 +6264,11 @@
     const available = Math.max(0, Math.floor(Number(capacity.available || 0)));
     if (!capacity.allowed || available <= 0) {
       restoreStartButton();
+      trackGrowthEvent("generate_limit_hit", {
+        mode: "batch",
+        code: capacity.reason || null,
+        tier: capacity.tier || null,
+      });
       await showBatchCapacityBlocked(capacity);
       return;
     }
@@ -6128,6 +6302,10 @@
     batchProgressGroups = groupsWithKeys;
     renderBatchProgress({ status: "queued", current: 0, total: groups.length });
     restoreStartButton();
+    trackGrowthEvent("batch_start", {
+      groupCount: groups.length,
+      available,
+    });
 
     const response = await sendMessage({
       type: "START_BATCH_GENERATION",
@@ -6551,8 +6729,10 @@
     throwOnLimit = false,
   } = {}) {
     const imageUrls = getUploadedImageUrls();
+    const mode = manageButtonState ? "manual" : "batch";
 
     if (!imageUrls.length) {
+      trackGrowthEvent("generate_missing_photo", { mode });
       if (manageButtonState) {
         showToast("Please upload at least one image.", "error");
       }
@@ -6588,6 +6768,15 @@
         selectedDescriptionLanguage || selectedLanguage,
       );
       const legacyLanguageCode = descriptionLanguageCode || titleLanguageCode;
+      trackGrowthEvent("generate_request", {
+        mode,
+        photoCount: imageUrls.length,
+        titleLanguageCode,
+        descriptionLanguageCode,
+        tone,
+        useEmojis: Boolean(useEmojis),
+        useBulletPoints: Boolean(useBulletPoints),
+      });
       const { access_token } = await sendMessage({ type: "GET_ACCESS_TOKEN" });
 
       if (!access_token) {
@@ -6619,6 +6808,7 @@
       });
 
       if (response.status === 401) {
+        trackGrowthEvent("generate_error", { mode, status: 401 });
         isAuthenticated = false;
         showToast("Session expired. Please sign in again.", "error");
         if (manageButtonState) {
@@ -6627,8 +6817,23 @@
         updateButtonUI();
         throw new Error("Session expired. Please sign in again.");
       }
-      if (response.status === 429) {
+      if (response.status === 429 || response.status === 403) {
         const errData = await response.json();
+        if (response.status === 403 && errData.code !== "account_paused") {
+          trackGrowthEvent("generate_error", {
+            mode,
+            status: response.status,
+            code: errData.code || null,
+          });
+          throw new Error(errData.error || "Request blocked.");
+        }
+        trackGrowthEvent("generate_limit_hit", {
+          mode,
+          status: response.status,
+          code: errData.code || null,
+          currentTier: errData.currentTier || null,
+          nextTier: errData.nextTier || null,
+        });
         const limitMessage = buildLimitMessage(errData);
         const pricingUrl = limitMessage.actionText ? await getPricingUrl() : null;
         if (limitMessage.paywall && pricingUrl) {
@@ -6647,7 +6852,12 @@
             limitMessage.message,
             "error",
             pricingUrl
-              ? { text: limitMessage.actionText, url: pricingUrl }
+              ? {
+                  text: limitMessage.actionText,
+                  url: pricingUrl,
+                  secondaryText: limitMessage.secondaryActionText,
+                  secondaryUrl: limitMessage.secondaryActionUrl,
+                }
               : null,
           );
         }
@@ -6662,6 +6872,11 @@
       }
       if (!response.ok) {
         const { error } = await response.json().catch(() => ({}));
+        trackGrowthEvent("generate_error", {
+          mode,
+          status: response.status,
+          message: error || null,
+        });
         throw new Error(error || `HTTP ${response.status}`);
       }
 
@@ -6681,16 +6896,25 @@
         setButtonSuccessState();
       }
 
-      // Show measurement advice if available
       if (showMeasurementAdvice && measurementAdvice && measurementAdvice.trim()) {
-        setTimeout(() => {
-          showToast(measurementAdvice, "info", null, false);
-        }, 300);
+        await maybeShowMeasurementAdvice(measurementAdvice);
       }
+
+      trackGrowthEvent("generate_success", {
+        mode,
+        photoCount: imageUrls.length,
+        titleLanguageCode,
+        descriptionLanguageCode,
+        hasMeasurementAdvice: Boolean(measurementAdvice && measurementAdvice.trim()),
+      });
 
       return { ok: true, title, description, measurementAdvice };
     } catch (err) {
       console.error("AutoLister AI Error:", err);
+      trackGrowthEvent("generate_error", {
+        mode,
+        message: err.message || "unknown",
+      });
       if (manageButtonState) {
         showToast(err.message || "An unexpected error occurred.", "error");
         isBusy = false;
@@ -6702,6 +6926,7 @@
 
   async function onGenerateClick() {
     if (!isAuthenticated) {
+      trackGrowthEvent("generate_blocked", { reason: "signed_out" });
       chrome.runtime.sendMessage({ type: "OPEN_POPUP" });
       return;
     }
@@ -6712,10 +6937,15 @@
       : "replace";
 
     if (descriptionApplyChoice === "cancel") {
+      trackGrowthEvent("generate_cancelled", { reason: "description_apply_choice" });
       return;
     }
 
     try {
+      trackGrowthEvent("generate_click", {
+        mode: "manual",
+        descriptionApplyChoice,
+      });
       await generateCurrentListing({
         descriptionApplyChoice,
         manageButtonState: true,

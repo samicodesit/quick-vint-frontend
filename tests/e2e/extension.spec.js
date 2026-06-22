@@ -58,7 +58,7 @@ function installChromeHarness(page, capacityResponse = null) {
     window.chrome = {
       runtime: {
         id: "test-extension",
-        getManifest: () => ({ version: "1.3.16" }),
+        getManifest: () => ({ version: "1.3.17" }),
         getURL: (assetPath) => `chrome-extension://test-extension/${assetPath}`,
         onMessage: { addListener: () => {} },
         sendMessage: (message, callback) => {
@@ -170,6 +170,64 @@ test.describe("AutoLister extension smoke flows", () => {
     await expect(page.locator('[data-testid="description--input"]')).toHaveValue(
       /Clean black jacket/,
     );
+  });
+
+  test("lets users permanently hide clothing measurement advice", async ({
+    page,
+  }) => {
+    await page.route("https://autolister.app/api/generate", (route) =>
+      route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          title: "Black Test Jacket",
+          description: "Clean black jacket in good condition.",
+          measurementAdvice: "Add chest and length measurements.",
+        }),
+      }),
+    );
+
+    await openContentHarness(page);
+    await page.locator("#quickvint-gen-btn").click();
+
+    const toast = page.locator("#quickvint-toast.info");
+    await expect(toast).toBeVisible();
+    await expect(toast).toContainText(
+      "adding simple measurements can reduce buyer questions",
+    );
+
+    await page.locator("#quickvint-toast .toast-action-button").click();
+    await expect(toast).not.toBeVisible();
+
+    await page.waitForTimeout(2100);
+    await page.locator('[data-testid="description--input"]').fill("");
+    await page.locator("#quickvint-gen-btn").click();
+    await page.waitForTimeout(700);
+
+    await expect(page.locator("#quickvint-toast.info")).not.toBeVisible();
+  });
+
+  test("shows contact and paid options for paused accounts", async ({ page }) => {
+    await page.route("https://autolister.app/api/generate", (route) =>
+      route.fulfill({
+        status: 403,
+        contentType: "application/json",
+        body: JSON.stringify({
+          code: "account_paused",
+          error:
+            "This account is paused because it appears linked to duplicate free-trial usage. To continue, contact support or choose a paid option.",
+        }),
+      }),
+    );
+
+    await openContentHarness(page);
+    await page.locator("#quickvint-gen-btn").click();
+
+    const toast = page.locator("#quickvint-toast.error");
+    await expect(toast).toBeVisible();
+    await expect(toast).toContainText("account is paused");
+    await expect(toast).toContainText("View paid options");
+    await expect(toast).toContainText("Contact support");
   });
 
   test("blocks phone upload before QR modal when no generation capacity remains", async ({

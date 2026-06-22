@@ -1,4 +1,5 @@
 AutoLister AI is a Vinted description generator built for sellers who want speed without risky automation.
+Generate Vinted titles and descriptions from photos in seconds, while keeping every listing under your control.
 
 NEW: PHONE UPLOAD
 Take photos on your phone, scan the QR code, and they appear on your Vinted listing page in seconds.

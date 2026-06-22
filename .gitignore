@@ -1,7 +1,7 @@
 node_modules/
 .vscode/
 .env
-dist /
+dist/
 content.min.js
 test-results/
 playwright-report/

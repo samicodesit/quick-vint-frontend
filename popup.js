@@ -102,6 +102,32 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   }
 
+  async function trackGrowthEvent(event, context = {}) {
+    try {
+      const {
+        data: { session },
+      } = await supabaseClient.auth.getSession();
+      const headers = { "Content-Type": "application/json" };
+      if (session?.access_token) {
+        headers.Authorization = `Bearer ${session.access_token}`;
+      }
+
+      fetch(`${API_BASE}/api/events/track`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({
+          event,
+          source: "extension_popup",
+          page: "extension_popup",
+          context,
+          extensionVersion: chrome.runtime.getManifest().version,
+        }),
+      }).catch(() => {});
+    } catch (err) {
+      // Analytics must never block auth, checkout, or popup rendering.
+    }
+  }
+
   function setView(view) {
     if (document.body.dataset.view !== view) {
       document.body.dataset.view = view;
@@ -511,6 +537,9 @@ document.addEventListener("DOMContentLoaded", () => {
     }
     setLoading(sendMagicLinkBtn, true, "Send Magic Link");
     showMessage(null);
+    trackGrowthEvent("magic_link_request", {
+      domain: email.split("@")[1]?.toLowerCase() || null,
+    });
     try {
       const res = await fetch(`${API_BASE}/api/auth/magic-link`, {
         method: "POST",
@@ -540,8 +569,14 @@ document.addEventListener("DOMContentLoaded", () => {
         data.message || "Check your email for the sign-in link.",
         "success",
       );
+      trackGrowthEvent("magic_link_sent", {
+        domain: email.split("@")[1]?.toLowerCase() || null,
+      });
       emailInput.value = "";
     } catch (err) {
+      trackGrowthEvent("magic_link_error", {
+        message: err.message || "unknown",
+      });
       showMessage(
         err.message || "Connection issue. Please check your internet.",
         "error",
@@ -564,18 +599,35 @@ document.addEventListener("DOMContentLoaded", () => {
       data: { session },
     } = await supabaseClient.auth.getSession();
     if (!session?.user?.email) {
+      trackGrowthEvent("pricing_signin_required", {
+        source: "extension_popup_upgrade",
+      });
       showMessage("Please sign in to upgrade.", "error");
       return;
     }
     setLoading(upgradeBtn, true, "Loading…");
+    trackGrowthEvent("checkout_start", {
+      source: "extension_popup",
+      tier: "starter",
+      checkoutType: "subscription",
+    });
     try {
       const res = await fetch(`${API_BASE}/api/stripe/create-checkout`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: session.user.email, tier: "starter" }),
+        body: JSON.stringify({
+          email: session.user.email,
+          tier: "starter",
+          source: "extension_popup",
+        }),
       });
       const { url } = await res.json();
       if (res.ok && url) {
+        trackGrowthEvent("checkout_opened", {
+          source: "extension_popup",
+          tier: "starter",
+          checkoutType: "subscription",
+        });
         window.open(url, "_blank");
       } else {
         showMessage("Unable to open the payment page.", "error");
@@ -593,10 +645,14 @@ document.addEventListener("DOMContentLoaded", () => {
       data: { session },
     } = await supabaseClient.auth.getSession();
     if (!session?.user?.email) {
+      trackGrowthEvent("billing_portal_signin_required", {
+        source: "extension_popup",
+      });
       showMessage("Please sign in to manage your subscription.", "error");
       return;
     }
     setLoading(manageBtn, true, "Loading…");
+    trackGrowthEvent("billing_portal_start", { source: "extension_popup" });
     try {
       const res = await fetch(`${API_BASE}/api/stripe/create-portal`, {
         method: "POST",
@@ -605,6 +661,7 @@ document.addEventListener("DOMContentLoaded", () => {
       });
       const { url } = await res.json();
       if (res.ok && url) {
+        trackGrowthEvent("billing_portal_opened", { source: "extension_popup" });
         window.open(url, "_blank");
       } else {
         showMessage("Unable to open the subscription page.", "error");
@@ -622,19 +679,36 @@ document.addEventListener("DOMContentLoaded", () => {
       data: { session },
     } = await supabaseClient.auth.getSession();
     if (!session?.user?.email) {
+      trackGrowthEvent("pricing_signin_required", {
+        source: "extension_popup_credit_pack",
+      });
       showMessage("Please sign in to buy credits.", "error");
       return;
     }
 
     setLoading(creditPackBtn, true, "Loading…");
+    trackGrowthEvent("credit_pack_click", { source: "extension_popup" });
+    trackGrowthEvent("checkout_start", {
+      source: "extension_popup",
+      tier: "credit_pack",
+      checkoutType: "credit_pack",
+    });
     try {
       const res = await fetch(`${API_BASE}/api/stripe/create-credit-checkout`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: session.user.email }),
+        body: JSON.stringify({
+          email: session.user.email,
+          source: "extension_popup",
+        }),
       });
       const { url, error } = await res.json();
       if (res.ok && url) {
+        trackGrowthEvent("checkout_opened", {
+          source: "extension_popup",
+          tier: "credit_pack",
+          checkoutType: "credit_pack",
+        });
         window.open(url, "_blank");
       } else {
         showMessage(error || "Unable to open the payment page.", "error");
@@ -649,6 +723,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
   function handleViewAllPlans(e) {
     if (e) e.preventDefault();
+    trackGrowthEvent("pricing_view_all_click", { source: "extension_popup" });
     chrome.runtime.sendMessage({ type: "GET_USER_PROFILE" }, (resp) => {
       const userData = {
         source: "extension",
