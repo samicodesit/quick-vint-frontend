@@ -51,6 +51,11 @@
     "*://*.vinted.com/*",
     "*://*.vinted.net/*"
   ],
+  "externally_connectable": {
+    "matches": [
+      "https://autolister.app/*"
+    ]
+  },
   "background": {
     "service_worker": "background.js"
   },

@@ -691,6 +691,60 @@ async function getBatchCapacity() {
 
 // --- EVENT LISTENERS ---
 
+function isAllowedExternalSender(sender) {
+  if (sender?.origin) return sender.origin === "https://autolister.app";
+  try {
+    return sender?.url
+      ? new URL(sender.url).origin === "https://autolister.app"
+      : false;
+  } catch (err) {
+    return false;
+  }
+}
+
+function buildPublicUserProfileResponse(supabaseSession, userProfile) {
+  const user = supabaseSession?.user || null;
+  return {
+    installed: true,
+    signedIn: Boolean(user),
+    user: user
+      ? {
+          id: user.id || null,
+          email: user.email || null,
+        }
+      : null,
+    profile: userProfile
+      ? {
+          subscription_tier: userProfile.subscription_tier || "free",
+          subscription_status: userProfile.subscription_status || "free",
+          credits_balance: userProfile.credits_balance || 0,
+        }
+      : null,
+  };
+}
+
+chrome.runtime.onMessageExternal.addListener((message, sender, sendResponse) => {
+  if (!isAllowedExternalSender(sender)) {
+    return false;
+  }
+
+  if (message?.type === "PING") {
+    sendResponse({ installed: true });
+    return false;
+  }
+
+  if (message?.type === "GET_USER_PROFILE") {
+    chrome.storage.local.get(["supabaseSession", "userProfile"], (data) => {
+      sendResponse(
+        buildPublicUserProfileResponse(data.supabaseSession, data.userProfile),
+      );
+    });
+    return true;
+  }
+
+  return false;
+});
+
 /**
  * Main message handler for requests from other parts of the extension.
  */
