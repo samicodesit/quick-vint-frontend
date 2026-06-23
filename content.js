@@ -114,6 +114,7 @@
   let batchCapacityLoading = false;
   let batchReceivedEventSent = false;
   let listingToolsReadyTracked = false;
+  let signedOutToolsReadyTracked = false;
   let batchCompleteReceivedEventSent = false;
   let eventQueue = [];
   let eventFlushTimer = null;
@@ -4285,6 +4286,9 @@
 
     btn.addEventListener("click", (e) => {
       e.preventDefault();
+      trackGrowthEvent("signin_cta_click", {
+        path: window.location.pathname,
+      });
       chrome.runtime.sendMessage({ type: "OPEN_POPUP" });
     });
 
@@ -4307,6 +4311,7 @@
       if (batchBtn) batchBtn.style.display = "none";
       if (titleLanguageField) titleLanguageField.style.display = "none";
       if (descriptionLanguageField) descriptionLanguageField.style.display = "none";
+      maybeTrackSignedOutToolsReady();
       return;
     }
 
@@ -4361,6 +4366,15 @@
     if (listingToolsReadyTracked || !isAuthenticated || !generateBtn) return;
     listingToolsReadyTracked = true;
     trackGrowthEvent("listing_tools_ready", {
+      path: window.location.pathname,
+      visiblePhotoCount: getVisibleUploadedPhotoCount(),
+    });
+  }
+
+  function maybeTrackSignedOutToolsReady() {
+    if (signedOutToolsReadyTracked || isAuthenticated || !signInBtn) return;
+    signedOutToolsReadyTracked = true;
+    trackGrowthEvent("signed_out_tools_ready", {
       path: window.location.pathname,
       visiblePhotoCount: getVisibleUploadedPhotoCount(),
     });

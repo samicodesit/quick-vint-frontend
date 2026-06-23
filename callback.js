@@ -42,6 +42,7 @@
   let currentLocalization = null;
   let userSession = null;
   let authSuccessTracked = false;
+  let callbackActionTaken = false;
 
   // Localization methods are now loaded from lib/localization.js
 
@@ -109,6 +110,7 @@
 
     fetch(`${API_BASE}/api/events/track`, {
       method: "POST",
+      keepalive: true,
       headers: {
         "Content-Type": "application/json",
         Authorization: `Bearer ${userSession.access_token}`,
@@ -437,6 +439,7 @@
     if (vintedBtn) {
       const vintedUrl = `https://www.${currentLocalization.domain}/items/new`;
       vintedBtn.onclick = () => {
+        callbackActionTaken = true;
         trackCallbackEvent("auth_vinted_cta_click", {
           domain: currentLocalization.domain,
         });
@@ -449,6 +452,7 @@
     const plansBtn = document.getElementById("view-plans");
     if (plansBtn) {
       plansBtn.onclick = () => {
+        callbackActionTaken = true;
         trackCallbackEvent("auth_plans_click", {
           plan: "free",
         });
@@ -499,6 +503,7 @@
     const closeTabBtn = document.getElementById("close-tab");
     if (closeTabBtn) {
       closeTabBtn.onclick = () => {
+        callbackActionTaken = true;
         trackCallbackEvent("auth_close_click");
         window.close();
       };
@@ -559,6 +564,14 @@
 
   // Kick off auth handling for BOTH flows
   bootstrapAuthReturn();
+
+  window.addEventListener("pagehide", () => {
+    if (authSuccessTracked && !callbackActionTaken) {
+      trackCallbackEvent("auth_callback_exit", {
+        without_action: true,
+      });
+    }
+  });
 
   // Add animation styles
   const style = document.createElement("style");
