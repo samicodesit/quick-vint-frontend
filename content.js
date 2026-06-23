@@ -4604,6 +4604,7 @@
   function closeModal() {
     const modal = document.getElementById(MODAL_ID);
     const sessionId = modal?.dataset?.sessionId;
+    const receivedCount = downloadedFiles.size;
 
     if (activePhoneUploadSessionId === sessionId) {
       activePhoneUploadSessionId = null;
@@ -4629,6 +4630,13 @@
     phoneUploadPreviewUrls.forEach((url) => URL.revokeObjectURL(url));
     phoneUploadPreviewUrls = [];
     displayedPhoneUploadPreviewCount = 0;
+
+    if (sessionId) {
+      trackGrowthEvent("phone_upload_close", {
+        mode: "single",
+        receivedCount,
+      });
+    }
 
     // Notify server to clean up session and delete files
     if (sessionId && chrome.runtime?.id) {
@@ -4675,6 +4683,10 @@
 
     const sessionId = generateSessionId();
     try {
+      trackGrowthEvent("phone_upload_start", {
+        mode: "single",
+        available,
+      });
       await createModal(sessionId);
       startPolling(sessionId);
     } finally {
@@ -4757,6 +4769,7 @@
               const filesToInject = downloads
                 .filter((result) => result.file)
                 .map((result) => result.file);
+              const failedDownloadCount = downloads.length - filesToInject.length;
 
               if (filesToInject.length > 0) {
                 if (injectFilesIntoVinted(filesToInject)) {
@@ -4768,12 +4781,28 @@
                       }
                     }
                   });
+                  trackGrowthEvent("phone_upload_received", {
+                    mode: "single",
+                    receivedCount: filesToInject.length,
+                    failedDownloadCount,
+                    totalReceivedCount: downloadedFiles.size,
+                  });
                   schedulePhoneUploadPreviewReveal();
                 } else {
+                  trackGrowthEvent("phone_upload_inject_error", {
+                    mode: "single",
+                    receivedCount: filesToInject.length,
+                    failedDownloadCount,
+                  });
                   downloads.forEach((result) => {
                     if (result.previewUrl) URL.revokeObjectURL(result.previewUrl);
                   });
                 }
+              } else if (failedDownloadCount > 0) {
+                trackGrowthEvent("phone_upload_download_error", {
+                  mode: "single",
+                  failedDownloadCount,
+                });
               }
             } finally {
               newRemoteFiles.forEach((file) =>
@@ -5059,6 +5088,9 @@
 
   function closeBatchModal({ cleanup = true } = {}) {
     const sessionId = batchUploadSessionId;
+    const receivedCount = batchRemoteFiles.length;
+    const groupedCount = batchMarkedGroups.length;
+    const wasComplete = batchIsComplete;
     document.getElementById(BATCH_MODAL_ID)?.remove();
     setBatchModalScrollLock(false);
 
@@ -5081,6 +5113,16 @@
           body: JSON.stringify({}),
         },
       }).catch(() => {});
+    }
+
+    if (sessionId) {
+      trackGrowthEvent("phone_upload_close", {
+        mode: "batch",
+        cleanup: Boolean(cleanup),
+        complete: wasComplete,
+        receivedCount,
+        groupedCount,
+      });
     }
 
     resetBatchState();
@@ -5959,6 +6001,11 @@
     const group = { id: `group-${batchNextGroupId++}`, keys };
     batchMarkedGroups.push(group);
     batchSelectedPhotoKeys.clear();
+    trackGrowthEvent("batch_group_created", {
+      groupCount: batchMarkedGroups.length,
+      photoCount: keys.length,
+      totalPhotoCount: batchRemoteFiles.length,
+    });
     const nextMarkedKeys = getMarkedBatchPhotoKeys();
     keys.forEach((key) => {
       updateBatchPhotoSelectionTile(key);
@@ -6039,6 +6086,11 @@
 
     steadyBatchReviewLayout();
     const [group] = batchMarkedGroups.splice(groupIndex, 1);
+    trackGrowthEvent("batch_group_removed", {
+      groupCount: batchMarkedGroups.length,
+      photoCount: group.keys.length,
+      totalPhotoCount: batchRemoteFiles.length,
+    });
     const row = batchGroupRowById.get(group.id);
     if (row) {
       row.classList.add("is-leaving");
@@ -6185,6 +6237,11 @@
         if (batchRemoteFiles.length !== batchLastFileCount) {
           batchLastFileCount = batchRemoteFiles.length;
           batchLastFileChangeAt = Date.now();
+          trackGrowthEvent("phone_upload_received", {
+            mode: "batch",
+            receivedCount: batchRemoteFiles.length,
+            complete: batchIsComplete,
+          });
         }
 
         preloadBatchImages(files);
@@ -6429,7 +6486,15 @@
     const body = getBatchBody();
     if (!body) return;
 
+    const previousStatus = batchProgressStatus;
     batchProgressStatus = status;
+    if (previousStatus !== status && (status === "done" || status === "failed")) {
+      trackGrowthEvent(status === "done" ? "batch_done" : "batch_failed", {
+        current,
+        total,
+        message: message || null,
+      });
+    }
     const modal = document.getElementById(BATCH_MODAL_ID);
     modal?.classList.remove("organizing");
     modal?.classList.add("generating");
