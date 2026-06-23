@@ -113,6 +113,7 @@
   let batchGenerationCapacity = null;
   let batchCapacityLoading = false;
   let batchReceivedEventSent = false;
+  let listingToolsReadyTracked = false;
   let batchCompleteReceivedEventSent = false;
   let eventQueue = [];
   let eventFlushTimer = null;
@@ -4320,6 +4321,7 @@
     }
 
     if (!generateBtn) return;
+    maybeTrackListingToolsReady();
     const label = generateBtn.querySelector(".label");
     const icon = generateBtn.querySelector(".icon");
 
@@ -4353,6 +4355,15 @@
       generateBtn.style.background = PRIMARY_BUTTON_BACKGROUND;
       generateBtn.style.cursor = "pointer";
     }
+  }
+
+  function maybeTrackListingToolsReady() {
+    if (listingToolsReadyTracked || !isAuthenticated || !generateBtn) return;
+    listingToolsReadyTracked = true;
+    trackGrowthEvent("listing_tools_ready", {
+      path: window.location.pathname,
+      visiblePhotoCount: getVisibleUploadedPhotoCount(),
+    });
   }
 
   function setButtonSuccessState() {

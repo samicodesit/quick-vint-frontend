@@ -104,26 +104,32 @@
     updateLanguageToggle();
   }
 
-  function trackAuthSuccess(session, eventName) {
-    if (authSuccessTracked || !session?.access_token) return;
-    authSuccessTracked = true;
+  function trackCallbackEvent(event, context = {}) {
+    if (!userSession?.access_token) return;
 
     fetch(`${API_BASE}/api/events/track`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Authorization: `Bearer ${session.access_token}`,
+        Authorization: `Bearer ${userSession.access_token}`,
       },
       body: JSON.stringify({
-        event: "auth_success",
+        event,
         source: "extension_callback",
         page: "callback",
-        context: {
-          auth_event: eventName,
-        },
+        context,
       }),
     }).catch(() => {
       // Analytics must never block login completion.
+    });
+  }
+
+  function trackAuthSuccess(session, eventName) {
+    if (authSuccessTracked || !session?.access_token) return;
+    authSuccessTracked = true;
+    userSession = session;
+    trackCallbackEvent("auth_success", {
+      auth_event: eventName,
     });
   }
 
@@ -431,6 +437,9 @@
     if (vintedBtn) {
       const vintedUrl = `https://www.${currentLocalization.domain}/items/new`;
       vintedBtn.onclick = () => {
+        trackCallbackEvent("auth_vinted_cta_click", {
+          domain: currentLocalization.domain,
+        });
         window.open(vintedUrl, "_blank");
         setTimeout(() => window.close(), 800);
       };
@@ -440,6 +449,9 @@
     const plansBtn = document.getElementById("view-plans");
     if (plansBtn) {
       plansBtn.onclick = () => {
+        trackCallbackEvent("auth_plans_click", {
+          plan: "free",
+        });
         const userData = {
           source: "extension",
           signed_in: !!userSession?.user?.email,
@@ -486,7 +498,10 @@
     // Initialize close tab button
     const closeTabBtn = document.getElementById("close-tab");
     if (closeTabBtn) {
-      closeTabBtn.onclick = () => window.close();
+      closeTabBtn.onclick = () => {
+        trackCallbackEvent("auth_close_click");
+        window.close();
+      };
     }
   }
 
