@@ -281,6 +281,32 @@
       },
     },
     {
+      id: "account-paused",
+      title: "Paused account notice",
+      note: "Real 403 account_paused handling shown after a paused user clicks Generate.",
+      height: 390,
+      auth: true,
+      action: "generate-account-paused",
+      hasImages: true,
+      generateResponse: {
+        status: 403,
+        body: {
+          code: "account_paused",
+          error:
+            "This account is paused because it appears linked to duplicate free-trial usage. To continue, contact support or choose a paid option.",
+        },
+      },
+      verify(doc) {
+        const toastText = doc.querySelector("#quickvint-toast")?.textContent || "";
+        return (
+          /Account paused/.test(toastText) &&
+          /account is paused/.test(toastText) &&
+          /View paid options/.test(toastText) &&
+          /Contact support/.test(toastText)
+        );
+      },
+    },
+    {
       id: "service-error",
       title: "Temporary service error",
       note: "Real non-paywall 429 handling for temporary backend issues.",
@@ -687,6 +713,7 @@
           scenario.action === "generate-free-limit" ||
           scenario.action === "generate-paid-limit" ||
           scenario.action === "generate-business-limit" ||
+          scenario.action === "generate-account-paused" ||
           scenario.action === "generate-missing-photo" ||
           scenario.action === "generate-service-error"
         ) {
