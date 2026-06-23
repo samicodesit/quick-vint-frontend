@@ -102,7 +102,27 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   }
 
-  async function trackGrowthEvent(event, context = {}) {
+  const eventQueue = [];
+  let eventFlushTimer = null;
+
+  function buildEventPayload(event, context) {
+    return {
+      event,
+      source: "extension_popup",
+      page: "extension_popup",
+      context,
+      extensionVersion: chrome.runtime.getManifest().version,
+    };
+  }
+
+  async function flushGrowthEvents() {
+    if (eventFlushTimer) {
+      clearTimeout(eventFlushTimer);
+      eventFlushTimer = null;
+    }
+    if (!eventQueue.length) return;
+
+    const queuedEvents = eventQueue.splice(0, eventQueue.length);
     try {
       const {
         data: { session },
@@ -116,17 +136,34 @@ document.addEventListener("DOMContentLoaded", () => {
         method: "POST",
         headers,
         body: JSON.stringify({
-          event,
-          source: "extension_popup",
-          page: "extension_popup",
-          context,
-          extensionVersion: chrome.runtime.getManifest().version,
+          events: queuedEvents.map((item) =>
+            buildEventPayload(item.event, item.context),
+          ),
         }),
       }).catch(() => {});
     } catch (err) {
       // Analytics must never block auth, checkout, or popup rendering.
     }
   }
+
+  function trackGrowthEvent(event, context = {}) {
+    try {
+      eventQueue.push({ event, context });
+
+      if (eventQueue.length >= 6) {
+        flushGrowthEvents();
+        return;
+      }
+
+      if (!eventFlushTimer) {
+        eventFlushTimer = setTimeout(flushGrowthEvents, 700);
+      }
+    } catch (err) {
+      // Analytics must never block auth, checkout, or popup rendering.
+    }
+  }
+
+  window.addEventListener("pagehide", flushGrowthEvents);
 
   function setView(view) {
     if (document.body.dataset.view !== view) {

@@ -112,6 +112,10 @@
   let batchProgressStatus = null;
   let batchGenerationCapacity = null;
   let batchCapacityLoading = false;
+  let batchReceivedEventSent = false;
+  let batchCompleteReceivedEventSent = false;
+  let eventQueue = [];
+  let eventFlushTimer = null;
   let batchTabStatusTimer = null;
   let isBatchPollInFlight = false;
   let batchImagePreloadUrls = new Set();
@@ -215,7 +219,25 @@
     });
   }
 
-  async function trackGrowthEvent(event, context = {}) {
+  function buildEventPayload(event, context, userProfile) {
+    return {
+      event,
+      source: "extension_content",
+      page: `${window.location.origin}${window.location.pathname}`,
+      plan: userProfile?.subscription_tier || "free",
+      context,
+      extensionVersion: chrome.runtime.getManifest().version,
+    };
+  }
+
+  async function flushGrowthEvents() {
+    if (eventFlushTimer) {
+      clearTimeout(eventFlushTimer);
+      eventFlushTimer = null;
+    }
+    if (!eventQueue.length) return;
+
+    const queuedEvents = eventQueue.splice(0, eventQueue.length);
     try {
       const { supabaseSession, userProfile } = await chrome.storage.local.get([
         "supabaseSession",
@@ -230,14 +252,28 @@
         method: "POST",
         headers,
         body: JSON.stringify({
-          event,
-          source: "extension_content",
-          page: `${window.location.origin}${window.location.pathname}`,
-          plan: userProfile?.subscription_tier || "free",
-          context,
-          extensionVersion: chrome.runtime.getManifest().version,
+          events: queuedEvents.map((item) =>
+            buildEventPayload(item.event, item.context, userProfile),
+          ),
         }),
       }).catch(() => {});
+    } catch (err) {
+      // Analytics must never block listing creation.
+    }
+  }
+
+  function trackGrowthEvent(event, context = {}) {
+    try {
+      eventQueue.push({ event, context });
+
+      if (eventQueue.length >= 8) {
+        flushGrowthEvents();
+        return;
+      }
+
+      if (!eventFlushTimer) {
+        eventFlushTimer = setTimeout(flushGrowthEvents, 1200);
+      }
     } catch (err) {
       // Analytics must never block listing creation.
     }
@@ -5034,6 +5070,8 @@
     batchProgressStatus = null;
     batchGenerationCapacity = null;
     batchCapacityLoading = false;
+    batchReceivedEventSent = false;
+    batchCompleteReceivedEventSent = false;
     isBatchPollInFlight = false;
     batchImagePreloadUrls = new Set();
     batchImagePreloadCache = new Map();
@@ -6237,10 +6275,22 @@
         if (batchRemoteFiles.length !== batchLastFileCount) {
           batchLastFileCount = batchRemoteFiles.length;
           batchLastFileChangeAt = Date.now();
+          if (!batchReceivedEventSent) {
+            batchReceivedEventSent = true;
+            trackGrowthEvent("phone_upload_received", {
+              mode: "batch",
+              receivedCount: batchRemoteFiles.length,
+              complete: false,
+            });
+          }
+        }
+
+        if (batchIsComplete && !batchCompleteReceivedEventSent && batchRemoteFiles.length > 0) {
+          batchCompleteReceivedEventSent = true;
           trackGrowthEvent("phone_upload_received", {
             mode: "batch",
             receivedCount: batchRemoteFiles.length,
-            complete: batchIsComplete,
+            complete: true,
           });
         }
 
