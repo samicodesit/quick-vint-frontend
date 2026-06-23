@@ -70,6 +70,7 @@
     limits: "20 extra listings",
   };
   const SUPPORT_EMAIL = "support@autolister.app";
+  const ANALYTICS_CLIENT_ID_KEY = "analyticsClientId";
   const TAILORED_LIMITS_CONTACT_URL =
     `mailto:${SUPPORT_EMAIL}?subject=AutoLister%20AI%20tailored%20limits`;
   const ACCOUNT_REVIEW_CONTACT_URL =
@@ -221,13 +222,31 @@
     });
   }
 
-  function buildEventPayload(event, context, userProfile) {
+  function createAnalyticsClientId() {
+    if (crypto?.randomUUID) return crypto.randomUUID();
+    return `cid_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+  }
+
+  async function getAnalyticsClientId() {
+    const data = await chrome.storage.local.get(ANALYTICS_CLIENT_ID_KEY);
+    if (data[ANALYTICS_CLIENT_ID_KEY]) {
+      return data[ANALYTICS_CLIENT_ID_KEY];
+    }
+    const analyticsClientId = createAnalyticsClientId();
+    await chrome.storage.local.set({ [ANALYTICS_CLIENT_ID_KEY]: analyticsClientId });
+    return analyticsClientId;
+  }
+
+  function buildEventPayload(event, context, userProfile, analyticsClientId) {
     return {
       event,
       source: "extension_content",
       page: `${window.location.origin}${window.location.pathname}`,
       plan: userProfile?.subscription_tier || "free",
-      context,
+      context: {
+        ...context,
+        analyticsClientId,
+      },
       extensionVersion: chrome.runtime.getManifest().version,
     };
   }
@@ -241,6 +260,7 @@
 
     const queuedEvents = eventQueue.splice(0, eventQueue.length);
     try {
+      const analyticsClientId = await getAnalyticsClientId();
       const { supabaseSession, userProfile } = await chrome.storage.local.get([
         "supabaseSession",
         "userProfile",
@@ -255,7 +275,12 @@
         headers,
         body: JSON.stringify({
           events: queuedEvents.map((item) =>
-            buildEventPayload(item.event, item.context, userProfile),
+            buildEventPayload(
+              item.event,
+              item.context,
+              userProfile,
+              analyticsClientId,
+            ),
           ),
         }),
       }).catch(() => {});

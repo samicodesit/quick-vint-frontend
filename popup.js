@@ -104,13 +104,32 @@ document.addEventListener("DOMContentLoaded", () => {
 
   const eventQueue = [];
   let eventFlushTimer = null;
+  const ANALYTICS_CLIENT_ID_KEY = "analyticsClientId";
 
-  function buildEventPayload(event, context) {
+  function createAnalyticsClientId() {
+    if (crypto?.randomUUID) return crypto.randomUUID();
+    return `cid_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+  }
+
+  async function getAnalyticsClientId() {
+    const data = await chrome.storage.local.get(ANALYTICS_CLIENT_ID_KEY);
+    if (data[ANALYTICS_CLIENT_ID_KEY]) {
+      return data[ANALYTICS_CLIENT_ID_KEY];
+    }
+    const analyticsClientId = createAnalyticsClientId();
+    await chrome.storage.local.set({ [ANALYTICS_CLIENT_ID_KEY]: analyticsClientId });
+    return analyticsClientId;
+  }
+
+  function buildEventPayload(event, context, analyticsClientId) {
     return {
       event,
       source: "extension_popup",
       page: "extension_popup",
-      context,
+      context: {
+        ...context,
+        analyticsClientId,
+      },
       extensionVersion: chrome.runtime.getManifest().version,
     };
   }
@@ -124,6 +143,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
     const queuedEvents = eventQueue.splice(0, eventQueue.length);
     try {
+      const analyticsClientId = await getAnalyticsClientId();
       const {
         data: { session },
       } = await supabaseClient.auth.getSession();
@@ -137,7 +157,7 @@ document.addEventListener("DOMContentLoaded", () => {
         headers,
         body: JSON.stringify({
           events: queuedEvents.map((item) =>
-            buildEventPayload(item.event, item.context),
+            buildEventPayload(item.event, item.context, analyticsClientId),
           ),
         }),
       }).catch(() => {});

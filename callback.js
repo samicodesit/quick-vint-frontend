@@ -37,12 +37,14 @@
   const successDiv = document.getElementById("successState");
   const errorDiv = document.getElementById("errorState");
   const errorMsg = document.getElementById("errorMessage");
+  const ANALYTICS_CLIENT_ID_KEY = "analyticsClientId";
 
   // Global state
   let currentLocalization = null;
   let userSession = null;
   let authSuccessTracked = false;
   let callbackActionTaken = false;
+  let analyticsClientId = null;
 
   // Localization methods are now loaded from lib/localization.js
 
@@ -105,25 +107,60 @@
     updateLanguageToggle();
   }
 
+  function createAnalyticsClientId() {
+    if (crypto?.randomUUID) return crypto.randomUUID();
+    return `cid_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+  }
+
+  function ensureAnalyticsClientId() {
+    return new Promise((resolve) => {
+      chrome.storage.local.get(ANALYTICS_CLIENT_ID_KEY, (data) => {
+        if (data[ANALYTICS_CLIENT_ID_KEY]) {
+          analyticsClientId = data[ANALYTICS_CLIENT_ID_KEY];
+          resolve(analyticsClientId);
+          return;
+        }
+
+        analyticsClientId = createAnalyticsClientId();
+        chrome.storage.local.set(
+          { [ANALYTICS_CLIENT_ID_KEY]: analyticsClientId },
+          () => resolve(analyticsClientId),
+        );
+      });
+    });
+  }
+
   function trackCallbackEvent(event, context = {}) {
     if (!userSession?.access_token) return;
 
-    fetch(`${API_BASE}/api/events/track`, {
-      method: "POST",
-      keepalive: true,
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${userSession.access_token}`,
-      },
-      body: JSON.stringify({
-        event,
-        source: "extension_callback",
-        page: "callback",
-        context,
-      }),
-    }).catch(() => {
-      // Analytics must never block login completion.
-    });
+    const send = (clientId) => {
+      fetch(`${API_BASE}/api/events/track`, {
+        method: "POST",
+        keepalive: true,
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${userSession.access_token}`,
+        },
+        body: JSON.stringify({
+          event,
+          source: "extension_callback",
+          page: "callback",
+          context: {
+            ...context,
+            analyticsClientId: clientId,
+          },
+        }),
+      }).catch(() => {
+        // Analytics must never block login completion.
+      });
+    };
+
+    if (analyticsClientId) {
+      send(analyticsClientId);
+      return;
+    }
+
+    ensureAnalyticsClientId().then(send).catch(() => {});
   }
 
   function trackAuthSuccess(session, eventName) {
@@ -563,6 +600,7 @@
   });
 
   // Kick off auth handling for BOTH flows
+  ensureAnalyticsClientId().catch(() => {});
   bootstrapAuthReturn();
 
   window.addEventListener("pagehide", () => {
