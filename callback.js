@@ -41,6 +41,7 @@
   // Global state
   let currentLocalization = null;
   let userSession = null;
+  let authSuccessTracked = false;
 
   // Localization methods are now loaded from lib/localization.js
 
@@ -101,6 +102,29 @@
 
     // Update language toggle button
     updateLanguageToggle();
+  }
+
+  function trackAuthSuccess(session, eventName) {
+    if (authSuccessTracked || !session?.access_token) return;
+    authSuccessTracked = true;
+
+    fetch(`${API_BASE}/api/events/track`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${session.access_token}`,
+      },
+      body: JSON.stringify({
+        event: "auth_success",
+        source: "extension_callback",
+        page: "callback",
+        context: {
+          auth_event: eventName,
+        },
+      }),
+    }).catch(() => {
+      // Analytics must never block login completion.
+    });
   }
 
   function updateLanguageToggle() {
@@ -502,6 +526,7 @@
       userSession = session; // Store for checkout functionality
       chrome.storage.local.set({ supabaseSession: session }, () => {
         chrome.runtime.sendMessage({ type: "AUTH_UPDATED" });
+        trackAuthSuccess(session, event);
         show("success");
         console.log("✅ User authenticated:", session.user.email);
       });

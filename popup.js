@@ -146,13 +146,12 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   }
 
-  function trackGrowthEvent(event, context = {}) {
+  function trackGrowthEvent(event, context = {}, immediate = false) {
     try {
       eventQueue.push({ event, context });
 
-      if (eventQueue.length >= 6) {
-        flushGrowthEvents();
-        return;
+      if (immediate || eventQueue.length >= 6) {
+        return flushGrowthEvents();
       }
 
       if (!eventFlushTimer) {
@@ -161,6 +160,7 @@ document.addEventListener("DOMContentLoaded", () => {
     } catch (err) {
       // Analytics must never block auth, checkout, or popup rendering.
     }
+    return Promise.resolve();
   }
 
   window.addEventListener("pagehide", flushGrowthEvents);
@@ -574,9 +574,9 @@ document.addEventListener("DOMContentLoaded", () => {
     }
     setLoading(sendMagicLinkBtn, true, "Send Magic Link");
     showMessage(null);
-    trackGrowthEvent("magic_link_request", {
+    await trackGrowthEvent("magic_link_request", {
       domain: email.split("@")[1]?.toLowerCase() || null,
-    });
+    }, true);
     try {
       const res = await fetch(`${API_BASE}/api/auth/magic-link`, {
         method: "POST",
@@ -606,9 +606,9 @@ document.addEventListener("DOMContentLoaded", () => {
         data.message || "Check your email for the sign-in link.",
         "success",
       );
-      trackGrowthEvent("magic_link_sent", {
+      await trackGrowthEvent("magic_link_sent", {
         domain: email.split("@")[1]?.toLowerCase() || null,
-      });
+      }, true);
       emailInput.value = "";
     } catch (err) {
       trackGrowthEvent("magic_link_error", {
