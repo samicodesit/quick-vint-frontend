@@ -7026,6 +7026,13 @@
               : null,
           );
         }
+        if (errData.code === "account_paused") {
+          trackGrowthEvent("account_paused_shown", {
+            mode,
+            status: response.status,
+            code: errData.code,
+          });
+        }
         if (manageButtonState) {
           isBusy = false;
         }
