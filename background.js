@@ -1,9 +1,25 @@
 // --- IMPORTS & INITIALIZATION ---
 importScripts("lib/supabase.js");
 
-function setAutolisterUninstallUrl() {
+const ANALYTICS_CLIENT_ID_KEY = "analyticsClientId";
+
+function createAnalyticsClientId() {
+  if (globalThis.crypto?.randomUUID) return globalThis.crypto.randomUUID();
+  return `cid_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+}
+
+async function getAnalyticsClientId() {
+  const data = await chrome.storage.local.get(ANALYTICS_CLIENT_ID_KEY);
+  if (data[ANALYTICS_CLIENT_ID_KEY]) return data[ANALYTICS_CLIENT_ID_KEY];
+  const analyticsClientId = createAnalyticsClientId();
+  await chrome.storage.local.set({ [ANALYTICS_CLIENT_ID_KEY]: analyticsClientId });
+  return analyticsClientId;
+}
+
+async function setAutolisterUninstallUrl() {
   const extensionVersion = chrome.runtime.getManifest().version;
-  const uninstallUrl = `https://autolister.app/uninstall?version=${encodeURIComponent(extensionVersion)}`;
+  const analyticsClientId = await getAnalyticsClientId();
+  const uninstallUrl = `https://autolister.app/uninstall?version=${encodeURIComponent(extensionVersion)}&cid=${encodeURIComponent(analyticsClientId)}`;
 
   chrome.runtime.setUninstallURL(uninstallUrl, () => {
     if (chrome.runtime.lastError) {
@@ -17,14 +33,14 @@ function setAutolisterUninstallUrl() {
 
 // --- FIRST RUN: open welcome/onboarding page on install ---
 chrome.runtime.onInstalled.addListener((details) => {
-  setAutolisterUninstallUrl();
+  setAutolisterUninstallUrl().catch(() => {});
 
   if (details.reason === "install") {
     chrome.tabs.create({ url: "https://autolister.app/welcome" });
   }
 });
 
-setAutolisterUninstallUrl();
+setAutolisterUninstallUrl().catch(() => {});
 
 // --- CONSTANTS ---
 const SUPABASE_URL = "https://jqloiovdwjaornnfvmyu.supabase.co";
