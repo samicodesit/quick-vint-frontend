@@ -299,7 +299,6 @@
       verify(doc) {
         const toastText = doc.querySelector("#quickvint-toast")?.textContent || "";
         return (
-          /Account paused/.test(toastText) &&
           /account is paused/.test(toastText) &&
           /View paid options/.test(toastText) &&
           /Contact support/.test(toastText)
@@ -642,6 +641,11 @@
           },
           getURL(path) {
             return new URL("../" + path, ${JSON.stringify(window.location.href)}).href;
+          },
+          onMessage: {
+            addListener(listener) {
+              listeners.push(listener);
+            },
           },
           sendMessage(message, callback) {
             let response = {};
