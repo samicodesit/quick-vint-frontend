@@ -228,6 +228,7 @@ test.describe("AutoLister extension smoke flows", () => {
     await expect(toast).toContainText("account is paused");
     await expect(toast).toContainText("View paid options");
     await expect(toast).toContainText("Contact support");
+    await expect(page.locator("#quickvint-gen-btn")).toBeEnabled();
   });
 
   test("blocks phone upload before QR modal when no generation capacity remains", async ({
