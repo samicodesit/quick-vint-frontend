@@ -84,10 +84,22 @@ function installChromeHarness(page, capacityResponse = null) {
         local: {
           get: (keys, callback) => {
             const result = {};
-            const requested = Array.isArray(keys) ? keys : [keys];
+            const requested =
+              keys && typeof keys === "object" && !Array.isArray(keys)
+                ? Object.keys(keys)
+                : Array.isArray(keys)
+                  ? keys
+                  : [keys];
             requested.forEach((key) => {
               if (Object.prototype.hasOwnProperty.call(storage, key)) {
                 result[key] = storage[key];
+              } else if (
+                keys &&
+                typeof keys === "object" &&
+                !Array.isArray(keys) &&
+                Object.prototype.hasOwnProperty.call(keys, key)
+              ) {
+                result[key] = keys[key];
               }
             });
             setTimeout(() => callback?.(result), 0);
@@ -227,6 +239,9 @@ test.describe("AutoLister extension smoke flows", () => {
     expect(requestBodies[0].emojiRetry).toBe(false);
     expect(requestBodies[1].useEmojis).toBe(false);
     expect(requestBodies[1].emojiRetry).toBe(true);
+    await expect(
+      page.locator("#quickvint-description-apply-prompt"),
+    ).toHaveCount(0);
 
     const storedUseEmojis = await page.evaluate(
       () => chrome.storage.local.get("useEmojis"),
@@ -236,6 +251,48 @@ test.describe("AutoLister extension smoke flows", () => {
       "aria-pressed",
       "false",
     );
+  });
+
+  test("does not allow Starter users to enable emoji generation", async ({
+    page,
+  }) => {
+    const requestBodies = [];
+    await page.route("https://autolister.app/api/generate", (route) => {
+      requestBodies.push(route.request().postDataJSON());
+      return route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          title: "Black Test Jacket",
+          description: "Clean black jacket in good condition.",
+          measurementAdvice: "",
+        }),
+      });
+    });
+
+    await openContentHarness(page);
+    await page.evaluate(() =>
+      chrome.storage.local.set({
+        useEmojis: true,
+        userProfile: {
+          subscription_status: "active",
+          subscription_tier: "starter",
+          api_calls_this_month: 0,
+          pack_credits: 0,
+        },
+      }),
+    );
+    await page.waitForTimeout(1100);
+
+    await expect(page.locator("#quickvint-emoji-toggle")).toBeDisabled();
+    await expect(page.locator("#quickvint-emoji-toggle")).toHaveAttribute(
+      "aria-pressed",
+      "false",
+    );
+
+    await page.locator("#quickvint-gen-btn").click();
+    await expect.poll(() => requestBodies.length).toBe(1);
+    expect(requestBodies[0].useEmojis).toBe(false);
   });
 
   test("lets users permanently hide clothing measurement advice", async ({
@@ -295,6 +352,15 @@ test.describe("AutoLister extension smoke flows", () => {
     await expect(toast).toContainText("View paid options");
     await expect(toast).toContainText("Contact support");
     await expect(page.locator("#quickvint-gen-btn")).toBeEnabled();
+
+    await page.locator("#quickvint-toast .toast-action-button").click();
+    await expect(page.locator("#quickvint-toast.paywall")).toBeVisible();
+    await expect(page.locator("#quickvint-toast.paywall")).toContainText(
+      "Continue with a paid option",
+    );
+    await expect(page.locator("#quickvint-toast.paywall")).toContainText(
+      "Starter",
+    );
   });
 
   test("blocks phone upload before QR modal when no generation capacity remains", async ({

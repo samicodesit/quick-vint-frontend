@@ -124,6 +124,7 @@
   let eventQueue = [];
   let eventFlushTimer = null;
   let batchTabStatusTimer = null;
+  let emojiToggleSyncTimer = null;
   let isBatchPollInFlight = false;
   let batchImagePreloadUrls = new Set();
   let batchImagePreloadCache = new Map();
@@ -141,7 +142,24 @@
     const icon = type === "success" ? "✅" : type === "info" ? "ℹ️" : "⚠️";
     let messageHtml = `<span class="toast-message-text">${escapeHtml(message)}</span>`;
 
-    if (action && action.text && action.url) {
+    if (action && action.text && typeof action.onClick === "function") {
+      messageHtml += `
+        <div class="toast-actions">
+          <button type="button" class="toast-link primary toast-action-button">
+            <span>${escapeHtml(action.text)}</span>
+            <span aria-hidden="true">&rarr;</span>
+          </button>
+      `;
+      if (action.secondaryText && action.secondaryUrl) {
+        messageHtml += `
+          <a class="toast-link secondary" href="${action.secondaryUrl}" target="_blank" rel="noopener noreferrer">
+            <span>${escapeHtml(action.secondaryText)}</span>
+            <span aria-hidden="true">&rarr;</span>
+          </a>
+        `;
+      }
+      messageHtml += "</div>";
+    } else if (action && action.text && action.url) {
       messageHtml += `
         <div class="toast-actions">
           <a class="toast-link primary" href="${action.url}" target="_blank" rel="noopener noreferrer">
@@ -158,8 +176,6 @@
         `;
       }
       messageHtml += "</div>";
-    } else if (action && action.text && typeof action.onClick === "function") {
-      messageHtml += `<button type="button" class="toast-action-button">${escapeHtml(action.text)}</button>`;
     }
 
     // Updated HTML structure with close button
@@ -182,7 +198,9 @@
       }, 300);
     }
 
-    toast.className = `${type}${action?.url ? " has-actions" : ""}`;
+    const hasStructuredActions =
+      action && action.text && (action.url || typeof action.onClick === "function");
+    toast.className = `${type}${hasStructuredActions ? " has-actions" : ""}`;
     toast.style.visibility = "visible"; // Ensure it's visible for the transition
 
     // Add close handler
@@ -194,8 +212,8 @@
     const actionButton = toast.querySelector(".toast-action-button");
     if (actionButton && action && typeof action.onClick === "function") {
       actionButton.onclick = () => {
-        action.onClick();
         hideToast();
+        action.onClick();
       };
     }
 
@@ -607,6 +625,14 @@
     return profile?.subscription_status !== "active" || tier === "free";
   }
 
+  function canUseEmojiSetting(profile) {
+    const tier = normalizeTier(profile?.subscription_tier);
+    if (profile?.subscription_status !== "active" || tier === "free") {
+      return true;
+    }
+    return tier === "pro" || tier === "business";
+  }
+
   function formatPlanLimitSummary(plan) {
     const daily = plan.daily === null ? "no daily limit" : `${plan.daily}/day`;
     return `${daily} · ${plan.monthly}/month`;
@@ -654,6 +680,25 @@
       badge,
       featured,
     };
+  }
+
+  function showAccountPausedPaywall(pricingUrl) {
+    showLimitPaywall({
+      title: "Continue with a paid option",
+      message:
+        "Paid plans and credit packs let legitimate sellers continue while support reviews duplicate free-trial issues.",
+      options: [
+        planOption("starter", { badge: "Best next step", featured: true }),
+        planOption("pro"),
+        planOption("business"),
+        creditPackOption({ badge: "One-time purchase" }),
+      ],
+      trustNote: "Secure checkout by Stripe. Contact support if this pause looks wrong.",
+      actionText: "Upgrade to Starter",
+      actionUrl: pricingUrl,
+      secondaryActionText: "Contact support",
+      secondaryActionUrl: ACCOUNT_REVIEW_CONTACT_URL,
+    });
   }
 
   async function createCheckoutForPaywall(option) {
@@ -912,8 +957,8 @@
     ) {
       syncInlineLanguageControls();
     }
-    if (changes.useEmojis) {
-      setEmojiToggleState(changes.useEmojis.newValue !== false);
+    if (changes.useEmojis || changes.userProfile) {
+      syncEmojiToggleState();
     }
   });
 
@@ -3712,7 +3757,7 @@
       #${DESCRIPTION_APPLY_PROMPT_ID} .quickvint-apply-actions {
         display: flex;
         gap: 8px;
-        flex-wrap: nowrap;
+        flex-wrap: wrap;
         justify-content: flex-start;
       }
 
@@ -3737,6 +3782,13 @@
         border-color: #4f46e5;
         background: ${PRIMARY_BUTTON_BACKGROUND};
         color: #ffffff;
+      }
+
+      #${DESCRIPTION_APPLY_PROMPT_ID} .quickvint-apply-settings {
+        flex-basis: 100%;
+        border-color: #e5e7eb;
+        background: #f8fafc;
+        color: #374151;
       }
 
       #${DESCRIPTION_APPLY_PROMPT_ID} button:hover {
@@ -3777,6 +3829,19 @@
         background: linear-gradient(135deg, #eef2ff 0%, #f5f3ff 100%);
         color: #4338ca;
         box-shadow: 0 8px 20px rgba(79, 70, 229, 0.16);
+      }
+
+      #${EMOJI_TOGGLE_ID}:disabled {
+        cursor: not-allowed;
+        opacity: 0.58;
+        transform: none;
+        box-shadow: 0 3px 8px rgba(17, 24, 39, 0.08);
+      }
+
+      #${EMOJI_TOGGLE_ID}:disabled:hover {
+        border-color: #d9dde8;
+        background: #ffffff;
+        transform: none;
       }
 
       #${EMOJI_TOGGLE_ID} .quickvint-emoji-label {
@@ -3909,24 +3974,30 @@
       }
 
       #quickvint-toast .toast-actions {
-        display: grid;
-        grid-template-columns: 1fr;
+        display: flex;
+        flex-direction: column;
+        align-items: flex-start;
         gap: 7px;
         margin-top: 2px;
       }
 
       #quickvint-toast .toast-link {
+        appearance: none;
         display: flex;
         align-items: center;
         justify-content: space-between;
         gap: 10px;
-        width: 100%;
+        width: auto;
+        min-width: 190px;
+        max-width: 100%;
         min-height: 34px;
-        padding: 8px 10px;
+        padding: 8px 12px;
         border-radius: 9px;
         border: 1px solid rgba(255, 255, 255, 0.28);
         background: rgba(255, 255, 255, 0.13);
         color: inherit;
+        cursor: pointer;
+        font: inherit;
         text-decoration: none;
         font-size: 13px;
         font-weight: 850;
@@ -3943,7 +4014,7 @@
         text-decoration: none;
       }
 
-      #quickvint-toast .toast-action-button {
+      #quickvint-toast .toast-action-button:not(.toast-link) {
         appearance: none;
         border: 0;
         background: transparent;
@@ -3957,7 +4028,7 @@
         white-space: nowrap;
       }
 
-      #quickvint-toast .toast-action-button:hover {
+      #quickvint-toast .toast-action-button:not(.toast-link):hover {
         opacity: 0.86;
       }
 
@@ -4267,15 +4338,24 @@
   function setEmojiToggleState(enabled) {
     if (!emojiToggleBtn) return;
     emojiToggleBtn.setAttribute("aria-pressed", enabled ? "true" : "false");
-    emojiToggleBtn.title = enabled
-      ? "Emojis are on for generated descriptions"
-      : "Emojis are off for generated descriptions";
   }
 
   async function syncEmojiToggleState() {
     if (!emojiToggleBtn) return;
-    const { useEmojis = true } = await chrome.storage.local.get("useEmojis");
-    setEmojiToggleState(useEmojis !== false);
+    const { useEmojis = true, userProfile = null } = await new Promise((resolve) => {
+      chrome.storage.local.get(
+        { useEmojis: true, userProfile: null },
+        (result) => resolve(result),
+      );
+    });
+    const emojiAccess = canUseEmojiSetting(userProfile);
+    emojiToggleBtn.disabled = !emojiAccess;
+    emojiToggleBtn.title = emojiAccess
+      ? useEmojis !== false
+        ? "Emojis are on for generated descriptions"
+        : "Emojis are off for generated descriptions"
+      : "Emoji support is available during the free trial and on Pro or Business.";
+    setEmojiToggleState(emojiAccess && useEmojis !== false);
   }
 
   function createEmojiToggleButton() {
@@ -4283,6 +4363,7 @@
     btn.id = EMOJI_TOGGLE_ID;
     btn.type = "button";
     btn.setAttribute("aria-label", "Toggle emojis in generated descriptions");
+    btn.setAttribute("aria-pressed", "true");
     btn.innerHTML = `
       <span class="quickvint-emoji-label">😊 Emoji</span>
       <span class="quickvint-emoji-switch" aria-hidden="true">
@@ -4290,7 +4371,16 @@
       </span>
     `;
     btn.addEventListener("click", async () => {
-      const { useEmojis = true } = await chrome.storage.local.get("useEmojis");
+      const { useEmojis = true, userProfile = null } = await new Promise((resolve) => {
+        chrome.storage.local.get(
+          { useEmojis: true, userProfile: null },
+          (result) => resolve(result),
+        );
+      });
+      if (!canUseEmojiSetting(userProfile)) {
+        setEmojiToggleState(false);
+        return;
+      }
       const nextValue = useEmojis === false;
       await chrome.storage.local.set({ useEmojis: nextValue });
       setEmojiToggleState(nextValue);
@@ -4300,7 +4390,20 @@
       });
     });
     syncEmojiToggleState();
+    startEmojiToggleSync();
     return btn;
+  }
+
+  function startEmojiToggleSync() {
+    if (emojiToggleSyncTimer) return;
+    emojiToggleSyncTimer = window.setInterval(() => {
+      if (!emojiToggleBtn || !document.body.contains(emojiToggleBtn)) {
+        window.clearInterval(emojiToggleSyncTimer);
+        emojiToggleSyncTimer = null;
+        return;
+      }
+      syncEmojiToggleState();
+    }, 1000);
   }
 
   function setActionButtonLoading(button, labelText) {
@@ -4713,10 +4816,11 @@
       prompt.id = DESCRIPTION_APPLY_PROMPT_ID;
       prompt.innerHTML = `
         <div class="quickvint-apply-title">Prefer no emojis?</div>
-        <div class="quickvint-apply-copy">Regenerate once for free without emojis. Change it anytime in <a href="#" class="quickvint-emoji-settings">settings</a>.</div>
+        <div class="quickvint-apply-copy">Retry once for free without emojis.</div>
         <div class="quickvint-apply-actions">
-          <button type="button" class="quickvint-apply-add">Regenerate</button>
+          <button type="button" class="quickvint-apply-add">Retry for free</button>
           <button type="button" class="quickvint-apply-cancel">Keep emojis</button>
+          <button type="button" class="quickvint-apply-settings">⚙️ Open Settings</button>
         </div>
       `;
 
@@ -4738,7 +4842,7 @@
       activeDescriptionApplyPromptCleanup = finish;
 
       prompt
-        .querySelector(".quickvint-emoji-settings")
+        .querySelector(".quickvint-apply-settings")
         ?.addEventListener("click", async (event) => {
           event.preventDefault();
           await chrome.storage.local.set({
@@ -7220,8 +7324,12 @@
         "useBulletPoints",
         "userProfile",
       ]);
+      const emojiAccess = canUseEmojiSetting(userProfile);
       const effectiveUseEmojis =
-        overrideUseEmojis === null ? useEmojis !== false : overrideUseEmojis === true;
+        emojiAccess &&
+        (overrideUseEmojis === null
+          ? useEmojis !== false
+          : overrideUseEmojis === true);
       const titleLanguageCode = normalizeLanguageCode(
         selectedTitleLanguage || selectedLanguage,
       );
@@ -7311,17 +7419,22 @@
             secondaryActionUrl: pricingUrl,
           });
         } else {
+          const isAccountPaused = errData.code === "account_paused";
           showToast(
             limitMessage.message,
             "error",
             pricingUrl
               ? {
                   text: limitMessage.actionText,
-                  url: pricingUrl,
+                  onClick: isAccountPaused
+                    ? () => showAccountPausedPaywall(pricingUrl)
+                    : null,
+                  url: isAccountPaused ? null : pricingUrl,
                   secondaryText: limitMessage.secondaryActionText,
                   secondaryUrl: limitMessage.secondaryActionUrl,
                 }
               : null,
+            !isAccountPaused,
           );
         }
         if (errData.code === "account_paused") {

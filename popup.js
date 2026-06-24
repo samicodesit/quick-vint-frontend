@@ -233,6 +233,14 @@ document.addEventListener("DOMContentLoaded", () => {
     return map[tier] || "free";
   }
 
+  function canUseEmojiSetting(profile) {
+    const tier = normalizeTier(profile?.subscription_tier);
+    if (profile?.subscription_status !== "active" || tier === "free") {
+      return true;
+    }
+    return tier === "pro" || tier === "business";
+  }
+
   function showMessage(msg, type = "info") {
     if (!messagesDiv) return;
     if (!msg) {
@@ -909,6 +917,7 @@ document.addEventListener("DOMContentLoaded", () => {
         const isActive = profile.subscription_status === "active";
         const hasProAccess =
           isActive && (tier === "pro" || tier === "business");
+        const hasEmojiAccess = canUseEmojiSetting(profile);
 
         // Set Tone
         const savedTone = result.tone || "standard";
@@ -920,7 +929,7 @@ document.addEventListener("DOMContentLoaded", () => {
         // Set Emojis
         if (emojiToggle) {
           // Default to true unless the user explicitly turned emojis off.
-          emojiToggle.checked = result.useEmojis !== false;
+          emojiToggle.checked = hasEmojiAccess && result.useEmojis !== false;
         }
 
         // Set Format
@@ -945,8 +954,7 @@ document.addEventListener("DOMContentLoaded", () => {
           }
 
         }
-
-        updateSettingsAccess(hasProAccess);
+        updateSettingsAccess(hasProAccess, hasEmojiAccess);
       },
     );
 
@@ -986,13 +994,13 @@ document.addEventListener("DOMContentLoaded", () => {
       const isActive = profile.subscription_status === "active";
       const hasProAccess =
         isActive && (tier === "pro" || tier === "business");
-      updateSettingsAccess(hasProAccess);
+      updateSettingsAccess(hasProAccess, canUseEmojiSetting(profile));
     });
   }
 
-  function updateSettingsAccess(hasProAccess) {
+  function updateSettingsAccess(hasProAccess, hasEmojiAccess = false) {
     const toneContainer = document.querySelector(".tone-grid");
-    const emojiContainer = document.querySelector(".toggle-container");
+    const emojiContainer = emojiToggle?.closest(".toggle-container");
     const infoNote = document.querySelector(".info-note");
     const upgradeNote = document.querySelector(".upgrade-note");
 
@@ -1004,8 +1012,11 @@ document.addEventListener("DOMContentLoaded", () => {
         if (chip) chip.classList.remove("locked");
       });
       if (emojiToggle) {
-        emojiToggle.disabled = false;
-        if (emojiContainer) emojiContainer.classList.remove("locked");
+        emojiToggle.disabled = !hasEmojiAccess;
+        emojiToggle.checked = hasEmojiAccess && emojiToggle.checked;
+        if (emojiContainer) {
+          emojiContainer.classList.toggle("locked", !hasEmojiAccess);
+        }
       }
       if (infoNote) infoNote.style.display = "none";
       if (upgradeNote) upgradeNote.style.display = "none";
@@ -1019,8 +1030,11 @@ document.addEventListener("DOMContentLoaded", () => {
         }
       });
       if (emojiToggle) {
-        emojiToggle.disabled = false;
-        if (emojiContainer) emojiContainer.classList.remove("locked");
+        emojiToggle.disabled = !hasEmojiAccess;
+        emojiToggle.checked = hasEmojiAccess && emojiToggle.checked;
+        if (emojiContainer) {
+          emojiContainer.classList.toggle("locked", !hasEmojiAccess);
+        }
       }
       if (infoNote) infoNote.style.display = "none";
       if (upgradeNote) upgradeNote.style.display = "flex";

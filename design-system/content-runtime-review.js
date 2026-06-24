@@ -1,7 +1,10 @@
 (async () => {
   const statusEl = document.getElementById("sourceStatus");
   const warningEl = document.getElementById("loadWarning");
-  const contentUrl = new URL("../content.js", window.location.href).href;
+  const contentUrl = new URL(
+    `../content.js?v=${Date.now()}`,
+    window.location.href,
+  ).href;
 
   const imageDataUrl =
     "data:image/svg+xml;charset=utf-8," +
@@ -34,6 +37,37 @@
       verify(doc) {
         const signIn = doc.getElementById("quickvint-signin-btn");
         return isVisible(doc, signIn);
+      },
+    },
+    {
+      id: "emoji-retry-prompt",
+      title: "Emoji retry prompt",
+      note: "Free-user prompt after an emoji generation, with settings link and retry action.",
+      height: 560,
+      auth: true,
+      action: "generate-emoji-prompt",
+      hasImages: true,
+      useEmojis: true,
+      generateResponse: {
+        status: 200,
+        body: {
+          title: "Vintage denim jacket",
+          description:
+            "Light blue denim jacket in good condition. Easy to style and ready for everyday wear.",
+          measurementAdvice: "",
+        },
+      },
+      verify(doc) {
+        const prompt = doc.getElementById("quickvint-description-apply-prompt");
+        return (
+          doc.defaultView.__generateCallCount === 1 &&
+          /Prefer no emojis\?/.test(prompt?.textContent || "") &&
+          /Retry once for free without emojis/.test(prompt?.textContent || "") &&
+          /Retry for free/.test(prompt?.textContent || "") &&
+          /Keep emojis/.test(prompt?.textContent || "") &&
+          /Open Settings/.test(prompt?.textContent || "") &&
+          !!prompt?.querySelector(".quickvint-apply-settings")
+        );
       },
     },
     {
@@ -154,37 +188,6 @@
           doc.querySelector('[data-testid="title--input"]')?.value === "" &&
           desc?.value === "My original description." &&
           !doc.getElementById("quickvint-description-apply-prompt")
-        );
-      },
-    },
-    {
-      id: "emoji-retry-prompt",
-      title: "Emoji retry prompt",
-      note: "Free-user prompt after an emoji generation, with settings link and retry action.",
-      height: 560,
-      auth: true,
-      action: "generate-emoji-prompt",
-      hasImages: true,
-      useEmojis: true,
-      generateResponse: {
-        status: 200,
-        body: {
-          title: "Vintage denim jacket",
-          description:
-            "Light blue denim jacket in good condition. Easy to style and ready for everyday wear.",
-          measurementAdvice: "",
-        },
-      },
-      verify(doc) {
-        const prompt = doc.getElementById("quickvint-description-apply-prompt");
-        return (
-          doc.defaultView.__generateCallCount === 1 &&
-          /Prefer no emojis\?/.test(prompt?.textContent || "") &&
-          /Regenerate once for free without emojis/.test(prompt?.textContent || "") &&
-          /settings/.test(prompt?.textContent || "") &&
-          /Regenerate/.test(prompt?.textContent || "") &&
-          /Keep emojis/.test(prompt?.textContent || "") &&
-          !!prompt?.querySelector(".quickvint-emoji-settings")
         );
       },
     },
@@ -332,7 +335,39 @@
         return (
           /account is paused/.test(toastText) &&
           /View paid options/.test(toastText) &&
-          /Contact support/.test(toastText)
+          /Contact support/.test(toastText) &&
+          !!doc.querySelector("#quickvint-toast .toast-actions") &&
+          !!doc.querySelector("#quickvint-toast .toast-link.primary") &&
+          !!doc.querySelector("#quickvint-toast .toast-link.secondary")
+        );
+      },
+    },
+    {
+      id: "account-paused-paywall",
+      title: "Paused account paid options",
+      note: "Clicking View paid options swaps the paused warning for the real paywall.",
+      height: 560,
+      auth: true,
+      action: "generate-account-paused-paywall",
+      hasImages: true,
+      generateResponse: {
+        status: 403,
+        body: {
+          code: "account_paused",
+          error:
+            "This account is paused because it appears linked to duplicate free-trial usage. To continue, contact support or choose a paid option.",
+        },
+      },
+      verify(doc) {
+        const toastText = doc.querySelector("#quickvint-toast")?.textContent || "";
+        return (
+          /Continue with a paid option/.test(toastText) &&
+          /Starter/.test(toastText) &&
+          /Pro/.test(toastText) &&
+          /Business/.test(toastText) &&
+          /One-time credits/.test(toastText) &&
+          /Contact support/.test(toastText) &&
+          !!doc.querySelector("#quickvint-toast .paywall-logo")
         );
       },
     },
@@ -406,7 +441,10 @@
     const grid = document.getElementById("previewGrid");
     grid.innerHTML = scenarios
       .map((scenario) => {
-        const wide = scenario.id === "signed-in" || scenario.id === "success";
+        const wide =
+          scenario.id === "signed-in" ||
+          scenario.id === "emoji-retry-prompt" ||
+          scenario.id === "success";
         return `
           <article class="ds-panel${wide ? " wide" : ""}">
             <div class="ds-panel-head">
@@ -749,11 +787,17 @@
           scenario.action === "generate-paid-limit" ||
           scenario.action === "generate-business-limit" ||
           scenario.action === "generate-account-paused" ||
+          scenario.action === "generate-account-paused-paywall" ||
           scenario.action === "generate-missing-photo" ||
           scenario.action === "generate-service-error" ||
           scenario.action === "generate-emoji-prompt"
         ) {
           generate?.click();
+          if (scenario.action === "generate-account-paused-paywall") {
+            setTimeout(() => {
+              document.querySelector("#quickvint-toast .toast-action-button")?.click();
+            }, 550);
+          }
         }
       };
     })();
