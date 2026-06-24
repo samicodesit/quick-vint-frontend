@@ -139,13 +139,25 @@
     }
 
     const icon = type === "success" ? "✅" : type === "info" ? "ℹ️" : "⚠️";
-    let messageHtml = `<span>${message}</span>`;
+    let messageHtml = `<span class="toast-message-text">${escapeHtml(message)}</span>`;
 
     if (action && action.text && action.url) {
-      messageHtml += `<a href="${action.url}" target="_blank" style="margin-left: 12px; color: inherit; text-decoration: underline; font-weight: 700; white-space: nowrap;">${action.text} &rarr;</a>`;
+      messageHtml += `
+        <div class="toast-actions">
+          <a class="toast-link primary" href="${action.url}" target="_blank" rel="noopener noreferrer">
+            <span>${escapeHtml(action.text)}</span>
+            <span aria-hidden="true">&rarr;</span>
+          </a>
+      `;
       if (action.secondaryText && action.secondaryUrl) {
-        messageHtml += `<a href="${action.secondaryUrl}" target="_blank" style="margin-left: 10px; color: inherit; text-decoration: underline; font-weight: 700; white-space: nowrap;">${action.secondaryText} &rarr;</a>`;
+        messageHtml += `
+          <a class="toast-link secondary" href="${action.secondaryUrl}" target="_blank" rel="noopener noreferrer">
+            <span>${escapeHtml(action.secondaryText)}</span>
+            <span aria-hidden="true">&rarr;</span>
+          </a>
+        `;
       }
+      messageHtml += "</div>";
     } else if (action && action.text && typeof action.onClick === "function") {
       messageHtml += `<button type="button" class="toast-action-button">${escapeHtml(action.text)}</button>`;
     }
@@ -170,7 +182,7 @@
       }, 300);
     }
 
-    toast.className = type;
+    toast.className = `${type}${action?.url ? " has-actions" : ""}`;
     toast.style.visibility = "visible"; // Ensure it's visible for the transition
 
     // Add close handler
@@ -3736,7 +3748,9 @@
         align-items: center;
         justify-content: space-between;
         gap: 9px;
+        height: 38px;
         min-height: 38px;
+        margin-left: 6px;
         padding: 5px 7px 5px 12px;
         border: 1px solid #d9dde8;
         border-radius: 12px;
@@ -3882,6 +3896,51 @@
       #quickvint-toast .toast-content {
         flex: 1;
         /* Allow wrapping normally */
+      }
+
+      #quickvint-toast.has-actions .toast-content {
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+      }
+
+      #quickvint-toast .toast-message-text {
+        display: block;
+      }
+
+      #quickvint-toast .toast-actions {
+        display: grid;
+        grid-template-columns: 1fr;
+        gap: 7px;
+        margin-top: 2px;
+      }
+
+      #quickvint-toast .toast-link {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+        width: 100%;
+        min-height: 34px;
+        padding: 8px 10px;
+        border-radius: 9px;
+        border: 1px solid rgba(255, 255, 255, 0.28);
+        background: rgba(255, 255, 255, 0.13);
+        color: inherit;
+        text-decoration: none;
+        font-size: 13px;
+        font-weight: 850;
+        line-height: 1.2;
+      }
+
+      #quickvint-toast .toast-link.primary {
+        background: rgba(255, 255, 255, 0.2);
+        border-color: rgba(255, 255, 255, 0.42);
+      }
+
+      #quickvint-toast .toast-link:hover {
+        background: rgba(255, 255, 255, 0.26);
+        text-decoration: none;
       }
 
       #quickvint-toast .toast-action-button {
@@ -4225,7 +4284,7 @@
     btn.type = "button";
     btn.setAttribute("aria-label", "Toggle emojis in generated descriptions");
     btn.innerHTML = `
-      <span class="quickvint-emoji-label">Emoji</span>
+      <span class="quickvint-emoji-label">😊 Emoji</span>
       <span class="quickvint-emoji-switch" aria-hidden="true">
         <span class="quickvint-emoji-knob"></span>
       </span>

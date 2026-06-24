@@ -158,6 +158,37 @@
       },
     },
     {
+      id: "emoji-retry-prompt",
+      title: "Emoji retry prompt",
+      note: "Free-user prompt after an emoji generation, with settings link and retry action.",
+      height: 560,
+      auth: true,
+      action: "generate-emoji-prompt",
+      hasImages: true,
+      useEmojis: true,
+      generateResponse: {
+        status: 200,
+        body: {
+          title: "Vintage denim jacket",
+          description:
+            "Light blue denim jacket in good condition. Easy to style and ready for everyday wear.",
+          measurementAdvice: "",
+        },
+      },
+      verify(doc) {
+        const prompt = doc.getElementById("quickvint-description-apply-prompt");
+        return (
+          doc.defaultView.__generateCallCount === 1 &&
+          /Prefer no emojis\?/.test(prompt?.textContent || "") &&
+          /Regenerate once for free without emojis/.test(prompt?.textContent || "") &&
+          /settings/.test(prompt?.textContent || "") &&
+          /Regenerate/.test(prompt?.textContent || "") &&
+          /Keep emojis/.test(prompt?.textContent || "") &&
+          !!prompt?.querySelector(".quickvint-emoji-settings")
+        );
+      },
+    },
+    {
       id: "free-limit",
       title: "Free limit paywall",
       note: "Real 429 handling path for free users.",
@@ -422,7 +453,7 @@
       selectedTitleLanguage: "en",
       selectedDescriptionLanguage: "nl",
       tone: "standard",
-      useEmojis: false,
+      useEmojis: scenario.useEmojis === true,
       useBulletPoints: true,
     };
   }
@@ -719,7 +750,8 @@
           scenario.action === "generate-business-limit" ||
           scenario.action === "generate-account-paused" ||
           scenario.action === "generate-missing-photo" ||
-          scenario.action === "generate-service-error"
+          scenario.action === "generate-service-error" ||
+          scenario.action === "generate-emoji-prompt"
         ) {
           generate?.click();
         }
