@@ -3,6 +3,7 @@
   const BTN_ID = "quickvint-gen-btn";
   const PHONE_BTN_ID = "quickvint-phone-btn";
   const BATCH_BTN_ID = "quickvint-batch-btn";
+  const EMOJI_TOGGLE_ID = "quickvint-emoji-toggle";
   const SIGN_IN_BTN_ID = "quickvint-signin-btn";
   const DESCRIPTION_APPLY_PROMPT_ID = "quickvint-description-apply-prompt";
   const TITLE_LANGUAGE_SELECT_ID = "quickvint-title-language-select";
@@ -20,6 +21,8 @@
   const BATCH_UPLOAD_WAIT_TIMEOUT_MS = 60000;
   const MEASUREMENT_ADVICE_HIDDEN_KEY = "quickvintHideMeasurementAdvice";
   const MEASUREMENT_ADVICE_LAST_SHOWN_KEY = "quickvintMeasurementAdviceLastShown";
+  const EMOJI_RETRY_PROMPT_HANDLED_KEY = "quickvintEmojiRetryPromptHandled";
+  const OPEN_SETTINGS_ON_NEXT_POPUP_KEY = "quickvintOpenSettingsOnNextPopup";
   const SELECTORS = {
     title: 'input[data-testid="title--input"]',
     description: 'textarea[data-testid="description--input"]',
@@ -82,6 +85,7 @@
   let generateBtn = null;
   let phoneBtn = null;
   let batchBtn = null;
+  let emojiToggleBtn = null;
   let signInBtn = null;
   let isBusy = false;
   let isAuthenticated = false;
@@ -586,6 +590,11 @@
     return map[tier] || "free";
   }
 
+  function isFreeProfile(profile) {
+    const tier = normalizeTier(profile?.subscription_tier);
+    return profile?.subscription_status !== "active" || tier === "free";
+  }
+
   function formatPlanLimitSummary(plan) {
     const daily = plan.daily === null ? "no daily limit" : `${plan.daily}/day`;
     return `${daily} · ${plan.monthly}/month`;
@@ -890,6 +899,9 @@
       changes.selectedDescriptionLanguage
     ) {
       syncInlineLanguageControls();
+    }
+    if (changes.useEmojis) {
+      setEmojiToggleState(changes.useEmojis.newValue !== false);
     }
   });
 
@@ -3671,6 +3683,20 @@
         line-height: 1.35;
       }
 
+      #${DESCRIPTION_APPLY_PROMPT_ID} .quickvint-apply-copy {
+        margin: -3px 0 10px;
+        color: #4b5563;
+        font-size: 12px;
+        font-weight: 600;
+        line-height: 1.4;
+      }
+
+      #${DESCRIPTION_APPLY_PROMPT_ID} .quickvint-apply-copy a {
+        color: #4f46e5;
+        font-weight: 800;
+        text-decoration: underline;
+      }
+
       #${DESCRIPTION_APPLY_PROMPT_ID} .quickvint-apply-actions {
         display: flex;
         gap: 8px;
@@ -3703,6 +3729,43 @@
 
       #${DESCRIPTION_APPLY_PROMPT_ID} button:hover {
         filter: brightness(0.98);
+      }
+
+      #${EMOJI_TOGGLE_ID} {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 6px;
+        min-height: 34px;
+        padding: 0 12px;
+        border: 1px solid #d1d5db;
+        border-radius: 10px;
+        background: #ffffff;
+        color: #374151;
+        cursor: pointer;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        font-size: 12px;
+        font-weight: 800;
+        line-height: 1;
+        white-space: nowrap;
+        transition: border-color 0.18s ease, background 0.18s ease, color 0.18s ease, box-shadow 0.18s ease;
+      }
+
+      #${EMOJI_TOGGLE_ID}:hover {
+        border-color: #a5b4fc;
+        background: #f8fafc;
+      }
+
+      #${EMOJI_TOGGLE_ID}[aria-pressed="true"] {
+        border-color: #4f46e5;
+        background: #eef2ff;
+        color: #4338ca;
+        box-shadow: 0 0 0 2px rgba(79, 70, 229, 0.12);
+      }
+
+      #${EMOJI_TOGGLE_ID} .quickvint-emoji-mark {
+        font-size: 14px;
+        line-height: 1;
       }
 
       /* TOAST NOTIFICATION */
@@ -4109,6 +4172,43 @@
     return btn;
   }
 
+  function setEmojiToggleState(enabled) {
+    if (!emojiToggleBtn) return;
+    emojiToggleBtn.setAttribute("aria-pressed", enabled ? "true" : "false");
+    emojiToggleBtn.title = enabled
+      ? "Emojis are on for generated descriptions"
+      : "Emojis are off for generated descriptions";
+  }
+
+  async function syncEmojiToggleState() {
+    if (!emojiToggleBtn) return;
+    const { useEmojis = true } = await chrome.storage.local.get("useEmojis");
+    setEmojiToggleState(useEmojis !== false);
+  }
+
+  function createEmojiToggleButton() {
+    const btn = document.createElement("button");
+    btn.id = EMOJI_TOGGLE_ID;
+    btn.type = "button";
+    btn.setAttribute("aria-label", "Toggle emojis in generated descriptions");
+    btn.innerHTML = `
+      <span class="quickvint-emoji-mark" aria-hidden="true">☺</span>
+      <span>Emoji</span>
+    `;
+    btn.addEventListener("click", async () => {
+      const { useEmojis = true } = await chrome.storage.local.get("useEmojis");
+      const nextValue = useEmojis === false;
+      await chrome.storage.local.set({ useEmojis: nextValue });
+      setEmojiToggleState(nextValue);
+      trackGrowthEvent("emoji_toggle_changed", {
+        source: "listing_tools",
+        enabled: nextValue,
+      });
+    });
+    syncEmojiToggleState();
+    return btn;
+  }
+
   function setActionButtonLoading(button, labelText) {
     if (!button) return () => {};
 
@@ -4509,6 +4609,62 @@
     });
   }
 
+  function getEmojiRetryChoice(descInput) {
+    removeDescriptionApplyPrompt();
+
+    return new Promise((resolve) => {
+      const prompt = document.createElement("div");
+      prompt.id = DESCRIPTION_APPLY_PROMPT_ID;
+      prompt.innerHTML = `
+        <div class="quickvint-apply-title">Prefer no emojis?</div>
+        <div class="quickvint-apply-copy">Regenerate once for free without emojis. Change it anytime in <a href="#" class="quickvint-emoji-settings">settings</a>.</div>
+        <div class="quickvint-apply-actions">
+          <button type="button" class="quickvint-apply-add">Regenerate</button>
+          <button type="button" class="quickvint-apply-cancel">Keep emojis</button>
+        </div>
+      `;
+
+      document.body.appendChild(prompt);
+      positionDescriptionApplyPrompt(prompt, descInput);
+
+      const onReposition = () => positionDescriptionApplyPrompt(prompt, descInput);
+      window.addEventListener("resize", onReposition);
+      window.addEventListener("scroll", onReposition, true);
+
+      function finish(choice) {
+        window.removeEventListener("resize", onReposition);
+        window.removeEventListener("scroll", onReposition, true);
+        prompt.remove();
+        activeDescriptionApplyPromptCleanup = null;
+        resolve(choice);
+      }
+
+      activeDescriptionApplyPromptCleanup = finish;
+
+      prompt
+        .querySelector(".quickvint-emoji-settings")
+        ?.addEventListener("click", async (event) => {
+          event.preventDefault();
+          await chrome.storage.local.set({
+            [OPEN_SETTINGS_ON_NEXT_POPUP_KEY]: true,
+          });
+          chrome.runtime.sendMessage({ type: "OPEN_POPUP" });
+        });
+
+      prompt
+        .querySelector(".quickvint-apply-add")
+        ?.addEventListener("click", () => {
+          finish("retry_without_emojis");
+        });
+
+      prompt
+        .querySelector(".quickvint-apply-cancel")
+        ?.addEventListener("click", () => {
+          finish("keep_emojis");
+        });
+    });
+  }
+
   function applyGeneratedDescription(descInput, generatedDescription, applyChoice) {
     const currentDescription = descInput.value || "";
     if (applyChoice === "add" && currentDescription.trim()) {
@@ -4520,6 +4676,43 @@
     }
 
     setDescriptionValue(descInput, generatedDescription);
+  }
+
+  async function maybeShowEmojiRetryPrompt(descInput) {
+    const { [EMOJI_RETRY_PROMPT_HANDLED_KEY]: handled } =
+      await chrome.storage.local.get(EMOJI_RETRY_PROMPT_HANDLED_KEY);
+
+    if (handled) return;
+
+    const choice = await getEmojiRetryChoice(descInput);
+    await chrome.storage.local.set({ [EMOJI_RETRY_PROMPT_HANDLED_KEY]: true });
+
+    if (choice !== "retry_without_emojis") {
+      trackGrowthEvent("emoji_retry_prompt_kept", {
+        source: "listing_tools",
+      });
+      return;
+    }
+
+    await chrome.storage.local.set({ useEmojis: false });
+    setEmojiToggleState(false);
+    trackGrowthEvent("emoji_retry_prompt_accepted", {
+      source: "listing_tools",
+    });
+
+    try {
+      await generateCurrentListing({
+        descriptionApplyChoice: "replace",
+        manageButtonState: true,
+        showMeasurementAdvice: false,
+        throwOnLimit: false,
+        skipEmojiRetryPrompt: true,
+        emojiRetry: true,
+        overrideUseEmojis: false,
+      });
+    } catch (err) {
+      // generateCurrentListing renders the visible error for manual retries.
+    }
   }
 
   // --- CORE LOGIC & EVENT HANDLERS ---
@@ -6892,6 +7085,9 @@
     manageButtonState = true,
     showMeasurementAdvice = true,
     throwOnLimit = false,
+    skipEmojiRetryPrompt = false,
+    emojiRetry = false,
+    overrideUseEmojis = null,
   } = {}) {
     const imageUrls = getUploadedImageUrls();
     const mode = manageButtonState ? "manual" : "batch";
@@ -6916,8 +7112,9 @@
         selectedTitleLanguage,
         selectedDescriptionLanguage,
         tone = "standard",
-        useEmojis,
+        useEmojis = true,
         useBulletPoints = true,
+        userProfile,
       } = await chrome.storage.local.get([
         "selectedLanguage",
         "selectedTitleLanguage",
@@ -6925,7 +7122,10 @@
         "tone",
         "useEmojis",
         "useBulletPoints",
+        "userProfile",
       ]);
+      const effectiveUseEmojis =
+        overrideUseEmojis === null ? useEmojis !== false : overrideUseEmojis === true;
       const titleLanguageCode = normalizeLanguageCode(
         selectedTitleLanguage || selectedLanguage,
       );
@@ -6939,8 +7139,9 @@
         titleLanguageCode,
         descriptionLanguageCode,
         tone,
-        useEmojis: Boolean(useEmojis),
+        useEmojis: effectiveUseEmojis,
         useBulletPoints: Boolean(useBulletPoints),
+        emojiRetry: Boolean(emojiRetry),
       });
       const { access_token } = await sendMessage({ type: "GET_ACCESS_TOKEN" });
 
@@ -6967,7 +7168,8 @@
           titleLanguageCode,
           descriptionLanguageCode,
           tone,
-          useEmojis,
+          useEmojis: effectiveUseEmojis,
+          emojiRetry: Boolean(emojiRetry),
           useBulletPoints,
         }),
       });
@@ -7077,8 +7279,20 @@
         photoCount: imageUrls.length,
         titleLanguageCode,
         descriptionLanguageCode,
+        useEmojis: effectiveUseEmojis,
+        emojiRetry: Boolean(emojiRetry),
         hasMeasurementAdvice: Boolean(measurementAdvice && measurementAdvice.trim()),
       });
+
+      if (
+        manageButtonState &&
+        effectiveUseEmojis &&
+        !skipEmojiRetryPrompt &&
+        isFreeProfile(userProfile) &&
+        descInput
+      ) {
+        await maybeShowEmojiRetryPrompt(descInput);
+      }
 
       return { ok: true, title, description, measurementAdvice };
     } catch (err) {
@@ -7136,8 +7350,10 @@
       generateBtn = existingBtn;
       phoneBtn = document.getElementById(PHONE_BTN_ID);
       batchBtn = document.getElementById(BATCH_BTN_ID);
+      emojiToggleBtn = document.getElementById(EMOJI_TOGGLE_ID);
       signInBtn = document.getElementById(SIGN_IN_BTN_ID);
       injectFieldLanguageControls();
+      syncEmojiToggleState();
       updateButtonUI();
       return true;
     }
@@ -7159,11 +7375,13 @@
       generateBtn = createButton();
       phoneBtn = createPhoneButton();
       batchBtn = createBatchButton();
+      emojiToggleBtn = createEmojiToggleButton();
       signInBtn = createSignInComponent();
 
       toolsWrapper.appendChild(generateBtn);
       toolsWrapper.appendChild(phoneBtn);
       toolsWrapper.appendChild(batchBtn);
+      toolsWrapper.appendChild(emojiToggleBtn);
 
       btnContainer.appendChild(toolsWrapper);
       btnContainer.appendChild(signInBtn);

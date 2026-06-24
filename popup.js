@@ -16,6 +16,7 @@ document.addEventListener("DOMContentLoaded", () => {
     price: "€5.99",
   };
   const LOW_REMAINING_RATIO = 0.2;
+  const OPEN_SETTINGS_ON_NEXT_POPUP_KEY = "quickvintOpenSettingsOnNextPopup";
 
   const TIER_DISPLAY_NAMES = {
     free: "Free Plan",
@@ -201,8 +202,8 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   }
 
-  function toggleSettingsView() {
-    const isSettingsActive = document.body.classList.toggle("settings-active");
+  function setSettingsView(isSettingsActive) {
+    document.body.classList.toggle("settings-active", isSettingsActive);
     if (gearIcon && backIcon) {
       if (isSettingsActive) {
         gearIcon.classList.add("hidden");
@@ -212,6 +213,10 @@ document.addEventListener("DOMContentLoaded", () => {
         backIcon.classList.add("hidden");
       }
     }
+  }
+
+  function toggleSettingsView() {
+    setSettingsView(!document.body.classList.contains("settings-active"));
   }
 
   function normalizeTier(tier) {
@@ -913,8 +918,8 @@ document.addEventListener("DOMContentLoaded", () => {
 
         // Set Emojis
         if (emojiToggle) {
-          // Default to false if not set
-          emojiToggle.checked = result.useEmojis === true;
+          // Default to true unless the user explicitly turned emojis off.
+          emojiToggle.checked = result.useEmojis !== false;
         }
 
         // Set Format
@@ -938,12 +943,6 @@ document.addEventListener("DOMContentLoaded", () => {
             chrome.storage.local.set({ tone: "standard" });
           }
 
-          // If they lost access but still have emojis on, turn them off
-          if (result.useEmojis === true) {
-            if (emojiToggle) emojiToggle.checked = false;
-            // Also update storage
-            chrome.storage.local.set({ useEmojis: false });
-          }
         }
 
         updateSettingsAccess(hasProAccess);
@@ -1019,8 +1018,8 @@ document.addEventListener("DOMContentLoaded", () => {
         }
       });
       if (emojiToggle) {
-        emojiToggle.disabled = true;
-        if (emojiContainer) emojiContainer.classList.add("locked");
+        emojiToggle.disabled = false;
+        if (emojiContainer) emojiContainer.classList.remove("locked");
       }
       if (infoNote) infoNote.style.display = "none";
       if (upgradeNote) upgradeNote.style.display = "flex";
@@ -1128,6 +1127,14 @@ document.addEventListener("DOMContentLoaded", () => {
     // Initial load
     await languageDropdownReady;
     await updateFromStorage();
+    const { [OPEN_SETTINGS_ON_NEXT_POPUP_KEY]: openSettingsOnNextPopup } =
+      await chrome.storage.local.get(OPEN_SETTINGS_ON_NEXT_POPUP_KEY);
+    if (openSettingsOnNextPopup) {
+      await chrome.storage.local.set({
+        [OPEN_SETTINGS_ON_NEXT_POPUP_KEY]: false,
+      });
+      setSettingsView(true);
+    }
     refreshProfileInBackground();
   }
 

@@ -149,8 +149,10 @@ test.describe("AutoLister extension smoke flows", () => {
   });
 
   test("generates listing copy into Vinted fields", async ({ page }) => {
-    await page.route("https://autolister.app/api/generate", (route) =>
-      route.fulfill({
+    const requestBodies = [];
+    await page.route("https://autolister.app/api/generate", (route) => {
+      requestBodies.push(route.request().postDataJSON());
+      return route.fulfill({
         status: 200,
         contentType: "application/json",
         body: JSON.stringify({
@@ -158,8 +160,8 @@ test.describe("AutoLister extension smoke flows", () => {
           description: "Clean black jacket in good condition.",
           measurementAdvice: "",
         }),
-      }),
-    );
+      });
+    });
 
     await openContentHarness(page);
     await page.locator("#quickvint-gen-btn").click();
@@ -169,6 +171,70 @@ test.describe("AutoLister extension smoke flows", () => {
     );
     await expect(page.locator('[data-testid="description--input"]')).toHaveValue(
       /Clean black jacket/,
+    );
+    expect(requestBodies[0].useEmojis).toBe(true);
+  });
+
+  test("lets free users retry once without emojis and saves the preference", async ({
+    page,
+  }) => {
+    const requestBodies = [];
+    await page.route("https://autolister.app/api/generate", (route) => {
+      const requestBody = route.request().postDataJSON();
+      requestBodies.push(requestBody);
+      return route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          title: requestBody.emojiRetry
+            ? "Black Test Jacket"
+            : "Black Test Jacket with emojis",
+          description: requestBody.emojiRetry
+            ? "Clean black jacket in good condition."
+            : "Clean black jacket in good condition with emojis.",
+          measurementAdvice: "",
+        }),
+      });
+    });
+
+    await openContentHarness(page);
+    await page.evaluate(() =>
+      chrome.storage.local.set({
+        userProfile: {
+          subscription_status: "free",
+          subscription_tier: "free",
+          api_calls_this_month: 0,
+          pack_credits: 0,
+        },
+      }),
+    );
+
+    await page.locator("#quickvint-gen-btn").click();
+    await expect(page.locator("#quickvint-description-apply-prompt")).toContainText(
+      "Prefer no emojis?",
+    );
+
+    await page.locator(".quickvint-apply-add").click();
+
+    await expect(page.locator('[data-testid="title--input"]')).toHaveValue(
+      "Black Test Jacket",
+    );
+    await expect(page.locator('[data-testid="description--input"]')).toHaveValue(
+      "Clean black jacket in good condition.",
+    );
+    expect(requestBodies).toHaveLength(2);
+    expect(requestBodies[0].useEmojis).toBe(true);
+    expect(requestBodies[0].emojiRetry).toBe(false);
+    expect(requestBodies[1].useEmojis).toBe(false);
+    expect(requestBodies[1].emojiRetry).toBe(true);
+
+    const storedUseEmojis = await page.evaluate(
+      () => chrome.storage.local.get("useEmojis"),
+    );
+    expect(storedUseEmojis.useEmojis).toBe(false);
+    await expect(page.locator("#quickvint-emoji-toggle")).toHaveAttribute(
+      "aria-pressed",
+      "false",
     );
   });
 
