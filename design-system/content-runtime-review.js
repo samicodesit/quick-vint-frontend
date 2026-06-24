@@ -53,7 +53,7 @@
         body: {
           title: "Vintage denim jacket",
           description:
-            "Light blue denim jacket in good condition. Easy to style and ready for everyday wear.",
+            "✨ Light blue denim jacket in good condition. Easy to style and ready for everyday wear. ✅",
           measurementAdvice: "",
         },
       },
