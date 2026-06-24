@@ -187,7 +187,7 @@ test.describe("AutoLister extension smoke flows", () => {
     expect(requestBodies[0].useEmojis).toBe(true);
   });
 
-  test("lets free users retry once without emojis and saves the preference", async ({
+  test("lets free users remove emojis locally and saves the preference", async ({
     page,
   }) => {
     const requestBodies = [];
@@ -198,12 +198,9 @@ test.describe("AutoLister extension smoke flows", () => {
         status: 200,
         contentType: "application/json",
         body: JSON.stringify({
-          title: requestBody.emojiRetry
-            ? "Black Test Jacket"
-            : "Black Test Jacket with emojis",
-          description: requestBody.emojiRetry
-            ? "Clean black jacket in good condition."
-            : "Clean black jacket in good condition with emojis.",
+          title: "Black Test Jacket with emojis",
+          description:
+            "✨ Clean black jacket ✅ Size EU 38 © brand ™ 🇬🇧 #️⃣ 1️⃣",
           measurementAdvice: "",
         }),
       });
@@ -223,22 +220,20 @@ test.describe("AutoLister extension smoke flows", () => {
 
     await page.locator("#quickvint-gen-btn").click();
     await expect(page.locator("#quickvint-description-apply-prompt")).toContainText(
-      "Prefer no emojis?",
+      "Remove emojis?",
     );
 
     await page.locator(".quickvint-apply-add").click();
 
     await expect(page.locator('[data-testid="title--input"]')).toHaveValue(
-      "Black Test Jacket",
+      "Black Test Jacket with emojis",
     );
     await expect(page.locator('[data-testid="description--input"]')).toHaveValue(
-      "Clean black jacket in good condition.",
+      "Clean black jacket Size EU 38 © brand ™",
     );
-    expect(requestBodies).toHaveLength(2);
+    expect(requestBodies).toHaveLength(1);
     expect(requestBodies[0].useEmojis).toBe(true);
     expect(requestBodies[0].emojiRetry).toBe(false);
-    expect(requestBodies[1].useEmojis).toBe(false);
-    expect(requestBodies[1].emojiRetry).toBe(true);
     await expect(
       page.locator("#quickvint-description-apply-prompt"),
     ).toHaveCount(0);

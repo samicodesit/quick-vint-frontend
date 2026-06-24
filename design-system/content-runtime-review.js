@@ -41,8 +41,8 @@
     },
     {
       id: "emoji-retry-prompt",
-      title: "Emoji retry prompt",
-      note: "Free-user prompt after an emoji generation, with settings link and retry action.",
+      title: "Emoji removal prompt",
+      note: "Free-user prompt after an emoji generation, with local removal and settings action.",
       height: 560,
       auth: true,
       action: "generate-emoji-prompt",
@@ -61,9 +61,9 @@
         const prompt = doc.getElementById("quickvint-description-apply-prompt");
         return (
           doc.defaultView.__generateCallCount === 1 &&
-          /Prefer no emojis\?/.test(prompt?.textContent || "") &&
-          /Retry once for free without emojis/.test(prompt?.textContent || "") &&
-          /Retry for free/.test(prompt?.textContent || "") &&
+          /😊 Remove emojis\?/.test(prompt?.textContent || "") &&
+          /Remove emojis and turn them off\./.test(prompt?.textContent || "") &&
+          /Remove emojis/.test(prompt?.textContent || "") &&
           /Keep emojis/.test(prompt?.textContent || "") &&
           /Open Settings/.test(prompt?.textContent || "") &&
           !!prompt?.querySelector(".quickvint-apply-settings")

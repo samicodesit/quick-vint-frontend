@@ -23,6 +23,8 @@
   const MEASUREMENT_ADVICE_LAST_SHOWN_KEY = "quickvintMeasurementAdviceLastShown";
   const EMOJI_RETRY_PROMPT_HANDLED_KEY = "quickvintEmojiRetryPromptHandled";
   const OPEN_SETTINGS_ON_NEXT_POPUP_KEY = "quickvintOpenSettingsOnNextPopup";
+  const EMOJI_SEQUENCE_REGEX =
+    /(?:[0-9#*]\uFE0F?\u20E3)|(?:[\u{1F1E6}-\u{1F1FF}]{2})|(?:\p{Emoji_Presentation}|\p{Emoji}\uFE0F)(?:\p{Emoji_Modifier})?(?:\u200D(?:\p{Emoji_Presentation}|\p{Emoji}\uFE0F)(?:\p{Emoji_Modifier})?)*/gu;
   const SELECTORS = {
     title: 'input[data-testid="title--input"]',
     description: 'textarea[data-testid="description--input"]',
@@ -4810,17 +4812,28 @@
     });
   }
 
-  function getEmojiRetryChoice(descInput) {
+  function stripEmojisFromText(text) {
+    return text
+      .replace(EMOJI_SEQUENCE_REGEX, "")
+      .replace(/[\uFE0E\uFE0F]/g, "")
+      .replace(/[ \t]{2,}/g, " ")
+      .replace(/[ \t]+\n/g, "\n")
+      .replace(/\n[ \t]+/g, "\n")
+      .replace(/\n{3,}/g, "\n\n")
+      .trim();
+  }
+
+  function getEmojiRemoveChoice(descInput) {
     removeDescriptionApplyPrompt();
 
     return new Promise((resolve) => {
       const prompt = document.createElement("div");
       prompt.id = DESCRIPTION_APPLY_PROMPT_ID;
       prompt.innerHTML = `
-        <div class="quickvint-apply-title">Prefer no emojis?</div>
-        <div class="quickvint-apply-copy">Retry once for free without emojis.</div>
+        <div class="quickvint-apply-title">😊 Remove emojis?</div>
+        <div class="quickvint-apply-copy">Remove emojis and turn them off.</div>
         <div class="quickvint-apply-actions">
-          <button type="button" class="quickvint-apply-add">Retry for free</button>
+          <button type="button" class="quickvint-apply-add">Remove emojis</button>
           <button type="button" class="quickvint-apply-cancel">Keep emojis</button>
           <button type="button" class="quickvint-apply-settings">⚙️ Open Settings</button>
         </div>
@@ -4856,7 +4869,7 @@
       prompt
         .querySelector(".quickvint-apply-add")
         ?.addEventListener("click", () => {
-          finish("retry_without_emojis");
+          finish("remove_emojis");
         });
 
       prompt
@@ -4886,11 +4899,11 @@
 
     if (handled) return;
 
-    const choice = await getEmojiRetryChoice(descInput);
+    const choice = await getEmojiRemoveChoice(descInput);
     await chrome.storage.local.set({ [EMOJI_RETRY_PROMPT_HANDLED_KEY]: true });
 
-    if (choice !== "retry_without_emojis") {
-      trackGrowthEvent("emoji_retry_prompt_kept", {
+    if (choice !== "remove_emojis") {
+      trackGrowthEvent("emoji_remove_prompt_kept", {
         source: "listing_tools",
       });
       return;
@@ -4898,23 +4911,15 @@
 
     await chrome.storage.local.set({ useEmojis: false });
     setEmojiToggleState(false);
-    trackGrowthEvent("emoji_retry_prompt_accepted", {
-      source: "listing_tools",
-    });
-
-    try {
-      await generateCurrentListing({
-        descriptionApplyChoice: "replace",
-        manageButtonState: true,
-        showMeasurementAdvice: false,
-        throwOnLimit: false,
-        skipEmojiRetryPrompt: true,
-        emojiRetry: true,
-        overrideUseEmojis: false,
-      });
-    } catch (err) {
-      // generateCurrentListing renders the visible error for manual retries.
+    const originalDescription = descInput.value || "";
+    const strippedDescription = stripEmojisFromText(originalDescription);
+    if (strippedDescription !== originalDescription) {
+      setDescriptionValue(descInput, strippedDescription);
     }
+    trackGrowthEvent("emoji_remove_prompt_accepted", {
+      source: "listing_tools",
+      changed: strippedDescription !== originalDescription,
+    });
   }
 
   // --- CORE LOGIC & EVENT HANDLERS ---
