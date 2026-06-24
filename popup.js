@@ -17,6 +17,7 @@ document.addEventListener("DOMContentLoaded", () => {
   };
   const LOW_REMAINING_RATIO = 0.2;
   const OPEN_SETTINGS_ON_NEXT_POPUP_KEY = "quickvintOpenSettingsOnNextPopup";
+  const OPEN_SETTINGS_FLAG_MAX_AGE_MS = 15000;
 
   const TIER_DISPLAY_NAMES = {
     free: "Free Plan",
@@ -1129,10 +1130,19 @@ document.addEventListener("DOMContentLoaded", () => {
     await updateFromStorage();
     const { [OPEN_SETTINGS_ON_NEXT_POPUP_KEY]: openSettingsOnNextPopup } =
       await chrome.storage.local.get(OPEN_SETTINGS_ON_NEXT_POPUP_KEY);
+    const settingsFlagAge =
+      typeof openSettingsOnNextPopup === "number"
+        ? Date.now() - openSettingsOnNextPopup
+        : Infinity;
     if (openSettingsOnNextPopup) {
       await chrome.storage.local.set({
         [OPEN_SETTINGS_ON_NEXT_POPUP_KEY]: false,
       });
+    }
+    if (
+      settingsFlagAge >= 0 &&
+      settingsFlagAge <= OPEN_SETTINGS_FLAG_MAX_AGE_MS
+    ) {
       setSettingsView(true);
     }
     refreshProfileInBackground();

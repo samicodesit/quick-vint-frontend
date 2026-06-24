@@ -4646,7 +4646,7 @@
         ?.addEventListener("click", async (event) => {
           event.preventDefault();
           await chrome.storage.local.set({
-            [OPEN_SETTINGS_ON_NEXT_POPUP_KEY]: true,
+            [OPEN_SETTINGS_ON_NEXT_POPUP_KEY]: Date.now(),
           });
           chrome.runtime.sendMessage({ type: "OPEN_POPUP" });
         });
