@@ -3734,38 +3734,71 @@
       #${EMOJI_TOGGLE_ID} {
         display: inline-flex;
         align-items: center;
-        justify-content: center;
-        gap: 6px;
-        min-height: 34px;
-        padding: 0 12px;
-        border: 1px solid #d1d5db;
-        border-radius: 10px;
+        justify-content: space-between;
+        gap: 9px;
+        min-height: 38px;
+        padding: 5px 7px 5px 12px;
+        border: 1px solid #d9dde8;
+        border-radius: 12px;
         background: #ffffff;
-        color: #374151;
+        color: #475569;
         cursor: pointer;
         font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
         font-size: 12px;
         font-weight: 800;
         line-height: 1;
         white-space: nowrap;
-        transition: border-color 0.18s ease, background 0.18s ease, color 0.18s ease, box-shadow 0.18s ease;
+        box-shadow: 0 6px 16px rgba(15, 23, 42, 0.07);
+        transition: border-color 0.18s ease, background 0.18s ease, color 0.18s ease, box-shadow 0.18s ease, transform 0.18s ease;
       }
 
       #${EMOJI_TOGGLE_ID}:hover {
-        border-color: #a5b4fc;
+        border-color: #b8c0d8;
         background: #f8fafc;
+        transform: translateY(-1px);
       }
 
       #${EMOJI_TOGGLE_ID}[aria-pressed="true"] {
-        border-color: #4f46e5;
-        background: #eef2ff;
+        border-color: #8b7cf6;
+        background: linear-gradient(135deg, #eef2ff 0%, #f5f3ff 100%);
         color: #4338ca;
-        box-shadow: 0 0 0 2px rgba(79, 70, 229, 0.12);
+        box-shadow: 0 8px 20px rgba(79, 70, 229, 0.16);
       }
 
-      #${EMOJI_TOGGLE_ID} .quickvint-emoji-mark {
-        font-size: 14px;
+      #${EMOJI_TOGGLE_ID} .quickvint-emoji-label {
         line-height: 1;
+      }
+
+      #${EMOJI_TOGGLE_ID} .quickvint-emoji-switch {
+        position: relative;
+        width: 36px;
+        height: 20px;
+        flex: 0 0 auto;
+        border-radius: 999px;
+        background: #cbd5e1;
+        box-shadow: inset 0 0 0 1px rgba(15, 23, 42, 0.06);
+        transition: background 0.18s ease, box-shadow 0.18s ease;
+      }
+
+      #${EMOJI_TOGGLE_ID} .quickvint-emoji-knob {
+        position: absolute;
+        top: 3px;
+        left: 3px;
+        width: 14px;
+        height: 14px;
+        border-radius: 999px;
+        background: #ffffff;
+        box-shadow: 0 1px 4px rgba(15, 23, 42, 0.28);
+        transition: transform 0.18s ease;
+      }
+
+      #${EMOJI_TOGGLE_ID}[aria-pressed="true"] .quickvint-emoji-switch {
+        background: ${PRIMARY_BUTTON_BACKGROUND};
+        box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.18);
+      }
+
+      #${EMOJI_TOGGLE_ID}[aria-pressed="true"] .quickvint-emoji-knob {
+        transform: translateX(16px);
       }
 
       /* TOAST NOTIFICATION */
@@ -4192,8 +4225,10 @@
     btn.type = "button";
     btn.setAttribute("aria-label", "Toggle emojis in generated descriptions");
     btn.innerHTML = `
-      <span class="quickvint-emoji-mark" aria-hidden="true">☺</span>
-      <span>Emoji</span>
+      <span class="quickvint-emoji-label">Emoji</span>
+      <span class="quickvint-emoji-switch" aria-hidden="true">
+        <span class="quickvint-emoji-knob"></span>
+      </span>
     `;
     btn.addEventListener("click", async () => {
       const { useEmojis = true } = await chrome.storage.local.get("useEmojis");
@@ -4434,6 +4469,7 @@
       if (generateBtn) generateBtn.style.display = "none";
       if (phoneBtn) phoneBtn.style.display = "none";
       if (batchBtn) batchBtn.style.display = "none";
+      if (emojiToggleBtn) emojiToggleBtn.style.display = "none";
       if (titleLanguageField) titleLanguageField.style.display = "none";
       if (descriptionLanguageField) descriptionLanguageField.style.display = "none";
       maybeTrackSignedOutToolsReady();
@@ -4445,6 +4481,7 @@
     if (generateBtn) generateBtn.style.display = "flex";
     if (phoneBtn) phoneBtn.style.display = "flex";
     if (batchBtn) batchBtn.style.display = "flex";
+    if (emojiToggleBtn) emojiToggleBtn.style.display = "inline-flex";
     if (titleLanguageField) titleLanguageField.style.display = "inline-flex";
     if (descriptionLanguageField) {
       descriptionLanguageField.style.display = "inline-flex";
