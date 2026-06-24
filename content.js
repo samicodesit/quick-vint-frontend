@@ -328,7 +328,9 @@
       eventQueue.push({ event, context });
 
       if (eventQueue.length >= 8) {
-        flushGrowthEvents();
+        if (!eventFlushTimer) {
+          eventFlushTimer = setTimeout(flushGrowthEvents, 0);
+        }
         return;
       }
 
