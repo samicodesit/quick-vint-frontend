@@ -22,6 +22,7 @@
   const MEASUREMENT_ADVICE_HIDDEN_KEY = "quickvintHideMeasurementAdvice";
   const MEASUREMENT_ADVICE_LAST_SHOWN_KEY = "quickvintMeasurementAdviceLastShown";
   const EMOJI_RETRY_PROMPT_HANDLED_KEY = "quickvintEmojiRetryPromptHandled";
+  const OFFER_DISMISSED_KEY_PREFIX = "quickvintOfferDismissed";
   const OPEN_SETTINGS_ON_NEXT_POPUP_KEY = "quickvintOpenSettingsOnNextPopup";
   const EMOJI_SEQUENCE_REGEX =
     /(?:[0-9#*]\uFE0F?\u20E3)|(?:[\u{1F1E6}-\u{1F1FF}]{2})|(?:\p{Emoji_Presentation}|\p{Emoji}\uFE0F)(?:\p{Emoji_Modifier})?(?:\u200D(?:\p{Emoji_Presentation}|\p{Emoji}\uFE0F)(?:\p{Emoji_Modifier})?)*/gu;
@@ -130,6 +131,8 @@
   let isBatchPollInFlight = false;
   let batchImagePreloadUrls = new Set();
   let batchImagePreloadCache = new Map();
+  let pendingGenerationOffer = null;
+  let activeFloatingPromptType = null;
 
   // --- HELPER FUNCTIONS ---
 
@@ -637,6 +640,42 @@
     return tier === "pro" || tier === "business";
   }
 
+  function getProfileUserId() {
+    return new Promise((resolve) => {
+      chrome.storage.local.get(["supabaseSession"], ({ supabaseSession }) => {
+        resolve(
+          supabaseSession?.user?.id ||
+            supabaseSession?.user?.email ||
+            "anonymous",
+        );
+      });
+    });
+  }
+
+  async function getPerUserStorageKey(prefix, suffix = "") {
+    const userId = await getProfileUserId();
+    return suffix ? `${prefix}:${userId}:${suffix}` : `${prefix}:${userId}`;
+  }
+
+  async function isOfferLocallyDismissed(offer) {
+    if (!offer?.campaignKey) return true;
+    const key = await getPerUserStorageKey(
+      OFFER_DISMISSED_KEY_PREFIX,
+      offer.campaignKey,
+    );
+    const result = await chrome.storage.local.get(key);
+    return Boolean(result[key]);
+  }
+
+  async function dismissOfferLocally(offer) {
+    if (!offer?.campaignKey) return;
+    const key = await getPerUserStorageKey(
+      OFFER_DISMISSED_KEY_PREFIX,
+      offer.campaignKey,
+    );
+    await chrome.storage.local.set({ [key]: Date.now() });
+  }
+
   function formatPlanLimitSummary(plan) {
     const daily = plan.daily === null ? "no daily limit" : `${plan.daily}/day`;
     return `${daily} · ${plan.monthly}/month`;
@@ -847,6 +886,45 @@
     return new Promise((resolve) => {
       chrome.runtime.sendMessage(message, resolve);
     });
+  }
+
+  async function claimGenerationOffer(offer) {
+    const { access_token } = await sendMessage({ type: "GET_ACCESS_TOKEN" });
+    if (!access_token) {
+      throw new Error("Your session has expired. Please sign in again via the extension.");
+    }
+
+    const response = await fetch(`${API_BASE}/api/user/generation-offers/claim`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${access_token}`,
+      },
+      body: JSON.stringify({ offerId: offer.id }),
+    });
+    const payload = await response.json().catch(() => ({}));
+
+    if (!response.ok || !payload?.ok) {
+      throw new Error(payload?.error || "Could not add this free generation.");
+    }
+
+    return payload;
+  }
+
+  async function dismissGenerationOffer(offer) {
+    const { access_token } = await sendMessage({ type: "GET_ACCESS_TOKEN" });
+    if (!access_token) return null;
+
+    const response = await fetch(`${API_BASE}/api/user/generation-offers/dismiss`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${access_token}`,
+      },
+      body: JSON.stringify({ offerId: offer.id }),
+    });
+
+    return response.json().catch(() => null);
   }
 
   /**
@@ -4730,6 +4808,7 @@
       return;
     }
     document.getElementById(DESCRIPTION_APPLY_PROMPT_ID)?.remove();
+    activeFloatingPromptType = null;
   }
 
   function setDescriptionValue(descInput, value) {
@@ -4756,29 +4835,42 @@
     prompt.style.top = `${top}px`;
   }
 
-  function getDescriptionApplyChoice(descInput) {
-    if (!(descInput.value || "").trim()) {
-      return Promise.resolve("replace");
-    }
-
+  function showFloatingPrompt({
+    type,
+    anchorInput,
+    title,
+    copy = "",
+    actions = [],
+    onAction = null,
+  }) {
     removeDescriptionApplyPrompt();
 
     return new Promise((resolve) => {
       const prompt = document.createElement("div");
       prompt.id = DESCRIPTION_APPLY_PROMPT_ID;
+      activeFloatingPromptType = type;
       prompt.innerHTML = `
-        <div class="quickvint-apply-title">Description already has text.</div>
+        <div class="quickvint-apply-title">${escapeHtml(title)}</div>
+        ${copy ? `<div class="quickvint-apply-copy">${escapeHtml(copy)}</div>` : ""}
         <div class="quickvint-apply-actions">
-          <button type="button" class="quickvint-apply-replace">Replace</button>
-          <button type="button" class="quickvint-apply-add">Add below</button>
-          <button type="button" class="quickvint-apply-cancel">Cancel</button>
+          ${actions
+            .map(
+              (action, index) => `
+                <button
+                  type="button"
+                  class="quickvint-apply-${escapeHtml(action.choice)}${action.primary ? " quickvint-apply-add" : ""}${action.fullWidth ? " quickvint-apply-settings" : ""}"
+                  data-quickvint-prompt-action="${index}"
+                >${escapeHtml(action.label)}</button>
+              `,
+            )
+            .join("")}
         </div>
       `;
 
       document.body.appendChild(prompt);
-      positionDescriptionApplyPrompt(prompt, descInput);
+      positionDescriptionApplyPrompt(prompt, anchorInput);
 
-      const onReposition = () => positionDescriptionApplyPrompt(prompt, descInput);
+      const onReposition = () => positionDescriptionApplyPrompt(prompt, anchorInput);
       window.addEventListener("resize", onReposition);
       window.addEventListener("scroll", onReposition, true);
 
@@ -4787,28 +4879,41 @@
         window.removeEventListener("scroll", onReposition, true);
         prompt.remove();
         activeDescriptionApplyPromptCleanup = null;
+        activeFloatingPromptType = null;
         resolve(choice);
       }
 
       activeDescriptionApplyPromptCleanup = finish;
 
-      prompt
-        .querySelector(".quickvint-apply-replace")
-        ?.addEventListener("click", () => {
-          finish("replace");
+      prompt.querySelectorAll("[data-quickvint-prompt-action]").forEach((button) => {
+        button.addEventListener("click", async (event) => {
+          const index = Number(event.currentTarget.dataset.quickvintPromptAction);
+          const action = actions[index];
+          if (!action) return;
+          if (typeof onAction === "function") {
+            const result = await onAction(action.choice, finish, event);
+            if (result === false) return;
+          }
+          finish(action.choice);
         });
+      });
+    });
+  }
 
-      prompt
-        .querySelector(".quickvint-apply-add")
-        ?.addEventListener("click", () => {
-          finish("add");
-        });
+  function getDescriptionApplyChoice(descInput) {
+    if (!(descInput.value || "").trim()) {
+      return Promise.resolve("replace");
+    }
 
-      prompt
-        .querySelector(".quickvint-apply-cancel")
-        ?.addEventListener("click", () => {
-          finish("cancel");
-        });
+    return showFloatingPrompt({
+      type: "description_apply",
+      anchorInput: descInput,
+      title: "Description already has text.",
+      actions: [
+        { choice: "replace", label: "Replace" },
+        { choice: "add", label: "Add below", primary: true },
+        { choice: "cancel", label: "Cancel" },
+      ],
     });
   }
 
@@ -4824,59 +4929,27 @@
   }
 
   function getEmojiRemoveChoice(descInput) {
-    removeDescriptionApplyPrompt();
-
-    return new Promise((resolve) => {
-      const prompt = document.createElement("div");
-      prompt.id = DESCRIPTION_APPLY_PROMPT_ID;
-      prompt.innerHTML = `
-        <div class="quickvint-apply-title">😊 Remove emojis?</div>
-        <div class="quickvint-apply-copy">Remove emojis and turn them off.</div>
-        <div class="quickvint-apply-actions">
-          <button type="button" class="quickvint-apply-add">Remove emojis</button>
-          <button type="button" class="quickvint-apply-cancel">Keep emojis</button>
-          <button type="button" class="quickvint-apply-settings">⚙️ Open Settings</button>
-        </div>
-      `;
-
-      document.body.appendChild(prompt);
-      positionDescriptionApplyPrompt(prompt, descInput);
-
-      const onReposition = () => positionDescriptionApplyPrompt(prompt, descInput);
-      window.addEventListener("resize", onReposition);
-      window.addEventListener("scroll", onReposition, true);
-
-      function finish(choice) {
-        window.removeEventListener("resize", onReposition);
-        window.removeEventListener("scroll", onReposition, true);
-        prompt.remove();
-        activeDescriptionApplyPromptCleanup = null;
-        resolve(choice);
-      }
-
-      activeDescriptionApplyPromptCleanup = finish;
-
-      prompt
-        .querySelector(".quickvint-apply-settings")
-        ?.addEventListener("click", async (event) => {
+    return showFloatingPrompt({
+      type: "emoji_remove",
+      anchorInput: descInput,
+      title: "😊 Remove emojis?",
+      copy: "Remove emojis and turn them off.",
+      actions: [
+        { choice: "remove_emojis", label: "Remove emojis", primary: true },
+        { choice: "keep_emojis", label: "Keep emojis" },
+        { choice: "settings", label: "⚙️ Open Settings", fullWidth: true },
+      ],
+      onAction: async (choice, finish, event) => {
+        if (choice === "settings") {
           event.preventDefault();
           await chrome.storage.local.set({
             [OPEN_SETTINGS_ON_NEXT_POPUP_KEY]: Date.now(),
           });
           chrome.runtime.sendMessage({ type: "OPEN_POPUP" });
-        });
-
-      prompt
-        .querySelector(".quickvint-apply-add")
-        ?.addEventListener("click", () => {
-          finish("remove_emojis");
-        });
-
-      prompt
-        .querySelector(".quickvint-apply-cancel")
-        ?.addEventListener("click", () => {
-          finish("keep_emojis");
-        });
+          return false;
+        }
+        return true;
+      },
     });
   }
 
@@ -4894,13 +4967,18 @@
   }
 
   async function maybeShowEmojiRetryPrompt(descInput) {
-    const { [EMOJI_RETRY_PROMPT_HANDLED_KEY]: handled } =
-      await chrome.storage.local.get(EMOJI_RETRY_PROMPT_HANDLED_KEY);
+    if (pendingGenerationOffer || activeFloatingPromptType) return;
 
+    const handledKey = await getPerUserStorageKey(EMOJI_RETRY_PROMPT_HANDLED_KEY);
+    const { [handledKey]: handled } =
+      await chrome.storage.local.get(handledKey);
     if (handled) return;
+    EMOJI_SEQUENCE_REGEX.lastIndex = 0;
+    if (!EMOJI_SEQUENCE_REGEX.test(descInput.value || "")) return;
+    EMOJI_SEQUENCE_REGEX.lastIndex = 0;
 
     const choice = await getEmojiRemoveChoice(descInput);
-    await chrome.storage.local.set({ [EMOJI_RETRY_PROMPT_HANDLED_KEY]: true });
+    await chrome.storage.local.set({ [handledKey]: true });
 
     if (choice !== "remove_emojis") {
       trackGrowthEvent("emoji_remove_prompt_kept", {
@@ -4920,6 +4998,95 @@
       source: "listing_tools",
       changed: strippedDescription !== originalDescription,
     });
+  }
+
+  function getPromptAnchorInput() {
+    return (
+      document.querySelector(SELECTORS.description) ||
+      document.querySelector(SELECTORS.title)
+    );
+  }
+
+  function isPromptBlockingModalOpen() {
+    return Boolean(
+      document.getElementById(MODAL_ID) ||
+        document.getElementById(BATCH_MODAL_ID),
+    );
+  }
+
+  async function maybeShowPendingGenerationOffer() {
+    const offer = pendingGenerationOffer;
+    if (!offer || activeFloatingPromptType || isPromptBlockingModalOpen()) return false;
+    if (await isOfferLocallyDismissed(offer)) {
+      pendingGenerationOffer = null;
+      return false;
+    }
+
+    const anchorInput = getPromptAnchorInput();
+    if (!anchorInput) return false;
+
+    const choice = await showFloatingPrompt({
+      type: "generation_offer",
+      anchorInput,
+      title: offer.title || "Forgot the label photo?",
+      copy:
+        offer.body ||
+        "Labels help with size and material.",
+      actions: [
+        {
+          choice: "claim",
+          label: offer.cta || "🎁 Claim 1 free generation",
+          primary: true,
+        },
+        { choice: "dismiss", label: "No thanks" },
+      ],
+      onAction: async (choice, finish, event) => {
+        if (choice !== "claim") return true;
+        const actionButton = event.currentTarget;
+        const previousLabel = actionButton.textContent;
+        actionButton.disabled = true;
+        actionButton.textContent = "Adding...";
+        try {
+          const payload = await claimGenerationOffer(offer);
+          pendingGenerationOffer = null;
+          const { userProfile = {} } = await chrome.storage.local.get("userProfile");
+          await chrome.storage.local.set({
+            userProfile: { ...userProfile, pack_credits: payload.packCredits },
+          });
+          trackGrowthEvent("generation_offer_claimed", {
+            campaignKey: offer.campaignKey,
+            offerCode: offer.offerCode,
+          });
+          showToast("1 free generation added.", "success");
+          finish("claim");
+        } catch (err) {
+          actionButton.disabled = false;
+          actionButton.textContent = previousLabel;
+          showToast(err.message || "Could not add this free generation.", "error");
+        }
+        return false;
+      },
+    });
+
+    if (choice === "dismiss") {
+      await dismissOfferLocally(offer);
+      dismissGenerationOffer(offer).catch(() => {});
+      pendingGenerationOffer = null;
+      trackGrowthEvent("generation_offer_dismissed", {
+        campaignKey: offer.campaignKey,
+        offerCode: offer.offerCode,
+      });
+    }
+
+    return true;
+  }
+
+  async function queueGenerationOffers(offers = []) {
+    const offer = Array.isArray(offers) ? offers[0] : null;
+    if (!offer?.id || !offer?.campaignKey) return false;
+    if (await isOfferLocallyDismissed(offer)) return false;
+    pendingGenerationOffer = offer;
+    return maybeShowPendingGenerationOffer();
   }
 
   // --- CORE LOGIC & EVENT HANDLERS ---
@@ -5136,6 +5303,8 @@
         },
       }).catch(() => {}); // Silent fail
     }
+
+    maybeShowPendingGenerationOffer();
   }
 
   async function onPhoneUploadClick() {
@@ -5614,6 +5783,7 @@
     }
 
     resetBatchState();
+    maybeShowPendingGenerationOffer();
   }
 
   function scheduleBatchAutoClose(sessionId) {
@@ -7092,7 +7262,11 @@
   }
 
   function handleBatchProgress(message) {
-    if (!document.getElementById(BATCH_MODAL_ID)) return;
+    const hasBatchModal = Boolean(document.getElementById(BATCH_MODAL_ID));
+    if (message.status === "done" && Array.isArray(message.offers)) {
+      queueGenerationOffers(message.offers);
+    }
+    if (!hasBatchModal) return;
     renderBatchProgress(message);
     if (message.status === "failed") {
       showToast(message.message || "Batch generation stopped.", "error");
@@ -7261,6 +7435,7 @@
         manageButtonState: false,
         showMeasurementAdvice: false,
         throwOnLimit: true,
+        generationMode: "batch",
       });
       showBatchTabStatus(`${listingPrefix}: checking listing details...`);
       await waitForGeneratedListingFields(
@@ -7270,7 +7445,7 @@
 
       showBatchTabStatus(`${listingPrefix}: ready to review.`, "success");
       hideBatchTabStatus(3500);
-      return { ok: true };
+      return { ok: true, offers: generatedListing?.offers || [] };
     } catch (err) {
       showBatchTabStatus(
         err.message || `${listingPrefix}: generation failed.`,
@@ -7295,9 +7470,11 @@
     skipEmojiRetryPrompt = false,
     emojiRetry = false,
     overrideUseEmojis = null,
+    generationMode = null,
   } = {}) {
     const imageUrls = getUploadedImageUrls();
     const mode = manageButtonState ? "manual" : "batch";
+    const requestGenerationMode = generationMode || mode;
 
     if (!imageUrls.length) {
       trackGrowthEvent("generate_missing_photo", { mode });
@@ -7382,6 +7559,7 @@
           useEmojis: effectiveUseEmojis,
           emojiRetry: Boolean(emojiRetry),
           useBulletPoints,
+          generationMode: requestGenerationMode,
         }),
       });
 
@@ -7470,7 +7648,7 @@
         throw new Error(error || `HTTP ${response.status}`);
       }
 
-      const { title, description, measurementAdvice } = await response.json();
+      const { title, description, measurementAdvice, offers = [] } = await response.json();
       const titleInput = document.querySelector(SELECTORS.title);
       const descInput = document.querySelector(SELECTORS.description);
 
@@ -7500,17 +7678,22 @@
         hasMeasurementAdvice: Boolean(measurementAdvice && measurementAdvice.trim()),
       });
 
+      const showedOfferPrompt = manageButtonState
+        ? await queueGenerationOffers(offers)
+        : false;
+
       if (
         manageButtonState &&
         effectiveUseEmojis &&
         !skipEmojiRetryPrompt &&
+        !showedOfferPrompt &&
         isFreeProfile(userProfile) &&
         descInput
       ) {
         await maybeShowEmojiRetryPrompt(descInput);
       }
 
-      return { ok: true, title, description, measurementAdvice };
+      return { ok: true, title, description, measurementAdvice, offers };
     } catch (err) {
       console.error("AutoLister AI Error:", err);
       trackGrowthEvent("generate_error", {

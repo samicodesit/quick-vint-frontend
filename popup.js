@@ -324,7 +324,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
     if (tier === "free") {
       if (dailyMeterLabel) dailyMeterLabel.textContent = "Free Listings";
-      if (monthlyMeterLabel) monthlyMeterLabel.textContent = "Credit Pack";
+      if (monthlyMeterLabel) monthlyMeterLabel.textContent = "Extra credits";
     } else {
       if (dailyMeterLabel) dailyMeterLabel.textContent = "Daily Usage";
       if (monthlyMeterLabel) monthlyMeterLabel.textContent = "Monthly Usage";
@@ -422,7 +422,7 @@ document.addEventListener("DOMContentLoaded", () => {
         freeLimit > 0 ? Math.min((freeUsed / freeLimit) * 100, 100) : 0;
 
       if (dailyMeterLabel) dailyMeterLabel.textContent = "Free Listings";
-      if (monthlyMeterLabel) monthlyMeterLabel.textContent = "Credit Pack";
+      if (monthlyMeterLabel) monthlyMeterLabel.textContent = "Extra credits";
       if (dailyCallsUsed) dailyCallsUsed.textContent = `${freeUsed} / ${freeLimit}`;
       if (monthlyCallsUsed)
         monthlyCallsUsed.textContent =

@@ -530,6 +530,7 @@ async function cleanupBatchUploadSession(sessionId) {
 async function runBatchGenerationJob(job) {
   const { groups } = job;
   let activeItemIndex = 0;
+  const offersByCampaign = new Map();
 
   notifyBatchProgress(job, {
     status: "queued",
@@ -578,6 +579,14 @@ async function runBatchGenerationJob(job) {
         );
       }
 
+      if (Array.isArray(result.offers)) {
+        result.offers.forEach((offer) => {
+          if (offer?.campaignKey && !offersByCampaign.has(offer.campaignKey)) {
+            offersByCampaign.set(offer.campaignKey, offer);
+          }
+        });
+      }
+
       notifyBatchProgress(job, {
         status: "item_done",
         current: index + 1,
@@ -602,6 +611,7 @@ async function runBatchGenerationJob(job) {
       status: "done",
       current: groups.length,
       total: groups.length,
+      offers: Array.from(offersByCampaign.values()),
     });
   } catch (err) {
     console.error("[Background] Batch generation failed:", err);

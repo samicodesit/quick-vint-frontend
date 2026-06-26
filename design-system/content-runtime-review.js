@@ -71,6 +71,57 @@
       },
     },
     {
+      id: "generation-offer-prompt",
+      title: "Free generation offer prompt",
+      note: "Claimable free-generation offer anchored beside the Vinted listing inputs.",
+      height: 560,
+      auth: true,
+      action: "generate-offer-prompt",
+      hasImages: true,
+      useEmojis: false,
+      userProfile: {
+        subscription_status: "free",
+        subscription_tier: "free",
+        api_calls_this_month: 0,
+        free_lifetime_generations_used: 0,
+        pack_credits: 0,
+      },
+      generateResponse: {
+        status: 200,
+        body: {
+          title: "Vintage denim jacket",
+          description:
+            "Light blue denim jacket in good condition. Easy to style and ready for everyday wear.",
+          measurementAdvice: "",
+          offers: [
+            {
+              id: "offer-label-preview",
+              campaignKey: "label_photo_bonus_2026_06",
+              offerCode: "free_label_photo_generation",
+              creditAmount: 1,
+              title: "Forgot the label photo?",
+              body: "Labels help with size and material.",
+              cta: "🎁 Claim 1 free generation",
+            },
+          ],
+        },
+      },
+      verify(doc) {
+        const prompt = doc.getElementById("quickvint-description-apply-prompt");
+        return (
+          doc.defaultView.__generateCallCount === 1 &&
+          /Forgot the label photo\?/.test(
+            prompt?.textContent || "",
+          ) &&
+          /Labels help with size and material\./.test(
+            prompt?.textContent || "",
+          ) &&
+          /🎁 Claim 1 free generation/.test(prompt?.textContent || "") &&
+          /No thanks/.test(prompt?.textContent || "")
+        );
+      },
+    },
+    {
       id: "missing-photo",
       title: "Missing photo error",
       note: "Real validation toast before the API is called.",
@@ -444,6 +495,7 @@
         const wide =
           scenario.id === "signed-in" ||
           scenario.id === "emoji-retry-prompt" ||
+          scenario.id === "generation-offer-prompt" ||
           scenario.id === "success";
         return `
           <article class="ds-panel${wide ? " wide" : ""}">
@@ -486,6 +538,11 @@
             : scenario.id === "business-limit"
               ? "business"
               : "free",
+        subscription_status: "free",
+        api_calls_this_month: 0,
+        free_lifetime_generations_used: 0,
+        pack_credits: 0,
+        ...(scenario.userProfile || {}),
       },
       selectedLanguage: "en",
       selectedTitleLanguage: "en",
@@ -790,7 +847,8 @@
           scenario.action === "generate-account-paused-paywall" ||
           scenario.action === "generate-missing-photo" ||
           scenario.action === "generate-service-error" ||
-          scenario.action === "generate-emoji-prompt"
+          scenario.action === "generate-emoji-prompt" ||
+          scenario.action === "generate-offer-prompt"
         ) {
           generate?.click();
           if (scenario.action === "generate-account-paused-paywall") {

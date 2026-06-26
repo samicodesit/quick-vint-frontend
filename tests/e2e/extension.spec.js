@@ -248,6 +248,90 @@ test.describe("AutoLister extension smoke flows", () => {
     );
   });
 
+  test("lets free users claim a generation offer without regenerating", async ({
+    page,
+  }) => {
+    const requestBodies = [];
+    let claimCount = 0;
+    await page.route("https://autolister.app/api/generate", (route) => {
+      requestBodies.push(route.request().postDataJSON());
+      return route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          title: "Black Test Jacket",
+          description: "Clean black jacket in good condition.",
+          measurementAdvice: "",
+          offers: [
+            {
+              id: "offer-label-1",
+              campaignKey: "label_photo_bonus_2026_06",
+              offerCode: "free_label_photo_generation",
+              creditAmount: 1,
+              title: "Forgot the label photo?",
+              body: "Labels help with size and material.",
+              cta: "🎁 Claim 1 free generation",
+            },
+          ],
+        }),
+      });
+    });
+    await page.route(
+      "https://autolister.app/api/user/generation-offers/claim",
+      (route) => {
+        claimCount += 1;
+        expect(route.request().postDataJSON()).toEqual({
+          offerId: "offer-label-1",
+        });
+        return route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify({
+            ok: true,
+            offerId: "offer-label-1",
+            campaignKey: "label_photo_bonus_2026_06",
+            offerCode: "free_label_photo_generation",
+            creditAmount: 1,
+            packCredits: 1,
+          }),
+        });
+      },
+    );
+
+    await openContentHarness(page);
+    await page.evaluate(() =>
+      chrome.storage.local.set({
+        userProfile: {
+          subscription_status: "free",
+          subscription_tier: "free",
+          api_calls_this_month: 0,
+          free_lifetime_generations_used: 0,
+          pack_credits: 0,
+        },
+      }),
+    );
+
+    await page.locator("#quickvint-gen-btn").click();
+    const prompt = page.locator("#quickvint-description-apply-prompt");
+    await expect(prompt).toContainText(
+      "Forgot the label photo?",
+    );
+    await expect(prompt).toContainText("Labels help with size and material.");
+    await expect(prompt).toContainText("🎁 Claim 1 free generation");
+
+    await page.locator("#quickvint-description-apply-prompt .quickvint-apply-add").click();
+    await expect(page.locator("#quickvint-toast.success")).toContainText(
+      "1 free generation added.",
+    );
+    expect(requestBodies).toHaveLength(1);
+    expect(claimCount).toBe(1);
+
+    const storedProfile = await page.evaluate(() =>
+      chrome.storage.local.get("userProfile"),
+    );
+    expect(storedProfile.userProfile.pack_credits).toBe(1);
+  });
+
   test("does not allow Starter users to enable emoji generation", async ({
     page,
   }) => {
