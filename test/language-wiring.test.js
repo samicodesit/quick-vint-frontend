@@ -24,3 +24,25 @@ test("shared language defaults load before extension entrypoints", () => {
   const buildScript = readFileSync("build.js", "utf8");
   assert.match(buildScript, /'language-defaults\.js'/);
 });
+
+test("design-system preview loads shared language defaults before content script", () => {
+  const reviewScript = readFileSync(
+    "design-system/content-runtime-review.js",
+    "utf8",
+  );
+  const languageDefaultsUrlIndex = reviewScript.indexOf("languageDefaultsUrl");
+  const contentUrlIndex = reviewScript.indexOf("contentUrl");
+  const languageScriptIndex = reviewScript.indexOf(
+    '<script src="${languageDefaultsUrl}"></script>',
+  );
+  const contentScriptIndex = reviewScript.indexOf(
+    '<script src="${contentUrl}"></script>',
+  );
+
+  assert.notEqual(languageDefaultsUrlIndex, -1);
+  assert.notEqual(contentUrlIndex, -1);
+  assert.ok(languageDefaultsUrlIndex > contentUrlIndex);
+  assert.notEqual(languageScriptIndex, -1);
+  assert.notEqual(contentScriptIndex, -1);
+  assert.ok(languageScriptIndex < contentScriptIndex);
+});

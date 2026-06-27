@@ -5,6 +5,10 @@
     `../content.js?v=${Date.now()}`,
     window.location.href,
   ).href;
+  const languageDefaultsUrl = new URL(
+    `../language-defaults.js?v=${Date.now()}`,
+    window.location.href,
+  ).href;
 
   const imageDataUrl =
     "data:image/svg+xml;charset=utf-8," +
@@ -860,6 +864,7 @@
       };
     })();
   </script>
+  <script src="${languageDefaultsUrl}"></script>
   <script src="${contentUrl}"></script>
   <script>
     window.addEventListener("load", () => {
@@ -912,9 +917,20 @@
   }
 
   try {
-    const response = await fetch(contentUrl, { cache: "no-store" });
-    if (!response.ok) throw new Error(`HTTP ${response.status}`);
-    await response.text();
+    const [languageDefaultsResponse, contentResponse] = await Promise.all([
+      fetch(languageDefaultsUrl, { cache: "no-store" }),
+      fetch(contentUrl, { cache: "no-store" }),
+    ]);
+    if (!languageDefaultsResponse.ok) {
+      throw new Error(`language-defaults.js HTTP ${languageDefaultsResponse.status}`);
+    }
+    if (!contentResponse.ok) {
+      throw new Error(`content.js HTTP ${contentResponse.status}`);
+    }
+    await Promise.all([
+      languageDefaultsResponse.text(),
+      contentResponse.text(),
+    ]);
 
     renderPanels();
     document.getElementById("previewGrid").addEventListener("click", (event) => {
