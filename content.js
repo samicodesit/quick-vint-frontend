@@ -5189,7 +5189,7 @@
       title: offer.title || "Forgot the label photo?",
       copy:
         offer.body ||
-        "Labels help with size and material.",
+        "Label photos help create better descriptions.",
       actions: [
         {
           choice: "claim",

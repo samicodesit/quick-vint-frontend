@@ -274,7 +274,7 @@ test.describe("AutoLister extension smoke flows", () => {
               offerCode: "free_label_photo_generation",
               creditAmount: 1,
               title: "Forgot the label photo?",
-              body: "Labels help with size and material.",
+              body: "Label photos help create better descriptions.",
               cta: "🎁 Claim 1 free generation",
             },
           ],
@@ -321,7 +321,9 @@ test.describe("AutoLister extension smoke flows", () => {
     await expect(prompt).toContainText(
       "Forgot the label photo?",
     );
-    await expect(prompt).toContainText("Labels help with size and material.");
+    await expect(prompt).toContainText(
+      "Label photos help create better descriptions.",
+    );
     await expect(prompt).toContainText("🎁 Claim 1 free generation");
 
     await page.locator("#quickvint-description-apply-prompt .quickvint-apply-add").click();

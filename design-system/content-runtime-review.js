@@ -104,7 +104,7 @@
               offerCode: "free_label_photo_generation",
               creditAmount: 1,
               title: "Forgot the label photo?",
-              body: "Labels help with size and material.",
+              body: "Label photos help create better descriptions.",
               cta: "🎁 Claim 1 free generation",
             },
           ],
@@ -117,7 +117,7 @@
           /Forgot the label photo\?/.test(
             prompt?.textContent || "",
           ) &&
-          /Labels help with size and material\./.test(
+          /Label photos help create better descriptions\./.test(
             prompt?.textContent || "",
           ) &&
           /🎁 Claim 1 free generation/.test(prompt?.textContent || "") &&
