@@ -87,6 +87,7 @@
         "*://*.vinted.com/*"
       ],
       "js": [
+        "language-defaults.js",
         "content.js"
       ],
       "run_at": "document_idle"

@@ -13,6 +13,7 @@ const { execSync } = require('child_process');
 // Configuration
 const INCLUDE_LIST = [
     'manifest.json',
+    'language-defaults.js',
     'content.js',
     'background.js',
     'popup.html',
@@ -21,7 +22,7 @@ const INCLUDE_LIST = [
     'callback.js',
     'lib',
     'icons',
-    'images',
+    'images/onboard.png',
     '_locales',
 ];
 
@@ -65,6 +66,7 @@ function copyRecursive(src, dest) {
             copyRecursive(path.join(src, entry), path.join(dest, entry));
         }
     } else {
+        fs.mkdirSync(path.dirname(dest), { recursive: true });
         fs.copyFileSync(src, dest);
     }
 }

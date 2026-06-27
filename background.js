@@ -19,7 +19,15 @@ async function getAnalyticsClientId() {
 async function setAutolisterUninstallUrl() {
   const extensionVersion = chrome.runtime.getManifest().version;
   const analyticsClientId = await getAnalyticsClientId();
-  const uninstallUrl = `https://autolister.app/uninstall?version=${encodeURIComponent(extensionVersion)}&cid=${encodeURIComponent(analyticsClientId)}`;
+  const session = await getStoredSession();
+  const params = new URLSearchParams({
+    version: extensionVersion,
+    cid: analyticsClientId,
+  });
+  if (session?.user?.id) {
+    params.set("uid", session.user.id);
+  }
+  const uninstallUrl = `https://autolister.app/uninstall?${params.toString()}`;
 
   chrome.runtime.setUninstallURL(uninstallUrl, () => {
     if (chrome.runtime.lastError) {
@@ -258,6 +266,7 @@ async function updateAndStoreUserProfile() {
     if (profileError) throw profileError;
 
     await chrome.storage.local.set({ userProfile: profile });
+    await setAutolisterUninstallUrl();
   } catch (error) {
     console.error("Failed to update and store user profile:", error);
   }
@@ -905,11 +914,13 @@ supabaseClient.auth.onAuthStateChange((event, session) => {
       if (event === "SIGNED_OUT" || event === "USER_DELETED") {
         if (tokenRefreshTimeout) clearTimeout(tokenRefreshTimeout);
         await chrome.storage.local.remove(["supabaseSession", "userProfile"]);
+        await setAutolisterUninstallUrl();
       } else if (event === "SIGNED_IN" || event === "TOKEN_REFRESHED") {
         await setStoredSession(session);
         await updateAndStoreUserProfile();
       } else if (session) {
         await setStoredSession(session);
+        await setAutolisterUninstallUrl();
       }
     } catch (e) {
       console.error("Error in onAuthStateChange handler:", e);

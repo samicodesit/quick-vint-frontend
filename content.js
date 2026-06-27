@@ -22,6 +22,7 @@
   const MEASUREMENT_ADVICE_HIDDEN_KEY = "quickvintHideMeasurementAdvice";
   const MEASUREMENT_ADVICE_LAST_SHOWN_KEY = "quickvintMeasurementAdviceLastShown";
   const EMOJI_RETRY_PROMPT_HANDLED_KEY = "quickvintEmojiRetryPromptHandled";
+  const INLINE_LANGUAGE_HINT_DONE_KEY = "quickvintInlineLanguageHintDone";
   const OFFER_DISMISSED_KEY_PREFIX = "quickvintOfferDismissed";
   const OPEN_SETTINGS_ON_NEXT_POPUP_KEY = "quickvintOpenSettingsOnNextPopup";
   const EMOJI_SEQUENCE_REGEX =
@@ -83,6 +84,7 @@
     `mailto:${SUPPORT_EMAIL}?subject=AutoLister%20AI%20account%20review`;
   const PRIMARY_BUTTON_BACKGROUND =
     "linear-gradient(135deg, #5b54f0 0%, #4338ca 100%)";
+  const languageDefaults = window.AutoListerLanguageDefaults;
 
   // --- STATE ---
   let generateBtn = null;
@@ -103,6 +105,7 @@
   let phoneUploadAutoCloseTimer = null;
   let inlineLanguageListenersBound = false;
   let activeDescriptionApplyPromptCleanup = null;
+  let activeGenerationOutputEditCleanup = null;
   let batchUploadSessionId = null;
   let batchPollInterval = null;
   let batchAutoCloseTimer = null;
@@ -584,8 +587,15 @@
       clearTimeout(window.quickvintToastTimeout);
   }
 
-  function normalizeLanguageCode(code) {
-    return code === "cs" ? "cz" : code;
+  function resolveListingLanguagePreferences(storage = {}) {
+    return languageDefaults.resolveListingLanguagePreferences(storage);
+  }
+
+  function markInlineLanguageHintDone() {
+    document
+      .querySelectorAll(".quickvint-lang-field.quickvint-lang-hint")
+      .forEach((field) => field.classList.remove("quickvint-lang-hint"));
+    chrome.storage.local.set({ [INLINE_LANGUAGE_HINT_DONE_KEY]: true });
   }
 
   async function getPricingUrl() {
@@ -1297,6 +1307,61 @@
         font-size: 12px;
         font-weight: 700;
         outline: none;
+        position: relative;
+      }
+
+      .quickvint-lang-field.quickvint-lang-hint .quickvint-lang-trigger {
+        background: linear-gradient(180deg, #ffffff 0%, #f7f5ff 100%);
+        border-color: #a78bfa;
+        box-shadow: 0 1px 2px rgba(79, 70, 229, 0.08);
+      }
+
+      .quickvint-lang-field.quickvint-lang-hint.open .quickvint-lang-trigger,
+      .quickvint-lang-field.quickvint-lang-hint .quickvint-lang-trigger:hover,
+      .quickvint-lang-field.quickvint-lang-hint .quickvint-lang-trigger:focus-visible {
+        box-shadow: 0 1px 2px rgba(79, 70, 229, 0.08);
+      }
+
+      .quickvint-lang-field.quickvint-lang-hint .quickvint-lang-trigger::before {
+        content: "";
+        position: absolute;
+        inset: -4px;
+        border: 2px solid rgba(124, 58, 237, 0.22);
+        border-radius: 12px;
+        opacity: 0;
+        pointer-events: none;
+        transform: scale(0.88);
+        transform-origin: center;
+        animation: quickvintLangHintPulse 1800ms cubic-bezier(0.22, 1, 0.36, 1) infinite;
+        will-change: transform, opacity;
+      }
+
+      .quickvint-lang-field.quickvint-lang-hint.open .quickvint-lang-trigger::before,
+      .quickvint-lang-field.quickvint-lang-hint .quickvint-lang-trigger:hover::before,
+      .quickvint-lang-field.quickvint-lang-hint .quickvint-lang-trigger:focus-visible::before {
+        animation: none;
+        opacity: 0;
+      }
+
+      @keyframes quickvintLangHintPulse {
+        0%, 100% {
+          opacity: 0;
+          transform: scale(0.88);
+        }
+        18% {
+          opacity: 1;
+          transform: scale(1);
+        }
+        54% {
+          opacity: 0;
+          transform: scale(1.18);
+        }
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        .quickvint-lang-field.quickvint-lang-hint .quickvint-lang-trigger::before {
+          animation: none;
+        }
       }
 
       .quickvint-lang-trigger::after {
@@ -4524,6 +4589,11 @@
     const field = document.createElement("div");
     field.className = "quickvint-lang-field";
     field.title = title;
+    chrome.storage.local.get(INLINE_LANGUAGE_HINT_DONE_KEY, (result) => {
+      if (!result[INLINE_LANGUAGE_HINT_DONE_KEY]) {
+        field.classList.add("quickvint-lang-hint");
+      }
+    });
 
     const trigger = document.createElement("button");
     trigger.id = selectId;
@@ -4533,6 +4603,7 @@
     trigger.addEventListener("click", (event) => {
       event.preventDefault();
       event.stopPropagation();
+      markInlineLanguageHintDone();
       document.querySelectorAll(".quickvint-lang-field.open").forEach((openField) => {
         if (openField !== field) openField.classList.remove("open");
       });
@@ -4557,6 +4628,7 @@
       option.addEventListener("click", (event) => {
         event.preventDefault();
         event.stopPropagation();
+        markInlineLanguageHintDone();
         updateInlineLanguageControl(trigger, lang.code);
         field.classList.remove("open");
         chrome.storage.local.set({
@@ -4603,7 +4675,8 @@
 
   function updateInlineLanguageControl(trigger, languageCode) {
     const selectedOption = LANGUAGE_OPTIONS.find(
-      (lang) => lang.code === normalizeLanguageCode(languageCode),
+      (lang) =>
+        lang.code === languageDefaults.normalizeLanguageCode(languageCode),
     );
     if (!selectedOption) return;
     trigger.dataset.value = selectedOption.code;
@@ -4653,12 +4726,8 @@
   function syncInlineLanguageControls(root = document) {
     chrome.storage.local.get(
       ["selectedLanguage", "selectedTitleLanguage", "selectedDescriptionLanguage"],
-      ({
-        selectedLanguage = "en",
-        selectedTitleLanguage,
-        selectedDescriptionLanguage,
-      }) => {
-        const fallbackLanguage = normalizeLanguageCode(selectedLanguage);
+      (storage) => {
+        const languagePreferences = resolveListingLanguagePreferences(storage);
         const titleTrigger = root.querySelector(`#${TITLE_LANGUAGE_SELECT_ID}`);
         const descriptionTrigger = root.querySelector(
           `#${DESCRIPTION_LANGUAGE_SELECT_ID}`,
@@ -4666,13 +4735,13 @@
         if (titleTrigger) {
           updateInlineLanguageControl(
             titleTrigger,
-            selectedTitleLanguage || fallbackLanguage,
+            languagePreferences.titleLanguageCode,
           );
         }
         if (descriptionTrigger) {
           updateInlineLanguageControl(
             descriptionTrigger,
-            selectedDescriptionLanguage || fallbackLanguage,
+            languagePreferences.descriptionLanguageCode,
           );
         }
       },
@@ -4966,6 +5035,95 @@
     setDescriptionValue(descInput, generatedDescription);
   }
 
+  function normalizeTrackedOutputText(value) {
+    return String(value || "").replace(/\r\n/g, "\n");
+  }
+
+  function startGenerationOutputEditTracking({
+    mode,
+    photoCount,
+    titleLanguageCode,
+    descriptionLanguageCode,
+    descriptionApplyChoice,
+    generatedTitle,
+    generatedDescription,
+    appliedTitle,
+    appliedDescription,
+  }) {
+    if (activeGenerationOutputEditCleanup) {
+      activeGenerationOutputEditCleanup();
+    }
+
+    const titleInput = document.querySelector(SELECTORS.title);
+    const descInput = document.querySelector(SELECTORS.description);
+    if (!titleInput && !descInput) return;
+
+    const initialTitle = normalizeTrackedOutputText(appliedTitle);
+    const initialDescription = normalizeTrackedOutputText(appliedDescription);
+    const startedAt = Date.now();
+    let hasTrackedEdit = false;
+    let debounceTimer = null;
+    let expiryTimer = null;
+
+    const cleanup = () => {
+      if (debounceTimer) clearTimeout(debounceTimer);
+      if (expiryTimer) clearTimeout(expiryTimer);
+      titleInput?.removeEventListener("input", scheduleCheck);
+      descInput?.removeEventListener("input", scheduleCheck);
+      titleInput?.removeEventListener("change", scheduleCheck);
+      descInput?.removeEventListener("change", scheduleCheck);
+      if (activeGenerationOutputEditCleanup === cleanup) {
+        activeGenerationOutputEditCleanup = null;
+      }
+    };
+
+    const checkForEdit = () => {
+      if (hasTrackedEdit) return;
+
+      const currentTitle = normalizeTrackedOutputText(titleInput?.value);
+      const currentDescription = normalizeTrackedOutputText(descInput?.value);
+      const titleChanged = Boolean(titleInput) && currentTitle !== initialTitle;
+      const descriptionChanged =
+        Boolean(descInput) && currentDescription !== initialDescription;
+
+      if (!titleChanged && !descriptionChanged) return;
+
+      hasTrackedEdit = true;
+      cleanup();
+      trackGrowthEvent("generation_output_edited", {
+        mode,
+        photoCount,
+        titleLanguageCode,
+        descriptionLanguageCode,
+        descriptionApplyChoice,
+        editDelayMs: Date.now() - startedAt,
+        titleChanged,
+        descriptionChanged,
+        generatedTitle: normalizeTrackedOutputText(generatedTitle),
+        generatedDescription: normalizeTrackedOutputText(generatedDescription),
+        appliedTitle: initialTitle,
+        appliedDescription: initialDescription,
+        currentTitle,
+        currentDescription,
+        titleLengthDelta: currentTitle.length - initialTitle.length,
+        descriptionLengthDelta:
+          currentDescription.length - initialDescription.length,
+      });
+    };
+
+    function scheduleCheck() {
+      if (debounceTimer) clearTimeout(debounceTimer);
+      debounceTimer = setTimeout(checkForEdit, 1200);
+    }
+
+    titleInput?.addEventListener("input", scheduleCheck);
+    descInput?.addEventListener("input", scheduleCheck);
+    titleInput?.addEventListener("change", scheduleCheck);
+    descInput?.addEventListener("change", scheduleCheck);
+    expiryTimer = setTimeout(cleanup, 5 * 60 * 1000);
+    activeGenerationOutputEditCleanup = cleanup;
+  }
+
   async function maybeShowEmojiRetryPrompt(descInput) {
     if (pendingGenerationOffer || activeFloatingPromptType) return;
 
@@ -5105,21 +5263,16 @@
     const uploadUrl = `${PHONE_UPLOAD_PAGE}?s=${sessionId}`;
 
     // Get saved language preferences. Fall back to the legacy single language setting.
-    const {
-      selectedLanguage = "en",
-      selectedTitleLanguage,
-      selectedDescriptionLanguage,
-    } = await chrome.storage.local.get([
+    const languageStorage = await chrome.storage.local.get([
       "selectedLanguage",
       "selectedTitleLanguage",
       "selectedDescriptionLanguage",
     ]);
-    const selectedModalTitleLanguage = normalizeLanguageCode(
-      selectedTitleLanguage || selectedLanguage,
-    );
-    const selectedModalDescriptionLanguage = normalizeLanguageCode(
-      selectedDescriptionLanguage || selectedLanguage,
-    );
+    const languagePreferences =
+      resolveListingLanguagePreferences(languageStorage);
+    const selectedModalTitleLanguage = languagePreferences.titleLanguageCode;
+    const selectedModalDescriptionLanguage =
+      languagePreferences.descriptionLanguageCode;
 
     const selectedTitleLanguageOption =
       LANGUAGE_OPTIONS.find((lang) => lang.code === selectedModalTitleLanguage) ||
@@ -7488,18 +7641,13 @@
       isBusy = true;
     }
     removeDescriptionApplyPrompt();
+    if (activeGenerationOutputEditCleanup) {
+      activeGenerationOutputEditCleanup();
+    }
     updateButtonUI();
 
     try {
-      const {
-        selectedLanguage = "en",
-        selectedTitleLanguage,
-        selectedDescriptionLanguage,
-        tone = "standard",
-        useEmojis = true,
-        useBulletPoints = true,
-        userProfile,
-      } = await chrome.storage.local.get([
+      const storage = await chrome.storage.local.get([
         "selectedLanguage",
         "selectedTitleLanguage",
         "selectedDescriptionLanguage",
@@ -7508,24 +7656,33 @@
         "useBulletPoints",
         "userProfile",
       ]);
+      const {
+        tone = "standard",
+        useEmojis = true,
+        useBulletPoints = true,
+        userProfile,
+      } = storage;
+      const languagePreferences = resolveListingLanguagePreferences(storage);
       const emojiAccess = canUseEmojiSetting(userProfile);
       const effectiveUseEmojis =
         emojiAccess &&
         (overrideUseEmojis === null
           ? useEmojis !== false
           : overrideUseEmojis === true);
-      const titleLanguageCode = normalizeLanguageCode(
-        selectedTitleLanguage || selectedLanguage,
-      );
-      const descriptionLanguageCode = normalizeLanguageCode(
-        selectedDescriptionLanguage || selectedLanguage,
-      );
+      const titleLanguageCode = languagePreferences.titleLanguageCode;
+      const descriptionLanguageCode =
+        languagePreferences.descriptionLanguageCode;
       const legacyLanguageCode = descriptionLanguageCode || titleLanguageCode;
       trackGrowthEvent("generate_request", {
         mode,
         photoCount: imageUrls.length,
         titleLanguageCode,
         descriptionLanguageCode,
+        languageDefaultSource: languagePreferences.defaultSource,
+        languageDefaultCode: languagePreferences.defaultLanguageCode,
+        domainLanguageCode: languagePreferences.domainLanguageCode,
+        hasStoredLanguagePreference:
+          languagePreferences.hasStoredLanguagePreference,
         tone,
         useEmojis: effectiveUseEmojis,
         useBulletPoints: Boolean(useBulletPoints),
@@ -7660,6 +7817,18 @@
         applyGeneratedDescription(descInput, description, descriptionApplyChoice);
       }
 
+      startGenerationOutputEditTracking({
+        mode,
+        photoCount: imageUrls.length,
+        titleLanguageCode,
+        descriptionLanguageCode,
+        descriptionApplyChoice,
+        generatedTitle: title,
+        generatedDescription: description,
+        appliedTitle: titleInput?.value || "",
+        appliedDescription: descInput?.value || "",
+      });
+
       if (manageButtonState) {
         setButtonSuccessState();
       }
@@ -7677,6 +7846,7 @@
         emojiRetry: Boolean(emojiRetry),
         hasMeasurementAdvice: Boolean(measurementAdvice && measurementAdvice.trim()),
       });
+      markInlineLanguageHintDone();
 
       const showedOfferPrompt = manageButtonState
         ? await queueGenerationOffers(offers)

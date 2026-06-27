@@ -18,6 +18,7 @@ document.addEventListener("DOMContentLoaded", () => {
   const LOW_REMAINING_RATIO = 0.2;
   const OPEN_SETTINGS_ON_NEXT_POPUP_KEY = "quickvintOpenSettingsOnNextPopup";
   const OPEN_SETTINGS_FLAG_MAX_AGE_MS = 15000;
+  const languageDefaults = window.AutoListerLanguageDefaults;
 
   const TIER_DISPLAY_NAMES = {
     free: "Free Plan",
@@ -86,6 +87,23 @@ document.addEventListener("DOMContentLoaded", () => {
     return new Promise((resolve) => {
       chrome.storage.local.get(keys, resolve);
     });
+  }
+
+  async function getActiveVintedHostname() {
+    try {
+      const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+      const url = new URL(tab?.url || "");
+      return url.hostname || "";
+    } catch (error) {
+      return "";
+    }
+  }
+
+  async function getDefaultListingLanguageCode() {
+    const activeHostname = await getActiveVintedHostname();
+    return languageDefaults.getDefaultListingLanguageInfo({
+      hostname: activeHostname,
+    }).code;
   }
 
   function sendRuntimeMessage(message) {
@@ -814,11 +832,9 @@ document.addEventListener("DOMContentLoaded", () => {
 
   // --- LANGUAGE DROPDOWN LOGIC ---
   function setupLanguageDropdown() {
-    const browserLanguage = (navigator.language || "en").slice(0, 2);
-    const fallbackCode = browserLanguage === "cs" ? "cz" : browserLanguage;
-
     const ready = new Promise((resolve) => {
-      chrome.storage.local.get(
+      getDefaultListingLanguageCode().then((fallbackCode) => {
+        chrome.storage.local.get(
         [
           "selectedLanguage",
           "selectedTitleLanguage",
@@ -845,6 +861,7 @@ document.addEventListener("DOMContentLoaded", () => {
           resolve();
         },
       );
+      });
     });
 
     const closeAllDropdowns = () => {

@@ -18,6 +18,7 @@ VERSION=${1:-""}
 # Files and folders to include in the ZIP
 INCLUDE_LIST=(
     "manifest.json"
+    "language-defaults.js"
     "content.js"
     "background.js"
     "popup.html"
@@ -27,7 +28,7 @@ INCLUDE_LIST=(
     "preview.html"
     "lib/"
     "icons/"
-    "images/"
+    "images/onboard.png"
     "_locales/"
 )
 

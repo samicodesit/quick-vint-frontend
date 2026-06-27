@@ -5,6 +5,7 @@
   "main": "content.js",
   "scripts": {
     "test": "npm run test:e2e",
+    "test:unit": "node --test test/*.test.js",
     "test:e2e": "playwright test",
     "test:e2e:install": "playwright install chromium",
     "build": "node scripts/set-env.js && terser content.js -o content.min.js --compress --mangle",
