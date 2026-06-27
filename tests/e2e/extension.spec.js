@@ -3,6 +3,7 @@ const path = require("node:path");
 const { test, expect, chromium } = require("@playwright/test");
 
 const extensionPath = path.resolve(__dirname, "../..");
+const languageDefaultsPath = path.join(extensionPath, "language-defaults.js");
 const contentScriptPath = path.join(extensionPath, "content.js");
 const listingFixture = fs.readFileSync(
   path.resolve(__dirname, "../fixtures/vinted-listing.html"),
@@ -126,6 +127,7 @@ async function openContentHarness(page, capacityResponse = null) {
   });
   await page.setContent(listingFixture, { waitUntil: "domcontentloaded" });
   await installChromeHarness(page, capacityResponse);
+  await page.addScriptTag({ path: languageDefaultsPath });
   await page.addScriptTag({ path: contentScriptPath });
   try {
     await expect(page.locator("#quickvint-gen-btn")).toBeVisible();
@@ -153,7 +155,10 @@ test.describe("AutoLister extension smoke flows", () => {
       );
       expect(manifest.manifest_version).toBe(3);
       expect(manifest.background.service_worker).toBe("background.js");
-      expect(manifest.content_scripts[0].js).toContain("content.js");
+      expect(manifest.content_scripts[0].js).toEqual([
+        "language-defaults.js",
+        "content.js",
+      ]);
       expect(manifest.host_permissions).toContain("https://autolister.app/*");
     } finally {
       await context.close();
