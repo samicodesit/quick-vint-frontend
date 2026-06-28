@@ -54,6 +54,7 @@ function installChromeHarness(page, capacityResponse = null) {
       selectedDescriptionLanguage: "en",
       tone: "standard",
       useBulletPoints: true,
+      descriptionLength: "long",
     };
 
     window.chrome = {
@@ -144,6 +145,9 @@ async function openContentHarness(page, capacityResponse = null) {
     );
   }
   await expect(page.locator("#quickvint-phone-btn")).toBeVisible();
+  await expect(
+    page.locator("#quickvint-description-length-toggle"),
+  ).toBeVisible();
 }
 
 test.describe("AutoLister extension smoke flows", () => {
@@ -190,6 +194,42 @@ test.describe("AutoLister extension smoke flows", () => {
       /Clean black jacket/,
     );
     expect(requestBodies[0].useEmojis).toBe(true);
+    expect(requestBodies[0].descriptionLength).toBe("long");
+  });
+
+  test("saves description length preference and sends it with generation requests", async ({
+    page,
+  }) => {
+    const requestBodies = [];
+    await page.route("https://autolister.app/api/generate", (route) => {
+      requestBodies.push(route.request().postDataJSON());
+      return route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          title: "Black Test Jacket",
+          description: "Clean black jacket.",
+          measurementAdvice: "",
+        }),
+      });
+    });
+
+    await openContentHarness(page);
+    await page
+      .locator("#quickvint-description-length-toggle [data-length='short']")
+      .click();
+
+    const storedDescriptionLength = await page.evaluate(() =>
+      chrome.storage.local.get("descriptionLength"),
+    );
+    expect(storedDescriptionLength.descriptionLength).toBe("short");
+    await expect(
+      page.locator("#quickvint-description-length-toggle [data-length='short']"),
+    ).toHaveAttribute("aria-pressed", "true");
+
+    await page.locator("#quickvint-gen-btn").click();
+    await expect.poll(() => requestBodies.length).toBe(1);
+    expect(requestBodies[0].descriptionLength).toBe("short");
   });
 
   test("lets free users remove emojis locally and saves the preference", async ({

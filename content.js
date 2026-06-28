@@ -4,6 +4,8 @@
   const PHONE_BTN_ID = "quickvint-phone-btn";
   const BATCH_BTN_ID = "quickvint-batch-btn";
   const EMOJI_TOGGLE_ID = "quickvint-emoji-toggle";
+  const DESCRIPTION_LENGTH_TOGGLE_ID = "quickvint-description-length-toggle";
+  const DESCRIPTION_LENGTH_STORAGE_KEY = "descriptionLength";
   const SIGN_IN_BTN_ID = "quickvint-signin-btn";
   const DESCRIPTION_APPLY_PROMPT_ID = "quickvint-description-apply-prompt";
   const TITLE_LANGUAGE_SELECT_ID = "quickvint-title-language-select";
@@ -91,6 +93,7 @@
   let phoneBtn = null;
   let batchBtn = null;
   let emojiToggleBtn = null;
+  let descriptionLengthToggle = null;
   let signInBtn = null;
   let isBusy = false;
   let isAuthenticated = false;
@@ -131,6 +134,7 @@
   let eventFlushTimer = null;
   let batchTabStatusTimer = null;
   let emojiToggleSyncTimer = null;
+  let descriptionLengthSyncTimer = null;
   let isBatchPollInFlight = false;
   let batchImagePreloadUrls = new Set();
   let batchImagePreloadCache = new Map();
@@ -1052,6 +1056,9 @@
     if (changes.useEmojis || changes.userProfile) {
       syncEmojiToggleState();
     }
+    if (changes[DESCRIPTION_LENGTH_STORAGE_KEY]) {
+      syncDescriptionLengthToggleState();
+    }
   });
 
   chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
@@ -1183,10 +1190,6 @@
         width: 18px;
         height: 18px;
         fill: currentColor;
-      }
-
-      #${PHONE_BTN_ID}, #${BATCH_BTN_ID} {
-        margin-left: 8px;
       }
 
       #${BTN_ID}:disabled, #${PHONE_BTN_ID}:disabled, #${BATCH_BTN_ID}:disabled {
@@ -3942,6 +3945,83 @@
         filter: brightness(0.98);
       }
 
+      .quickvint-tools {
+        display: inline-flex;
+        flex-direction: column;
+        align-items: flex-end;
+        gap: 8px;
+      }
+
+      .quickvint-primary-tools,
+      .quickvint-tool-options {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        flex-wrap: wrap;
+      }
+
+      .quickvint-tool-options {
+        justify-content: flex-end;
+        gap: 7px;
+        width: 100%;
+      }
+
+      #${DESCRIPTION_LENGTH_TOGGLE_ID} {
+        display: inline-grid;
+        grid-template-columns: repeat(2, minmax(47px, 1fr));
+        align-items: center;
+        width: 100px;
+        height: 38px;
+        min-height: 38px;
+        padding: 3px;
+        border: 1px solid #d9dde8;
+        border-radius: 8px;
+        background: #ffffff;
+        box-shadow: 0 6px 16px rgba(15, 23, 42, 0.07);
+        transition: border-color 0.22s ease, box-shadow 0.22s ease, transform 0.22s ease;
+      }
+
+      #${DESCRIPTION_LENGTH_TOGGLE_ID}:hover {
+        border-color: #b8c0d8;
+        box-shadow: 0 8px 18px rgba(15, 23, 42, 0.09);
+        transform: translateY(-1px);
+      }
+
+      #${DESCRIPTION_LENGTH_TOGGLE_ID} .quickvint-length-option {
+        appearance: none;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 100%;
+        height: 30px;
+        min-width: 0;
+        padding: 0 7px;
+        border: 0;
+        border-radius: 6px;
+        background: transparent;
+        color: #64748b;
+        cursor: pointer;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        font-size: 12px;
+        font-weight: 800;
+        line-height: 1;
+        letter-spacing: 0;
+        white-space: nowrap;
+        transform: scale(1);
+        transition: background 0.22s ease, color 0.22s ease, box-shadow 0.22s ease, transform 0.22s ease;
+      }
+
+      #${DESCRIPTION_LENGTH_TOGGLE_ID} .quickvint-length-option:hover {
+        color: #4338ca;
+      }
+
+      #${DESCRIPTION_LENGTH_TOGGLE_ID} .quickvint-length-option[aria-pressed="true"] {
+        background: ${PRIMARY_BUTTON_BACKGROUND};
+        color: #ffffff;
+        box-shadow: 0 5px 12px rgba(79, 70, 229, 0.2);
+        transform: scale(1.015);
+      }
+
       #${EMOJI_TOGGLE_ID} {
         display: inline-flex;
         align-items: center;
@@ -3949,10 +4029,9 @@
         gap: 9px;
         height: 38px;
         min-height: 38px;
-        margin-left: 6px;
         padding: 5px 7px 5px 12px;
         border: 1px solid #d9dde8;
-        border-radius: 12px;
+        border-radius: 8px;
         background: #ffffff;
         color: #475569;
         cursor: pointer;
@@ -3962,7 +4041,7 @@
         line-height: 1;
         white-space: nowrap;
         box-shadow: 0 6px 16px rgba(15, 23, 42, 0.07);
-        transition: border-color 0.18s ease, background 0.18s ease, color 0.18s ease, box-shadow 0.18s ease, transform 0.18s ease;
+        transition: border-color 0.22s ease, background 0.22s ease, color 0.22s ease, box-shadow 0.22s ease, transform 0.22s ease;
       }
 
       #${EMOJI_TOGGLE_ID}:hover {
@@ -4003,7 +4082,7 @@
         border-radius: 999px;
         background: #cbd5e1;
         box-shadow: inset 0 0 0 1px rgba(15, 23, 42, 0.06);
-        transition: background 0.18s ease, box-shadow 0.18s ease;
+        transition: background 0.22s ease, box-shadow 0.22s ease;
       }
 
       #${EMOJI_TOGGLE_ID} .quickvint-emoji-knob {
@@ -4015,7 +4094,7 @@
         border-radius: 999px;
         background: #ffffff;
         box-shadow: 0 1px 4px rgba(15, 23, 42, 0.28);
-        transition: transform 0.18s ease;
+        transition: transform 0.22s ease;
       }
 
       #${EMOJI_TOGGLE_ID}[aria-pressed="true"] .quickvint-emoji-switch {
@@ -4025,6 +4104,22 @@
 
       #${EMOJI_TOGGLE_ID}[aria-pressed="true"] .quickvint-emoji-knob {
         transform: translateX(16px);
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        #${DESCRIPTION_LENGTH_TOGGLE_ID},
+        #${DESCRIPTION_LENGTH_TOGGLE_ID} .quickvint-length-option,
+        #${EMOJI_TOGGLE_ID},
+        #${EMOJI_TOGGLE_ID} .quickvint-emoji-switch,
+        #${EMOJI_TOGGLE_ID} .quickvint-emoji-knob {
+          transition-duration: 1ms !important;
+        }
+
+        #${DESCRIPTION_LENGTH_TOGGLE_ID}:hover,
+        #${EMOJI_TOGGLE_ID}:hover,
+        #${DESCRIPTION_LENGTH_TOGGLE_ID} .quickvint-length-option[aria-pressed="true"] {
+          transform: none;
+        }
       }
 
       /* TOAST NOTIFICATION */
@@ -4482,6 +4577,84 @@
     return btn;
   }
 
+  function normalizeDescriptionLength(value) {
+    return value === "short" ? "short" : "long";
+  }
+
+  function setDescriptionLengthToggleState(value) {
+    if (!descriptionLengthToggle) return;
+    const normalizedValue = normalizeDescriptionLength(value);
+    descriptionLengthToggle.dataset.value = normalizedValue;
+    descriptionLengthToggle
+      .querySelectorAll(".quickvint-length-option")
+      .forEach((option) => {
+        option.setAttribute(
+          "aria-pressed",
+          option.dataset.length === normalizedValue ? "true" : "false",
+        );
+      });
+  }
+
+  async function getStoredDescriptionLength() {
+    const storage = await chrome.storage.local.get({
+      [DESCRIPTION_LENGTH_STORAGE_KEY]: "long",
+    });
+    return normalizeDescriptionLength(storage[DESCRIPTION_LENGTH_STORAGE_KEY]);
+  }
+
+  async function syncDescriptionLengthToggleState() {
+    if (!descriptionLengthToggle) return;
+    setDescriptionLengthToggleState(await getStoredDescriptionLength());
+  }
+
+  function createDescriptionLengthToggle() {
+    const group = document.createElement("div");
+    group.id = DESCRIPTION_LENGTH_TOGGLE_ID;
+    group.setAttribute("role", "group");
+    group.setAttribute("aria-label", "Description length");
+    group.title = "Description length";
+    group.innerHTML = `
+      <button type="button" class="quickvint-length-option" data-length="short" aria-pressed="false">Short</button>
+      <button type="button" class="quickvint-length-option" data-length="long" aria-pressed="true">Long</button>
+    `;
+
+    group.addEventListener("click", async (event) => {
+      const option =
+        event.target instanceof Element
+          ? event.target.closest(".quickvint-length-option")
+          : null;
+      if (!option) return;
+      const descriptionLength = normalizeDescriptionLength(option.dataset.length);
+      await chrome.storage.local.set({
+        [DESCRIPTION_LENGTH_STORAGE_KEY]: descriptionLength,
+      });
+      setDescriptionLengthToggleState(descriptionLength);
+      trackGrowthEvent("description_length_changed", {
+        source: "listing_tools",
+        descriptionLength,
+      });
+    });
+
+    syncDescriptionLengthToggleState();
+    startDescriptionLengthToggleSync();
+    return group;
+  }
+
+  function startDescriptionLengthToggleSync() {
+    if (descriptionLengthSyncTimer) return;
+    descriptionLengthSyncTimer = window.setInterval(() => {
+      if (
+        !descriptionLengthToggle ||
+        !document.body.contains(descriptionLengthToggle)
+      ) {
+        window.clearInterval(descriptionLengthSyncTimer);
+        descriptionLengthSyncTimer = null;
+        return;
+      }
+      syncDescriptionLengthToggleState();
+    }, 1000);
+  }
+
   function setEmojiToggleState(enabled) {
     if (!emojiToggleBtn) return;
     emojiToggleBtn.setAttribute("aria-pressed", enabled ? "true" : "false");
@@ -4783,6 +4956,7 @@
       if (phoneBtn) phoneBtn.style.display = "none";
       if (batchBtn) batchBtn.style.display = "none";
       if (emojiToggleBtn) emojiToggleBtn.style.display = "none";
+      if (descriptionLengthToggle) descriptionLengthToggle.style.display = "none";
       if (titleLanguageField) titleLanguageField.style.display = "none";
       if (descriptionLanguageField) descriptionLanguageField.style.display = "none";
       maybeTrackSignedOutToolsReady();
@@ -4794,6 +4968,7 @@
     if (generateBtn) generateBtn.style.display = "flex";
     if (phoneBtn) phoneBtn.style.display = "flex";
     if (batchBtn) batchBtn.style.display = "flex";
+    if (descriptionLengthToggle) descriptionLengthToggle.style.display = "inline-grid";
     if (emojiToggleBtn) emojiToggleBtn.style.display = "inline-flex";
     if (titleLanguageField) titleLanguageField.style.display = "inline-flex";
     if (descriptionLanguageField) {
@@ -7654,14 +7829,17 @@
         "tone",
         "useEmojis",
         "useBulletPoints",
+        DESCRIPTION_LENGTH_STORAGE_KEY,
         "userProfile",
       ]);
       const {
         tone = "standard",
         useEmojis = true,
         useBulletPoints = true,
+        [DESCRIPTION_LENGTH_STORAGE_KEY]: storedDescriptionLength = "long",
         userProfile,
       } = storage;
+      const descriptionLength = normalizeDescriptionLength(storedDescriptionLength);
       const languagePreferences = resolveListingLanguagePreferences(storage);
       const emojiAccess = canUseEmojiSetting(userProfile);
       const effectiveUseEmojis =
@@ -7686,6 +7864,7 @@
         tone,
         useEmojis: effectiveUseEmojis,
         useBulletPoints: Boolean(useBulletPoints),
+        descriptionLength,
         emojiRetry: Boolean(emojiRetry),
       });
       const { access_token } = await sendMessage({ type: "GET_ACCESS_TOKEN" });
@@ -7716,6 +7895,7 @@
           useEmojis: effectiveUseEmojis,
           emojiRetry: Boolean(emojiRetry),
           useBulletPoints,
+          descriptionLength,
           generationMode: requestGenerationMode,
         }),
       });
@@ -7920,9 +8100,13 @@
       phoneBtn = document.getElementById(PHONE_BTN_ID);
       batchBtn = document.getElementById(BATCH_BTN_ID);
       emojiToggleBtn = document.getElementById(EMOJI_TOGGLE_ID);
+      descriptionLengthToggle = document.getElementById(
+        DESCRIPTION_LENGTH_TOGGLE_ID,
+      );
       signInBtn = document.getElementById(SIGN_IN_BTN_ID);
       injectFieldLanguageControls();
       syncEmojiToggleState();
+      syncDescriptionLengthToggleState();
       updateButtonUI();
       return true;
     }
@@ -7936,21 +8120,28 @@
       // Container for tool buttons and the sign-in component, spaced below the title.
       btnContainer.style.marginTop = "20px";
 
-      // Wrapper for tools (Generate + Phone)
+      // Wrapper for primary actions and lightweight preferences.
       const toolsWrapper = document.createElement("div");
-      toolsWrapper.style.display = "flex";
-      toolsWrapper.style.alignItems = "center";
+      toolsWrapper.className = "quickvint-tools";
+      const primaryTools = document.createElement("div");
+      primaryTools.className = "quickvint-primary-tools";
+      const toolOptions = document.createElement("div");
+      toolOptions.className = "quickvint-tool-options";
 
       generateBtn = createButton();
       phoneBtn = createPhoneButton();
       batchBtn = createBatchButton();
+      descriptionLengthToggle = createDescriptionLengthToggle();
       emojiToggleBtn = createEmojiToggleButton();
       signInBtn = createSignInComponent();
 
-      toolsWrapper.appendChild(generateBtn);
-      toolsWrapper.appendChild(phoneBtn);
-      toolsWrapper.appendChild(batchBtn);
-      toolsWrapper.appendChild(emojiToggleBtn);
+      primaryTools.appendChild(generateBtn);
+      primaryTools.appendChild(phoneBtn);
+      primaryTools.appendChild(batchBtn);
+      toolOptions.appendChild(descriptionLengthToggle);
+      toolOptions.appendChild(emojiToggleBtn);
+      toolsWrapper.appendChild(primaryTools);
+      toolsWrapper.appendChild(toolOptions);
 
       btnContainer.appendChild(toolsWrapper);
       btnContainer.appendChild(signInBtn);
