@@ -4,8 +4,10 @@
   const PHONE_BTN_ID = "quickvint-phone-btn";
   const BATCH_BTN_ID = "quickvint-batch-btn";
   const EMOJI_TOGGLE_ID = "quickvint-emoji-toggle";
+  const HASHTAGS_TOGGLE_ID = "quickvint-hashtags-toggle";
   const DESCRIPTION_LENGTH_TOGGLE_ID = "quickvint-description-length-toggle";
   const DESCRIPTION_LENGTH_STORAGE_KEY = "descriptionLength";
+  const HASHTAGS_STORAGE_KEY = "useHashtags";
   const SIGN_IN_BTN_ID = "quickvint-signin-btn";
   const DESCRIPTION_APPLY_PROMPT_ID = "quickvint-description-apply-prompt";
   const TITLE_LANGUAGE_SELECT_ID = "quickvint-title-language-select";
@@ -93,6 +95,7 @@
   let phoneBtn = null;
   let batchBtn = null;
   let emojiToggleBtn = null;
+  let hashtagsToggleBtn = null;
   let descriptionLengthToggle = null;
   let signInBtn = null;
   let isBusy = false;
@@ -134,6 +137,7 @@
   let eventFlushTimer = null;
   let batchTabStatusTimer = null;
   let emojiToggleSyncTimer = null;
+  let hashtagsToggleSyncTimer = null;
   let descriptionLengthSyncTimer = null;
   let isBatchPollInFlight = false;
   let batchImagePreloadUrls = new Set();
@@ -1055,6 +1059,9 @@
     }
     if (changes.useEmojis || changes.userProfile) {
       syncEmojiToggleState();
+    }
+    if (changes[HASHTAGS_STORAGE_KEY]) {
+      syncHashtagsToggleState();
     }
     if (changes[DESCRIPTION_LENGTH_STORAGE_KEY]) {
       syncDescriptionLengthToggleState();
@@ -4022,7 +4029,7 @@
         transform: scale(1.015);
       }
 
-      #${EMOJI_TOGGLE_ID} {
+      .quickvint-binary-toggle {
         display: inline-flex;
         align-items: center;
         justify-content: space-between;
@@ -4044,37 +4051,37 @@
         transition: border-color 0.22s ease, background 0.22s ease, color 0.22s ease, box-shadow 0.22s ease, transform 0.22s ease;
       }
 
-      #${EMOJI_TOGGLE_ID}:hover {
+      .quickvint-binary-toggle:hover {
         border-color: #b8c0d8;
         background: #f8fafc;
         transform: translateY(-1px);
       }
 
-      #${EMOJI_TOGGLE_ID}[aria-pressed="true"] {
+      .quickvint-binary-toggle[aria-pressed="true"] {
         border-color: #8b7cf6;
         background: linear-gradient(135deg, #eef2ff 0%, #f5f3ff 100%);
         color: #4338ca;
         box-shadow: 0 8px 20px rgba(79, 70, 229, 0.16);
       }
 
-      #${EMOJI_TOGGLE_ID}:disabled {
+      .quickvint-binary-toggle:disabled {
         cursor: not-allowed;
         opacity: 0.58;
         transform: none;
         box-shadow: 0 3px 8px rgba(17, 24, 39, 0.08);
       }
 
-      #${EMOJI_TOGGLE_ID}:disabled:hover {
+      .quickvint-binary-toggle:disabled:hover {
         border-color: #d9dde8;
         background: #ffffff;
         transform: none;
       }
 
-      #${EMOJI_TOGGLE_ID} .quickvint-emoji-label {
+      .quickvint-binary-toggle .quickvint-toggle-label {
         line-height: 1;
       }
 
-      #${EMOJI_TOGGLE_ID} .quickvint-emoji-switch {
+      .quickvint-binary-toggle .quickvint-toggle-switch {
         position: relative;
         width: 36px;
         height: 20px;
@@ -4085,7 +4092,7 @@
         transition: background 0.22s ease, box-shadow 0.22s ease;
       }
 
-      #${EMOJI_TOGGLE_ID} .quickvint-emoji-knob {
+      .quickvint-binary-toggle .quickvint-toggle-knob {
         position: absolute;
         top: 3px;
         left: 3px;
@@ -4097,26 +4104,26 @@
         transition: transform 0.22s ease;
       }
 
-      #${EMOJI_TOGGLE_ID}[aria-pressed="true"] .quickvint-emoji-switch {
+      .quickvint-binary-toggle[aria-pressed="true"] .quickvint-toggle-switch {
         background: ${PRIMARY_BUTTON_BACKGROUND};
         box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.18);
       }
 
-      #${EMOJI_TOGGLE_ID}[aria-pressed="true"] .quickvint-emoji-knob {
+      .quickvint-binary-toggle[aria-pressed="true"] .quickvint-toggle-knob {
         transform: translateX(16px);
       }
 
       @media (prefers-reduced-motion: reduce) {
         #${DESCRIPTION_LENGTH_TOGGLE_ID},
         #${DESCRIPTION_LENGTH_TOGGLE_ID} .quickvint-length-option,
-        #${EMOJI_TOGGLE_ID},
-        #${EMOJI_TOGGLE_ID} .quickvint-emoji-switch,
-        #${EMOJI_TOGGLE_ID} .quickvint-emoji-knob {
+        .quickvint-binary-toggle,
+        .quickvint-binary-toggle .quickvint-toggle-switch,
+        .quickvint-binary-toggle .quickvint-toggle-knob {
           transition-duration: 1ms !important;
         }
 
         #${DESCRIPTION_LENGTH_TOGGLE_ID}:hover,
-        #${EMOJI_TOGGLE_ID}:hover,
+        .quickvint-binary-toggle:hover,
         #${DESCRIPTION_LENGTH_TOGGLE_ID} .quickvint-length-option[aria-pressed="true"] {
           transform: none;
         }
@@ -4660,6 +4667,68 @@
     emojiToggleBtn.setAttribute("aria-pressed", enabled ? "true" : "false");
   }
 
+  function setHashtagsToggleState(enabled) {
+    if (!hashtagsToggleBtn) return;
+    hashtagsToggleBtn.setAttribute("aria-pressed", enabled ? "true" : "false");
+    hashtagsToggleBtn.title = enabled
+      ? "Hashtags are on for generated descriptions"
+      : "Hashtags are off for generated descriptions";
+  }
+
+  async function syncHashtagsToggleState() {
+    if (!hashtagsToggleBtn) return;
+    const storage = await chrome.storage.local.get({
+      [HASHTAGS_STORAGE_KEY]: true,
+    });
+    setHashtagsToggleState(storage[HASHTAGS_STORAGE_KEY] !== false);
+  }
+
+  function createBinaryToggleMarkup(label) {
+    return `
+      <span class="quickvint-toggle-label">${label}</span>
+      <span class="quickvint-toggle-switch" aria-hidden="true">
+        <span class="quickvint-toggle-knob"></span>
+      </span>
+    `;
+  }
+
+  function createHashtagsToggleButton() {
+    const btn = document.createElement("button");
+    btn.id = HASHTAGS_TOGGLE_ID;
+    btn.type = "button";
+    btn.className = "quickvint-binary-toggle";
+    btn.setAttribute("aria-label", "Toggle hashtags in generated descriptions");
+    btn.setAttribute("aria-pressed", "true");
+    btn.innerHTML = createBinaryToggleMarkup("# Tags");
+    btn.addEventListener("click", async () => {
+      const storage = await chrome.storage.local.get({
+        [HASHTAGS_STORAGE_KEY]: true,
+      });
+      const nextValue = storage[HASHTAGS_STORAGE_KEY] === false;
+      await chrome.storage.local.set({ [HASHTAGS_STORAGE_KEY]: nextValue });
+      setHashtagsToggleState(nextValue);
+      trackGrowthEvent("hashtags_toggle_changed", {
+        source: "listing_tools",
+        enabled: nextValue,
+      });
+    });
+    syncHashtagsToggleState();
+    startHashtagsToggleSync();
+    return btn;
+  }
+
+  function startHashtagsToggleSync() {
+    if (hashtagsToggleSyncTimer) return;
+    hashtagsToggleSyncTimer = window.setInterval(() => {
+      if (!hashtagsToggleBtn || !document.body.contains(hashtagsToggleBtn)) {
+        window.clearInterval(hashtagsToggleSyncTimer);
+        hashtagsToggleSyncTimer = null;
+        return;
+      }
+      syncHashtagsToggleState();
+    }, 1000);
+  }
+
   async function syncEmojiToggleState() {
     if (!emojiToggleBtn) return;
     const { useEmojis = true, userProfile = null } = await new Promise((resolve) => {
@@ -4682,14 +4751,10 @@
     const btn = document.createElement("button");
     btn.id = EMOJI_TOGGLE_ID;
     btn.type = "button";
+    btn.className = "quickvint-binary-toggle";
     btn.setAttribute("aria-label", "Toggle emojis in generated descriptions");
     btn.setAttribute("aria-pressed", "true");
-    btn.innerHTML = `
-      <span class="quickvint-emoji-label">😊 Emoji</span>
-      <span class="quickvint-emoji-switch" aria-hidden="true">
-        <span class="quickvint-emoji-knob"></span>
-      </span>
-    `;
+    btn.innerHTML = createBinaryToggleMarkup("😊 Emoji");
     btn.addEventListener("click", async () => {
       const { useEmojis = true, userProfile = null } = await new Promise((resolve) => {
         chrome.storage.local.get(
@@ -4956,6 +5021,7 @@
       if (phoneBtn) phoneBtn.style.display = "none";
       if (batchBtn) batchBtn.style.display = "none";
       if (emojiToggleBtn) emojiToggleBtn.style.display = "none";
+      if (hashtagsToggleBtn) hashtagsToggleBtn.style.display = "none";
       if (descriptionLengthToggle) descriptionLengthToggle.style.display = "none";
       if (titleLanguageField) titleLanguageField.style.display = "none";
       if (descriptionLanguageField) descriptionLanguageField.style.display = "none";
@@ -4969,6 +5035,7 @@
     if (phoneBtn) phoneBtn.style.display = "flex";
     if (batchBtn) batchBtn.style.display = "flex";
     if (descriptionLengthToggle) descriptionLengthToggle.style.display = "inline-grid";
+    if (hashtagsToggleBtn) hashtagsToggleBtn.style.display = "inline-flex";
     if (emojiToggleBtn) emojiToggleBtn.style.display = "inline-flex";
     if (titleLanguageField) titleLanguageField.style.display = "inline-flex";
     if (descriptionLanguageField) {
@@ -7828,6 +7895,7 @@
         "selectedDescriptionLanguage",
         "tone",
         "useEmojis",
+        HASHTAGS_STORAGE_KEY,
         "useBulletPoints",
         DESCRIPTION_LENGTH_STORAGE_KEY,
         "userProfile",
@@ -7835,6 +7903,7 @@
       const {
         tone = "standard",
         useEmojis = true,
+        [HASHTAGS_STORAGE_KEY]: useHashtags = true,
         useBulletPoints = true,
         [DESCRIPTION_LENGTH_STORAGE_KEY]: storedDescriptionLength = "long",
         userProfile,
@@ -7863,6 +7932,7 @@
           languagePreferences.hasStoredLanguagePreference,
         tone,
         useEmojis: effectiveUseEmojis,
+        useHashtags: useHashtags !== false,
         useBulletPoints: Boolean(useBulletPoints),
         descriptionLength,
         emojiRetry: Boolean(emojiRetry),
@@ -7893,6 +7963,7 @@
           descriptionLanguageCode,
           tone,
           useEmojis: effectiveUseEmojis,
+          useHashtags: useHashtags !== false,
           emojiRetry: Boolean(emojiRetry),
           useBulletPoints,
           descriptionLength,
@@ -8100,12 +8171,14 @@
       phoneBtn = document.getElementById(PHONE_BTN_ID);
       batchBtn = document.getElementById(BATCH_BTN_ID);
       emojiToggleBtn = document.getElementById(EMOJI_TOGGLE_ID);
+      hashtagsToggleBtn = document.getElementById(HASHTAGS_TOGGLE_ID);
       descriptionLengthToggle = document.getElementById(
         DESCRIPTION_LENGTH_TOGGLE_ID,
       );
       signInBtn = document.getElementById(SIGN_IN_BTN_ID);
       injectFieldLanguageControls();
       syncEmojiToggleState();
+      syncHashtagsToggleState();
       syncDescriptionLengthToggleState();
       updateButtonUI();
       return true;
@@ -8132,6 +8205,7 @@
       phoneBtn = createPhoneButton();
       batchBtn = createBatchButton();
       descriptionLengthToggle = createDescriptionLengthToggle();
+      hashtagsToggleBtn = createHashtagsToggleButton();
       emojiToggleBtn = createEmojiToggleButton();
       signInBtn = createSignInComponent();
 
@@ -8139,6 +8213,7 @@
       primaryTools.appendChild(phoneBtn);
       primaryTools.appendChild(batchBtn);
       toolOptions.appendChild(descriptionLengthToggle);
+      toolOptions.appendChild(hashtagsToggleBtn);
       toolOptions.appendChild(emojiToggleBtn);
       toolsWrapper.appendChild(primaryTools);
       toolsWrapper.appendChild(toolOptions);
