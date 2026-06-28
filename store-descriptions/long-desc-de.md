@@ -1,38 +1,19 @@
-AutoLister AI ist ein Vinted Description Generator für Verkäufer, die schneller inserieren wollen ohne riskante Automatisierung.
+Sie müssen Ihr Vinted-Konto nicht verbinden.
+Keine Spam-E-Mails. Keine Werbung.
+Support ist jederzeit über support@autolister.app erreichbar.
 
-NEU: UPLOAD VOM HANDY
-Machen Sie Fotos mit Ihrem Handy, scannen Sie den QR-Code, und die Bilder erscheinen in Sekunden auf Ihrer Vinted-Anzeigenseite.
+AutoLister AI ist ein Vinted-Beschreibungsgenerator, der Ihnen hilft, Titel und Beschreibungen aus Fotos zu erstellen.
 
-SO FUNKTIONIERT ES
+Laden Sie Fotos auf einer Vinted-Anzeigenseite hoch und klicken Sie auf Generate. Titel und Beschreibung werden direkt in die Anzeigenseite eingefügt, ohne Copy-Paste.
 
-1. Laden Sie Ihre Artikelfotos bei Vinted hoch
-2. Klicken Sie auf den "Generate"-Button
-3. Erhalten Sie sofort einen KI-erstellten Titel und eine Beschreibung
+Es hilft Ihnen, schneller auf Vinted zu verkaufen, besonders wenn Sie mehrere Artikel hochladen. Handy-Upload und Batch-Listing funktionieren per QR-Code: Fotos mit dem Handy aufnehmen, an den Browser senden, nach Artikel gruppieren und schneller Entwürfe erstellen.
 
-SICHERES KONZEPT
-• AutoLister erstellt nur Listing-Texte
-• Keine Auto-Likes, Auto-Follows oder Massenaktionen
-• Sie behalten die volle Kontrolle vor jeder Veröffentlichung
+Funktionen:
+• Vinted-Titelgenerator für besser auffindbare Anzeigentitel aus Fotos
+• Vinted-Beschreibungsgenerator für klare Artikelbeschreibungen aus Fotos
+• KI-Vinted-Listing-Generator mit Hinweisen zu Marke, Farbe, Größe und Artikeltyp, wenn sichtbar
+• Vinted-Hashtag-Generator für bessere Auffindbarkeit
+• QR-Code-Handy-Upload, um Fotos schneller vom Handy zu Vinted zu bringen
+• Batch-Generator für Vinted-Listings für mehrere Artikel in einem Ablauf
 
-AUTOLISTER VS AUTOMATION BOTS
-• Automation Bots setzen auf wiederholte Engagement-Aktionen
-• AutoLister setzt auf hochwertige Texte aus Ihren Produktfotos
-• Ideal für Verkäufer, die schnellere Listings mit sichererem Workflow wollen
-
-WAS SIE ERHALTEN
-• KI-generierte Titel für bessere Sichtbarkeit
-• Klare Beschreibungen mit Zustandsdetails und Stilhinweisen
-• Automatische Erkennung von Marke, Farbe und Artikeltyp
-• 5 gezielte Hashtags für bessere Auffindbarkeit
-• Inhalte in 18 Sprachen für mehr Reichweite
-
-FÜR WEN
-• Gelegenheitsverkäufer mit wenigen Artikeln
-• Aktive Verkäufer mit vielen Inseraten pro Woche
-• Reseller, die konsistente professionelle Beschreibungen wollen
-
-NICHT GEEIGNET FÜR
-• Nutzer, die Auto-Like-, Auto-Follow- oder Auto-Relist-Bots suchen
-• Nutzer, die vollautomatisches Konto-Verhalten erwarten
-
-Installieren Sie AutoLister AI und verwandeln Sie Ihren Kleiderschrank in Bargeld.
+Geeignet für Gelegenheitsverkäufer, aktive Kleiderschrank-Aufräumer, Reseller und alle, die schneller einen ersten Entwurf erstellen möchten, aber die Kontrolle über jedes Vinted-Listing behalten wollen.

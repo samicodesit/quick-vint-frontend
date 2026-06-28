@@ -1,38 +1,19 @@
-AutoLister AI is een Vinted Description Generator voor verkopers die sneller willen werken zonder risicovolle automatisering.
+Je hoeft je Vinted-account niet te koppelen.
+Geen spam-mails. Geen advertenties.
+Support is altijd bereikbaar via support@autolister.app.
 
-NIEUW: UPLOAD VANAF TELEFOON
-Maak foto's met je telefoon, scan de QR-code en ze verschijnen in seconden op je Vinted advertentiepagina.
+AutoLister AI is een generator voor Vinted-beschrijvingen die je helpt titels en beschrijvingen te maken op basis van foto's.
 
-HOE HET WERKT
+Upload foto's op een Vinted advertentiepagina en klik op Generate. De titel en beschrijving worden voor je ingevuld op de advertentiepagina, dus kopiëren en plakken is niet nodig.
 
-1. Upload je artikelfoto's naar Vinted
-2. Klik op de knop "Generate"
-3. Ontvang direct een door AI gemaakte titel en beschrijving
+Het helpt je sneller te verkopen op Vinted, vooral als je meerdere items wilt uploaden. Telefoonupload en batchgeneratie werken via een QR-code: maak foto's met je telefoon, stuur ze naar je browser, groepeer ze per item en maak sneller concepten.
 
-ONTWORPEN VOOR EEN VEILIGERE WORKFLOW
-• AutoLister genereert alleen advertentietekst
-• Geen auto-like, auto-follow of massa-acties
-• Jij houdt controle voor elke publicatie
+Functies:
+• Vinted-titelgenerator voor vindbare advertentietitels uit foto's
+• generator voor Vinted-beschrijvingen voor duidelijke itemomschrijvingen uit foto's
+• AI-generator voor Vinted-advertenties met hints voor merk, kleur, maat en itemtype als die zichtbaar zijn
+• Vinted-hashtaggenerator voor betere vindbaarheid
+• QR-code upload vanaf je telefoon om foto's sneller naar Vinted te krijgen
+• batchgenerator voor Vinted-advertenties voor meerdere items in één flow
 
-AUTOLISTER VS AUTOMATISERINGSBOTS
-• Bots richten zich op repetitieve engagement-acties
-• AutoLister richt zich op kwalitatieve listingtekst vanuit je foto's
-• Ideaal voor sneller plaatsen met een veiligere workflow
-
-WAT JE KRIJGT
-• AI-titels die je zichtbaarheid helpen verbeteren
-• Duidelijke beschrijvingen met staatdetails en stijlcontext
-• Automatische detectie van merk, kleur en artikeltype
-• 5 gerichte hashtags voor betere vindbaarheid
-• Content in 18 talen om meer kopers te bereiken
-
-VOOR WIE
-• Incidentele verkopers
-• Actieve verkopers met veel listings
-• Resellers die consistente professionele beschrijvingen willen
-
-NIET VOOR
-• Gebruikers die auto-like, auto-follow of auto-relist bots zoeken
-• Gebruikers die volledig geautomatiseerd accountgedrag willen
-
-Installeer AutoLister AI en verander je kledingkast in geld.
+Geschikt voor incidentele verkopers, actieve Vinted-verkopers, resellers en iedereen die sneller een eerste concept wil maken maar controle wil houden over elke Vinted-advertentie.

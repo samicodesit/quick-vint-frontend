@@ -1,38 +1,19 @@
-AutoLister AI es un Vinted Description Generator para vendedores que quieren velocidad sin automatizacion riesgosa.
+No necesitas conectar tu cuenta de Vinted.
+Sin correos spam. Sin anuncios.
+El soporte siempre está disponible en support@autolister.app.
 
-NUEVO: SUBIDA DESDE EL MOVIL
-Toma fotos con tu movil, escanea el codigo QR y aparecen en segundos en tu pagina de anuncio de Vinted.
+AutoLister AI es un generador de descripciones Vinted que te ayuda a crear títulos y descripciones a partir de fotos.
 
-COMO FUNCIONA
+Sube fotos en una página de anuncio de Vinted y haz clic en Generate. El título y la descripción se rellenan en la página del anuncio, sin copiar y pegar.
 
-1. Sube las fotos de tu articulo a Vinted
-2. Haz clic en el boton "Generate"
-3. Recibe al instante un titulo y una descripcion creados por IA
+Ayuda a vender más rápido en Vinted, sobre todo si tienes varios artículos que subir. La subida desde el móvil y la generación por lotes funcionan con un código QR: toma fotos en el móvil, envíalas al navegador, agrúpalas por artículo y crea borradores más rápido.
 
-DISENADO PARA UN FLUJO MAS SEGURO
-• AutoLister solo genera texto de anuncio
-• Sin auto-like, auto-follow ni acciones masivas
-• Tu mantienes el control antes de publicar
+Funciones:
+• generador de títulos Vinted para títulos de anuncios más fáciles de encontrar desde fotos
+• generador de descripciones Vinted para descripciones claras desde fotos
+• generador de anuncios Vinted con IA con sugerencias de marca, color, talla y tipo de artículo cuando sean visibles
+• generador de hashtags Vinted para ayudar a la visibilidad
+• subida por código QR para mover fotos del móvil a Vinted más rápido
+• generador de anuncios Vinted por lotes para preparar varios artículos en un mismo flujo
 
-AUTOLISTER VS BOTS DE AUTOMATIZACION
-• Los bots se enfocan en acciones repetitivas de engagement
-• AutoLister se enfoca en texto de calidad desde tus fotos
-• Ideal para crear anuncios mas rapido con un flujo mas seguro
-
-QUE OBTIENES
-• Titulos IA para mejorar la visibilidad del anuncio
-• Descripciones claras con estado y contexto de estilo
-• Deteccion automatica de marca, color y tipo de articulo
-• 5 hashtags dirigidos para mejor descubrimiento
-• Contenido en 18 idiomas para llegar a mas compradores
-
-PARA QUIEN ES
-• Vendedores ocasionales
-• Vendedores activos con muchos anuncios
-• Revendedores que quieren descripciones profesionales y consistentes
-
-NO ES PARA
-• Usuarios que buscan bots de auto-like, auto-follow o auto-relist
-• Usuarios que quieren comportamiento de cuenta totalmente automatizado
-
-Instala AutoLister AI y convierte tu armario en dinero.
+Adecuado para vendedores ocasionales, vendedores activos, revendedores y cualquier persona que quiera un primer borrador más rápido manteniendo el control de cada anuncio de Vinted.

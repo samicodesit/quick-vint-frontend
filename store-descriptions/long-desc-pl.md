@@ -1,38 +1,19 @@
-AutoLister AI to Vinted Description Generator dla sprzedawcow, ktorzy chca szybciej wystawiac bez ryzykownej automatyzacji.
+Nie musisz łączyć swojego konta Vinted.
+Bez spamowych e-maili. Bez reklam.
+Wsparcie jest zawsze dostępne pod adresem support@autolister.app.
 
-NOWOSC: PRZESYLANIE Z TELEFONU
-Zrob zdjecia telefonem, zeskanuj kod QR, a pojawia sie na stronie ogloszenia Vinted w kilka sekund.
+AutoLister AI to generator opisów Vinted, który pomaga tworzyć tytuły i opisy ogłoszeń na podstawie zdjęć.
 
-JAK TO DZIALA
+Dodaj zdjęcia na stronie ogłoszenia Vinted i kliknij Generate. Tytuł i opis są wstawiane na stronie ogłoszenia, więc nie trzeba nic kopiować i wklejać.
 
-1. Przeslij zdjecia przedmiotu na Vinted
-2. Kliknij przycisk "Generate"
-3. Otrzymaj natychmiast tytul i opis stworzone przez AI
+Pomaga sprzedawać szybciej na Vinted, szczególnie gdy masz kilka przedmiotów do dodania. Przesyłanie z telefonu i generowanie wielu ogłoszeń naraz działają przez kod QR: zrób zdjęcia telefonem, wyślij je do przeglądarki, pogrupuj według przedmiotów i szybciej twórz szkice.
 
-ZAPROJEKTOWANE DLA BEZPIECZNIEJSZEGO PROCESU
-• AutoLister generuje tylko tekst ogloszenia
-• Bez auto-like, auto-follow i masowych akcji
-• Ty zachowujesz kontrole przed publikacja
+Funkcje:
+• generator tytułów Vinted do tytułów ogłoszeń łatwiejszych do znalezienia na podstawie zdjęć
+• generator opisów Vinted do jasnych opisów przedmiotów ze zdjęć
+• generator ogłoszeń Vinted AI z podpowiedziami marki, koloru, rozmiaru i typu przedmiotu, jeśli są widoczne
+• generator hashtagów Vinted dla lepszej widoczności ogłoszeń
+• przesyłanie zdjęć przez kod QR, aby szybciej przenieść je z telefonu do Vinted
+• generator wielu ogłoszeń Vinted do przygotowania kilku przedmiotów w jednym procesie
 
-AUTOLISTER VS BOTY AUTOMATYZUJACE
-• Boty skupiaja sie na powtarzalnych akcjach engagement
-• AutoLister skupia sie na jakosciowym tekscie z Twoich zdjec
-• Idealny dla szybszego tworzenia ogloszen w bezpieczniejszym workflow
-
-CO OTRZYMUJESZ
-• Tytuly AI wspierajace widocznosc ogloszen
-• Jasne opisy ze stanem i kontekstem stylu
-• Automatyczne wykrywanie marki, koloru i typu przedmiotu
-• 5 celowanych hashtagow dla lepszej widocznosci
-• Tresc w 18 jezykach, aby dotrzec do wiekszej liczby kupujacych
-
-DLA KOGO
-• Sprzedawcy okazjonalni
-• Sprzedawcy aktywni z duza liczba ogloszen
-• Resellerzy chcacych profesjonalnych i spojnych opisow
-
-NIE DLA
-• Uzytkownikow szukajacych botow auto-like, auto-follow lub auto-relist
-• Uzytkownikow oczekujacych pelnej automatyzacji konta
-
-Zainstaluj AutoLister AI i zamien swoja szafe w gotowke.
+Odpowiednie dla sprzedawców okazjonalnych, aktywnych sprzedawców, resellerów i każdego, kto chce szybciej przygotować pierwszy szkic, zachowując kontrolę nad każdym ogłoszeniem Vinted.

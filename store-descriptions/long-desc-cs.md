@@ -1,38 +1,19 @@
-AutoLister AI je Vinted Description Generator pro prodejce, kteri chteji rychlejsi inzerci bez rizikove automatizace.
+Nemusíte propojovat svůj účet Vinted.
+Žádné spamové e-maily. Žádné reklamy.
+Podpora je vždy dostupná na support@autolister.app.
 
-NOVINKA: NAHRAVANI Z TELEFONU
-Vyfotte predmety telefonem, naskenujte QR kod a fotky se objevi na strance inzeratu Vinted behem par sekund.
+AutoLister AI je generátor popisů Vinted, který pomáhá tvořit titulky a popisy inzerátů z fotek.
 
-JAK TO FUNGUJE
+Nahrajte fotky na stránce inzerátu Vinted a klikněte na Generate. Titulek a popis se vloží přímo do stránky inzerátu, takže není potřeba nic kopírovat a vkládat.
 
-1. Nahrajte fotky predmetu na Vinted
-2. Kliknete na tlacitko "Generate"
-3. Okamzite ziskate titulek a popis vytvoreny AI
+Pomáhá prodávat rychleji na Vinted, hlavně když máte více předmětů. Nahrávání z telefonu a dávkové generování fungují přes QR kód: vyfoťte předměty telefonem, pošlete fotky do prohlížeče, seskupte je podle předmětů a rychleji vytvořte návrhy.
 
-NAVRZENO PRO BEZPECNEJSI WORKFLOW
-• AutoLister generuje pouze text inzeratu
-• Zadny auto-like, auto-follow ani hromadne akce
-• Pred publikaci mate vse pod kontrolou
+Funkce:
+• generátor titulků Vinted pro lépe dohledatelné titulky inzerátů z fotek
+• generátor popisů Vinted pro jasné popisy předmětů z fotek
+• AI generátor inzerátů Vinted s nápovědou ke značce, barvě, velikosti a typu předmětu, pokud jsou viditelné
+• generátor hashtagů Vinted pro lepší dohledatelnost inzerátů
+• nahrávání fotek přes QR kód pro rychlejší přesun z telefonu do Vinted
+• generátor více inzerátů Vinted najednou pro přípravu více předmětů v jednom postupu
 
-AUTOLISTER VS AUTOMATIZACNI BOTI
-• Boti se soustredi na opakovane engagement akce
-• AutoLister se soustredi na kvalitni text inzeratu z vasich fotek
-• Idealni pro rychlejsi tvorbu inzeratu s bezpecnejsim workflow
-
-CO ZISKATE
-• AI titulky pro lepsi viditelnost ve vyhledavani
-• Jasne popisy s detaily o stavu a stylu
-• Automaticke rozpoznani znacky, barvy a typu predmetu
-• 5 cilenych hashtagu pro lepsi objevitelnost
-• Obsah v 18 jazycich pro vice kupujicich
-
-PRO KOHO
-• Prilezitostni prodejci
-• Aktivni prodejci s mnoha inzeraty
-• Reselleri, kteri chteji profesionalni a konzistentni popisy
-
-NENI TO PRO
-• Uzivatele hledajici auto-like, auto-follow nebo auto-relist boty
-• Uzivatele, kteri chteji plne automatizovane chovani uctu
-
-Nainstalujte AutoLister AI a promente svuj satnik v penize.
+Vhodné pro příležitostné prodejce, aktivní prodejce, resellery i každého, kdo chce rychlejší první návrh a zároveň kontrolu nad každým inzerátem Vinted.
