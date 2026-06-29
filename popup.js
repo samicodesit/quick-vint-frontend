@@ -615,6 +615,39 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   }
 
+  async function getVerifiedSignedInBillingState() {
+    const sessionResult = await sendRuntimeMessage({ type: "GET_VALID_SESSION" });
+    if (!sessionResult?.ok || !sessionResult.email) {
+      return {
+        ok: false,
+        reason: sessionResult?.reason || "no_session",
+      };
+    }
+
+    const { userProfile } = await getLocalStorage(["userProfile"]);
+    const profile = userProfile || null;
+    const tier = normalizeTier(profile?.subscription_tier);
+
+    return { ok: true, email: sessionResult.email, profile, tier };
+  }
+
+  async function getVerifiedBillingPortalState() {
+    const signedInState = await getVerifiedSignedInBillingState();
+    if (!signedInState.ok) {
+      return signedInState;
+    }
+
+    const hasSubscriptionPlan =
+      signedInState.profile?.subscription_status === "active" &&
+      signedInState.tier !== "free";
+
+    if (!hasSubscriptionPlan) {
+      return { ok: false, reason: "no_active_subscription" };
+    }
+
+    return signedInState;
+  }
+
   // --- API & EVENT HANDLERS ---
 
   async function handleSendMagicLink() {
@@ -684,28 +717,30 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   async function handleUpgrade() {
-    const {
-      data: { session },
-    } = await supabaseClient.auth.getSession();
-    if (!session?.user?.email) {
-      trackGrowthEvent("pricing_signin_required", {
-        source: "extension_popup_upgrade",
-      });
-      showMessage("Please sign in to upgrade.", "error");
-      return;
-    }
     setLoading(upgradeBtn, true, "Loading…");
-    trackGrowthEvent("checkout_start", {
-      source: "extension_popup",
-      tier: "starter",
-      checkoutType: "subscription",
-    });
+    showMessage(null);
     try {
+      const checkoutState = await getVerifiedSignedInBillingState();
+      if (!checkoutState.ok) {
+        trackGrowthEvent("pricing_signin_required", {
+          source: "extension_popup_upgrade",
+          reason: checkoutState.reason,
+        });
+        showMessage("Please sign in to upgrade.", "error");
+        await updateFromStorage();
+        return;
+      }
+
+      trackGrowthEvent("checkout_start", {
+        source: "extension_popup",
+        tier: "starter",
+        checkoutType: "subscription",
+      });
       const res = await fetch(`${API_BASE}/api/stripe/create-checkout`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          email: session.user.email,
+          email: checkoutState.email,
           tier: "starter",
           source: "extension_popup",
         }),
@@ -730,23 +765,45 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   async function handleManageSubscription() {
-    const {
-      data: { session },
-    } = await supabaseClient.auth.getSession();
-    if (!session?.user?.email) {
-      trackGrowthEvent("billing_portal_signin_required", {
-        source: "extension_popup",
-      });
-      showMessage("Please sign in to manage your subscription.", "error");
-      return;
-    }
     setLoading(manageBtn, true, "Loading…");
-    trackGrowthEvent("billing_portal_start", { source: "extension_popup" });
+    showMessage(null);
     try {
+      const portalState = await getVerifiedBillingPortalState();
+      if (!portalState.ok) {
+        if (
+          portalState.reason === "signed_out" ||
+          portalState.reason === "no_session"
+        ) {
+          trackGrowthEvent("billing_portal_signin_required", {
+            source: "extension_popup",
+          });
+          showMessage("Please sign in to manage your subscription.", "error");
+          await updateFromStorage();
+          return;
+        }
+
+        if (portalState.reason === "no_active_subscription") {
+          showMessage("No active subscription found for this account.", "error");
+          await updateFromStorage();
+          return;
+        }
+
+        trackGrowthEvent("billing_portal_verification_failed", {
+          source: "extension_popup",
+          reason: portalState.reason,
+        });
+        showMessage(
+          "Unable to verify your subscription. Please try again.",
+          "error",
+        );
+        return;
+      }
+
+      trackGrowthEvent("billing_portal_start", { source: "extension_popup" });
       const res = await fetch(`${API_BASE}/api/stripe/create-portal`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: session.user.email }),
+        body: JSON.stringify({ email: portalState.email }),
       });
       const { url } = await res.json();
       if (res.ok && url) {
@@ -764,30 +821,31 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   async function handleCreditPackPurchase() {
-    const {
-      data: { session },
-    } = await supabaseClient.auth.getSession();
-    if (!session?.user?.email) {
-      trackGrowthEvent("pricing_signin_required", {
-        source: "extension_popup_credit_pack",
-      });
-      showMessage("Please sign in to buy credits.", "error");
-      return;
-    }
-
     setLoading(creditPackBtn, true, "Loading…");
-    trackGrowthEvent("credit_pack_click", { source: "extension_popup" });
-    trackGrowthEvent("checkout_start", {
-      source: "extension_popup",
-      tier: "credit_pack",
-      checkoutType: "credit_pack",
-    });
+    showMessage(null);
     try {
+      const checkoutState = await getVerifiedSignedInBillingState();
+      if (!checkoutState.ok) {
+        trackGrowthEvent("pricing_signin_required", {
+          source: "extension_popup_credit_pack",
+          reason: checkoutState.reason,
+        });
+        showMessage("Please sign in to buy credits.", "error");
+        await updateFromStorage();
+        return;
+      }
+
+      trackGrowthEvent("credit_pack_click", { source: "extension_popup" });
+      trackGrowthEvent("checkout_start", {
+        source: "extension_popup",
+        tier: "credit_pack",
+        checkoutType: "credit_pack",
+      });
       const res = await fetch(`${API_BASE}/api/stripe/create-credit-checkout`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          email: session.user.email,
+          email: checkoutState.email,
           source: "extension_popup",
         }),
       });

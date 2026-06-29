@@ -3994,6 +3994,19 @@
         transform: translateY(-1px);
       }
 
+      #${DESCRIPTION_LENGTH_TOGGLE_ID}[data-loading="true"] {
+        pointer-events: none;
+        border-color: #e2e8f0;
+        background: #ffffff;
+        box-shadow: 0 4px 12px rgba(15, 23, 42, 0.05);
+      }
+
+      #${DESCRIPTION_LENGTH_TOGGLE_ID}[data-loading="true"]:hover {
+        border-color: #e2e8f0;
+        box-shadow: 0 4px 12px rgba(15, 23, 42, 0.05);
+        transform: none;
+      }
+
       #${DESCRIPTION_LENGTH_TOGGLE_ID} .quickvint-length-option {
         appearance: none;
         display: inline-flex;
@@ -4027,6 +4040,32 @@
         color: #ffffff;
         box-shadow: 0 5px 12px rgba(79, 70, 229, 0.2);
         transform: scale(1.015);
+      }
+
+      #${DESCRIPTION_LENGTH_TOGGLE_ID}[data-loading="true"] .quickvint-length-option {
+        position: relative;
+        overflow: hidden;
+        background: #eef2f7;
+        color: transparent;
+        cursor: wait;
+      }
+
+      #${DESCRIPTION_LENGTH_TOGGLE_ID}[data-loading="true"] .quickvint-length-option[aria-pressed="true"] {
+        background: #eef2f7;
+        color: transparent;
+        box-shadow: none;
+        transform: none;
+      }
+
+      #${DESCRIPTION_LENGTH_TOGGLE_ID}[data-loading="true"] .quickvint-length-option::after,
+      .quickvint-binary-toggle[data-loading="true"] .quickvint-toggle-label::after,
+      .quickvint-binary-toggle[data-loading="true"] .quickvint-toggle-switch::after {
+        content: "";
+        position: absolute;
+        inset: 0;
+        background: linear-gradient(90deg, transparent 0%, rgba(255, 255, 255, 0.78) 50%, transparent 100%);
+        transform: translateX(-100%);
+        animation: quickvintSkeletonSweep 1.25s ease-in-out infinite;
       }
 
       .quickvint-binary-toggle {
@@ -4071,6 +4110,22 @@
         box-shadow: 0 3px 8px rgba(17, 24, 39, 0.08);
       }
 
+      .quickvint-binary-toggle[data-loading="true"] {
+        cursor: wait;
+        opacity: 1;
+        pointer-events: none;
+        border-color: #e2e8f0;
+        background: #ffffff;
+        color: transparent;
+        box-shadow: 0 4px 12px rgba(15, 23, 42, 0.05);
+      }
+
+      .quickvint-binary-toggle[data-loading="true"]:hover {
+        border-color: #e2e8f0;
+        background: #ffffff;
+        transform: none;
+      }
+
       .quickvint-binary-toggle:disabled:hover {
         border-color: #d9dde8;
         background: #ffffff;
@@ -4078,7 +4133,17 @@
       }
 
       .quickvint-binary-toggle .quickvint-toggle-label {
+        position: relative;
         line-height: 1;
+      }
+
+      .quickvint-binary-toggle[data-loading="true"] .quickvint-toggle-label {
+        width: 48px;
+        height: 12px;
+        overflow: hidden;
+        border-radius: 999px;
+        background: #eef2f7;
+        color: transparent;
       }
 
       .quickvint-binary-toggle .quickvint-toggle-switch {
@@ -4113,6 +4178,27 @@
         transform: translateX(16px);
       }
 
+      .quickvint-binary-toggle[data-loading="true"] .quickvint-toggle-switch {
+        overflow: hidden;
+        background: #e2e8f0;
+        box-shadow: inset 0 0 0 1px rgba(15, 23, 42, 0.04);
+      }
+
+      .quickvint-binary-toggle[data-loading="true"] .quickvint-toggle-knob,
+      .quickvint-binary-toggle[data-loading="true"][aria-pressed="true"] .quickvint-toggle-knob {
+        transform: translateX(8px);
+        box-shadow: 0 1px 3px rgba(15, 23, 42, 0.16);
+      }
+
+      @keyframes quickvintSkeletonSweep {
+        0% {
+          transform: translateX(-100%);
+        }
+        100% {
+          transform: translateX(100%);
+        }
+      }
+
       @media (prefers-reduced-motion: reduce) {
         #${DESCRIPTION_LENGTH_TOGGLE_ID},
         #${DESCRIPTION_LENGTH_TOGGLE_ID} .quickvint-length-option,
@@ -4126,6 +4212,12 @@
         .quickvint-binary-toggle:hover,
         #${DESCRIPTION_LENGTH_TOGGLE_ID} .quickvint-length-option[aria-pressed="true"] {
           transform: none;
+        }
+
+        #${DESCRIPTION_LENGTH_TOGGLE_ID}[data-loading="true"] .quickvint-length-option::after,
+        .quickvint-binary-toggle[data-loading="true"] .quickvint-toggle-label::after,
+        .quickvint-binary-toggle[data-loading="true"] .quickvint-toggle-switch::after {
+          animation: none;
         }
       }
 
@@ -4588,13 +4680,43 @@
     return value === "short" ? "short" : "long";
   }
 
+  function setPreferenceLoadingState(control, isLoading) {
+    if (!control) return;
+    control.dataset.loading = isLoading ? "true" : "false";
+    control.setAttribute("aria-busy", isLoading ? "true" : "false");
+  }
+
+  function setDescriptionLengthLoadingState(isLoading) {
+    if (!descriptionLengthToggle) return;
+    setPreferenceLoadingState(descriptionLengthToggle, isLoading);
+    descriptionLengthToggle
+      .querySelectorAll(".quickvint-length-option")
+      .forEach((option) => {
+        option.disabled = isLoading;
+        if (isLoading) {
+          option.setAttribute("aria-pressed", "false");
+        }
+      });
+  }
+
+  function setBinaryToggleLoadingState(button, isLoading) {
+    if (!button) return;
+    setPreferenceLoadingState(button, isLoading);
+    button.disabled = isLoading;
+    if (isLoading) {
+      button.setAttribute("aria-pressed", "mixed");
+    }
+  }
+
   function setDescriptionLengthToggleState(value) {
     if (!descriptionLengthToggle) return;
     const normalizedValue = normalizeDescriptionLength(value);
+    setDescriptionLengthLoadingState(false);
     descriptionLengthToggle.dataset.value = normalizedValue;
     descriptionLengthToggle
       .querySelectorAll(".quickvint-length-option")
       .forEach((option) => {
+        option.disabled = false;
         option.setAttribute(
           "aria-pressed",
           option.dataset.length === normalizedValue ? "true" : "false",
@@ -4611,7 +4733,15 @@
 
   async function syncDescriptionLengthToggleState() {
     if (!descriptionLengthToggle) return;
-    setDescriptionLengthToggleState(await getStoredDescriptionLength());
+    if (descriptionLengthToggle.dataset.loading !== "false") {
+      setDescriptionLengthLoadingState(true);
+    }
+    try {
+      setDescriptionLengthToggleState(await getStoredDescriptionLength());
+    } catch (error) {
+      console.warn("AutoLister AI: failed to load description length", error);
+      setDescriptionLengthToggleState("long");
+    }
   }
 
   function createDescriptionLengthToggle() {
@@ -4619,18 +4749,21 @@
     group.id = DESCRIPTION_LENGTH_TOGGLE_ID;
     group.setAttribute("role", "group");
     group.setAttribute("aria-label", "Description length");
+    group.setAttribute("aria-busy", "true");
+    group.dataset.loading = "true";
     group.title = "Description length";
     group.innerHTML = `
-      <button type="button" class="quickvint-length-option" data-length="short" aria-pressed="false">Short</button>
-      <button type="button" class="quickvint-length-option" data-length="long" aria-pressed="true">Long</button>
+      <button type="button" class="quickvint-length-option" data-length="short" aria-pressed="false" disabled>Short</button>
+      <button type="button" class="quickvint-length-option" data-length="long" aria-pressed="false" disabled>Long</button>
     `;
 
     group.addEventListener("click", async (event) => {
+      if (group.dataset.loading === "true") return;
       const option =
         event.target instanceof Element
           ? event.target.closest(".quickvint-length-option")
           : null;
-      if (!option) return;
+      if (!option || option.disabled) return;
       const descriptionLength = normalizeDescriptionLength(option.dataset.length);
       await chrome.storage.local.set({
         [DESCRIPTION_LENGTH_STORAGE_KEY]: descriptionLength,
@@ -4664,11 +4797,14 @@
 
   function setEmojiToggleState(enabled) {
     if (!emojiToggleBtn) return;
+    setPreferenceLoadingState(emojiToggleBtn, false);
     emojiToggleBtn.setAttribute("aria-pressed", enabled ? "true" : "false");
   }
 
   function setHashtagsToggleState(enabled) {
     if (!hashtagsToggleBtn) return;
+    setPreferenceLoadingState(hashtagsToggleBtn, false);
+    hashtagsToggleBtn.disabled = false;
     hashtagsToggleBtn.setAttribute("aria-pressed", enabled ? "true" : "false");
     hashtagsToggleBtn.title = enabled
       ? "Hashtags are on for generated descriptions"
@@ -4677,10 +4813,18 @@
 
   async function syncHashtagsToggleState() {
     if (!hashtagsToggleBtn) return;
-    const storage = await chrome.storage.local.get({
-      [HASHTAGS_STORAGE_KEY]: true,
-    });
-    setHashtagsToggleState(storage[HASHTAGS_STORAGE_KEY] !== false);
+    if (hashtagsToggleBtn.dataset.loading !== "false") {
+      setBinaryToggleLoadingState(hashtagsToggleBtn, true);
+    }
+    try {
+      const storage = await chrome.storage.local.get({
+        [HASHTAGS_STORAGE_KEY]: true,
+      });
+      setHashtagsToggleState(storage[HASHTAGS_STORAGE_KEY] !== false);
+    } catch (error) {
+      console.warn("AutoLister AI: failed to load hashtag setting", error);
+      setHashtagsToggleState(true);
+    }
   }
 
   function createBinaryToggleMarkup(label) {
@@ -4698,9 +4842,13 @@
     btn.type = "button";
     btn.className = "quickvint-binary-toggle";
     btn.setAttribute("aria-label", "Toggle hashtags in generated descriptions");
-    btn.setAttribute("aria-pressed", "true");
+    btn.setAttribute("aria-pressed", "mixed");
+    btn.setAttribute("aria-busy", "true");
+    btn.dataset.loading = "true";
+    btn.disabled = true;
     btn.innerHTML = createBinaryToggleMarkup("# Tags");
     btn.addEventListener("click", async () => {
+      if (btn.dataset.loading === "true" || btn.disabled) return;
       const storage = await chrome.storage.local.get({
         [HASHTAGS_STORAGE_KEY]: true,
       });
@@ -4731,20 +4879,30 @@
 
   async function syncEmojiToggleState() {
     if (!emojiToggleBtn) return;
-    const { useEmojis = true, userProfile = null } = await new Promise((resolve) => {
-      chrome.storage.local.get(
-        { useEmojis: true, userProfile: null },
-        (result) => resolve(result),
-      );
-    });
-    const emojiAccess = canUseEmojiSetting(userProfile);
-    emojiToggleBtn.disabled = !emojiAccess;
-    emojiToggleBtn.title = emojiAccess
-      ? useEmojis !== false
-        ? "Emojis are on for generated descriptions"
-        : "Emojis are off for generated descriptions"
-      : "Emoji support is available during the free trial and on Pro or Business.";
-    setEmojiToggleState(emojiAccess && useEmojis !== false);
+    if (emojiToggleBtn.dataset.loading !== "false") {
+      setBinaryToggleLoadingState(emojiToggleBtn, true);
+    }
+    try {
+      const { useEmojis = true, userProfile = null } = await new Promise((resolve) => {
+        chrome.storage.local.get(
+          { useEmojis: true, userProfile: null },
+          (result) => resolve(result),
+        );
+      });
+      const emojiAccess = canUseEmojiSetting(userProfile);
+      setEmojiToggleState(emojiAccess && useEmojis !== false);
+      emojiToggleBtn.disabled = !emojiAccess;
+      emojiToggleBtn.title = emojiAccess
+        ? useEmojis !== false
+          ? "Emojis are on for generated descriptions"
+          : "Emojis are off for generated descriptions"
+        : "Emoji support is available during the free trial and on Pro or Business.";
+    } catch (error) {
+      console.warn("AutoLister AI: failed to load emoji setting", error);
+      setEmojiToggleState(false);
+      emojiToggleBtn.disabled = true;
+      emojiToggleBtn.title = "Emoji setting could not be loaded.";
+    }
   }
 
   function createEmojiToggleButton() {
@@ -4753,9 +4911,13 @@
     btn.type = "button";
     btn.className = "quickvint-binary-toggle";
     btn.setAttribute("aria-label", "Toggle emojis in generated descriptions");
-    btn.setAttribute("aria-pressed", "true");
+    btn.setAttribute("aria-pressed", "mixed");
+    btn.setAttribute("aria-busy", "true");
+    btn.dataset.loading = "true";
+    btn.disabled = true;
     btn.innerHTML = createBinaryToggleMarkup("😊 Emoji");
     btn.addEventListener("click", async () => {
+      if (btn.dataset.loading === "true" || btn.disabled) return;
       const { useEmojis = true, userProfile = null } = await new Promise((resolve) => {
         chrome.storage.local.get(
           { useEmojis: true, userProfile: null },

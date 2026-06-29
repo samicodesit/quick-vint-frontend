@@ -808,6 +808,20 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         );
         break;
 
+      case "GET_VALID_SESSION":
+        const validSession = await ensureValidToken();
+        sendResponse(
+          validSession?.user?.email
+            ? {
+                ok: true,
+                email: validSession.user.email,
+                userId: validSession.user.id || null,
+                expires_at: validSession.expires_at || null,
+              }
+            : { ok: false, reason: "no_session" },
+        );
+        break;
+
       case "GET_USER_USAGE_COUNT":
         const usageCount = await fetchUserUsageCount();
         sendResponse(usageCount);
