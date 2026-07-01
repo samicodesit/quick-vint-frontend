@@ -31,6 +31,12 @@
   const supabaseClient = supabaseFactory.createClient(
     SUPABASE_URL,
     SUPABASE_ANON_KEY,
+    {
+      auth: {
+        detectSessionInUrl: false,
+        autoRefreshToken: false,
+      },
+    },
   );
 
   const loadingDiv = document.getElementById("loadingState");
@@ -43,7 +49,12 @@
   let currentLocalization = null;
   let userSession = null;
   let authSuccessTracked = false;
+  let authCompletionStarted = false;
+  let successActionsInitialized = false;
+  let authCallbackExitTracked = false;
   let callbackActionTaken = false;
+  let autoCloseTimerId = null;
+  let autoCloseAttemptTracked = false;
   let analyticsClientId = null;
 
   // Localization methods are now loaded from lib/localization.js
@@ -143,6 +154,12 @@
     });
   }
 
+  function clearAuthParamsFromUrl() {
+    if (!window.history?.replaceState) return;
+    const cleanUrl = `${window.location.origin}${window.location.pathname}`;
+    window.history.replaceState(null, document.title, cleanUrl);
+  }
+
   function updateLanguageToggle() {
     const langToggle = document.getElementById("lang-toggle");
     const langCurrent = document.getElementById("lang-current");
@@ -227,6 +244,9 @@
   }
 
   function initializeSuccessActions() {
+    if (successActionsInitialized) return;
+    successActionsInitialized = true;
+
     // Use stored language preference instead of always detecting
     currentLocalization = getStoredLanguagePreference();
 
@@ -238,6 +258,11 @@
     if (closeTabBtn) {
       closeTabBtn.onclick = () => {
         callbackActionTaken = true;
+        if (autoCloseTimerId) {
+          clearTimeout(autoCloseTimerId);
+          autoCloseTimerId = null;
+        }
+        autoCloseAttemptTracked = true;
         trackCallbackEvent("auth_close_click");
         window.close();
         setTimeout(() => {
@@ -248,7 +273,11 @@
       };
     }
 
-    setTimeout(() => {
+    if (autoCloseTimerId || autoCloseAttemptTracked) return;
+    autoCloseTimerId = setTimeout(() => {
+      autoCloseTimerId = null;
+      if (callbackActionTaken || autoCloseAttemptTracked) return;
+      autoCloseAttemptTracked = true;
       trackCallbackEvent("auth_auto_close_attempt", {
         has_opener: Boolean(window.opener),
       });
@@ -261,26 +290,94 @@
     }, 700);
   }
 
+  function completeAuthSession(session, eventName) {
+    if (!session?.access_token) return false;
+    userSession = session;
+    trackAuthSuccess(session, eventName);
+
+    if (authCompletionStarted) {
+      show("success");
+      return true;
+    }
+
+    authCompletionStarted = true;
+    chrome.storage.local.set({ supabaseSession: session }, () => {
+      chrome.runtime.sendMessage({ type: "AUTH_UPDATED" }, () => {
+        if (chrome.runtime.lastError) {
+          console.debug(
+            "AUTH_UPDATED message was not acknowledged:",
+            chrome.runtime.lastError.message,
+          );
+        }
+      });
+      show("success");
+      console.log("✅ User authenticated:", session.user.email);
+    });
+
+    return true;
+  }
+
   // ---- IMPORTANT: supports BOTH magic-link + Google OAuth return ----
   async function bootstrapAuthReturn() {
     try {
       const url = window.location.href;
       const searchParams = new URLSearchParams(window.location.search);
+      const hashParams = new URLSearchParams(
+        window.location.hash.replace(/^#/, ""),
+      );
       const hasOAuthCode = !!searchParams.get("code");
+      const hashError =
+        hashParams.get("error_description") ||
+        hashParams.get("error") ||
+        searchParams.get("error_description") ||
+        searchParams.get("error");
+
+      if (hashError) {
+        show("error", hashError);
+        return;
+      }
 
       // Google OAuth returns ?code=... and MUST be exchanged for a session
       if (hasOAuthCode) {
-        const { error } = await supabaseClient.auth.exchangeCodeForSession(url);
+        const { data, error } =
+          await supabaseClient.auth.exchangeCodeForSession(url);
         if (error) {
           console.error("exchangeCodeForSession error:", error);
           show("error", error.message);
           return;
         }
+        clearAuthParamsFromUrl();
+        if (completeAuthSession(data.session, "code_exchange")) return;
+      } else if (
+        hashParams.get("access_token") &&
+        hashParams.get("refresh_token")
+      ) {
+        const { data, error } = await supabaseClient.auth.setSession({
+          access_token: hashParams.get("access_token"),
+          refresh_token: hashParams.get("refresh_token"),
+        });
+        if (error) {
+          console.error("setSession from callback hash error:", error);
+          show("error", error.message);
+          return;
+        }
+        clearAuthParamsFromUrl();
+        if (completeAuthSession(data.session, "url_hash")) return;
       }
 
       // For magic links / already-established sessions, this nudges session init
-      await supabaseClient.auth.getSession();
-      // onAuthStateChange will handle the UI + storage
+      const { data, error } = await supabaseClient.auth.getSession();
+      if (error) {
+        console.error("getSession error:", error);
+        show("error", error.message);
+        return;
+      }
+      if (completeAuthSession(data.session, "existing_session")) return;
+
+      show(
+        "error",
+        "Authentication failed. Please try signing in again.",
+      );
     } catch (e) {
       console.error("bootstrapAuthReturn failed:", e);
       show(
@@ -293,14 +390,13 @@
   show("loading");
 
   supabaseClient.auth.onAuthStateChange((event, session) => {
-    if ((event === "SIGNED_IN" || event === "INITIAL_SESSION") && session) {
-      userSession = session; // Store for checkout functionality
-      chrome.storage.local.set({ supabaseSession: session }, () => {
-        chrome.runtime.sendMessage({ type: "AUTH_UPDATED" });
-        trackAuthSuccess(session, event);
-        show("success");
-        console.log("✅ User authenticated:", session.user.email);
-      });
+    if (
+      (event === "SIGNED_IN" ||
+        event === "INITIAL_SESSION" ||
+        event === "TOKEN_REFRESHED") &&
+      session
+    ) {
+      completeAuthSession(session, event);
     } else if (event === "SIGNED_OUT") {
       userSession = null;
       show(
@@ -318,7 +414,8 @@
   bootstrapAuthReturn();
 
   window.addEventListener("pagehide", () => {
-    if (authSuccessTracked && !callbackActionTaken) {
+    if (authSuccessTracked && !callbackActionTaken && !authCallbackExitTracked) {
+      authCallbackExitTracked = true;
       trackCallbackEvent("auth_callback_exit", {
         without_action: true,
       });

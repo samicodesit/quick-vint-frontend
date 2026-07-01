@@ -533,6 +533,8 @@
 
     if (actionBtn) {
       actionBtn.addEventListener("click", async () => {
+        if (actionBtn.dataset.checkoutPending === "true") return;
+
         const selectedOption = options[selectedOptionIndex];
         const checkoutOption =
           selectedOption && selectedOption.selectable !== false
@@ -554,6 +556,7 @@
 
         const previousText = actionTextEl?.textContent || actionText;
         const checkoutWindow = window.open("about:blank", "_blank");
+        actionBtn.dataset.checkoutPending = "true";
         actionBtn.disabled = true;
         if (actionTextEl) actionTextEl.textContent = "Opening checkout...";
         trackGrowthEvent("checkout_start", {
@@ -582,6 +585,7 @@
             "error",
           );
         } finally {
+          delete actionBtn.dataset.checkoutPending;
           actionBtn.disabled = false;
           if (actionTextEl) actionTextEl.textContent = previousText;
         }
