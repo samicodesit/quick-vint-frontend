@@ -412,27 +412,15 @@
     }
 
     const logoUrl = chrome.runtime.getURL("icons/icon48.png");
-    const selectableIndex = options.findIndex(
-      (option) => option.featured && option.selectable !== false,
-    );
-    const firstSelectableIndex = options.findIndex(
-      (option) => option.selectable !== false,
-    );
-    const defaultOptionIndex =
-      selectableIndex >= 0 ? selectableIndex : firstSelectableIndex;
-    const defaultOption =
-      defaultOptionIndex >= 0 ? options[defaultOptionIndex] : null;
-    const defaultActionText = defaultOption?.actionText || actionText;
     const optionsHtml = options.length
       ? `
         <div class="paywall-options">
           ${options
             .map((option, index) => {
               const isSelectable = option.selectable !== false;
-              const isSelected = index === defaultOptionIndex;
               return `
                 <button
-                  class="paywall-option${option.featured ? " featured" : ""}${option.muted ? " muted" : ""}${isSelected ? " selected" : ""}"
+                  class="paywall-option${option.featured ? " featured" : ""}${option.muted ? " muted" : ""}"
                   type="button"
                   data-paywall-option-index="${index}"
                   ${isSelectable ? "" : "disabled"}
@@ -471,10 +459,14 @@
         </div>
         <div class="paywall-message">${escapeHtml(message)}</div>
         ${optionsHtml}
-        <button class="paywall-action" type="button">
-          <span>${escapeHtml(defaultActionText)}</span>
-          <span aria-hidden="true">→</span>
-        </button>
+        ${
+          !options.length && actionText
+            ? `<button class="paywall-action" type="button">
+                <span>${escapeHtml(actionText)}</span>
+                <span aria-hidden="true">→</span>
+              </button>`
+            : ""
+        }
         ${
           secondaryActionText && secondaryActionUrl
             ? `<a class="paywall-secondary-action" href="${secondaryActionUrl}" target="_blank" rel="noopener noreferrer">${escapeHtml(secondaryActionText)}</a>`
@@ -497,37 +489,85 @@
       };
     }
 
-    let selectedOptionIndex = defaultOptionIndex;
     const actionBtn = toast.querySelector(".paywall-action");
-    const actionTextEl = actionBtn?.querySelector("span");
     const optionButtons = Array.from(
       toast.querySelectorAll("[data-paywall-option-index]"),
     );
 
-    function setSelectedOption(index) {
-      const option = options[index];
-      if (!option || option.selectable === false) return;
-      selectedOptionIndex = index;
+    async function openPaywallOption(option, triggerButton) {
+      if (!option || triggerButton?.dataset.checkoutPending === "true") return;
+
+      if (!option.checkoutType) {
+        trackGrowthEvent("paywall_action_click", {
+          action: "external_link",
+          tier: option.tier || null,
+        });
+        window.open(option.actionUrl || actionUrl, "_blank", "noopener,noreferrer");
+        return;
+      }
+
+      const optionNameEl = triggerButton?.querySelector(".paywall-option-name");
+      const previousOptionName = optionNameEl?.textContent || "";
+      const checkoutWindow = window.open("about:blank", "_blank");
+      if (triggerButton) {
+        triggerButton.dataset.checkoutPending = "true";
+        triggerButton.disabled = true;
+      }
       optionButtons.forEach((button) => {
-        button.classList.toggle(
-          "selected",
-          Number(button.dataset.paywallOptionIndex) === index,
-        );
+        if (button !== triggerButton) button.disabled = true;
       });
-      if (actionTextEl) {
-        actionTextEl.textContent = option.actionText || actionText;
+      if (actionBtn) actionBtn.disabled = true;
+      if (optionNameEl) optionNameEl.textContent = "Opening checkout...";
+
+      trackGrowthEvent("checkout_start", {
+        source: "extension_paywall",
+        tier: option.tier,
+        checkoutType: option.checkoutType,
+      });
+
+      try {
+        const checkoutUrl = await createCheckoutForPaywall(option);
+        trackGrowthEvent("checkout_opened", {
+          source: "extension_paywall",
+          tier: option.tier,
+          checkoutType: option.checkoutType,
+        });
+        if (checkoutWindow) {
+          checkoutWindow.location.href = checkoutUrl;
+        } else {
+          window.open(checkoutUrl, "_blank", "noopener,noreferrer");
+        }
+      } catch (error) {
+        if (checkoutWindow) checkoutWindow.close();
+        console.error("Paywall checkout error:", error);
+        showToast(
+          error.message || "Unable to open the payment page. Please try again.",
+          "error",
+        );
+      } finally {
+        if (triggerButton) {
+          delete triggerButton.dataset.checkoutPending;
+          triggerButton.disabled = false;
+        }
+        optionButtons.forEach((button) => {
+          const optionIndex = Number(button.dataset.paywallOptionIndex);
+          const buttonOption = options[optionIndex];
+          button.disabled = buttonOption?.selectable === false;
+        });
+        if (actionBtn) actionBtn.disabled = false;
+        if (optionNameEl) optionNameEl.textContent = previousOptionName;
       }
     }
 
     optionButtons.forEach((button) => {
       button.addEventListener("click", () => {
         const optionIndex = Number(button.dataset.paywallOptionIndex);
-        setSelectedOption(optionIndex);
         const option = options[optionIndex];
         trackGrowthEvent("paywall_option_select", {
           tier: option?.tier || null,
           checkoutType: option?.checkoutType || null,
         });
+        openPaywallOption(option, button);
       });
     });
 
@@ -535,59 +575,18 @@
       actionBtn.addEventListener("click", async () => {
         if (actionBtn.dataset.checkoutPending === "true") return;
 
-        const selectedOption = options[selectedOptionIndex];
-        const checkoutOption =
-          selectedOption && selectedOption.selectable !== false
-            ? selectedOption
-            : null;
-
-        if (!checkoutOption?.checkoutType) {
-          trackGrowthEvent("paywall_action_click", {
-            action: "external_link",
-            tier: checkoutOption?.tier || null,
-          });
-          window.open(
-            checkoutOption?.actionUrl || actionUrl,
-            "_blank",
-            "noopener,noreferrer",
-          );
+        if (!actionUrl) {
+          showToast("Unable to open the payment page. Please try again.", "error");
           return;
         }
 
-        const previousText = actionTextEl?.textContent || actionText;
-        const checkoutWindow = window.open("about:blank", "_blank");
-        actionBtn.dataset.checkoutPending = "true";
-        actionBtn.disabled = true;
-        if (actionTextEl) actionTextEl.textContent = "Opening checkout...";
-        trackGrowthEvent("checkout_start", {
-          source: "extension_paywall",
-          tier: checkoutOption.tier,
-          checkoutType: checkoutOption.checkoutType,
-        });
-
-        try {
-          const checkoutUrl = await createCheckoutForPaywall(checkoutOption);
-          trackGrowthEvent("checkout_opened", {
-            source: "extension_paywall",
-            tier: checkoutOption.tier,
-            checkoutType: checkoutOption.checkoutType,
+        if (!options.length) {
+          trackGrowthEvent("paywall_action_click", {
+            action: "external_link",
+            tier: null,
           });
-          if (checkoutWindow) {
-            checkoutWindow.location.href = checkoutUrl;
-          } else {
-            window.open(checkoutUrl, "_blank", "noopener,noreferrer");
-          }
-        } catch (error) {
-          if (checkoutWindow) checkoutWindow.close();
-          console.error("Paywall checkout error:", error);
-          showToast(
-            error.message || "Unable to open the payment page. Please try again.",
-            "error",
-          );
-        } finally {
-          delete actionBtn.dataset.checkoutPending;
-          actionBtn.disabled = false;
-          if (actionTextEl) actionTextEl.textContent = previousText;
+          window.open(actionUrl, "_blank", "noopener,noreferrer");
+          return;
         }
       });
     }
@@ -4447,18 +4446,19 @@
         cursor: pointer;
         font-family: inherit;
         text-align: left;
-        transition: border-color 140ms ease, background 140ms ease, box-shadow 140ms ease;
+        transition: border-color 140ms ease, background 140ms ease, box-shadow 140ms ease, transform 140ms ease;
       }
 
       #quickvint-toast.paywall .paywall-option:hover:not(:disabled) {
-        border-color: #d1d5db;
-        box-shadow: 0 5px 14px rgba(79, 70, 229, 0.1);
+        border-color: #c7d2fe;
+        background: #fbfbff;
+        box-shadow: 0 7px 18px rgba(79, 70, 229, 0.12);
+        transform: translateY(-1px);
       }
 
-      #quickvint-toast.paywall .paywall-option.selected {
-        border-color: rgba(79, 70, 229, 0.62);
-        background: #f7f7ff;
-        box-shadow: 0 0 0 2px rgba(79, 70, 229, 0.1);
+      #quickvint-toast.paywall .paywall-option:focus-visible {
+        outline: 2px solid rgba(79, 70, 229, 0.45);
+        outline-offset: 2px;
       }
 
       #quickvint-toast.paywall .paywall-option.muted {
@@ -4467,6 +4467,13 @@
 
       #quickvint-toast.paywall .paywall-option:disabled {
         cursor: default;
+        opacity: 0.74;
+        transform: none;
+      }
+
+      #quickvint-toast.paywall .paywall-option[data-checkout-pending="true"] {
+        cursor: wait;
+        opacity: 0.86;
       }
 
       #quickvint-toast.paywall .paywall-option-main {
