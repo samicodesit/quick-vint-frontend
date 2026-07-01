@@ -18,6 +18,8 @@ document.addEventListener("DOMContentLoaded", () => {
   const LOW_REMAINING_RATIO = 0.2;
   const OPEN_SETTINGS_ON_NEXT_POPUP_KEY = "quickvintOpenSettingsOnNextPopup";
   const OPEN_SETTINGS_FLAG_MAX_AGE_MS = 15000;
+  const MAGIC_LINK_PENDING_KEY = "quickvintMagicLinkPending";
+  const MAGIC_LINK_PENDING_MAX_AGE_MS = 15 * 60 * 1000;
   const languageDefaults = window.AutoListerLanguageDefaults;
 
   const TIER_DISPLAY_NAMES = {
@@ -45,6 +47,11 @@ document.addEventListener("DOMContentLoaded", () => {
 
   // --- DOM ELEMENT REFERENCES ---
   const messagesDiv = document.getElementById("messages");
+  const authEntryState = document.getElementById("authEntryState");
+  const magicLinkSentState = document.getElementById("magicLinkSentState");
+  const magicLinkSentEmail = document.getElementById("magicLinkSentEmail");
+  const resendMagicLinkBtn = document.getElementById("resendMagicLinkBtn");
+  const editMagicLinkEmailBtn = document.getElementById("editMagicLinkEmailBtn");
   const emailInput = document.getElementById("emailInput");
   const sendMagicLinkBtn = document.getElementById("sendMagicLinkBtn");
   const userEmailSpan = document.getElementById("userEmail");
@@ -279,6 +286,51 @@ document.addEventListener("DOMContentLoaded", () => {
     button.textContent = isLoading ? "Processing…" : defaultText;
   }
 
+  function showMagicLinkForm() {
+    authEntryState?.classList.remove("hidden");
+    magicLinkSentState?.classList.add("hidden");
+  }
+
+  function showMagicLinkSent(email) {
+    authEntryState?.classList.add("hidden");
+    magicLinkSentState?.classList.remove("hidden");
+    if (magicLinkSentEmail) {
+      magicLinkSentEmail.textContent = email;
+    }
+  }
+
+  async function setPendingMagicLinkEmail(email) {
+    await chrome.storage.local.set({
+      [MAGIC_LINK_PENDING_KEY]: {
+        email,
+        sentAt: Date.now(),
+      },
+    });
+    showMagicLinkSent(email);
+  }
+
+  async function clearPendingMagicLinkEmail() {
+    await chrome.storage.local.remove(MAGIC_LINK_PENDING_KEY);
+    showMagicLinkForm();
+  }
+
+  async function restorePendingMagicLinkState() {
+    const data = await getLocalStorage(MAGIC_LINK_PENDING_KEY);
+    const pending = data[MAGIC_LINK_PENDING_KEY];
+    const sentAt = Number(pending?.sentAt || 0);
+    const email = typeof pending?.email === "string" ? pending.email : "";
+
+    if (email && Date.now() - sentAt < MAGIC_LINK_PENDING_MAX_AGE_MS) {
+      showMagicLinkSent(email);
+      return;
+    }
+
+    if (pending) {
+      await chrome.storage.local.remove(MAGIC_LINK_PENDING_KEY);
+    }
+    showMagicLinkForm();
+  }
+
   function restoreUpgradeButtonContent() {
     if (!upgradeBtn) return;
     upgradeBtn.disabled = false;
@@ -369,6 +421,7 @@ document.addEventListener("DOMContentLoaded", () => {
     const requestId = ++renderRequestId;
 
     if (user && profile) {
+      chrome.storage.local.remove(MAGIC_LINK_PENDING_KEY);
       const shouldRevealAfterUsage = document.body.dataset.view !== "signed-in";
       if (shouldRevealAfterUsage) {
         setView("loading");
@@ -421,6 +474,7 @@ document.addEventListener("DOMContentLoaded", () => {
       renderRequestId += 1;
       renderedTier = null;
       document.body.classList.remove("settings-active");
+      await restorePendingMagicLinkState();
       setView("signed-out");
     }
   }
@@ -650,18 +704,22 @@ document.addEventListener("DOMContentLoaded", () => {
 
   // --- API & EVENT HANDLERS ---
 
-  async function handleSendMagicLink() {
-    if (!emailInput) return;
-    const email = emailInput.value.trim();
+  async function sendMagicLinkToEmail(email, button, defaultText, isResend = false) {
     if (!email.includes("@")) {
       showMessage("Please enter a valid email address.", "error");
       return;
     }
-    setLoading(sendMagicLinkBtn, true, "Send Magic Link");
+
+    setLoading(button, true, defaultText);
     showMessage(null);
-    await trackGrowthEvent("magic_link_request", {
-      domain: email.split("@")[1]?.toLowerCase() || null,
-    }, true);
+    await trackGrowthEvent(
+      isResend ? "magic_link_resend_request" : "magic_link_request",
+      {
+        domain: email.split("@")[1]?.toLowerCase() || null,
+      },
+      true,
+    );
+
     try {
       const res = await fetch(`${API_BASE}/api/auth/magic-link`, {
         method: "POST",
@@ -686,26 +744,51 @@ document.addEventListener("DOMContentLoaded", () => {
         throw new Error(data.error || "Failed to send magic link.");
       }
 
-      // Backend returns { message: "..." } for success
-      showMessage(
-        data.message || "Check your email for the sign-in link.",
-        "success",
+      await setPendingMagicLinkEmail(email);
+      await trackGrowthEvent(
+        isResend ? "magic_link_resent" : "magic_link_sent",
+        {
+          domain: email.split("@")[1]?.toLowerCase() || null,
+        },
+        true,
       );
-      await trackGrowthEvent("magic_link_sent", {
-        domain: email.split("@")[1]?.toLowerCase() || null,
-      }, true);
-      emailInput.value = "";
     } catch (err) {
       trackGrowthEvent("magic_link_error", {
         message: err.message || "unknown",
+        isResend,
       });
       showMessage(
         err.message || "Connection issue. Please check your internet.",
         "error",
       );
     } finally {
-      setLoading(sendMagicLinkBtn, false, "Send Magic Link");
+      setLoading(button, false, defaultText);
     }
+  }
+
+  async function handleSendMagicLink() {
+    if (!emailInput) return;
+    await sendMagicLinkToEmail(
+      emailInput.value.trim(),
+      sendMagicLinkBtn,
+      "Send Magic Link",
+    );
+  }
+
+  async function handleResendMagicLink() {
+    const data = await getLocalStorage(MAGIC_LINK_PENDING_KEY);
+    const email = data[MAGIC_LINK_PENDING_KEY]?.email;
+    if (!email) {
+      showMagicLinkForm();
+      return;
+    }
+
+    await sendMagicLinkToEmail(
+      email,
+      resendMagicLinkBtn,
+      "Resend",
+      true,
+    );
   }
 
   function handleSignOut(event) {
@@ -1154,6 +1237,21 @@ document.addEventListener("DOMContentLoaded", () => {
 
     if (sendMagicLinkBtn) {
       sendMagicLinkBtn.addEventListener("click", handleSendMagicLink);
+    }
+    if (resendMagicLinkBtn) {
+      resendMagicLinkBtn.addEventListener("click", handleResendMagicLink);
+    }
+    if (editMagicLinkEmailBtn) {
+      editMagicLinkEmailBtn.addEventListener("click", async () => {
+        const data = await getLocalStorage(MAGIC_LINK_PENDING_KEY);
+        const email = data[MAGIC_LINK_PENDING_KEY]?.email;
+        await clearPendingMagicLinkEmail();
+        if (emailInput && email) {
+          emailInput.value = email;
+          emailInput.focus();
+          emailInput.select();
+        }
+      });
     }
     if (signOutBtn) {
       signOutBtn.addEventListener("click", handleSignOut);
