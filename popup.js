@@ -20,6 +20,7 @@ document.addEventListener("DOMContentLoaded", () => {
   const OPEN_SETTINGS_FLAG_MAX_AGE_MS = 15000;
   const MAGIC_LINK_PENDING_KEY = "quickvintMagicLinkPending";
   const MAGIC_LINK_PENDING_MAX_AGE_MS = 15 * 60 * 1000;
+  const MAGIC_LINK_RESEND_COOLDOWN_MS = 60 * 1000;
   const languageDefaults = window.AutoListerLanguageDefaults;
 
   const TIER_DISPLAY_NAMES = {
@@ -87,6 +88,7 @@ document.addEventListener("DOMContentLoaded", () => {
   let profileRefreshInFlight = false;
   let lastProfileRefreshAt = 0;
   let renderedTier = null;
+  let magicLinkCooldownTimer = null;
 
   // --- HELPER & UTILITY FUNCTIONS ---
 
@@ -286,27 +288,75 @@ document.addEventListener("DOMContentLoaded", () => {
     button.textContent = isLoading ? "Processing…" : defaultText;
   }
 
+  function clearMagicLinkCooldownTimer() {
+    if (magicLinkCooldownTimer) {
+      clearInterval(magicLinkCooldownTimer);
+      magicLinkCooldownTimer = null;
+    }
+  }
+
+  function getMagicLinkCooldownRemainingMs(sentAt) {
+    const sentAtMs = Number(sentAt || 0);
+    if (!sentAtMs) return 0;
+    return Math.max(0, sentAtMs + MAGIC_LINK_RESEND_COOLDOWN_MS - Date.now());
+  }
+
+  function updateMagicLinkResendButton(sentAt) {
+    if (!resendMagicLinkBtn) return 0;
+    const remainingMs = getMagicLinkCooldownRemainingMs(sentAt);
+    const remainingSeconds = Math.ceil(remainingMs / 1000);
+
+    if (remainingSeconds > 0) {
+      resendMagicLinkBtn.disabled = true;
+      resendMagicLinkBtn.textContent = `Resend in ${remainingSeconds}s`;
+    } else {
+      resendMagicLinkBtn.disabled = false;
+      resendMagicLinkBtn.textContent = "Resend";
+    }
+
+    return remainingMs;
+  }
+
+  function startMagicLinkCooldown(sentAt) {
+    clearMagicLinkCooldownTimer();
+    const remainingMs = updateMagicLinkResendButton(sentAt);
+    if (remainingMs <= 0) return;
+
+    magicLinkCooldownTimer = setInterval(() => {
+      if (updateMagicLinkResendButton(sentAt) <= 0) {
+        clearMagicLinkCooldownTimer();
+      }
+    }, 1000);
+  }
+
   function showMagicLinkForm() {
+    clearMagicLinkCooldownTimer();
+    if (resendMagicLinkBtn) {
+      resendMagicLinkBtn.disabled = false;
+      resendMagicLinkBtn.textContent = "Resend";
+    }
     authEntryState?.classList.remove("hidden");
     magicLinkSentState?.classList.add("hidden");
   }
 
-  function showMagicLinkSent(email) {
+  function showMagicLinkSent(email, sentAt = Date.now()) {
     authEntryState?.classList.add("hidden");
     magicLinkSentState?.classList.remove("hidden");
     if (magicLinkSentEmail) {
       magicLinkSentEmail.textContent = email;
     }
+    startMagicLinkCooldown(sentAt);
   }
 
   async function setPendingMagicLinkEmail(email) {
+    const sentAt = Date.now();
     await chrome.storage.local.set({
       [MAGIC_LINK_PENDING_KEY]: {
         email,
-        sentAt: Date.now(),
+        sentAt,
       },
     });
-    showMagicLinkSent(email);
+    showMagicLinkSent(email, sentAt);
   }
 
   async function clearPendingMagicLinkEmail() {
@@ -321,7 +371,7 @@ document.addEventListener("DOMContentLoaded", () => {
     const email = typeof pending?.email === "string" ? pending.email : "";
 
     if (email && Date.now() - sentAt < MAGIC_LINK_PENDING_MAX_AGE_MS) {
-      showMagicLinkSent(email);
+      showMagicLinkSent(email, sentAt);
       return;
     }
 
@@ -421,6 +471,7 @@ document.addEventListener("DOMContentLoaded", () => {
     const requestId = ++renderRequestId;
 
     if (user && profile) {
+      clearMagicLinkCooldownTimer();
       chrome.storage.local.remove(MAGIC_LINK_PENDING_KEY);
       const shouldRevealAfterUsage = document.body.dataset.view !== "signed-in";
       if (shouldRevealAfterUsage) {
@@ -777,9 +828,15 @@ document.addEventListener("DOMContentLoaded", () => {
 
   async function handleResendMagicLink() {
     const data = await getLocalStorage(MAGIC_LINK_PENDING_KEY);
-    const email = data[MAGIC_LINK_PENDING_KEY]?.email;
+    const pending = data[MAGIC_LINK_PENDING_KEY];
+    const email = pending?.email;
     if (!email) {
       showMagicLinkForm();
+      return;
+    }
+
+    if (getMagicLinkCooldownRemainingMs(pending.sentAt) > 0) {
+      updateMagicLinkResendButton(pending.sentAt);
       return;
     }
 
