@@ -597,6 +597,7 @@
 
   function frameHtml(scenario) {
     const storage = scenarioStorage(scenario);
+    const extensionAssetBaseUrl = new URL("/ui-components/", window.location.href).href;
     return `<!doctype html>
 <html lang="en">
 <head>
@@ -763,7 +764,7 @@
             return { version: "design-system" };
           },
           getURL(path) {
-            return new URL("../" + path, ${JSON.stringify(window.location.href)}).href;
+            return new URL(path, ${JSON.stringify(extensionAssetBaseUrl)}).href;
           },
           onMessage: {
             addListener(listener) {
