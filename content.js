@@ -3,6 +3,8 @@
   const BTN_ID = "quickvint-gen-btn";
   const PHONE_BTN_ID = "quickvint-phone-btn";
   const BATCH_BTN_ID = "quickvint-batch-btn";
+  const REPORT_BTN_ID = "quickvint-report-btn";
+  const REPORT_MODAL_ID = "quickvint-report-modal";
   const EMOJI_TOGGLE_ID = "quickvint-emoji-toggle";
   const HASHTAGS_TOGGLE_ID = "quickvint-hashtags-toggle";
   const DESCRIPTION_LENGTH_TOGGLE_ID = "quickvint-description-length-toggle";
@@ -69,6 +71,7 @@
   const WAND_ICON_SVG = `<svg fill="#ffffff" viewBox="0 0 512 512" version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink"> <path d="M454.321,219.727l-38.766-51.947l20.815-61.385c2.046-6.032,0.489-12.704-4.015-17.208 c-4.504-4.504-11.175-6.061-17.208-4.015l-61.384,20.815l-51.951-38.766c-5.103-3.809-11.929-4.392-17.605-1.499 c-5.676,2.893-9.217,8.755-9.136,15.125l0.829,64.815l-52.923,37.426c-5.201,3.678-7.863,9.989-6.867,16.282 c0.996,6.291,5.479,11.471,11.561,13.363l43.844,13.63L14.443,483.432c-6.535,6.534-6.535,17.131,0,23.666s17.131,6.535,23.666,0 l257.073-257.072l13.629,43.843c2.172,6.986,8.638,11.768,15.984,11.768c5.375,0,10.494-2.595,13.66-7.072l37.426-52.923 l64.815,0.828c6.322,0.051,12.233-3.462,15.125-9.136S458.131,224.833,454.321,219.727z"></path> <polygon points="173.373,67.274 160.014,42.848 146.656,67.274 122.23,80.632 146.656,93.992 160.014,118.417 173.373,93.992 197.799,80.632 "></polygon> <polygon points="362.946,384.489 352.14,364.731 341.335,384.489 321.577,395.294 341.335,406.1 352.14,425.856 362.946,406.1 382.703,395.294 "></polygon> <polygon points="378.142,19.757 367.337,0 356.531,19.757 336.774,30.563 356.531,41.369 367.337,61.126 378.142,41.369 397.9,30.563 "></polygon> <polygon points="490.635,142.513 484.167,130.689 477.701,142.513 465.876,148.979 477.701,155.446 484.167,167.27 490.635,155.446 502.458,148.979 "></polygon> <polygon points="492.626,294.117 465.876,301.951 439.128,294.117 446.962,320.865 439.128,347.615 465.876,339.781 492.626,347.615 484.791,320.865 "></polygon> </svg>`;
   const PHONE_ICON_SVG = `<svg fill="#ffffff" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M17 1.01L7 1c-1.1 0-2 .9-2 2v18c0 1.1.9 2 2 2h10c1.1 0 2-.9 2-2V3c0-1.1-.9-1.99-2-1.99zM17 19H7V5h10v14z"/></svg>`;
   const BATCH_ICON_SVG = `<svg fill="#ffffff" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M5 4h11.5A2.5 2.5 0 0 1 19 6.5V18H7.5A2.5 2.5 0 0 1 5 15.5V4Zm2 2v9.5c0 .28.22.5.5.5H17V6.5a.5.5 0 0 0-.5-.5H7Zm-3 2h1v9.5A1.5 1.5 0 0 0 6.5 19H17v1H6.5A2.5 2.5 0 0 1 4 17.5V8Zm5.25 6h5.5l-1.75-2.33-1.38 1.72-.95-1.14L9.25 14ZM10 9.5A1.5 1.5 0 1 0 10 12.5 1.5 1.5 0 0 0 10 9.5Z"/></svg>`;
+  const REPORT_ICON_SVG = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" xmlns="http://www.w3.org/2000/svg"><path d="m3 11 18-5v12L3 13v-2Z"/><path d="M11.6 14.4 13 20H9.5L8.2 13.6"/></svg>`;
   const PLAN_LIMITS = {
     free: { name: "Free", daily: null, monthly: 5, price: "Free" },
     starter: { name: "Starter", daily: 10, monthly: 75, price: "€3.99/mo" },
@@ -94,6 +97,7 @@
   let generateBtn = null;
   let phoneBtn = null;
   let batchBtn = null;
+  let reportBtn = null;
   let emojiToggleBtn = null;
   let hashtagsToggleBtn = null;
   let descriptionLengthToggle = null;
@@ -355,6 +359,32 @@
       }
     } catch (err) {
       // Analytics must never block listing creation.
+    }
+  }
+
+  async function sendImmediateGrowthEvent(event, context = {}) {
+    const analyticsClientId = await getAnalyticsClientId();
+    const { supabaseSession, userProfile } = await chrome.storage.local.get([
+      "supabaseSession",
+      "userProfile",
+    ]);
+    const headers = { "Content-Type": "application/json" };
+    if (supabaseSession?.access_token) {
+      headers.Authorization = `Bearer ${supabaseSession.access_token}`;
+    }
+
+    const response = await fetch(`${API_BASE}/api/events/track`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({
+        events: [
+          buildEventPayload(event, context, userProfile, analyticsClientId),
+        ],
+      }),
+    });
+
+    if (!response.ok) {
+      throw new Error("Report could not be sent.");
     }
   }
 
@@ -1208,6 +1238,55 @@
         opacity: 0.82;
       }
 
+      #${REPORT_BTN_ID} {
+        display: none;
+        align-items: center;
+        justify-content: center;
+        width: 38px;
+        height: 38px;
+        min-width: 38px;
+        padding: 0;
+        border: 1px solid #d9deea;
+        border-radius: 10px;
+        background: #ffffff;
+        color: #475569;
+        box-shadow: 0 5px 14px rgba(15, 23, 42, 0.1);
+        cursor: pointer;
+        transition: transform 0.16s ease, box-shadow 0.16s ease, border-color 0.16s ease, color 0.16s ease;
+      }
+
+      #${REPORT_BTN_ID}:hover {
+        border-color: #a5b4fc;
+        color: #4338ca;
+        box-shadow: 0 8px 18px rgba(79, 70, 229, 0.16);
+        transform: translateY(-1px);
+      }
+
+      #${REPORT_BTN_ID}:active {
+        box-shadow: 0 4px 10px rgba(15, 23, 42, 0.12);
+        transform: translateY(0);
+      }
+
+      #${REPORT_BTN_ID}:disabled {
+        cursor: progress;
+        opacity: 0.72;
+        transform: none;
+      }
+
+      #${REPORT_BTN_ID} .icon {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 18px;
+        height: 18px;
+      }
+
+      #${REPORT_BTN_ID} svg {
+        display: block;
+        width: 100%;
+        height: 100%;
+      }
+
       #${BTN_ID}.is-loading::before,
       #${PHONE_BTN_ID}.is-loading::before,
       #${BATCH_BTN_ID}.is-loading::before {
@@ -1471,6 +1550,149 @@
         display: block;
         width: 100%;
         height: 100%;
+      }
+
+      #${REPORT_MODAL_ID} {
+        position: fixed;
+        inset: 0;
+        z-index: 2147483646;
+        display: none;
+        align-items: center;
+        justify-content: center;
+        padding: 20px;
+        background: rgba(15, 23, 42, 0.36);
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      }
+
+      #${REPORT_MODAL_ID}.visible {
+        display: flex;
+      }
+
+      #${REPORT_MODAL_ID} .quickvint-report-card {
+        width: min(420px, 100%);
+        padding: 18px;
+        border: 1px solid rgba(148, 163, 184, 0.28);
+        border-radius: 14px;
+        background: #ffffff;
+        color: #111827;
+        box-shadow: 0 24px 60px rgba(15, 23, 42, 0.24);
+      }
+
+      #${REPORT_MODAL_ID} .quickvint-report-head {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 14px;
+      }
+
+      #${REPORT_MODAL_ID} .quickvint-report-title {
+        margin: 0;
+        font-size: 18px;
+        font-weight: 800;
+        line-height: 1.25;
+        color: #0f172a;
+      }
+
+      #${REPORT_MODAL_ID} .quickvint-report-copy {
+        margin: 7px 0 16px;
+        color: #475569;
+        font-size: 13px;
+        line-height: 1.45;
+      }
+
+      #${REPORT_MODAL_ID} .quickvint-report-close {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 30px;
+        height: 30px;
+        border: 0;
+        border-radius: 8px;
+        background: transparent;
+        color: #64748b;
+        cursor: pointer;
+        font-size: 22px;
+        line-height: 1;
+      }
+
+      #${REPORT_MODAL_ID} .quickvint-report-close:hover {
+        background: #f1f5f9;
+        color: #0f172a;
+      }
+
+      #${REPORT_MODAL_ID} .quickvint-report-label {
+        display: block;
+        margin: 0 0 7px;
+        color: #334155;
+        font-size: 12px;
+        font-weight: 760;
+      }
+
+      #${REPORT_MODAL_ID} .quickvint-report-select,
+      #${REPORT_MODAL_ID} .quickvint-report-textarea {
+        width: 100%;
+        border: 1px solid #cbd5e1;
+        border-radius: 10px;
+        background: #ffffff;
+        color: #0f172a;
+        font: inherit;
+        font-size: 14px;
+        outline: none;
+        transition: border-color 0.14s ease, box-shadow 0.14s ease;
+      }
+
+      #${REPORT_MODAL_ID} .quickvint-report-select {
+        height: 40px;
+        margin-bottom: 13px;
+        padding: 0 11px;
+      }
+
+      #${REPORT_MODAL_ID} .quickvint-report-textarea {
+        min-height: 104px;
+        resize: vertical;
+        padding: 11px;
+        line-height: 1.4;
+      }
+
+      #${REPORT_MODAL_ID} .quickvint-report-select:focus,
+      #${REPORT_MODAL_ID} .quickvint-report-textarea:focus {
+        border-color: #6366f1;
+        box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.14);
+      }
+
+      #${REPORT_MODAL_ID} .quickvint-report-actions {
+        display: flex;
+        justify-content: flex-end;
+        gap: 10px;
+        margin-top: 15px;
+      }
+
+      #${REPORT_MODAL_ID} .quickvint-report-secondary,
+      #${REPORT_MODAL_ID} .quickvint-report-submit {
+        height: 38px;
+        padding: 0 14px;
+        border-radius: 10px;
+        font-size: 14px;
+        font-weight: 760;
+        cursor: pointer;
+      }
+
+      #${REPORT_MODAL_ID} .quickvint-report-secondary {
+        border: 1px solid #d7dce7;
+        background: #ffffff;
+        color: #334155;
+      }
+
+      #${REPORT_MODAL_ID} .quickvint-report-submit {
+        border: 0;
+        background: ${PRIMARY_BUTTON_BACKGROUND};
+        color: #ffffff;
+        box-shadow: 0 8px 18px rgba(79, 70, 229, 0.24);
+      }
+
+      #${REPORT_MODAL_ID} .quickvint-report-submit:disabled {
+        cursor: progress;
+        opacity: 0.75;
       }
 
       /* Modal Styles */
@@ -4694,6 +4916,132 @@
     return btn;
   }
 
+  function createReportButton() {
+    const btn = document.createElement("button");
+    btn.id = REPORT_BTN_ID;
+    btn.type = "button";
+    btn.title = "Report an issue or send feedback";
+    btn.setAttribute("aria-label", "Report an issue or send feedback");
+    btn.innerHTML = `<span class="icon">${REPORT_ICON_SVG}</span>`;
+    btn.addEventListener("click", openReportModal);
+    return btn;
+  }
+
+  function getOrCreateReportModal() {
+    let modal = document.getElementById(REPORT_MODAL_ID);
+    if (modal) return modal;
+
+    modal = document.createElement("div");
+    modal.id = REPORT_MODAL_ID;
+    modal.setAttribute("role", "dialog");
+    modal.setAttribute("aria-modal", "true");
+    modal.setAttribute("aria-labelledby", "quickvint-report-title");
+    modal.innerHTML = `
+      <div class="quickvint-report-card">
+        <div class="quickvint-report-head">
+          <div>
+            <h2 id="quickvint-report-title" class="quickvint-report-title">Report an issue</h2>
+            <p class="quickvint-report-copy">Tell me what went wrong or what should improve. 🎁 Helpful reports have a chance to get <strong>up to 10 free extra listings</strong>.</p>
+          </div>
+          <button type="button" class="quickvint-report-close" aria-label="Close report form">&times;</button>
+        </div>
+
+        <label class="quickvint-report-label" for="quickvint-report-category">What is it about?</label>
+        <select id="quickvint-report-category" class="quickvint-report-select">
+          <option value="result_quality">Generated result</option>
+          <option value="tool_bug">Tool bug</option>
+          <option value="billing_account">Billing or account</option>
+          <option value="idea">Idea or improvement</option>
+          <option value="other">Other</option>
+        </select>
+
+        <label class="quickvint-report-label" for="quickvint-report-message">Short note</label>
+        <textarea id="quickvint-report-message" class="quickvint-report-textarea" placeholder="What happened?"></textarea>
+
+        <div class="quickvint-report-actions">
+          <button type="button" class="quickvint-report-secondary">Cancel</button>
+          <button type="button" class="quickvint-report-submit">Send report</button>
+        </div>
+      </div>
+    `;
+
+    modal.addEventListener("click", (event) => {
+      if (event.target === modal) closeReportModal();
+    });
+    modal
+      .querySelector(".quickvint-report-close")
+      ?.addEventListener("click", closeReportModal);
+    modal
+      .querySelector(".quickvint-report-secondary")
+      ?.addEventListener("click", closeReportModal);
+    modal
+      .querySelector(".quickvint-report-submit")
+      ?.addEventListener("click", submitReportFeedback);
+
+    document.body.appendChild(modal);
+    return modal;
+  }
+
+  function openReportModal() {
+    const modal = getOrCreateReportModal();
+    modal.classList.add("visible");
+    const textarea = modal.querySelector(".quickvint-report-textarea");
+    if (textarea) {
+      textarea.value = "";
+      setTimeout(() => textarea.focus(), 0);
+    }
+    trackGrowthEvent("listing_report_opened", {
+      source: "listing_tools",
+      path: window.location.pathname,
+    });
+  }
+
+  function closeReportModal() {
+    document.getElementById(REPORT_MODAL_ID)?.classList.remove("visible");
+  }
+
+  async function submitReportFeedback() {
+    const modal = document.getElementById(REPORT_MODAL_ID);
+    if (!modal) return;
+    const category = modal.querySelector(".quickvint-report-select")?.value || "other";
+    const message = modal.querySelector(".quickvint-report-textarea")?.value?.trim() || "";
+    const submitButton = modal.querySelector(".quickvint-report-submit");
+
+    if (message.length < 4) {
+      showToast("Add a few words so I can understand the report.", "info");
+      return;
+    }
+
+    if (submitButton) {
+      submitButton.disabled = true;
+      submitButton.textContent = "Sending...";
+    }
+
+    const titleInput = document.querySelector(SELECTORS.title);
+    const descriptionInput = document.querySelector(SELECTORS.description);
+
+    try {
+      await sendImmediateGrowthEvent("listing_report_submitted", {
+        source: "listing_tools",
+        category,
+        message,
+        path: window.location.pathname,
+        titleValue: titleInput?.value?.slice(0, 160) || "",
+        descriptionLength: descriptionInput?.value?.length || 0,
+        visiblePhotoCount: getVisibleUploadedPhotoCount(),
+      });
+      closeReportModal();
+      showToast("Thanks - report sent.", "success");
+    } catch (error) {
+      showToast("Could not send the report. Please try again.", "error");
+    } finally {
+      if (submitButton) {
+        submitButton.disabled = false;
+        submitButton.textContent = "Send report";
+      }
+    }
+  }
+
   function normalizeDescriptionLength(value) {
     return value === "short" ? "short" : "long";
   }
@@ -5200,6 +5548,7 @@
       if (generateBtn) generateBtn.style.display = "none";
       if (phoneBtn) phoneBtn.style.display = "none";
       if (batchBtn) batchBtn.style.display = "none";
+      if (reportBtn) reportBtn.style.display = "none";
       if (emojiToggleBtn) emojiToggleBtn.style.display = "none";
       if (hashtagsToggleBtn) hashtagsToggleBtn.style.display = "none";
       if (descriptionLengthToggle) descriptionLengthToggle.style.display = "none";
@@ -5214,6 +5563,7 @@
     if (generateBtn) generateBtn.style.display = "flex";
     if (phoneBtn) phoneBtn.style.display = "flex";
     if (batchBtn) batchBtn.style.display = "flex";
+    if (reportBtn) reportBtn.style.display = "inline-flex";
     if (descriptionLengthToggle) descriptionLengthToggle.style.display = "inline-grid";
     if (hashtagsToggleBtn) hashtagsToggleBtn.style.display = "inline-flex";
     if (emojiToggleBtn) emojiToggleBtn.style.display = "inline-flex";
@@ -5238,6 +5588,10 @@
       batchBtn.disabled = isBusy;
       batchBtn.style.background = PRIMARY_BUTTON_BACKGROUND;
       batchBtn.style.cursor = isBusy ? "not-allowed" : "pointer";
+    }
+    if (reportBtn) {
+      reportBtn.disabled = false;
+      reportBtn.style.cursor = "pointer";
     }
 
     if (!label || !icon) return;
@@ -8350,6 +8704,11 @@
       generateBtn = existingBtn;
       phoneBtn = document.getElementById(PHONE_BTN_ID);
       batchBtn = document.getElementById(BATCH_BTN_ID);
+      reportBtn = document.getElementById(REPORT_BTN_ID);
+      if (!reportBtn) {
+        reportBtn = createReportButton();
+        existingBtn.closest(".quickvint-primary-tools")?.appendChild(reportBtn);
+      }
       emojiToggleBtn = document.getElementById(EMOJI_TOGGLE_ID);
       hashtagsToggleBtn = document.getElementById(HASHTAGS_TOGGLE_ID);
       descriptionLengthToggle = document.getElementById(
@@ -8384,6 +8743,7 @@
       generateBtn = createButton();
       phoneBtn = createPhoneButton();
       batchBtn = createBatchButton();
+      reportBtn = createReportButton();
       descriptionLengthToggle = createDescriptionLengthToggle();
       hashtagsToggleBtn = createHashtagsToggleButton();
       emojiToggleBtn = createEmojiToggleButton();
@@ -8392,6 +8752,7 @@
       primaryTools.appendChild(generateBtn);
       primaryTools.appendChild(phoneBtn);
       primaryTools.appendChild(batchBtn);
+      primaryTools.appendChild(reportBtn);
       toolOptions.appendChild(descriptionLengthToggle);
       toolOptions.appendChild(hashtagsToggleBtn);
       toolOptions.appendChild(emojiToggleBtn);
