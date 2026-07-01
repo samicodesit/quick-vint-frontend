@@ -429,7 +429,7 @@
                     <span class="paywall-option-name">${escapeHtml(option.name)}</span>
                     ${
                       option.badge
-                        ? `<span class="paywall-option-badge">${escapeHtml(option.badge)}</span>`
+                        ? `<span class="paywall-option-badge${option.badge.toLowerCase() === "most popular" ? " most-popular" : ""}">${escapeHtml(option.badge)}</span>`
                         : ""
                     }
                   </div>
@@ -707,6 +707,7 @@
     { badge = "", featured = false, muted = false, selectable = true } = {},
   ) {
     const plan = PLAN_LIMITS[tier];
+    const displayBadge = tier === "pro" ? "Most popular" : badge;
     return {
       tier,
       name: plan.name,
@@ -714,7 +715,7 @@
       limits: formatPlanLimitSummary(plan),
       actionText: `Upgrade to ${plan.name}`,
       checkoutType: "subscription",
-      badge,
+      badge: displayBadge,
       featured,
       muted,
       selectable,
@@ -752,7 +753,7 @@
       message:
         "Paid plans and credit packs let legitimate sellers continue while support reviews duplicate free-trial issues.",
       options: [
-        planOption("starter", { badge: "Best next step", featured: true }),
+        planOption("starter", { featured: true }),
         planOption("pro"),
         planOption("business"),
         creditPackOption({ badge: "One-time purchase" }),
@@ -817,7 +818,7 @@
         title: "Free listings used",
         message: "Pick the plan that fits how often you list.",
         options: [
-          planOption("starter", { badge: "Best next step", featured: true }),
+          planOption("starter", { featured: true }),
           planOption("pro"),
           planOption("business"),
           creditPackOption({ badge: "No commitment" }),
@@ -865,7 +866,7 @@
       const nextTierOptions =
         currentTier === "starter"
           ? [
-              planOption("pro", { badge: "Recommended", featured: true }),
+              planOption("pro", { featured: true }),
               planOption("business"),
               creditPackOption({ badge: "One-time" }),
             ]
@@ -4427,8 +4428,8 @@
 
       #quickvint-toast.paywall .paywall-options {
         display: grid;
-        gap: 7px;
-        margin: 0 0 12px;
+        gap: 9px;
+        margin: 2px 0 13px;
       }
 
       #quickvint-toast.paywall .paywall-option {
@@ -4437,8 +4438,8 @@
         align-items: center;
         gap: 10px;
         width: 100%;
-        min-height: 48px;
-        padding: 9px 10px;
+        min-height: 52px;
+        padding: 10px 11px;
         border: 1px solid #e5e7eb;
         border-radius: 12px;
         background: #ffffff;
@@ -4504,6 +4505,12 @@
         font-weight: 850;
         line-height: 1;
         white-space: nowrap;
+      }
+
+      #quickvint-toast.paywall .paywall-option-badge.most-popular {
+        background: #f4f2ff;
+        color: #4f46e5;
+        border-color: #ddd6fe;
       }
 
       #quickvint-toast.paywall .paywall-option-side {

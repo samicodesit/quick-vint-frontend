@@ -265,13 +265,9 @@
         const toastText = doc.querySelector("#quickvint-toast")?.textContent || "";
         const canSelectPlans =
           selectPaywallOption(doc, "Pro") &&
-          /Upgrade to Pro/.test(paywallPrimaryText(doc)) &&
           selectPaywallOption(doc, "Business") &&
-          /Upgrade to Business/.test(paywallPrimaryText(doc)) &&
           selectPaywallOption(doc, "One-time credits") &&
-          /Buy one-time credits/.test(paywallPrimaryText(doc)) &&
-          selectPaywallOption(doc, "Starter") &&
-          /Upgrade to Starter/.test(paywallPrimaryText(doc));
+          selectPaywallOption(doc, "Starter");
         return (
           /Free listings used/.test(toastText) &&
           /Starter/.test(toastText) &&
@@ -283,10 +279,12 @@
           /€19\.99\/mo/.test(toastText) &&
           /One-time credits/.test(toastText) &&
           /€5\.99/.test(toastText) &&
+          /Most popular/.test(toastText) &&
+          !/Best next step/.test(toastText) &&
           /No commitment/.test(toastText) &&
-          /Upgrade to Starter/.test(toastText) &&
           /Compare all plans/.test(toastText) &&
           /Secure checkout by Stripe/.test(toastText) &&
+          !paywallHasMainAction(doc) &&
           canSelectPlans &&
           !!doc.querySelector("#quickvint-toast .paywall-logo")
         );
@@ -312,19 +310,19 @@
         const toastText = doc.querySelector("#quickvint-toast")?.textContent || "";
         const canSelectTopUp =
           selectPaywallOption(doc, "One-time credits") &&
-          /Buy one-time credits/.test(paywallPrimaryText(doc)) &&
-          selectPaywallOption(doc, "Pro") &&
-          /Upgrade to Pro/.test(paywallPrimaryText(doc));
+          selectPaywallOption(doc, "Pro");
         return (
           /Monthly limit reached/.test(toastText) &&
           /Pro/.test(toastText) &&
           /€9\.99\/mo/.test(toastText) &&
           /25\/day · 250\/month/.test(toastText) &&
+          /Most popular/.test(toastText) &&
+          !/Recommended/.test(toastText) &&
           /One-time credits/.test(toastText) &&
           /€5\.99/.test(toastText) &&
-          /Upgrade to Pro/.test(toastText) &&
           /Compare all plans/.test(toastText) &&
           /Secure checkout by Stripe/.test(toastText) &&
+          !paywallHasMainAction(doc) &&
           canSelectTopUp &&
           !!doc.querySelector("#quickvint-toast .paywall-logo")
         );
@@ -347,12 +345,9 @@
       },
       verify(doc) {
         const toastText = doc.querySelector("#quickvint-toast")?.textContent || "";
-        const selectedOption = doc.querySelector("#quickvint-toast .paywall-option.selected");
         const canSelectContact =
           selectPaywallOption(doc, "Tailored limits") &&
-          /Contact us/.test(paywallPrimaryText(doc)) &&
-          selectPaywallOption(doc, "One-time credits") &&
-          /Buy one-time credits/.test(paywallPrimaryText(doc));
+          selectPaywallOption(doc, "One-time credits");
         return (
           /Limit reached/.test(toastText) &&
           /One-time credits/.test(toastText) &&
@@ -364,7 +359,7 @@
           !/Current plan/.test(toastText) &&
           !/Compare all plans/.test(toastText) &&
           canSelectContact &&
-          /One-time credits/.test(selectedOption?.textContent || "") &&
+          !paywallHasMainAction(doc) &&
           !!doc.querySelector("#quickvint-toast .paywall-logo")
         );
       },
@@ -483,13 +478,11 @@
 
   function selectPaywallOption(doc, label) {
     const option = getPaywallOption(doc, label);
-    if (!option || option.disabled) return false;
-    option.click();
-    return option.classList.contains("selected");
+    return !!option && !option.disabled;
   }
 
-  function paywallPrimaryText(doc) {
-    return doc.querySelector("#quickvint-toast .paywall-action")?.textContent || "";
+  function paywallHasMainAction(doc) {
+    return !!doc.querySelector("#quickvint-toast .paywall-action");
   }
 
   function renderPanels() {
