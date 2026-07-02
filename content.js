@@ -847,7 +847,7 @@
     if (code === "free_lifetime_limit") {
       return {
         title: "Free listings used",
-        message: "Pick the plan that fits how often you list.",
+        message: "Your photos stay here. Pick a plan to generate this listing.",
         options: [
           planOption("starter", { featured: true }),
           planOption("pro"),
@@ -866,7 +866,7 @@
         title: "Limit reached",
         message:
           code === "monthly_limit" || code === "daily_limit"
-            ? "Add a few more listings without changing plan."
+            ? "Your listing stays here. Add credits without changing plan."
             : limitData.error || "Usage limit reached.",
         options:
           code === "monthly_limit" || code === "daily_limit"
@@ -910,7 +910,7 @@
 
       return {
         title: titleText,
-        message: "Choose more monthly room or a one-time top-up.",
+        message: "Your listing stays here. Upgrade or top up to continue.",
         options: nextTierOptions,
         trustNote: "Secure checkout by Stripe. Cancel anytime.",
         actionText: `Upgrade to ${nextPlan.name}`,
@@ -1183,6 +1183,16 @@
 
     if (message?.type === "BATCH_PROGRESS") {
       handleBatchProgress(message);
+      sendResponse({ ok: true });
+      return false;
+    }
+
+    if (message?.type === "CHECKOUT_FULFILLED") {
+      const paywall = document.getElementById("quickvint-toast");
+      if (paywall?.classList.contains("paywall")) {
+        paywall.classList.remove("visible");
+      }
+      showToast("Payment confirmed. Click Generate again.", "success");
       sendResponse({ ok: true });
       return false;
     }

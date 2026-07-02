@@ -758,6 +758,48 @@ function buildPublicUserProfileResponse(supabaseSession, userProfile) {
   };
 }
 
+async function notifyVintedTabsCheckoutFulfilled() {
+  try {
+    const tabs = await chrome.tabs.query({
+      url: [
+        "*://*.vinted.at/*",
+        "*://*.vinted.be/*",
+        "*://*.vinted.cz/*",
+        "*://*.vinted.de/*",
+        "*://*.vinted.dk/*",
+        "*://*.vinted.es/*",
+        "*://*.vinted.fi/*",
+        "*://*.vinted.fr/*",
+        "*://*.vinted.gr/*",
+        "*://*.vinted.hr/*",
+        "*://*.vinted.hu/*",
+        "*://*.vinted.ie/*",
+        "*://*.vinted.it/*",
+        "*://*.vinted.lt/*",
+        "*://*.vinted.lu/*",
+        "*://*.vinted.nl/*",
+        "*://*.vinted.pt/*",
+        "*://*.vinted.ro/*",
+        "*://*.vinted.pl/*",
+        "*://*.vinted.se/*",
+        "*://*.vinted.sk/*",
+        "*://*.vinted.co.uk/*",
+        "*://*.vinted.com/*",
+      ],
+    });
+
+    await Promise.allSettled(
+      tabs.map((tab) =>
+        tab.id
+          ? chrome.tabs.sendMessage(tab.id, { type: "CHECKOUT_FULFILLED" })
+          : Promise.resolve(),
+      ),
+    );
+  } catch (error) {
+    console.debug("Could not notify Vinted tabs after checkout:", error);
+  }
+}
+
 chrome.runtime.onMessageExternal.addListener((message, sender, sendResponse) => {
   if (!isAllowedExternalSender(sender)) {
     return false;
@@ -801,6 +843,19 @@ chrome.runtime.onMessageExternal.addListener((message, sender, sendResponse) => 
         error: error?.message || "Unable to open extension popup.",
       });
     }
+    return true;
+  }
+
+  if (message?.type === "CHECKOUT_FULFILLED") {
+    updateAndStoreUserProfile()
+      .then(() => notifyVintedTabsCheckoutFulfilled())
+      .then(() => sendResponse({ ok: true }))
+      .catch((error) =>
+        sendResponse({
+          ok: false,
+          error: error?.message || "Unable to refresh profile.",
+        }),
+      );
     return true;
   }
 
