@@ -128,8 +128,8 @@
     {
       id: "limit-followup-offer",
       title: "Free-limit follow-up offer",
-      note: "Returning free-limit user sees the concise upgrade or feedback prompt.",
-      height: 560,
+      note: "Returning free-limit user sees a structured upgrade offer with a feedback escape path.",
+      height: 640,
       auth: true,
       action: "none",
       hasImages: true,
@@ -145,25 +145,31 @@
         campaignKey: "limit_followup_offer_v1",
         couponCode: "LISTFASTER20",
         discountLabel: "20% off your first month",
-        title: "Keep listing faster",
-        body: "You used your free listings. Use LISTFASTER20 for 20% off your first month.",
+        title: "Keep listing without waiting",
+        body: "You reached the free limit.",
         trust: "No Vinted account connection needed.",
-        cta: "View plans",
+        cta: "View upgrade options",
         pricingUrl: "https://autolister.app/pricing?offer=preview",
         limitHitAt: "2026-07-02T10:00:00.000Z",
       },
       verify(doc) {
-        const prompt = doc.getElementById("quickvint-description-apply-prompt");
-        const text = prompt?.textContent || "";
+        const modal = doc.getElementById("quickvint-limit-followup-modal");
+        const text = modal?.textContent || "";
         return (
-          /Keep listing faster/.test(text) &&
+          /AutoLister AI/.test(text) &&
+          /Vinted listing assistant/.test(text) &&
+          /5 free listings used/.test(text) &&
+          /Keep listing without waiting/.test(text) &&
           /LISTFASTER20/.test(text) &&
           /20% off your first month/.test(text) &&
           /No Vinted account connection needed/.test(text) &&
-          /View plans/.test(text) &&
-          /Not now/.test(text) &&
-          /Tell us why/.test(text) &&
-          !!prompt?.querySelector(".quickvint-apply-settings")
+          /Secure Stripe checkout\. Cancel anytime\./.test(text) &&
+          /View plans & use offer/.test(text) &&
+          /Maybe later/.test(text) &&
+          /🎁 Share feedback for free listings/.test(text) &&
+          !!modal?.querySelector(".quickvint-limit-offer") &&
+          !!modal?.querySelector(".quickvint-limit-primary") &&
+          modal?.querySelector(".quickvint-limit-code")?.tagName === "BUTTON"
         );
       },
     },

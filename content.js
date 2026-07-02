@@ -12,6 +12,7 @@
   const HASHTAGS_STORAGE_KEY = "useHashtags";
   const SIGN_IN_BTN_ID = "quickvint-signin-btn";
   const DESCRIPTION_APPLY_PROMPT_ID = "quickvint-description-apply-prompt";
+  const LIMIT_FOLLOWUP_MODAL_ID = "quickvint-limit-followup-modal";
   const TITLE_LANGUAGE_SELECT_ID = "quickvint-title-language-select";
   const DESCRIPTION_LANGUAGE_SELECT_ID = "quickvint-description-language-select";
   const MODAL_ID = "quickvint-phone-modal";
@@ -4288,6 +4289,297 @@
         filter: brightness(0.98);
       }
 
+      #${LIMIT_FOLLOWUP_MODAL_ID} {
+        position: fixed;
+        z-index: 2147483647;
+        width: min(410px, calc(100vw - 28px));
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      }
+
+      #${LIMIT_FOLLOWUP_MODAL_ID} .quickvint-limit-card {
+        width: 100%;
+        border: 1px solid #ddd6fe;
+        border-radius: 16px;
+        background: #ffffff;
+        color: #111827;
+        box-shadow:
+          0 24px 70px rgba(17, 24, 39, 0.24),
+          0 0 0 1px rgba(255, 255, 255, 0.72) inset;
+        overflow: hidden;
+      }
+
+      #${LIMIT_FOLLOWUP_MODAL_ID} .quickvint-limit-body {
+        padding: 20px;
+      }
+
+      #${LIMIT_FOLLOWUP_MODAL_ID} .quickvint-limit-brand {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+        margin-bottom: 14px;
+      }
+
+      #${LIMIT_FOLLOWUP_MODAL_ID} .quickvint-limit-brand-main {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        min-width: 0;
+      }
+
+      #${LIMIT_FOLLOWUP_MODAL_ID} .quickvint-limit-logo {
+        width: 34px;
+        height: 34px;
+        border-radius: 10px;
+        box-shadow: 0 8px 18px rgba(79, 70, 229, 0.18);
+      }
+
+      #${LIMIT_FOLLOWUP_MODAL_ID} .quickvint-limit-brand-name {
+        color: #111827;
+        font-size: 13px;
+        font-weight: 850;
+        line-height: 1.15;
+      }
+
+      #${LIMIT_FOLLOWUP_MODAL_ID} .quickvint-limit-brand-sub {
+        margin-top: 2px;
+        color: #64748b;
+        font-size: 11px;
+        font-weight: 720;
+        line-height: 1.2;
+      }
+
+      #${LIMIT_FOLLOWUP_MODAL_ID} .quickvint-limit-top {
+        display: flex;
+        align-items: flex-start;
+        gap: 8px;
+        margin-bottom: 14px;
+      }
+
+      #${LIMIT_FOLLOWUP_MODAL_ID} .quickvint-limit-kicker {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        min-height: 24px;
+        padding: 0 9px;
+        border-radius: 999px;
+        background: #f4f3ff;
+        color: #4f46e5;
+        font-size: 11px;
+        font-weight: 850;
+        line-height: 1;
+      }
+
+      #${LIMIT_FOLLOWUP_MODAL_ID} .quickvint-limit-close {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 28px;
+        height: 28px;
+        border: 0;
+        border-radius: 8px;
+        background: transparent;
+        color: #94a3b8;
+        cursor: pointer;
+        font: inherit;
+        font-size: 22px;
+        line-height: 1;
+      }
+
+      #${LIMIT_FOLLOWUP_MODAL_ID} .quickvint-limit-close:hover {
+        background: #f8fafc;
+        color: #334155;
+      }
+
+      #${LIMIT_FOLLOWUP_MODAL_ID} .quickvint-limit-title {
+        margin: 0;
+        color: #111827;
+        font-size: 22px;
+        font-weight: 850;
+        line-height: 1.12;
+        letter-spacing: 0;
+      }
+
+      #${LIMIT_FOLLOWUP_MODAL_ID} .quickvint-limit-copy {
+        margin: 10px 0 0;
+        color: #475467;
+        font-size: 14px;
+        font-weight: 620;
+        line-height: 1.48;
+      }
+
+      #${LIMIT_FOLLOWUP_MODAL_ID} .quickvint-limit-offer {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 14px;
+        margin-top: 16px;
+        padding: 14px;
+        border: 1px solid #c7d2fe;
+        border-radius: 12px;
+        background: #f8f7ff;
+      }
+
+      #${LIMIT_FOLLOWUP_MODAL_ID} .quickvint-limit-offer-main {
+        color: #312e81;
+        font-size: 15px;
+        font-weight: 850;
+        line-height: 1.2;
+      }
+
+      #${LIMIT_FOLLOWUP_MODAL_ID} .quickvint-limit-offer-sub {
+        margin-top: 4px;
+        color: #64748b;
+        font-size: 12px;
+        font-weight: 700;
+        line-height: 1.25;
+      }
+
+      #${LIMIT_FOLLOWUP_MODAL_ID} .quickvint-limit-code {
+        flex: 0 0 auto;
+        padding: 7px 9px;
+        border: 1px dashed #8b5cf6;
+        border-radius: 9px;
+        background: #ffffff;
+        color: #4338ca;
+        cursor: pointer;
+        font: inherit;
+        font-size: 12px;
+        font-weight: 900;
+        letter-spacing: 0;
+        outline: none;
+      }
+
+      #${LIMIT_FOLLOWUP_MODAL_ID} .quickvint-limit-code:hover {
+        background: #f4f3ff;
+      }
+
+      #${LIMIT_FOLLOWUP_MODAL_ID} .quickvint-limit-points {
+        display: grid;
+        gap: 8px;
+        margin: 15px 0 0;
+        padding: 0;
+        list-style: none;
+      }
+
+      #${LIMIT_FOLLOWUP_MODAL_ID} .quickvint-limit-points li {
+        display: flex;
+        align-items: flex-start;
+        gap: 8px;
+        color: #334155;
+        font-size: 13px;
+        font-weight: 680;
+        line-height: 1.34;
+      }
+
+      #${LIMIT_FOLLOWUP_MODAL_ID} .quickvint-limit-check {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        flex: 0 0 auto;
+        width: 18px;
+        height: 18px;
+        border-radius: 999px;
+        background: #ecfdf5;
+        color: #059669;
+        font-size: 12px;
+        font-weight: 900;
+      }
+
+      #${LIMIT_FOLLOWUP_MODAL_ID} .quickvint-limit-actions {
+        display: grid;
+        grid-template-columns: 1fr auto;
+        gap: 10px;
+        margin-top: 18px;
+      }
+
+      #${LIMIT_FOLLOWUP_MODAL_ID} .quickvint-limit-primary,
+      #${LIMIT_FOLLOWUP_MODAL_ID} .quickvint-limit-secondary {
+        min-height: 42px;
+        border-radius: 10px;
+        cursor: pointer;
+        font: inherit;
+        font-size: 13px;
+        font-weight: 850;
+        outline: none;
+      }
+
+      #${LIMIT_FOLLOWUP_MODAL_ID} .quickvint-limit-primary {
+        border: 0;
+        background: ${PRIMARY_BUTTON_BACKGROUND};
+        color: #ffffff;
+        box-shadow: 0 14px 28px rgba(79, 70, 229, 0.24);
+      }
+
+      #${LIMIT_FOLLOWUP_MODAL_ID} .quickvint-limit-secondary {
+        min-width: 96px;
+        border: 1px solid #dbe3f0;
+        background: #ffffff;
+        color: #475467;
+      }
+
+      #${LIMIT_FOLLOWUP_MODAL_ID} .quickvint-limit-primary:hover,
+      #${LIMIT_FOLLOWUP_MODAL_ID} .quickvint-limit-secondary:hover {
+        filter: brightness(0.98);
+      }
+
+      #${LIMIT_FOLLOWUP_MODAL_ID} .quickvint-limit-primary:focus-visible,
+      #${LIMIT_FOLLOWUP_MODAL_ID} .quickvint-limit-secondary:focus-visible,
+      #${LIMIT_FOLLOWUP_MODAL_ID} .quickvint-limit-code:focus-visible,
+      #${LIMIT_FOLLOWUP_MODAL_ID} .quickvint-limit-feedback:focus-visible,
+      #${LIMIT_FOLLOWUP_MODAL_ID} .quickvint-limit-close:focus-visible {
+        outline: 3px solid rgba(79, 70, 229, 0.18);
+        outline-offset: 2px;
+      }
+
+      #${LIMIT_FOLLOWUP_MODAL_ID} .quickvint-limit-feedback {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 100%;
+        min-height: 38px;
+        margin-top: 10px;
+        border: 0;
+        border-radius: 9px;
+        background: transparent;
+        color: #4f46e5;
+        cursor: pointer;
+        font: inherit;
+        font-size: 12px;
+        font-weight: 800;
+        outline: none;
+      }
+
+      #${LIMIT_FOLLOWUP_MODAL_ID} .quickvint-limit-feedback:hover {
+        background: #f8f7ff;
+      }
+
+      @media (max-width: 520px) {
+        #${LIMIT_FOLLOWUP_MODAL_ID} {
+          top: auto !important;
+          right: 12px !important;
+          bottom: 12px !important;
+          left: 12px !important;
+          width: auto;
+        }
+
+        #${LIMIT_FOLLOWUP_MODAL_ID} .quickvint-limit-card {
+          border-radius: 14px;
+        }
+
+        #${LIMIT_FOLLOWUP_MODAL_ID} .quickvint-limit-body {
+          padding: 18px;
+        }
+
+        #${LIMIT_FOLLOWUP_MODAL_ID} .quickvint-limit-actions {
+          grid-template-columns: 1fr;
+        }
+
+        #${LIMIT_FOLLOWUP_MODAL_ID} .quickvint-limit-secondary {
+          width: 100%;
+        }
+      }
+
       .quickvint-tools {
         display: inline-flex;
         flex-direction: column;
@@ -6165,6 +6457,142 @@
     return true;
   }
 
+  function positionLimitFollowupOfferModal(modal, anchorInput) {
+    if (window.matchMedia("(max-width: 520px)").matches) {
+      modal.style.top = "";
+      modal.style.left = "";
+      modal.style.right = "";
+      modal.style.bottom = "";
+      return;
+    }
+
+    const rect = anchorInput?.getBoundingClientRect();
+    const width = Math.min(410, window.innerWidth - 28);
+    const height = modal.offsetHeight || 458;
+    const margin = 18;
+    const gap = 14;
+    let left = window.innerWidth - width - margin;
+    let top = 80;
+
+    if (rect) {
+      top = Math.max(
+        margin,
+        Math.min(rect.top - 18, window.innerHeight - height - margin),
+      );
+      if (window.innerWidth - rect.right >= width + gap + margin) {
+        left = rect.right + gap;
+      }
+    }
+
+    modal.style.width = `${width}px`;
+    modal.style.left = `${Math.round(left)}px`;
+    modal.style.top = `${Math.round(top)}px`;
+    modal.style.right = "auto";
+    modal.style.bottom = "auto";
+  }
+
+  function showLimitFollowupOfferModal(offer, anchorInput) {
+    document.getElementById(LIMIT_FOLLOWUP_MODAL_ID)?.remove();
+    removeDescriptionApplyPrompt();
+
+    const couponCode = offer.couponCode || "LISTFASTER20";
+    const discountLabel = offer.discountLabel || "20% off your first month";
+    const logoUrl = chrome.runtime.getURL("icons/icon48.png");
+
+    return new Promise((resolve) => {
+      const modal = document.createElement("div");
+      modal.id = LIMIT_FOLLOWUP_MODAL_ID;
+      modal.setAttribute("role", "dialog");
+      modal.setAttribute("aria-modal", "true");
+      modal.setAttribute("aria-labelledby", "quickvint-limit-title");
+      activeFloatingPromptType = "limit_followup_offer";
+      modal.innerHTML = `
+        <div class="quickvint-limit-card">
+          <div class="quickvint-limit-body">
+            <div class="quickvint-limit-brand">
+              <div class="quickvint-limit-brand-main">
+                <img class="quickvint-limit-logo" src="${escapeHtml(logoUrl)}" alt="" />
+                <div>
+                  <div class="quickvint-limit-brand-name">AutoLister AI</div>
+                  <div class="quickvint-limit-brand-sub">Vinted listing assistant</div>
+                </div>
+              </div>
+              <button type="button" class="quickvint-limit-close" aria-label="Close offer">&times;</button>
+            </div>
+            <div class="quickvint-limit-top">
+              <span class="quickvint-limit-kicker">5 free listings used</span>
+            </div>
+            <h2 class="quickvint-limit-title" id="quickvint-limit-title">Keep listing without waiting</h2>
+            <p class="quickvint-limit-copy">Your free trial is complete. This offer keeps your next listings moving today.</p>
+            <div class="quickvint-limit-offer" aria-label="${escapeHtml(discountLabel)}">
+              <div>
+                <div class="quickvint-limit-offer-main">${escapeHtml(discountLabel)}</div>
+                <div class="quickvint-limit-offer-sub">Use at checkout</div>
+              </div>
+              <button type="button" class="quickvint-limit-code" aria-label="Copy coupon code ${escapeHtml(couponCode)}">${escapeHtml(couponCode)}</button>
+            </div>
+            <ul class="quickvint-limit-points">
+              <li><span class="quickvint-limit-check">✓</span><span>No Vinted account connection needed</span></li>
+              <li><span class="quickvint-limit-check">✓</span><span>Secure Stripe checkout. Cancel anytime.</span></li>
+            </ul>
+            <div class="quickvint-limit-actions">
+              <button type="button" class="quickvint-limit-primary">View plans & use offer</button>
+              <button type="button" class="quickvint-limit-secondary">Maybe later</button>
+            </div>
+            <button type="button" class="quickvint-limit-feedback">🎁 Share feedback for free listings</button>
+          </div>
+        </div>
+      `;
+
+      function finish(choice) {
+        window.removeEventListener("resize", onReposition);
+        window.removeEventListener("scroll", onReposition, true);
+        modal.remove();
+        activeFloatingPromptType = null;
+        resolve(choice);
+      }
+
+      const onReposition = () => positionLimitFollowupOfferModal(modal, anchorInput);
+      window.addEventListener("resize", onReposition);
+      window.addEventListener("scroll", onReposition, true);
+      modal
+        .querySelector(".quickvint-limit-close")
+        ?.addEventListener("click", () => finish("dismiss"));
+      modal
+        .querySelector(".quickvint-limit-secondary")
+        ?.addEventListener("click", () => finish("dismiss"));
+      modal
+        .querySelector(".quickvint-limit-primary")
+        ?.addEventListener("click", () => finish("open"));
+      modal
+        .querySelector(".quickvint-limit-feedback")
+        ?.addEventListener("click", () => finish("feedback"));
+      modal
+        .querySelector(".quickvint-limit-code")
+        ?.addEventListener("click", async (event) => {
+          const button = event.currentTarget;
+          const previousText = button.textContent;
+          try {
+            await navigator.clipboard?.writeText(couponCode);
+            button.textContent = "Copied";
+            trackGrowthEvent("limit_followup_coupon_copied", {
+              campaignKey: offer.campaignKey,
+              couponCode,
+            });
+            setTimeout(() => {
+              if (document.body.contains(button)) button.textContent = previousText;
+            }, 1600);
+          } catch (error) {
+            button.textContent = couponCode;
+          }
+        });
+
+      document.body.appendChild(modal);
+      positionLimitFollowupOfferModal(modal, anchorInput);
+      modal.querySelector(".quickvint-limit-primary")?.focus();
+    });
+  }
+
   async function maybeShowPendingLimitFollowupOffer() {
     const offer = pendingLimitFollowupOffer;
     if (!offer || activeFloatingPromptType || isPromptBlockingModalOpen()) return false;
@@ -6186,51 +6614,33 @@
       limitHitAt: offer.limitHitAt,
     });
 
-    const choice = await showFloatingPrompt({
-      type: "limit_followup_offer",
-      anchorInput,
-      title: offer.title || "Keep listing faster",
-      copy: [offer.body, offer.trust]
-        .filter(Boolean)
-        .join(" ") ||
-        "You used your free listings. Use LISTFASTER20 for 20% off your first month.",
-      actions: [
-        {
-          choice: "open",
-          label: offer.cta || "View plans",
-          primary: true,
-        },
-        { choice: "dismiss", label: "Not now" },
-        { choice: "feedback", label: "Tell us why", fullWidth: true },
-      ],
-      onAction: async (choice) => {
-        if (choice === "feedback") {
-          await dismissOfferLocally(offer);
-          pendingLimitFollowupOffer = null;
-          trackGrowthEvent("limit_followup_offer_feedback_click", {
-            campaignKey: offer.campaignKey,
-            couponCode: offer.couponCode,
-            limitHitAt: offer.limitHitAt,
-          });
-          openReportModal({
-            source: "limit_followup_offer",
-            category: "idea",
-            placeholder: "What would make AutoLister worth upgrading for you?",
-          });
-          return true;
-        }
-        if (choice !== "open") return true;
-        await dismissOfferLocally(offer);
-        pendingLimitFollowupOffer = null;
-        trackGrowthEvent("limit_followup_offer_click", {
-          campaignKey: offer.campaignKey,
-          couponCode: offer.couponCode,
-          limitHitAt: offer.limitHitAt,
-        });
-        window.open(offer.pricingUrl, "_blank", "noopener,noreferrer");
-        return true;
-      },
-    });
+    const choice = await showLimitFollowupOfferModal(offer, anchorInput);
+
+    if (choice === "feedback") {
+      await dismissOfferLocally(offer);
+      pendingLimitFollowupOffer = null;
+      trackGrowthEvent("limit_followup_offer_feedback_click", {
+        campaignKey: offer.campaignKey,
+        couponCode: offer.couponCode,
+        limitHitAt: offer.limitHitAt,
+      });
+      openReportModal({
+        source: "limit_followup_offer",
+        category: "idea",
+        placeholder: "What would make AutoLister worth upgrading for you?",
+      });
+    }
+
+    if (choice === "open") {
+      await dismissOfferLocally(offer);
+      pendingLimitFollowupOffer = null;
+      trackGrowthEvent("limit_followup_offer_click", {
+        campaignKey: offer.campaignKey,
+        couponCode: offer.couponCode,
+        limitHitAt: offer.limitHitAt,
+      });
+      window.open(offer.pricingUrl, "_blank", "noopener,noreferrer");
+    }
 
     if (choice === "dismiss") {
       await dismissOfferLocally(offer);
