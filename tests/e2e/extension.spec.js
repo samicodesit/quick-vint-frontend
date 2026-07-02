@@ -751,6 +751,60 @@ test.describe("AutoLister extension smoke flows", () => {
     expect(offerFetchCount).toBe(0);
   });
 
+  test("does not treat stored language defaults as an explicit offer language", async ({
+    page,
+  }) => {
+    await openContentHarness(page, null, {
+      emptyListing: true,
+      shortenOfferTimers: true,
+      initialStorage: {
+        selectedLanguage: "fr",
+        selectedTitleLanguage: "fr",
+        selectedDescriptionLanguage: "fr",
+        userProfile: {
+          subscription_status: "free",
+          subscription_tier: "free",
+          api_calls_this_month: 5,
+          free_lifetime_generations_used: 5,
+          pack_credits: 0,
+        },
+      },
+    });
+
+    const offer = page.locator("#quickvint-limit-followup-modal");
+    await expect(offer).toBeVisible();
+    await expect(offer).toContainText("Keep listing without waiting");
+    await expect(offer).not.toContainText("Continuez à publier sans attendre");
+  });
+
+  test("uses the selected language for the offer after a real language interaction", async ({
+    page,
+  }) => {
+    await openContentHarness(page, null, {
+      emptyListing: true,
+      shortenOfferTimers: true,
+      initialStorage: {
+        quickvintLanguagePreferenceTouched: true,
+        selectedLanguage: "en",
+        selectedTitleLanguage: "fr",
+        selectedDescriptionLanguage: "fr",
+        userProfile: {
+          subscription_status: "free",
+          subscription_tier: "free",
+          api_calls_this_month: 5,
+          free_lifetime_generations_used: 5,
+          pack_credits: 0,
+        },
+      },
+    });
+
+    const offer = page.locator("#quickvint-limit-followup-modal");
+    await expect(offer).toBeVisible();
+    await expect(offer).toContainText("5 annonces gratuites utilisées");
+    await expect(offer).toContainText("Continuez à publier sans attendre");
+    await expect(offer).toContainText("LISTFASTER20");
+  });
+
   test("shows the free-limit offer after closing the free-limit paywall", async ({
     page,
   }) => {
