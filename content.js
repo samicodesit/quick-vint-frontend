@@ -35,6 +35,7 @@
   const OFFER_LAST_SHOWN_KEY_PREFIX = "quickvintOfferLastShown";
   const OFFER_SHOW_COOLDOWN_MS = 7 * 24 * 60 * 60 * 1000;
   const LIMIT_FOLLOWUP_CLOSE_DELAY_MS = 10 * 1000;
+  const LIMIT_FOLLOWUP_RETRY_DELAY_MS = 30 * 1000;
   const OPEN_SETTINGS_ON_NEXT_POPUP_KEY = "quickvintOpenSettingsOnNextPopup";
   const EMOJI_SEQUENCE_REGEX =
     /(?:[0-9#*]\uFE0F?\u20E3)|(?:[\u{1F1E6}-\u{1F1FF}]{2})|(?:\p{Emoji_Presentation}|\p{Emoji}\uFE0F)(?:\p{Emoji_Modifier})?(?:\u200D(?:\p{Emoji_Presentation}|\p{Emoji}\uFE0F)(?:\p{Emoji_Modifier})?)*/gu;
@@ -465,8 +466,10 @@
   let limitFollowupOfferChecked = false;
   let limitFollowupOfferFetchInFlight = false;
   let limitFollowupRescueTimer = null;
+  let pendingLimitFollowupRetryTimer = null;
   let freeLimitPaywallCheckoutStarted = false;
   let activeFloatingPromptType = null;
+  let limitFollowupResumeListenersBound = false;
 
   // --- HELPER FUNCTIONS ---
 
@@ -741,6 +744,44 @@
     if (!limitFollowupRescueTimer) return;
     window.clearTimeout(limitFollowupRescueTimer);
     limitFollowupRescueTimer = null;
+  }
+
+  function clearPendingLimitFollowupRetryTimer() {
+    if (!pendingLimitFollowupRetryTimer) return;
+    window.clearTimeout(pendingLimitFollowupRetryTimer);
+    pendingLimitFollowupRetryTimer = null;
+  }
+
+  function schedulePendingLimitFollowupRetry(reason) {
+    if (!pendingLimitFollowupOffer) return;
+    clearPendingLimitFollowupRetryTimer();
+    pendingLimitFollowupRetryTimer = window.setTimeout(() => {
+      pendingLimitFollowupRetryTimer = null;
+      maybeShowPendingPrompts({ reason: `retry_${reason}` });
+    }, LIMIT_FOLLOWUP_RETRY_DELAY_MS);
+  }
+
+  function checkPendingLimitFollowupOnResume(reason) {
+    if (!pendingLimitFollowupOffer) return;
+    clearPendingLimitFollowupRetryTimer();
+    maybeShowPendingPrompts({ reason });
+  }
+
+  function bindLimitFollowupResumeListeners() {
+    if (limitFollowupResumeListenersBound) return;
+    limitFollowupResumeListenersBound = true;
+
+    window.addEventListener("focus", () => {
+      checkPendingLimitFollowupOnResume("window_focus");
+    });
+    window.addEventListener("pageshow", () => {
+      checkPendingLimitFollowupOnResume("page_show");
+    });
+    document.addEventListener("visibilitychange", () => {
+      if (document.visibilityState === "visible") {
+        checkPendingLimitFollowupOnResume("visibility_visible");
+      }
+    });
   }
 
   function scheduleLimitFollowupRescueCheck(reason) {
@@ -6999,11 +7040,23 @@
     });
   }
 
-  async function maybeShowPendingLimitFollowupOffer({ allowDuringDraft = false } = {}) {
+  async function maybeShowPendingLimitFollowupOffer({
+    allowDuringDraft = false,
+    reason = "auto",
+  } = {}) {
     const offer = pendingLimitFollowupOffer;
-    if (!offer || activeFloatingPromptType || isPromptBlockingModalOpen()) return false;
+    if (!offer) return false;
+    if (document.visibilityState === "hidden") {
+      schedulePendingLimitFollowupRetry("hidden");
+      return false;
+    }
+    if (activeFloatingPromptType || isPromptBlockingModalOpen()) {
+      schedulePendingLimitFollowupRetry("blocked_modal");
+      return false;
+    }
     if (await isOfferLocallyDismissed(offer)) {
       pendingLimitFollowupOffer = null;
+      clearPendingLimitFollowupRetryTimer();
       return false;
     }
     if (await wasOfferShownRecently(offer)) {
@@ -7011,15 +7064,23 @@
     }
 
     const anchorInput = getPromptAnchorInput();
-    if (!anchorInput) return false;
-    if (!allowDuringDraft && isListingDraftInProgress()) return false;
+    if (!anchorInput) {
+      schedulePendingLimitFollowupRetry("missing_anchor");
+      return false;
+    }
+    if (!allowDuringDraft && isListingDraftInProgress()) {
+      schedulePendingLimitFollowupRetry("draft_in_progress");
+      return false;
+    }
 
     const languageContext = await resolvePreferredUiLanguageContext();
+    clearPendingLimitFollowupRetryTimer();
     await markOfferShownLocally(offer);
     trackGrowthEvent("limit_followup_offer_shown", {
       campaignKey: offer.campaignKey,
       couponCode: offer.couponCode,
       limitHitAt: offer.limitHitAt,
+      reason,
       languageCode: languageContext.languageCode,
       hasExplicitLanguagePreference:
         languageContext.hasExplicitLanguagePreference,
@@ -7034,6 +7095,7 @@
     if (choice === "feedback") {
       await dismissOfferLocally(offer);
       pendingLimitFollowupOffer = null;
+      clearPendingLimitFollowupRetryTimer();
       trackGrowthEvent("limit_followup_offer_feedback_click", {
         campaignKey: offer.campaignKey,
         couponCode: offer.couponCode,
@@ -7049,6 +7111,7 @@
     if (choice === "open") {
       await dismissOfferLocally(offer);
       pendingLimitFollowupOffer = null;
+      clearPendingLimitFollowupRetryTimer();
       trackGrowthEvent("limit_followup_offer_click", {
         campaignKey: offer.campaignKey,
         couponCode: offer.couponCode,
@@ -7060,6 +7123,7 @@
     if (choice === "dismiss") {
       await dismissOfferLocally(offer);
       pendingLimitFollowupOffer = null;
+      clearPendingLimitFollowupRetryTimer();
       trackGrowthEvent("limit_followup_offer_dismissed", {
         campaignKey: offer.campaignKey,
         couponCode: offer.couponCode,
@@ -7112,7 +7176,7 @@
         return;
       }
       pendingLimitFollowupOffer = offer;
-      maybeShowPendingPrompts({ allowDuringDraft });
+      maybeShowPendingPrompts({ allowDuringDraft, reason });
       trackGrowthEvent("limit_followup_offer_loaded", {
         reason,
         campaignKey: offer.campaignKey,
@@ -9904,6 +9968,7 @@
 
   function init() {
     injectStylesheet();
+    bindLimitFollowupResumeListeners();
     initializeAuthState();
     startInjectionObserver();
   }
