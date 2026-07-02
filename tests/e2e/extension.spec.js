@@ -33,8 +33,8 @@ async function loadExtension() {
   return { context, serviceWorker };
 }
 
-function installChromeHarness(page, capacityResponse = null) {
-  return page.evaluate((capacity) => {
+function installChromeHarness(page, capacityResponse = null, initialStorage = {}) {
+  return page.evaluate(({ capacity, initialStorage }) => {
     const storage = {
       supabaseSession: {
         access_token: "test-access-token",
@@ -58,6 +58,7 @@ function installChromeHarness(page, capacityResponse = null) {
       useBulletPoints: true,
       descriptionLength: "long",
       useHashtags: true,
+      ...initialStorage,
     };
 
     window.chrome = {
@@ -119,7 +120,7 @@ function installChromeHarness(page, capacityResponse = null) {
         onChanged: { addListener: () => {} },
       },
     };
-  }, capacityResponse);
+  }, { capacity: capacityResponse, initialStorage });
 }
 
 async function openContentHarness(page, capacityResponse = null, options = {}) {
@@ -130,7 +131,14 @@ async function openContentHarness(page, capacityResponse = null, options = {}) {
     if (message.type() === "error") consoleErrors.push(message.text());
   });
   await page.setContent(listingFixture, { waitUntil: "domcontentloaded" });
-  await installChromeHarness(page, capacityResponse);
+  if (options.emptyListing) {
+    await page.evaluate(() => {
+      document.querySelectorAll(".photo-box").forEach((node) => node.remove());
+      document.querySelector('[data-testid="title--input"]').value = "";
+      document.querySelector('[data-testid="description--input"]').value = "";
+    });
+  }
+  await installChromeHarness(page, capacityResponse, options.initialStorage || {});
   if (options.shortenOfferTimers) {
     await page.evaluate(() => {
       const originalSetTimeout = window.setTimeout.bind(window);
@@ -692,11 +700,55 @@ test.describe("AutoLister extension smoke flows", () => {
       },
     );
 
-    await openContentHarness(page, null, { shortenOfferTimers: true });
+    await openContentHarness(page, null, {
+      shortenOfferTimers: true,
+      initialStorage: {
+        userProfile: {
+          subscription_status: "free",
+          subscription_tier: "free",
+          api_calls_this_month: 5,
+          free_lifetime_generations_used: 5,
+          pack_credits: 0,
+        },
+      },
+    });
     await page.waitForTimeout(150);
 
-    expect(offerFetchCount).toBe(1);
+    expect(offerFetchCount).toBe(0);
     await expect(page.locator("#quickvint-limit-followup-modal")).toHaveCount(0);
+  });
+
+  test("shows the return-visit offer on an empty listing after local free limit is reached", async ({
+    page,
+  }) => {
+    let offerFetchCount = 0;
+    await page.route(
+      "https://autolister.app/api/user/limit-followup-offer",
+      (route) => {
+        offerFetchCount += 1;
+        return route.abort();
+      },
+    );
+
+    await openContentHarness(page, null, {
+      emptyListing: true,
+      shortenOfferTimers: true,
+      initialStorage: {
+        userProfile: {
+          subscription_status: "free",
+          subscription_tier: "free",
+          api_calls_this_month: 5,
+          free_lifetime_generations_used: 5,
+          pack_credits: 0,
+        },
+      },
+    });
+
+    const offer = page.locator("#quickvint-limit-followup-modal");
+    await expect(offer).toBeVisible();
+    await expect(offer).toContainText("5 free listings used");
+    await expect(offer).toContainText("LISTFASTER20");
+    expect(offerFetchCount).toBe(0);
   });
 
   test("shows the free-limit offer after closing the free-limit paywall", async ({

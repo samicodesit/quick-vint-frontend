@@ -36,23 +36,25 @@ Covered by:
 
 Trigger:
 - Authenticated listing tools become ready.
-- The extension waits briefly, then asks `/api/user/limit-followup-offer`.
-- The API confirms the user recently hit the free lifetime limit and is still eligible.
+- The extension waits briefly, then checks the locally stored user profile.
+- The profile is free, has used all 5 free listings, and has no one-time credits available.
 
 Behavior:
 - Show the same LISTFASTER20 offer only when the current listing page is not in draft mode.
 - If the user has a title, description, or uploaded photos, stay quiet.
 - If the offer is pending and the page becomes visible/focused again, retry once through the normal prompt queue.
+- This path does not call a follow-up endpoint, so it is not blocked by endpoint deploy or CORS issues.
 
 Cancel conditions:
 - The user has a listing draft in progress.
 - Another prompt/modal is already open.
 - The offer was previously dismissed locally.
 - The offer was shown recently.
-- The server says the user is not eligible.
+- The local profile does not prove the free limit is reached.
 
 Covered by:
 - `tests/e2e/extension.spec.js` -> `does not interrupt an in-progress listing with the return-visit limit offer`
+- `tests/e2e/extension.spec.js` -> `shows the return-visit offer on an empty listing after local free limit is reached`
 
 ## Offer Actions
 

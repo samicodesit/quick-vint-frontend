@@ -34,6 +34,7 @@
   const OFFER_DISMISSED_KEY_PREFIX = "quickvintOfferDismissed";
   const OFFER_LAST_SHOWN_KEY_PREFIX = "quickvintOfferLastShown";
   const OFFER_SHOW_COOLDOWN_MS = 7 * 24 * 60 * 60 * 1000;
+  const FREE_LIFETIME_LIMIT = 5;
   const LIMIT_FOLLOWUP_COUPON_CODE = "LISTFASTER20";
   const LIMIT_FOLLOWUP_CLOSE_DELAY_MS = 10 * 1000;
   const LIMIT_FOLLOWUP_RETURN_DELAY_MS = 4 * 1000;
@@ -465,7 +466,6 @@
   let pendingGenerationOffer = null;
   let pendingLimitFollowupOffer = null;
   let limitFollowupOfferChecked = false;
-  let limitFollowupOfferFetchInFlight = false;
   let limitFollowupRescueTimer = null;
   let limitFollowupReturnTimer = null;
   let freeLimitPaywallCheckoutStarted = false;
@@ -1148,6 +1148,14 @@
     return profile?.subscription_status !== "active" || tier === "free";
   }
 
+  function hasLocalFreeLimitReached(profile) {
+    return (
+      isFreeProfile(profile) &&
+      Number(profile?.free_lifetime_generations_used || 0) >= FREE_LIFETIME_LIMIT &&
+      Number(profile?.pack_credits || 0) <= 0
+    );
+  }
+
   function canUseEmojiSetting(profile) {
     const tier = normalizeTier(profile?.subscription_tier);
     if (profile?.subscription_status !== "active" || tier === "free") {
@@ -1489,22 +1497,6 @@
     });
 
     return response.json().catch(() => null);
-  }
-
-  async function fetchLimitFollowupOffer() {
-    const { access_token } = await sendMessage({ type: "GET_ACCESS_TOKEN" });
-    if (!access_token) return null;
-
-    const response = await fetch(`${API_BASE}/api/user/limit-followup-offer`, {
-      method: "GET",
-      headers: {
-        Authorization: `Bearer ${access_token}`,
-        "X-Autolister-Extension-Version": chrome.runtime.getManifest().version,
-      },
-    });
-    const payload = await response.json().catch(() => null);
-    if (!response.ok || !payload?.eligible || !payload?.pricingUrl) return null;
-    return payload;
   }
 
   /**
@@ -7165,7 +7157,6 @@
     reason = "auto",
   } = {}) {
     if ((!force && limitFollowupOfferChecked) || !isAuthenticated || !generateBtn) return;
-    if (limitFollowupOfferFetchInFlight) return;
     if (!force) limitFollowupOfferChecked = true;
 
     try {
@@ -7173,25 +7164,29 @@
       if (await isOfferLocallyDismissed(localOfferKey)) return;
       if (await wasOfferShownRecently(localOfferKey)) return;
 
-      limitFollowupOfferFetchInFlight = true;
-      const offer = await fetchLimitFollowupOffer();
-      if (
-        !offer ||
-        (await isOfferLocallyDismissed(offer)) ||
-        (await wasOfferShownRecently(offer))
-      ) {
-        return;
-      }
+      const { userProfile = null } = await chrome.storage.local.get("userProfile");
+      if (!hasLocalFreeLimitReached(userProfile)) return;
+
+      const offer = {
+        campaignKey: "limit_followup_offer_v1",
+        couponCode: LIMIT_FOLLOWUP_COUPON_CODE,
+        discountLabel: LIMIT_FOLLOWUP_COPY.en.discount,
+        pricingUrl: await getPricingUrl(),
+        limitHitAt: new Date().toISOString(),
+      };
+
+      if (await isOfferLocallyDismissed(offer)) return;
+      if (await wasOfferShownRecently(offer)) return;
+
       pendingLimitFollowupOffer = offer;
       maybeShowPendingPrompts({ allowDuringDraft, reason });
       trackGrowthEvent("limit_followup_offer_loaded", {
         reason,
         campaignKey: offer.campaignKey,
+        source: "local_free_limit_profile",
       });
     } catch (error) {
       console.debug("AutoLister AI: limit follow-up offer skipped", error);
-    } finally {
-      limitFollowupOfferFetchInFlight = false;
     }
   }
 
