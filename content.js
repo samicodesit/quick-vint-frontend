@@ -34,7 +34,9 @@
   const OFFER_DISMISSED_KEY_PREFIX = "quickvintOfferDismissed";
   const OFFER_LAST_SHOWN_KEY_PREFIX = "quickvintOfferLastShown";
   const OFFER_SHOW_COOLDOWN_MS = 7 * 24 * 60 * 60 * 1000;
+  const LIMIT_FOLLOWUP_COUPON_CODE = "LISTFASTER20";
   const LIMIT_FOLLOWUP_CLOSE_DELAY_MS = 10 * 1000;
+  const LIMIT_FOLLOWUP_RETURN_DELAY_MS = 4 * 1000;
   const LIMIT_FOLLOWUP_RETRY_DELAY_MS = 30 * 1000;
   const OPEN_SETTINGS_ON_NEXT_POPUP_KEY = "quickvintOpenSettingsOnNextPopup";
   const EMOJI_SEQUENCE_REGEX =
@@ -466,6 +468,7 @@
   let limitFollowupOfferChecked = false;
   let limitFollowupOfferFetchInFlight = false;
   let limitFollowupRescueTimer = null;
+  let limitFollowupReturnTimer = null;
   let pendingLimitFollowupRetryTimer = null;
   let freeLimitPaywallCheckoutStarted = false;
   let activeFloatingPromptType = null;
@@ -746,6 +749,12 @@
     limitFollowupRescueTimer = null;
   }
 
+  function clearLimitFollowupReturnTimer() {
+    if (!limitFollowupReturnTimer) return;
+    window.clearTimeout(limitFollowupReturnTimer);
+    limitFollowupReturnTimer = null;
+  }
+
   function clearPendingLimitFollowupRetryTimer() {
     if (!pendingLimitFollowupRetryTimer) return;
     window.clearTimeout(pendingLimitFollowupRetryTimer);
@@ -784,18 +793,43 @@
     });
   }
 
+  async function queueLocalLimitFollowupOffer(reason) {
+    const offer = {
+      campaignKey: "limit_followup_offer_v1",
+      couponCode: LIMIT_FOLLOWUP_COUPON_CODE,
+      discountLabel: LIMIT_FOLLOWUP_COPY.en.discount,
+      pricingUrl: await getPricingUrl(),
+      limitHitAt: new Date().toISOString(),
+    };
+
+    if (await isOfferLocallyDismissed(offer)) return;
+    if (await wasOfferShownRecently(offer)) return;
+
+    pendingLimitFollowupOffer = offer;
+    trackGrowthEvent("limit_followup_offer_loaded", {
+      reason,
+      campaignKey: offer.campaignKey,
+      source: "client_free_limit_paywall",
+    });
+    maybeShowPendingPrompts({ allowDuringDraft: true, reason });
+  }
+
   function scheduleLimitFollowupRescueCheck(reason) {
     clearLimitFollowupRescueTimer();
     limitFollowupRescueTimer = window.setTimeout(() => {
       limitFollowupRescueTimer = null;
       if (freeLimitPaywallCheckoutStarted) return;
       trackGrowthEvent("limit_followup_rescue_check", { reason });
-      maybeFetchAndShowLimitFollowupOffer({
-        force: true,
-        allowDuringDraft: true,
-        reason,
-      });
+      queueLocalLimitFollowupOffer(reason);
     }, LIMIT_FOLLOWUP_CLOSE_DELAY_MS);
+  }
+
+  function scheduleLimitFollowupReturnCheck() {
+    clearLimitFollowupReturnTimer();
+    limitFollowupReturnTimer = window.setTimeout(() => {
+      limitFollowupReturnTimer = null;
+      maybeFetchAndShowLimitFollowupOffer({ reason: "return_visit" });
+    }, LIMIT_FOLLOWUP_RETURN_DELAY_MS);
   }
 
   function showLimitPaywall({
@@ -6502,7 +6536,7 @@
       path: window.location.pathname,
       visiblePhotoCount: getVisibleUploadedPhotoCount(),
     });
-    maybeFetchAndShowLimitFollowupOffer();
+    scheduleLimitFollowupReturnCheck();
   }
 
   function maybeTrackSignedOutToolsReady() {
