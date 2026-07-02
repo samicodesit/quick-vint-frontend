@@ -989,7 +989,10 @@
   async function compressImage(imageUrl, maxDimension = 1024, quality = 0.8) {
     return new Promise((resolve, reject) => {
       const img = new Image();
-      img.crossOrigin = "anonymous";
+      const isRemoteUrl = /^https?:\/\//i.test(imageUrl);
+      if (!isRemoteUrl) {
+        img.crossOrigin = "anonymous";
+      }
 
       img.onload = () => {
         try {
@@ -1026,6 +1029,24 @@
         reject(new Error(`Failed to load image: ${imageUrl}`));
       };
 
+      if (isRemoteUrl) {
+        sendMessage({
+          type: "PROXY_FETCH",
+          url: imageUrl,
+          options: { method: "GET" },
+          isBlob: true,
+        })
+          .then((response) => {
+            if (!response?.ok || !response.data) {
+              reject(new Error(response?.error || `Failed to fetch image: ${imageUrl}`));
+              return;
+            }
+            img.src = response.data;
+          })
+          .catch((error) => reject(error));
+        return;
+      }
+
       img.src = imageUrl;
     });
   }
@@ -1036,17 +1057,24 @@
    * @returns {Promise<string[]>} Array of compressed base64 images
    */
   async function compressImages(imageUrls) {
+    let failedCount = 0;
     const compressionPromises = imageUrls.map(async (url) => {
       try {
         return await compressImage(url);
       } catch (error) {
-        console.warn(`Failed to compress image ${url}:`, error);
+        failedCount += 1;
         // Return original URL as fallback if compression fails
         return url;
       }
     });
 
-    return Promise.all(compressionPromises);
+    const compressedImages = await Promise.all(compressionPromises);
+    if (failedCount > 0) {
+      console.warn(
+        `AutoLister AI: ${failedCount}/${imageUrls.length} image(s) could not be compressed; using original URL fallback.`,
+      );
+    }
+    return compressedImages;
   }
 
   function getUploadedImageUrls() {

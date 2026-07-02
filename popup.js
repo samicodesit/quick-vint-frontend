@@ -83,6 +83,7 @@ document.addEventListener("DOMContentLoaded", () => {
   const backIcon = document.querySelector(".back-icon");
   const toneOptions = document.querySelectorAll('input[name="tone"]');
   const emojiToggle = document.getElementById("emojiToggle");
+  const emojiToggleContainer = document.getElementById("emojiToggleContainer");
   const formatOptions = document.querySelectorAll('input[name="format"]');
   let renderRequestId = 0;
   let profileRefreshInFlight = false;
@@ -1184,6 +1185,12 @@ document.addEventListener("DOMContentLoaded", () => {
 
     // Save Emojis on change
     if (emojiToggle) {
+      emojiToggleContainer?.addEventListener("click", (event) => {
+        if (event.target.closest(".toggle-switch")) return;
+        if (!emojiToggle.disabled) {
+          emojiToggle.click();
+        }
+      });
       emojiToggle.addEventListener("change", (e) => {
         if (!e.target.disabled) {
           chrome.storage.local.set({ useEmojis: e.target.checked });

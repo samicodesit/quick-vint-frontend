@@ -389,6 +389,10 @@
 
   show("loading");
 
+  document.getElementById("errorDoneButton")?.addEventListener("click", () => {
+    window.close();
+  });
+
   supabaseClient.auth.onAuthStateChange((event, session) => {
     if (
       (event === "SIGNED_IN" ||
