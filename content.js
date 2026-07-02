@@ -30,6 +30,8 @@
   const EMOJI_RETRY_PROMPT_HANDLED_KEY = "quickvintEmojiRetryPromptHandled";
   const INLINE_LANGUAGE_HINT_DONE_KEY = "quickvintInlineLanguageHintDone";
   const OFFER_DISMISSED_KEY_PREFIX = "quickvintOfferDismissed";
+  const OFFER_LAST_SHOWN_KEY_PREFIX = "quickvintOfferLastShown";
+  const OFFER_SHOW_COOLDOWN_MS = 7 * 24 * 60 * 60 * 1000;
   const OPEN_SETTINGS_ON_NEXT_POPUP_KEY = "quickvintOpenSettingsOnNextPopup";
   const EMOJI_SEQUENCE_REGEX =
     /(?:[0-9#*]\uFE0F?\u20E3)|(?:[\u{1F1E6}-\u{1F1FF}]{2})|(?:\p{Emoji_Presentation}|\p{Emoji}\uFE0F)(?:\p{Emoji_Modifier})?(?:\u200D(?:\p{Emoji_Presentation}|\p{Emoji}\uFE0F)(?:\p{Emoji_Modifier})?)*/gu;
@@ -148,6 +150,8 @@
   let batchImagePreloadUrls = new Set();
   let batchImagePreloadCache = new Map();
   let pendingGenerationOffer = null;
+  let pendingLimitFollowupOffer = null;
+  let limitFollowupOfferChecked = false;
   let activeFloatingPromptType = null;
 
   // --- HELPER FUNCTIONS ---
@@ -728,6 +732,26 @@
     await chrome.storage.local.set({ [key]: Date.now() });
   }
 
+  async function wasOfferShownRecently(offer) {
+    if (!offer?.campaignKey) return true;
+    const key = await getPerUserStorageKey(
+      OFFER_LAST_SHOWN_KEY_PREFIX,
+      offer.campaignKey,
+    );
+    const result = await chrome.storage.local.get(key);
+    const lastShownAt = Number(result[key] || 0);
+    return lastShownAt > 0 && Date.now() - lastShownAt < OFFER_SHOW_COOLDOWN_MS;
+  }
+
+  async function markOfferShownLocally(offer) {
+    if (!offer?.campaignKey) return;
+    const key = await getPerUserStorageKey(
+      OFFER_LAST_SHOWN_KEY_PREFIX,
+      offer.campaignKey,
+    );
+    await chrome.storage.local.set({ [key]: Date.now() });
+  }
+
   function formatPlanLimitSummary(plan) {
     const daily = plan.daily === null ? "no daily limit" : `${plan.daily}/day`;
     return `${daily} · ${plan.monthly}/month`;
@@ -1004,6 +1028,22 @@
     });
 
     return response.json().catch(() => null);
+  }
+
+  async function fetchLimitFollowupOffer() {
+    const { access_token } = await sendMessage({ type: "GET_ACCESS_TOKEN" });
+    if (!access_token) return null;
+
+    const response = await fetch(`${API_BASE}/api/user/limit-followup-offer`, {
+      method: "GET",
+      headers: {
+        Authorization: `Bearer ${access_token}`,
+        "X-Autolister-Extension-Version": chrome.runtime.getManifest().version,
+      },
+    });
+    const payload = await response.json().catch(() => null);
+    if (!response.ok || !payload?.eligible || !payload?.pricingUrl) return null;
+    return payload;
   }
 
   /**
@@ -5052,16 +5092,25 @@
     return modal;
   }
 
-  function openReportModal() {
+  function openReportModal(options = {}) {
     const modal = getOrCreateReportModal();
     modal.classList.add("visible");
+    const categorySelect = modal.querySelector(".quickvint-report-select");
+    if (categorySelect && options.category) {
+      categorySelect.value = options.category;
+    }
     const textarea = modal.querySelector(".quickvint-report-textarea");
     if (textarea) {
       textarea.value = "";
+      if (options.placeholder) {
+        textarea.placeholder = options.placeholder;
+      } else {
+        textarea.placeholder = "What happened?";
+      }
       setTimeout(() => textarea.focus(), 0);
     }
     trackGrowthEvent("listing_report_opened", {
-      source: "listing_tools",
+      source: options.source || "listing_tools",
       path: window.location.pathname,
     });
   }
@@ -5716,6 +5765,7 @@
       path: window.location.pathname,
       visiblePhotoCount: getVisibleUploadedPhotoCount(),
     });
+    maybeFetchAndShowLimitFollowupOffer();
   }
 
   function maybeTrackSignedOutToolsReady() {
@@ -6108,7 +6158,123 @@
       });
     }
 
+    setTimeout(() => {
+      maybeShowPendingLimitFollowupOffer();
+    }, 0);
+
     return true;
+  }
+
+  async function maybeShowPendingLimitFollowupOffer() {
+    const offer = pendingLimitFollowupOffer;
+    if (!offer || activeFloatingPromptType || isPromptBlockingModalOpen()) return false;
+    if (await isOfferLocallyDismissed(offer)) {
+      pendingLimitFollowupOffer = null;
+      return false;
+    }
+    if (await wasOfferShownRecently(offer)) {
+      return false;
+    }
+
+    const anchorInput = getPromptAnchorInput();
+    if (!anchorInput) return false;
+
+    await markOfferShownLocally(offer);
+    trackGrowthEvent("limit_followup_offer_shown", {
+      campaignKey: offer.campaignKey,
+      couponCode: offer.couponCode,
+      limitHitAt: offer.limitHitAt,
+    });
+
+    const choice = await showFloatingPrompt({
+      type: "limit_followup_offer",
+      anchorInput,
+      title: offer.title || "Keep listing faster",
+      copy: [offer.body, offer.trust]
+        .filter(Boolean)
+        .join(" ") ||
+        "You used your free listings. Use LISTFASTER20 for 20% off your first month.",
+      actions: [
+        {
+          choice: "open",
+          label: offer.cta || "View plans",
+          primary: true,
+        },
+        { choice: "dismiss", label: "Not now" },
+        { choice: "feedback", label: "Tell us why", fullWidth: true },
+      ],
+      onAction: async (choice) => {
+        if (choice === "feedback") {
+          await dismissOfferLocally(offer);
+          pendingLimitFollowupOffer = null;
+          trackGrowthEvent("limit_followup_offer_feedback_click", {
+            campaignKey: offer.campaignKey,
+            couponCode: offer.couponCode,
+            limitHitAt: offer.limitHitAt,
+          });
+          openReportModal({
+            source: "limit_followup_offer",
+            category: "idea",
+            placeholder: "What would make AutoLister worth upgrading for you?",
+          });
+          return true;
+        }
+        if (choice !== "open") return true;
+        await dismissOfferLocally(offer);
+        pendingLimitFollowupOffer = null;
+        trackGrowthEvent("limit_followup_offer_click", {
+          campaignKey: offer.campaignKey,
+          couponCode: offer.couponCode,
+          limitHitAt: offer.limitHitAt,
+        });
+        window.open(offer.pricingUrl, "_blank", "noopener,noreferrer");
+        return true;
+      },
+    });
+
+    if (choice === "dismiss") {
+      await dismissOfferLocally(offer);
+      pendingLimitFollowupOffer = null;
+      trackGrowthEvent("limit_followup_offer_dismissed", {
+        campaignKey: offer.campaignKey,
+        couponCode: offer.couponCode,
+        limitHitAt: offer.limitHitAt,
+      });
+    }
+
+    return true;
+  }
+
+  function maybeShowPendingPrompts() {
+    maybeShowPendingGenerationOffer().then((shown) => {
+      if (!shown) {
+        maybeShowPendingLimitFollowupOffer();
+      }
+    });
+  }
+
+  async function maybeFetchAndShowLimitFollowupOffer() {
+    if (limitFollowupOfferChecked || !isAuthenticated || !generateBtn) return;
+    limitFollowupOfferChecked = true;
+
+    try {
+      const localOfferKey = { campaignKey: "limit_followup_offer_v1" };
+      if (await isOfferLocallyDismissed(localOfferKey)) return;
+      if (await wasOfferShownRecently(localOfferKey)) return;
+
+      const offer = await fetchLimitFollowupOffer();
+      if (
+        !offer ||
+        (await isOfferLocallyDismissed(offer)) ||
+        (await wasOfferShownRecently(offer))
+      ) {
+        return;
+      }
+      pendingLimitFollowupOffer = offer;
+      maybeShowPendingPrompts();
+    } catch (error) {
+      console.debug("AutoLister AI: limit follow-up offer skipped", error);
+    }
   }
 
   async function queueGenerationOffers(offers = []) {
@@ -6116,7 +6282,8 @@
     if (!offer?.id || !offer?.campaignKey) return false;
     if (await isOfferLocallyDismissed(offer)) return false;
     pendingGenerationOffer = offer;
-    return maybeShowPendingGenerationOffer();
+    maybeShowPendingPrompts();
+    return true;
   }
 
   // --- CORE LOGIC & EVENT HANDLERS ---
@@ -6329,7 +6496,7 @@
       }).catch(() => {}); // Silent fail
     }
 
-    maybeShowPendingGenerationOffer();
+    maybeShowPendingPrompts();
   }
 
   async function onPhoneUploadClick() {
@@ -6808,7 +6975,7 @@
     }
 
     resetBatchState();
-    maybeShowPendingGenerationOffer();
+    maybeShowPendingPrompts();
   }
 
   function scheduleBatchAutoClose(sessionId) {

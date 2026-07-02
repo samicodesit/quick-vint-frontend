@@ -126,6 +126,48 @@
       },
     },
     {
+      id: "limit-followup-offer",
+      title: "Free-limit follow-up offer",
+      note: "Returning free-limit user sees the concise upgrade or feedback prompt.",
+      height: 560,
+      auth: true,
+      action: "none",
+      hasImages: true,
+      userProfile: {
+        subscription_status: "free",
+        subscription_tier: "free",
+        api_calls_this_month: 5,
+        free_lifetime_generations_used: 5,
+        pack_credits: 0,
+      },
+      limitFollowupOffer: {
+        eligible: true,
+        campaignKey: "limit_followup_offer_v1",
+        couponCode: "LISTFASTER20",
+        discountLabel: "20% off your first month",
+        title: "Keep listing faster",
+        body: "You used your free listings. Use LISTFASTER20 for 20% off your first month.",
+        trust: "No Vinted account connection needed.",
+        cta: "View plans",
+        pricingUrl: "https://autolister.app/pricing?offer=preview",
+        limitHitAt: "2026-07-02T10:00:00.000Z",
+      },
+      verify(doc) {
+        const prompt = doc.getElementById("quickvint-description-apply-prompt");
+        const text = prompt?.textContent || "";
+        return (
+          /Keep listing faster/.test(text) &&
+          /LISTFASTER20/.test(text) &&
+          /20% off your first month/.test(text) &&
+          /No Vinted account connection needed/.test(text) &&
+          /View plans/.test(text) &&
+          /Not now/.test(text) &&
+          /Tell us why/.test(text) &&
+          !!prompt?.querySelector(".quickvint-apply-settings")
+        );
+      },
+    },
+    {
       id: "missing-photo",
       title: "Missing photo error",
       note: "Real validation toast before the API is called.",
@@ -493,6 +535,7 @@
           scenario.id === "signed-in" ||
           scenario.id === "emoji-retry-prompt" ||
           scenario.id === "generation-offer-prompt" ||
+          scenario.id === "limit-followup-offer" ||
           scenario.id === "success";
         return `
           <article class="ds-panel${wide ? " wide" : ""}">
@@ -788,6 +831,15 @@
       };
 
       window.fetch = async (url) => {
+        if (String(url).includes("/api/user/limit-followup-offer")) {
+          return new Response(JSON.stringify(scenario.limitFollowupOffer || {
+            eligible: false,
+          }), {
+            status: 200,
+            headers: { "Content-Type": "application/json" },
+          });
+        }
+
         if (String(url).includes("/api/generate")) {
           window.__generateCallCount += 1;
           const configured = scenario.generateResponse;
