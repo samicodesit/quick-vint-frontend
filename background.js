@@ -777,6 +777,33 @@ chrome.runtime.onMessageExternal.addListener((message, sender, sendResponse) => 
     return true;
   }
 
+  if (
+    message?.type === "OPEN_SIGNIN_POPUP" ||
+    message?.type === "OPEN_POPUP"
+  ) {
+    try {
+      const maybePromise = chrome.action.openPopup();
+      if (maybePromise?.then) {
+        maybePromise
+          .then(() => sendResponse({ ok: true }))
+          .catch((error) =>
+            sendResponse({
+              ok: false,
+              error: error?.message || "Unable to open extension popup.",
+            }),
+          );
+      } else {
+        sendResponse({ ok: true });
+      }
+    } catch (error) {
+      sendResponse({
+        ok: false,
+        error: error?.message || "Unable to open extension popup.",
+      });
+    }
+    return true;
+  }
+
   return false;
 });
 
