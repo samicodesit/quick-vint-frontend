@@ -143,6 +143,7 @@
   let emojiToggleSyncTimer = null;
   let hashtagsToggleSyncTimer = null;
   let descriptionLengthSyncTimer = null;
+  let extensionContextInvalidated = false;
   let isBatchPollInFlight = false;
   let batchImagePreloadUrls = new Set();
   let batchImagePreloadCache = new Map();
@@ -938,6 +939,32 @@
     return new Promise((resolve) => {
       chrome.runtime.sendMessage(message, resolve);
     });
+  }
+
+  function isExtensionContextInvalidatedError(error) {
+    return /Extension context invalidated/i.test(error?.message || String(error || ""));
+  }
+
+  function stopPreferenceSyncTimers() {
+    if (descriptionLengthSyncTimer) {
+      window.clearInterval(descriptionLengthSyncTimer);
+      descriptionLengthSyncTimer = null;
+    }
+    if (hashtagsToggleSyncTimer) {
+      window.clearInterval(hashtagsToggleSyncTimer);
+      hashtagsToggleSyncTimer = null;
+    }
+    if (emojiToggleSyncTimer) {
+      window.clearInterval(emojiToggleSyncTimer);
+      emojiToggleSyncTimer = null;
+    }
+  }
+
+  function handleExtensionContextInvalidated(error) {
+    if (!isExtensionContextInvalidatedError(error)) return false;
+    extensionContextInvalidated = true;
+    stopPreferenceSyncTimers();
+    return true;
   }
 
   async function claimGenerationOffer(offer) {
@@ -5131,13 +5158,14 @@
   }
 
   async function syncDescriptionLengthToggleState() {
-    if (!descriptionLengthToggle) return;
+    if (!descriptionLengthToggle || extensionContextInvalidated) return;
     if (descriptionLengthToggle.dataset.loading !== "false") {
       setDescriptionLengthLoadingState(true);
     }
     try {
       setDescriptionLengthToggleState(await getStoredDescriptionLength());
     } catch (error) {
+      if (handleExtensionContextInvalidated(error)) return;
       console.warn("AutoLister AI: failed to load description length", error);
       setDescriptionLengthToggleState("long");
     }
@@ -5183,6 +5211,7 @@
     if (descriptionLengthSyncTimer) return;
     descriptionLengthSyncTimer = window.setInterval(() => {
       if (
+        extensionContextInvalidated ||
         !descriptionLengthToggle ||
         !document.body.contains(descriptionLengthToggle)
       ) {
@@ -5211,7 +5240,7 @@
   }
 
   async function syncHashtagsToggleState() {
-    if (!hashtagsToggleBtn) return;
+    if (!hashtagsToggleBtn || extensionContextInvalidated) return;
     if (hashtagsToggleBtn.dataset.loading !== "false") {
       setBinaryToggleLoadingState(hashtagsToggleBtn, true);
     }
@@ -5221,6 +5250,7 @@
       });
       setHashtagsToggleState(storage[HASHTAGS_STORAGE_KEY] !== false);
     } catch (error) {
+      if (handleExtensionContextInvalidated(error)) return;
       console.warn("AutoLister AI: failed to load hashtag setting", error);
       setHashtagsToggleState(true);
     }
@@ -5267,7 +5297,11 @@
   function startHashtagsToggleSync() {
     if (hashtagsToggleSyncTimer) return;
     hashtagsToggleSyncTimer = window.setInterval(() => {
-      if (!hashtagsToggleBtn || !document.body.contains(hashtagsToggleBtn)) {
+      if (
+        extensionContextInvalidated ||
+        !hashtagsToggleBtn ||
+        !document.body.contains(hashtagsToggleBtn)
+      ) {
         window.clearInterval(hashtagsToggleSyncTimer);
         hashtagsToggleSyncTimer = null;
         return;
@@ -5277,7 +5311,7 @@
   }
 
   async function syncEmojiToggleState() {
-    if (!emojiToggleBtn) return;
+    if (!emojiToggleBtn || extensionContextInvalidated) return;
     if (emojiToggleBtn.dataset.loading !== "false") {
       setBinaryToggleLoadingState(emojiToggleBtn, true);
     }
@@ -5297,6 +5331,7 @@
           : "Emojis are off for generated descriptions"
         : "Emoji support is available during the free trial and on Pro or Business.";
     } catch (error) {
+      if (handleExtensionContextInvalidated(error)) return;
       console.warn("AutoLister AI: failed to load emoji setting", error);
       setEmojiToggleState(false);
       emojiToggleBtn.disabled = true;
@@ -5343,7 +5378,11 @@
   function startEmojiToggleSync() {
     if (emojiToggleSyncTimer) return;
     emojiToggleSyncTimer = window.setInterval(() => {
-      if (!emojiToggleBtn || !document.body.contains(emojiToggleBtn)) {
+      if (
+        extensionContextInvalidated ||
+        !emojiToggleBtn ||
+        !document.body.contains(emojiToggleBtn)
+      ) {
         window.clearInterval(emojiToggleSyncTimer);
         emojiToggleSyncTimer = null;
         return;

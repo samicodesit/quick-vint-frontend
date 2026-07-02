@@ -289,6 +289,29 @@ test.describe("AutoLister extension smoke flows", () => {
     ]);
   });
 
+  test("stops preference sync quietly when Chrome invalidates the extension context", async ({
+    page,
+  }) => {
+    const warnings = [];
+    page.on("console", (message) => {
+      if (message.type() === "warning") warnings.push(message.text());
+    });
+
+    await openContentHarness(page);
+    await page.evaluate(() => {
+      chrome.storage.local.get = () => {
+        throw new Error("Extension context invalidated.");
+      };
+    });
+    await page.waitForTimeout(1300);
+
+    expect(
+      warnings.filter((warning) =>
+        warning.includes("AutoLister AI: failed to load"),
+      ),
+    ).toEqual([]);
+  });
+
   test("saves description length preference and sends it with generation requests", async ({
     page,
   }) => {
