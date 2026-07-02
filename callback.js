@@ -311,7 +311,6 @@
         }
       });
       show("success");
-      console.log("✅ User authenticated:", session.user.email);
     });
 
     return true;
