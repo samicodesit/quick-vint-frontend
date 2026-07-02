@@ -1038,10 +1038,6 @@
       const optionNameEl = triggerButton?.querySelector(".paywall-option-name");
       const previousOptionName = optionNameEl?.textContent || "";
       const checkoutWindow = window.open("about:blank", "_blank");
-      if (isFreeLimitPaywall) {
-        freeLimitPaywallCheckoutStarted = true;
-        clearLimitFollowupRescueTimer();
-      }
       if (triggerButton) {
         triggerButton.dataset.checkoutPending = "true";
         triggerButton.disabled = true;
@@ -1060,6 +1056,10 @@
 
       try {
         const checkoutUrl = await createCheckoutForPaywall(option);
+        if (isFreeLimitPaywall) {
+          freeLimitPaywallCheckoutStarted = true;
+          clearLimitFollowupRescueTimer();
+        }
         trackGrowthEvent("checkout_opened", {
           source: "extension_paywall",
           tier: option.tier,
@@ -1073,6 +1073,18 @@
       } catch (error) {
         if (checkoutWindow) checkoutWindow.close();
         console.error("Paywall checkout error:", error);
+        if (isFreeLimitPaywall && !freeLimitPaywallCheckoutStarted) {
+          scheduleLimitFollowupRescueCheck("checkout_failed");
+        }
+        clearPaywallPositioning();
+        trackGrowthEvent("checkout_failed", {
+          source: "extension_paywall",
+          tier: option.tier,
+          checkoutType: option.checkoutType,
+          reason: error.reason || null,
+          status: error.status || null,
+          message: error.message || "Unable to open the payment page.",
+        });
         showToast(
           error.message || "Unable to open the payment page. Please try again.",
           "error",
@@ -1371,7 +1383,12 @@
       source: "extension_paywall",
     });
     if (!response?.ok || !response.url) {
-      throw new Error(response?.error || "Unable to open the payment page.");
+      const error = new Error(
+        response?.error || "Unable to open the payment page.",
+      );
+      error.reason = response?.reason || null;
+      error.status = response?.status || null;
+      throw error;
     }
     return response.url;
   }

@@ -2,6 +2,7 @@
 importScripts("lib/supabase.js");
 
 const ANALYTICS_CLIENT_ID_KEY = "analyticsClientId";
+const ACCOUNT_EMAIL_STORAGE_KEY = "accountEmail";
 
 function createAnalyticsClientId() {
   if (globalThis.crypto?.randomUUID) return globalThis.crypto.randomUUID();
@@ -14,6 +15,12 @@ async function getAnalyticsClientId() {
   const analyticsClientId = createAnalyticsClientId();
   await chrome.storage.local.set({ [ANALYTICS_CLIENT_ID_KEY]: analyticsClientId });
   return analyticsClientId;
+}
+
+function normalizeEmail(email) {
+  return typeof email === "string" && email.includes("@")
+    ? email.trim().toLowerCase()
+    : "";
 }
 
 async function setAutolisterUninstallUrl() {
@@ -95,7 +102,10 @@ async function getStoredSession() {
  * @param {object|null} session - The Supabase session object.
  */
 async function setStoredSession(session) {
-  await chrome.storage.local.set({ supabaseSession: session });
+  const values = { supabaseSession: session };
+  const email = normalizeEmail(session?.user?.email);
+  if (email) values[ACCOUNT_EMAIL_STORAGE_KEY] = email;
+  await chrome.storage.local.set(values);
   if (session?.expires_at) {
     scheduleTokenRefresh(session);
   }
@@ -161,7 +171,7 @@ async function refreshTokenWithRetry(maxRetries = 3) {
         error?.message?.includes("Invalid Refresh Token") ||
         error?.message?.includes("refresh_token_not_found")
       ) {
-        await handleSignOut();
+        await handleSignOut({ clearAccountEmail: false });
         return null;
       }
 
@@ -258,14 +268,18 @@ async function updateAndStoreUserProfile() {
     const { data: profile, error: profileError } = await authClient
       .from("profiles")
       .select(
-        "subscription_status, api_calls_this_month, subscription_tier, current_period_end, is_legacy_plan, free_lifetime_generations_used, pack_credits",
+        "email, subscription_status, api_calls_this_month, subscription_tier, current_period_end, is_legacy_plan, free_lifetime_generations_used, pack_credits",
       )
       .eq("id", user.id)
       .single();
 
     if (profileError) throw profileError;
 
-    await chrome.storage.local.set({ userProfile: profile });
+    const accountEmail = normalizeEmail(user.email) || normalizeEmail(profile?.email);
+    await chrome.storage.local.set({
+      userProfile: profile,
+      ...(accountEmail ? { [ACCOUNT_EMAIL_STORAGE_KEY]: accountEmail } : {}),
+    });
     await setAutolisterUninstallUrl();
   } catch (error) {
     console.error("Failed to update and store user profile:", error);
@@ -360,22 +374,43 @@ async function fetchUserUsageCount() {
  * Signs the user out and clears all local session data.
  * @returns {Promise<{ok: boolean, error?: string}>}
  */
-async function handleSignOut() {
+async function handleSignOut({ clearAccountEmail = true } = {}) {
   if (tokenRefreshTimeout) clearTimeout(tokenRefreshTimeout);
   try {
     const { error } = await supabaseClient.auth.signOut();
     if (error) throw error;
+    if (clearAccountEmail) {
+      await chrome.storage.local.remove([ACCOUNT_EMAIL_STORAGE_KEY]);
+    }
     return { ok: true };
   } catch (err) {
     return { error: err.message };
   }
 }
 
+async function getStoredCheckoutEmail(session) {
+  const sessionEmail = normalizeEmail(session?.user?.email);
+  if (sessionEmail) return sessionEmail;
+
+  const stored = await chrome.storage.local.get([
+    ACCOUNT_EMAIL_STORAGE_KEY,
+    "userProfile",
+  ]);
+  return (
+    normalizeEmail(stored[ACCOUNT_EMAIL_STORAGE_KEY]) ||
+    normalizeEmail(stored.userProfile?.email)
+  );
+}
+
 async function createCheckout(message = {}) {
   const session = await ensureValidToken();
-  const email = session?.user?.email;
+  const email = await getStoredCheckoutEmail(session);
   if (!email) {
-    return { ok: false, error: "Please sign in again before checkout." };
+    return {
+      ok: false,
+      reason: "no_checkout_email",
+      error: "Please sign in again before checkout.",
+    };
   }
 
   const checkoutType = message.checkoutType;
@@ -1009,7 +1044,9 @@ supabaseClient.auth.onAuthStateChange((event, session) => {
     try {
       if (event === "SIGNED_OUT" || event === "USER_DELETED") {
         if (tokenRefreshTimeout) clearTimeout(tokenRefreshTimeout);
-        await chrome.storage.local.remove(["supabaseSession", "userProfile"]);
+        const keysToRemove = ["supabaseSession", "userProfile"];
+        if (event === "USER_DELETED") keysToRemove.push(ACCOUNT_EMAIL_STORAGE_KEY);
+        await chrome.storage.local.remove(keysToRemove);
         await setAutolisterUninstallUrl();
       } else if (event === "SIGNED_IN" || event === "TOKEN_REFRESHED") {
         await setStoredSession(session);

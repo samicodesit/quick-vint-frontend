@@ -60,6 +60,27 @@ function installChromeHarness(page, capacityResponse = null, initialStorage = {}
       useHashtags: true,
       ...initialStorage,
     };
+    const runtimeMessages = [];
+    const openedWindows = [];
+
+    window.__extensionHarness = {
+      storage,
+      runtimeMessages,
+      openedWindows,
+    };
+
+    window.open = (url = "") => {
+      const openedWindow = {
+        closed: false,
+        location: { href: url },
+        close() {
+          this.closed = true;
+        },
+        focus() {},
+      };
+      openedWindows.push(openedWindow);
+      return openedWindow;
+    };
 
     window.chrome = {
       runtime: {
@@ -68,18 +89,24 @@ function installChromeHarness(page, capacityResponse = null, initialStorage = {}
         getURL: (assetPath) => `chrome-extension://test-extension/${assetPath}`,
         onMessage: { addListener: () => {} },
         sendMessage: (message, callback) => {
+          runtimeMessages.push(message);
           let response = { ok: true };
           if (message?.type === "GET_ACCESS_TOKEN") {
             response = {
-              access_token: storage.supabaseSession.access_token,
-              expires_at: storage.supabaseSession.expires_at,
+              access_token: storage.supabaseSession?.access_token,
+              expires_at: storage.supabaseSession?.expires_at,
             };
           } else if (message?.type === "GET_BATCH_CAPACITY") {
             response = { ok: true, capacity };
           } else if (message?.type === "GET_USER_PROFILE") {
             response = {
-              user: storage.supabaseSession.user,
+              user: storage.supabaseSession?.user || null,
               profile: storage.userProfile,
+            };
+          } else if (message?.type === "CREATE_CHECKOUT") {
+            response = storage.__checkoutResponse || {
+              ok: true,
+              url: "https://checkout.test/session",
             };
           }
 
@@ -213,6 +240,72 @@ test.describe("AutoLister extension smoke flows", () => {
         "content.js",
       ]);
       expect(manifest.host_permissions).toContain("https://autolister.app/*");
+    } finally {
+      await context.close();
+    }
+  });
+
+  test("background checkout uses the stored account email when the session is missing", async () => {
+    const { context, serviceWorker } = await loadExtension();
+    const checkoutRequests = [];
+    try {
+      await context.route(
+        "https://autolister.app/api/stripe/create-checkout",
+        async (route) => {
+          checkoutRequests.push(route.request().postDataJSON());
+          await route.fulfill({
+            status: 200,
+            contentType: "application/json",
+            body: JSON.stringify({
+              url: "https://checkout.test/from-background",
+            }),
+          });
+        },
+      );
+
+      await serviceWorker.evaluate(async () => {
+        await chrome.storage.local.remove([
+          "supabaseSession",
+          "userProfile",
+          "accountEmail",
+        ]);
+      });
+
+      const missingEmailResult = await serviceWorker.evaluate(() =>
+        createCheckout({
+          checkoutType: "subscription",
+          tier: "pro",
+          source: "extension_paywall",
+        }),
+      );
+
+      expect(missingEmailResult).toEqual({
+        ok: false,
+        reason: "no_checkout_email",
+        error: "Please sign in again before checkout.",
+      });
+      expect(checkoutRequests).toEqual([]);
+
+      const checkoutResult = await serviceWorker.evaluate(async () => {
+        await chrome.storage.local.set({ accountEmail: "Seller@Example.com " });
+        return createCheckout({
+          checkoutType: "subscription",
+          tier: "pro",
+          source: "extension_paywall",
+        });
+      });
+
+      expect(checkoutResult).toEqual({
+        ok: true,
+        url: "https://checkout.test/from-background",
+      });
+      expect(checkoutRequests).toEqual([
+        {
+          email: "seller@example.com",
+          source: "extension_paywall",
+          tier: "pro",
+        },
+      ]);
     } finally {
       await context.close();
     }
@@ -851,6 +944,129 @@ test.describe("AutoLister extension smoke flows", () => {
     await expect(offer).toBeVisible();
     await expect(offer).toContainText("5 free listings used");
     await expect(offer).toContainText("Keep listing without waiting");
+    await expect(offer).toContainText("LISTFASTER20");
+  });
+
+  test("opens checkout from the free-limit paywall when a plan is clicked", async ({
+    page,
+  }) => {
+    const trackedEvents = [];
+    await page.route("https://autolister.app/api/events/track", (route) => {
+      trackedEvents.push(route.request().postDataJSON());
+      return route.fulfill({ status: 204, body: "" });
+    });
+    await page.route("https://autolister.app/api/generate", (route) =>
+      route.fulfill({
+        status: 429,
+        contentType: "application/json",
+        body: JSON.stringify({
+          code: "free_lifetime_limit",
+          currentTier: "free",
+          nextTier: "starter",
+          error: "Free listing limit reached.",
+        }),
+      }),
+    );
+
+    await openContentHarness(page);
+
+    await page.locator("#quickvint-gen-btn").click();
+    await expect(page.locator("#quickvint-toast.paywall")).toContainText(
+      "Free listings used",
+    );
+    await page.locator('[data-paywall-option-index="1"]').click();
+
+    await expect
+      .poll(() =>
+        page.evaluate(
+          () =>
+            window.__extensionHarness.runtimeMessages.filter(
+              (message) => message?.type === "CREATE_CHECKOUT",
+            ),
+        ),
+      )
+      .toEqual([
+        {
+          type: "CREATE_CHECKOUT",
+          checkoutType: "subscription",
+          tier: "pro",
+          source: "extension_paywall",
+        },
+      ]);
+
+    await expect
+      .poll(() =>
+        page.evaluate(() =>
+          window.__extensionHarness.openedWindows.map((opened) => ({
+            href: opened.location.href,
+            closed: opened.closed,
+          })),
+        ),
+      )
+      .toEqual([{ href: "https://checkout.test/session", closed: false }]);
+
+    await expect
+      .poll(() =>
+        trackedEvents.flatMap((body) => body.events || []).map((event) => event.event),
+      )
+      .toContain("checkout_opened");
+  });
+
+  test("logs failed paywall checkout and still shows the rescue offer after close", async ({
+    page,
+  }) => {
+    const trackedEvents = [];
+    await page.setViewportSize({ width: 1800, height: 900 });
+    await page.route("https://autolister.app/api/events/track", (route) => {
+      trackedEvents.push(route.request().postDataJSON());
+      return route.fulfill({ status: 204, body: "" });
+    });
+    await page.route("https://autolister.app/api/generate", (route) =>
+      route.fulfill({
+        status: 429,
+        contentType: "application/json",
+        body: JSON.stringify({
+          code: "free_lifetime_limit",
+          currentTier: "free",
+          nextTier: "starter",
+          error: "Free listing limit reached.",
+        }),
+      }),
+    );
+
+    await openContentHarness(page, null, {
+      shortenOfferTimers: true,
+      initialStorage: {
+        __checkoutResponse: {
+          ok: false,
+          reason: "no_checkout_email",
+          error: "Please sign in again before checkout.",
+        },
+      },
+    });
+
+    await page.locator("#quickvint-gen-btn").click();
+    await expect(page.locator("#quickvint-toast.paywall")).toContainText(
+      "Free listings used",
+    );
+    await page.locator('[data-paywall-option-index="1"]').click();
+
+    await expect
+      .poll(() =>
+        trackedEvents.flatMap((body) => body.events || []).map((event) => event.event),
+      )
+      .toContain("checkout_failed");
+
+    await expect
+      .poll(() =>
+        page.evaluate(() =>
+          window.__extensionHarness.openedWindows.map((opened) => opened.closed),
+        ),
+      )
+      .toEqual([true]);
+
+    const offer = page.locator("#quickvint-limit-followup-modal");
+    await expect(offer).toBeVisible();
     await expect(offer).toContainText("LISTFASTER20");
   });
 });
