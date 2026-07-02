@@ -37,7 +37,6 @@
   const LIMIT_FOLLOWUP_COUPON_CODE = "LISTFASTER20";
   const LIMIT_FOLLOWUP_CLOSE_DELAY_MS = 10 * 1000;
   const LIMIT_FOLLOWUP_RETURN_DELAY_MS = 4 * 1000;
-  const LIMIT_FOLLOWUP_RETRY_DELAY_MS = 30 * 1000;
   const OPEN_SETTINGS_ON_NEXT_POPUP_KEY = "quickvintOpenSettingsOnNextPopup";
   const EMOJI_SEQUENCE_REGEX =
     /(?:[0-9#*]\uFE0F?\u20E3)|(?:[\u{1F1E6}-\u{1F1FF}]{2})|(?:\p{Emoji_Presentation}|\p{Emoji}\uFE0F)(?:\p{Emoji_Modifier})?(?:\u200D(?:\p{Emoji_Presentation}|\p{Emoji}\uFE0F)(?:\p{Emoji_Modifier})?)*/gu;
@@ -469,7 +468,6 @@
   let limitFollowupOfferFetchInFlight = false;
   let limitFollowupRescueTimer = null;
   let limitFollowupReturnTimer = null;
-  let pendingLimitFollowupRetryTimer = null;
   let freeLimitPaywallCheckoutStarted = false;
   let activeFloatingPromptType = null;
   let limitFollowupResumeListenersBound = false;
@@ -755,24 +753,8 @@
     limitFollowupReturnTimer = null;
   }
 
-  function clearPendingLimitFollowupRetryTimer() {
-    if (!pendingLimitFollowupRetryTimer) return;
-    window.clearTimeout(pendingLimitFollowupRetryTimer);
-    pendingLimitFollowupRetryTimer = null;
-  }
-
-  function schedulePendingLimitFollowupRetry(reason) {
-    if (!pendingLimitFollowupOffer) return;
-    clearPendingLimitFollowupRetryTimer();
-    pendingLimitFollowupRetryTimer = window.setTimeout(() => {
-      pendingLimitFollowupRetryTimer = null;
-      maybeShowPendingPrompts({ reason: `retry_${reason}` });
-    }, LIMIT_FOLLOWUP_RETRY_DELAY_MS);
-  }
-
   function checkPendingLimitFollowupOnResume(reason) {
     if (!pendingLimitFollowupOffer) return;
-    clearPendingLimitFollowupRetryTimer();
     maybeShowPendingPrompts({ reason });
   }
 
@@ -7081,16 +7063,13 @@
     const offer = pendingLimitFollowupOffer;
     if (!offer) return false;
     if (document.visibilityState === "hidden") {
-      schedulePendingLimitFollowupRetry("hidden");
       return false;
     }
     if (activeFloatingPromptType || isPromptBlockingModalOpen()) {
-      schedulePendingLimitFollowupRetry("blocked_modal");
       return false;
     }
     if (await isOfferLocallyDismissed(offer)) {
       pendingLimitFollowupOffer = null;
-      clearPendingLimitFollowupRetryTimer();
       return false;
     }
     if (await wasOfferShownRecently(offer)) {
@@ -7099,16 +7078,13 @@
 
     const anchorInput = getPromptAnchorInput();
     if (!anchorInput) {
-      schedulePendingLimitFollowupRetry("missing_anchor");
       return false;
     }
     if (!allowDuringDraft && isListingDraftInProgress()) {
-      schedulePendingLimitFollowupRetry("draft_in_progress");
       return false;
     }
 
     const languageContext = await resolvePreferredUiLanguageContext();
-    clearPendingLimitFollowupRetryTimer();
     await markOfferShownLocally(offer);
     trackGrowthEvent("limit_followup_offer_shown", {
       campaignKey: offer.campaignKey,
@@ -7129,7 +7105,6 @@
     if (choice === "feedback") {
       await dismissOfferLocally(offer);
       pendingLimitFollowupOffer = null;
-      clearPendingLimitFollowupRetryTimer();
       trackGrowthEvent("limit_followup_offer_feedback_click", {
         campaignKey: offer.campaignKey,
         couponCode: offer.couponCode,
@@ -7145,7 +7120,6 @@
     if (choice === "open") {
       await dismissOfferLocally(offer);
       pendingLimitFollowupOffer = null;
-      clearPendingLimitFollowupRetryTimer();
       trackGrowthEvent("limit_followup_offer_click", {
         campaignKey: offer.campaignKey,
         couponCode: offer.couponCode,
@@ -7157,7 +7131,6 @@
     if (choice === "dismiss") {
       await dismissOfferLocally(offer);
       pendingLimitFollowupOffer = null;
-      clearPendingLimitFollowupRetryTimer();
       trackGrowthEvent("limit_followup_offer_dismissed", {
         campaignKey: offer.campaignKey,
         couponCode: offer.couponCode,
