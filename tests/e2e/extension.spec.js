@@ -122,7 +122,7 @@ function installChromeHarness(page, capacityResponse = null) {
   }, capacityResponse);
 }
 
-async function openContentHarness(page, capacityResponse = null) {
+async function openContentHarness(page, capacityResponse = null, options = {}) {
   const pageErrors = [];
   const consoleErrors = [];
   page.on("pageerror", (error) => pageErrors.push(error.message));
@@ -131,6 +131,16 @@ async function openContentHarness(page, capacityResponse = null) {
   });
   await page.setContent(listingFixture, { waitUntil: "domcontentloaded" });
   await installChromeHarness(page, capacityResponse);
+  if (options.shortenOfferTimers) {
+    await page.evaluate(() => {
+      const originalSetTimeout = window.setTimeout.bind(window);
+      window.setTimeout = (callback, delay, ...args) => {
+        const shortenedDelay =
+          delay === 4000 || delay === 10000 ? 25 : delay;
+        return originalSetTimeout(callback, shortenedDelay, ...args);
+      };
+    });
+  }
   await page.addScriptTag({ path: languageDefaultsPath });
   await page.addScriptTag({ path: contentScriptPath });
   try {
@@ -658,5 +668,77 @@ test.describe("AutoLister extension smoke flows", () => {
     await expect(page.locator("#quickvint-toast.paywall")).toContainText(
       "Free listings used",
     );
+  });
+
+  test("does not interrupt an in-progress listing with the return-visit limit offer", async ({
+    page,
+  }) => {
+    let offerFetchCount = 0;
+    await page.route(
+      "https://autolister.app/api/user/limit-followup-offer",
+      (route) => {
+        offerFetchCount += 1;
+        return route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify({
+            eligible: true,
+            campaignKey: "limit_followup_offer_v1",
+            couponCode: "LISTFASTER20",
+            pricingUrl: "https://autolister.app/pricing?offer=test",
+            limitHitAt: new Date().toISOString(),
+          }),
+        });
+      },
+    );
+
+    await openContentHarness(page, null, { shortenOfferTimers: true });
+    await page.waitForTimeout(150);
+
+    expect(offerFetchCount).toBe(1);
+    await expect(page.locator("#quickvint-limit-followup-modal")).toHaveCount(0);
+  });
+
+  test("shows the free-limit offer after closing the free-limit paywall", async ({
+    page,
+  }) => {
+    await page.route("https://autolister.app/api/generate", (route) =>
+      route.fulfill({
+        status: 429,
+        contentType: "application/json",
+        body: JSON.stringify({
+          code: "free_lifetime_limit",
+          currentTier: "free",
+          nextTier: "starter",
+          error: "Free listing limit reached.",
+        }),
+      }),
+    );
+
+    await openContentHarness(page, null, { shortenOfferTimers: true });
+    await page.evaluate(() =>
+      chrome.storage.local.set({
+        userProfile: {
+          subscription_status: "free",
+          subscription_tier: "free",
+          api_calls_this_month: 5,
+          free_lifetime_generations_used: 5,
+          pack_credits: 0,
+        },
+      }),
+    );
+
+    await page.locator("#quickvint-gen-btn").click();
+    await expect(page.locator("#quickvint-toast.paywall")).toContainText(
+      "Free listings used",
+    );
+
+    await page.locator("#quickvint-toast .paywall-close").click();
+
+    const offer = page.locator("#quickvint-limit-followup-modal");
+    await expect(offer).toBeVisible();
+    await expect(offer).toContainText("5 free listings used");
+    await expect(offer).toContainText("Keep listing without waiting");
+    await expect(offer).toContainText("LISTFASTER20");
   });
 });
