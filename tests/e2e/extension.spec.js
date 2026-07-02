@@ -18,7 +18,7 @@ async function loadExtension() {
   );
   const context = await chromium.launchPersistentContext(userDataDir, {
     channel: "chromium",
-    headless: false,
+    headless: process.env.E2E_HEADED !== "1",
     args: [
       `--disable-extensions-except=${extensionPath}`,
       `--load-extension=${extensionPath}`,

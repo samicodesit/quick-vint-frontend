@@ -7,7 +7,7 @@ module.exports = defineConfig({
     timeout: 7_500,
   },
   use: {
-    headless: false,
+    headless: process.env.E2E_HEADED !== "1",
     trace: "retain-on-failure",
   },
   workers: 1,
