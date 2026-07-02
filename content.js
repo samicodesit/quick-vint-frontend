@@ -5835,10 +5835,10 @@
     return showFloatingPrompt({
       type: "description_apply",
       anchorInput: descInput,
-      title: "Description already has text.",
+      title: "Update existing description?",
       actions: [
-        { choice: "replace", label: "Replace" },
-        { choice: "add", label: "Add below", primary: true },
+        { choice: "replace", label: "Replace description", primary: true },
+        { choice: "add", label: "Add below" },
         { choice: "cancel", label: "Cancel" },
       ],
     });
