@@ -431,6 +431,7 @@
   let phoneUploadAutoCloseTimer = null;
   let inlineLanguageListenersBound = false;
   let activeDescriptionApplyPromptCleanup = null;
+  let activeLimitFollowupOfferCleanup = null;
   let activeGenerationOutputEditCleanup = null;
   let batchUploadSessionId = null;
   let batchPollInterval = null;
@@ -470,17 +471,20 @@
   let limitFollowupReturnTimer = null;
   let freeLimitPaywallCheckoutStarted = false;
   let activeFloatingPromptType = null;
+  let activePaywallCleanup = null;
   let limitFollowupResumeListenersBound = false;
 
   // --- HELPER FUNCTIONS ---
 
   function showToast(message, type = "error", action = null, autoHide = true) {
+    clearPaywallPositioning();
     let toast = document.getElementById("quickvint-toast");
     if (!toast) {
       toast = document.createElement("div");
       toast.id = "quickvint-toast";
       document.body.appendChild(toast);
     }
+    resetToastPosition(toast);
 
     const icon = type === "success" ? "✅" : type === "info" ? "ℹ️" : "⚠️";
     let messageHtml = `<span class="toast-message-text">${escapeHtml(message)}</span>`;
@@ -753,6 +757,67 @@
     limitFollowupReturnTimer = null;
   }
 
+  function clearPaywallPositioning() {
+    if (!activePaywallCleanup) return;
+    activePaywallCleanup();
+    activePaywallCleanup = null;
+  }
+
+  function resetToastPosition(toast) {
+    if (!toast) return;
+    toast.style.left = "";
+    toast.style.top = "";
+    toast.style.right = "";
+    toast.style.bottom = "";
+    toast.style.width = "";
+  }
+
+  function getFloatingPromptAnchor(anchorInput) {
+    const descriptionBox = anchorInput?.closest("label") || anchorInput;
+    const titleInput = document.querySelector(SELECTORS.title);
+    const titleBox = titleInput?.closest("label") || titleInput;
+    return titleBox?.parentElement || descriptionBox?.parentElement || descriptionBox;
+  }
+
+  function positionAnchoredFloatingCard(element, anchorInput, preferredWidth) {
+    if (!element) return;
+    if (window.matchMedia("(max-width: 520px)").matches) {
+      element.style.width = "auto";
+      element.style.left = "12px";
+      element.style.right = "12px";
+      element.style.top = "16px";
+      element.style.bottom = "auto";
+      return;
+    }
+
+    const anchor = getFloatingPromptAnchor(anchorInput);
+    const anchorRect = anchor?.getBoundingClientRect();
+    const margin = 12;
+    const gap = 12;
+    const width = Math.min(preferredWidth, window.innerWidth - margin * 2);
+    const height = element.offsetHeight || 420;
+    let left = window.innerWidth - width - margin;
+    let top = 80;
+
+    if (anchorRect) {
+      const rightSpace = window.innerWidth - anchorRect.right;
+      left =
+        rightSpace >= width + gap + margin
+          ? anchorRect.right + gap
+          : Math.max(margin, window.innerWidth - width - margin);
+      top = Math.max(
+        margin,
+        Math.min(anchorRect.top, window.innerHeight - height - margin),
+      );
+    }
+
+    element.style.width = `${Math.round(width)}px`;
+    element.style.left = `${Math.round(left)}px`;
+    element.style.top = `${Math.round(top)}px`;
+    element.style.right = "auto";
+    element.style.bottom = "auto";
+  }
+
   function checkPendingLimitFollowupOnResume(reason) {
     if (!pendingLimitFollowupOffer) return;
     maybeShowPendingPrompts({ reason });
@@ -825,6 +890,11 @@
     secondaryActionUrl,
     limitCode,
   }) {
+    removeDescriptionApplyPrompt();
+    if (activeLimitFollowupOfferCleanup) {
+      activeLimitFollowupOfferCleanup("cancel");
+    }
+    clearPaywallPositioning();
     const isFreeLimitPaywall = limitCode === "free_lifetime_limit";
     if (isFreeLimitPaywall) {
       freeLimitPaywallCheckoutStarted = false;
@@ -913,11 +983,27 @@
 
     toast.className = "paywall";
     toast.style.visibility = "visible";
+    activeFloatingPromptType = "paywall";
+
+    const anchorInput = getPromptAnchorInput();
+    const onReposition = () => positionAnchoredFloatingCard(toast, anchorInput, 430);
+    onReposition();
+    window.addEventListener("resize", onReposition);
+    window.addEventListener("scroll", onReposition, true);
+    activePaywallCleanup = () => {
+      window.removeEventListener("resize", onReposition);
+      window.removeEventListener("scroll", onReposition, true);
+      if (activeFloatingPromptType === "paywall") {
+        activeFloatingPromptType = null;
+      }
+      resetToastPosition(toast);
+    };
 
     const closeBtn = toast.querySelector(".toast-close");
     if (closeBtn) {
       closeBtn.onclick = () => {
         toast.classList.remove("visible");
+        clearPaywallPositioning();
         if (window.quickvintToastTimeout)
           clearTimeout(window.quickvintToastTimeout);
         trackGrowthEvent("paywall_closed", {
@@ -6553,22 +6639,7 @@
   }
 
   function positionDescriptionApplyPrompt(prompt, descInput) {
-    const descriptionBox = descInput.closest("label") || descInput;
-    const titleInput = document.querySelector(SELECTORS.title);
-    const titleBox = titleInput?.closest("label") || titleInput;
-    const anchor = titleBox?.parentElement || descriptionBox.parentElement || descriptionBox;
-    const anchorRect = anchor.getBoundingClientRect();
-    const promptWidth = Math.min(320, window.innerWidth - 24);
-    const gap = 12;
-    const rightSpace = window.innerWidth - anchorRect.right;
-    const left = rightSpace >= promptWidth + gap
-      ? anchorRect.right + gap
-      : Math.max(12, window.innerWidth - promptWidth - 12);
-    const top = Math.max(12, anchorRect.top);
-
-    prompt.style.width = `${promptWidth}px`;
-    prompt.style.left = `${left}px`;
-    prompt.style.top = `${top}px`;
+    positionAnchoredFloatingCard(prompt, descInput, 320);
   }
 
   function showFloatingPrompt({
@@ -6911,37 +6982,7 @@
   }
 
   function positionLimitFollowupOfferModal(modal, anchorInput) {
-    if (window.matchMedia("(max-width: 520px)").matches) {
-      modal.style.top = "";
-      modal.style.left = "";
-      modal.style.right = "";
-      modal.style.bottom = "";
-      return;
-    }
-
-    const rect = anchorInput?.getBoundingClientRect();
-    const width = Math.min(410, window.innerWidth - 28);
-    const height = modal.offsetHeight || 458;
-    const margin = 18;
-    const gap = 14;
-    let left = window.innerWidth - width - margin;
-    let top = 80;
-
-    if (rect) {
-      top = Math.max(
-        margin,
-        Math.min(rect.top - 18, window.innerHeight - height - margin),
-      );
-      if (window.innerWidth - rect.right >= width + gap + margin) {
-        left = rect.right + gap;
-      }
-    }
-
-    modal.style.width = `${width}px`;
-    modal.style.left = `${Math.round(left)}px`;
-    modal.style.top = `${Math.round(top)}px`;
-    modal.style.right = "auto";
-    modal.style.bottom = "auto";
+    positionAnchoredFloatingCard(modal, anchorInput, 410);
   }
 
   function showLimitFollowupOfferModal(offer, anchorInput, copy) {
@@ -7004,12 +7045,14 @@
         window.removeEventListener("scroll", onReposition, true);
         modal.remove();
         activeFloatingPromptType = null;
+        activeLimitFollowupOfferCleanup = null;
         resolve(choice);
       }
 
       const onReposition = () => positionLimitFollowupOfferModal(modal, anchorInput);
       window.addEventListener("resize", onReposition);
       window.addEventListener("scroll", onReposition, true);
+      activeLimitFollowupOfferCleanup = finish;
       modal
         .querySelector(".quickvint-limit-close")
         ?.addEventListener("click", () => finish("dismiss"));

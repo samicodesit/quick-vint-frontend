@@ -63,6 +63,14 @@ Covered by:
 - `Share feedback for free listings`: dismisses the local offer state and opens the report modal.
 - Coupon click copies `LISTFASTER20`.
 
+## Placement And Overlap
+
+- The paywall, generation follow-up prompts, and free-limit offer are anchored beside the title/description form area on desktop.
+- On narrow screens they move to the top with side margins.
+- Opening the paywall clears any active description prompt or free-limit offer modal.
+- The rescue offer only runs after the free-limit paywall is closed and the checkout path was not started.
+- A pending return-visit offer does not show while another prompt/modal is active.
+
 ## Edge Cases
 
 - A user who reloads with a half-filled listing should not see the proactive return-visit offer.

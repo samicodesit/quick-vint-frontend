@@ -754,6 +754,7 @@ test.describe("AutoLister extension smoke flows", () => {
   test("shows the free-limit offer after closing the free-limit paywall", async ({
     page,
   }) => {
+    await page.setViewportSize({ width: 1800, height: 900 });
     await page.route("https://autolister.app/api/generate", (route) =>
       route.fulfill({
         status: 429,
@@ -784,6 +785,11 @@ test.describe("AutoLister extension smoke flows", () => {
     await expect(page.locator("#quickvint-toast.paywall")).toContainText(
       "Free listings used",
     );
+    await expect(page.locator("#quickvint-toast.paywall")).toBeVisible();
+    const paywallBox = await page.locator("#quickvint-toast.paywall").boundingBox();
+    const titleBox = await page.locator('[data-testid="title--input"]').boundingBox();
+    expect(paywallBox.x).toBeGreaterThan(titleBox.x + titleBox.width);
+    expect(Math.abs(paywallBox.y - titleBox.y)).toBeLessThan(80);
 
     await page.locator("#quickvint-toast .paywall-close").click();
 
