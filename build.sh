@@ -28,7 +28,6 @@ INCLUDE_LIST=(
     "preview.html"
     "lib/"
     "icons/"
-    "images/onboard.png"
     "_locales/"
 )
 
@@ -71,6 +70,13 @@ fi
 
 node "$SCRIPT_DIR/scripts/release-version.js" check
 
+echo -e "${YELLOW}⚡ Minifying content script...${NC}"
+if [ ! -x "$SCRIPT_DIR/node_modules/.bin/terser" ]; then
+    echo -e "${RED}❌ Error: terser not found. Run npm install before packaging.${NC}"
+    exit 1
+fi
+"$SCRIPT_DIR/node_modules/.bin/terser" content.js -o content.min.js --compress --mangle
+
 # Create dist directory
 DIST_DIR="$SCRIPT_DIR/dist"
 mkdir -p "$DIST_DIR"
@@ -97,7 +103,9 @@ trap "rm -rf $TEMP_DIR" EXIT
 # Copy files to temp directory
 echo "📂 Staging files..."
 for item in "${INCLUDE_LIST[@]}"; do
-    if [ -e "$SCRIPT_DIR/$item" ]; then
+    if [ "$item" = "content.js" ] && [ -e "$SCRIPT_DIR/content.min.js" ]; then
+        cp "$SCRIPT_DIR/content.min.js" "$TEMP_DIR/content.js"
+    elif [ -e "$SCRIPT_DIR/$item" ]; then
         cp -r "$SCRIPT_DIR/$item" "$TEMP_DIR/"
     else
         echo -e "${YELLOW}⚠️  Warning: $item not found, skipping${NC}"

@@ -8,7 +8,7 @@
 
 const fs = require('fs');
 const path = require('path');
-const { execSync } = require('child_process');
+const { execFileSync, execSync } = require('child_process');
 
 // Configuration
 const INCLUDE_LIST = [
@@ -22,7 +22,6 @@ const INCLUDE_LIST = [
     'callback.js',
     'lib',
     'icons',
-    'images/onboard.png',
     '_locales',
 ];
 
@@ -69,6 +68,43 @@ function copyRecursive(src, dest) {
         fs.mkdirSync(path.dirname(dest), { recursive: true });
         fs.copyFileSync(src, dest);
     }
+}
+
+function minifyContentScript(scriptDir) {
+    const terserBin = path.join(
+        scriptDir,
+        'node_modules',
+        '.bin',
+        process.platform === 'win32' ? 'terser.cmd' : 'terser',
+    );
+
+    if (!fs.existsSync(terserBin)) {
+        throw new Error('terser not found. Run npm install before packaging.');
+    }
+
+    execFileSync(
+        terserBin,
+        ['content.js', '-o', 'content.min.js', '--compress', '--mangle'],
+        {
+            cwd: scriptDir,
+            stdio: 'inherit',
+        },
+    );
+}
+
+function copyReleaseItem(scriptDir, tempDir, item) {
+    const destPath = path.join(tempDir, item);
+    const releaseSource =
+        item === 'content.js'
+            ? path.join(scriptDir, 'content.min.js')
+            : path.join(scriptDir, item);
+
+    if (fs.existsSync(releaseSource)) {
+        copyRecursive(releaseSource, destPath);
+        return;
+    }
+
+    log(`⚠️  Warning: ${item} not found, skipping`, 'yellow');
 }
 
 function createZip(sourceDir, outputFile) {
@@ -179,6 +215,9 @@ async function main() {
         stdio: 'inherit',
     });
 
+    log('⚡ Minifying content script...', 'yellow');
+    minifyContentScript(scriptDir);
+
     // Create dist directory
     const distDir = path.join(scriptDir, 'dist');
     if (!fs.existsSync(distDir)) {
@@ -200,14 +239,7 @@ async function main() {
         // Copy files to temp directory
         log('📂 Staging files...');
         for (const item of INCLUDE_LIST) {
-            const srcPath = path.join(scriptDir, item);
-            const destPath = path.join(tempDir, item);
-
-            if (fs.existsSync(srcPath)) {
-                copyRecursive(srcPath, destPath);
-            } else {
-                log(`⚠️  Warning: ${item} not found, skipping`, 'yellow');
-            }
+            copyReleaseItem(scriptDir, tempDir, item);
         }
 
         // Create ZIP
