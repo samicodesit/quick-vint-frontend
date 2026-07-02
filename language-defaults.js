@@ -156,6 +156,64 @@
     };
   }
 
+  function resolvePreferredUiLanguage(storage = {}, options = {}) {
+    const defaultLanguage = getDefaultListingLanguageInfo(options);
+    const hasExplicitLanguagePreference = Boolean(
+      storage.quickvintLanguagePreferenceTouched,
+    );
+
+    if (hasExplicitLanguagePreference) {
+      const explicitDescriptionLanguage = getSupportedLanguageCode(
+        storage.selectedDescriptionLanguage,
+      );
+      if (explicitDescriptionLanguage) {
+        return {
+          code: explicitDescriptionLanguage,
+          source: "explicit_description_language",
+          hasExplicitLanguagePreference,
+        };
+      }
+
+      const explicitTitleLanguage = getSupportedLanguageCode(
+        storage.selectedTitleLanguage,
+      );
+      if (explicitTitleLanguage) {
+        return {
+          code: explicitTitleLanguage,
+          source: "explicit_title_language",
+          hasExplicitLanguagePreference,
+        };
+      }
+
+      const explicitBaseLanguage = getSupportedLanguageCode(storage.selectedLanguage);
+      if (explicitBaseLanguage) {
+        return {
+          code: explicitBaseLanguage,
+          source: "explicit_base_language",
+          hasExplicitLanguagePreference,
+        };
+      }
+    }
+
+    return {
+      code: defaultLanguage.code || DEFAULT_LANGUAGE_CODE,
+      source: defaultLanguage.source,
+      hasExplicitLanguagePreference,
+    };
+  }
+
+  function resolveLanguageProfile(storage = {}, options = {}) {
+    const listingLanguages = resolveListingLanguagePreferences(storage, options);
+    const uiLanguage = resolvePreferredUiLanguage(storage, options);
+
+    return {
+      ...listingLanguages,
+      uiLanguageCode: uiLanguage.code,
+      uiLanguageSource: uiLanguage.source,
+      hasExplicitLanguagePreference: uiLanguage.hasExplicitLanguagePreference,
+    };
+  }
+
   return {
     DEFAULT_LANGUAGE_CODE,
     normalizeLanguageCode,
@@ -164,5 +222,7 @@
     getBrowserLanguageCode,
     getDefaultListingLanguageInfo,
     resolveListingLanguagePreferences,
+    resolvePreferredUiLanguage,
+    resolveLanguageProfile,
   };
 });

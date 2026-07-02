@@ -105,3 +105,66 @@ test("unsupported stored language is ignored in favor of domain fallback", () =>
   assert.equal(result.descriptionLanguageCode, "it");
   assert.equal(result.hasStoredLanguagePreference, false);
 });
+
+test("language profile keeps displayed defaults separate from explicit UI preference", () => {
+  const result = languageDefaults.resolveLanguageProfile(
+    {
+      selectedLanguage: "fr",
+      selectedTitleLanguage: "fr",
+      selectedDescriptionLanguage: "fr",
+    },
+    {
+      hostname: "vinted.nl",
+      navigatorLanguages: ["en-US"],
+      navigatorLanguage: "en-US",
+    },
+  );
+
+  assert.equal(result.titleLanguageCode, "fr");
+  assert.equal(result.descriptionLanguageCode, "fr");
+  assert.equal(result.hasStoredLanguagePreference, true);
+  assert.equal(result.hasExplicitLanguagePreference, false);
+  assert.equal(result.uiLanguageCode, "nl");
+  assert.equal(result.uiLanguageSource, "vinted_domain");
+});
+
+test("language profile uses explicit description language for UI after user interaction", () => {
+  const result = languageDefaults.resolveLanguageProfile(
+    {
+      quickvintLanguagePreferenceTouched: true,
+      selectedLanguage: "en",
+      selectedTitleLanguage: "en",
+      selectedDescriptionLanguage: "nl",
+    },
+    {
+      hostname: "vinted.fr",
+      navigatorLanguages: ["fr-FR"],
+      navigatorLanguage: "fr-FR",
+    },
+  );
+
+  assert.equal(result.titleLanguageCode, "en");
+  assert.equal(result.descriptionLanguageCode, "nl");
+  assert.equal(result.uiLanguageCode, "nl");
+  assert.equal(result.uiLanguageSource, "explicit_description_language");
+  assert.equal(result.hasExplicitLanguagePreference, true);
+});
+
+test("language profile falls back to title language for UI when touched without description language", () => {
+  const result = languageDefaults.resolveLanguageProfile(
+    {
+      quickvintLanguagePreferenceTouched: true,
+      selectedTitleLanguage: "de",
+    },
+    {
+      hostname: "vinted.es",
+      navigatorLanguages: ["es-ES"],
+      navigatorLanguage: "es-ES",
+    },
+  );
+
+  assert.equal(result.titleLanguageCode, "de");
+  assert.equal(result.descriptionLanguageCode, "es");
+  assert.equal(result.uiLanguageCode, "de");
+  assert.equal(result.uiLanguageSource, "explicit_title_language");
+});

@@ -1135,21 +1135,8 @@
     return languageDefaults.resolveListingLanguagePreferences(storage);
   }
 
-  function resolvePreferredUiLanguageCode(storage = {}) {
-    if (storage[LANGUAGE_PREFERENCE_TOUCHED_KEY]) {
-      const explicitLanguage =
-        languageDefaults.getSupportedLanguageCode(
-          storage.selectedDescriptionLanguage,
-        ) ||
-        languageDefaults.getSupportedLanguageCode(storage.selectedTitleLanguage) ||
-        languageDefaults.getSupportedLanguageCode(storage.selectedLanguage);
-      const supportedExplicitLanguage =
-        languageDefaults.getSupportedLanguageCode(explicitLanguage);
-      if (supportedExplicitLanguage) return supportedExplicitLanguage;
-    }
-
-    const defaultLanguage = languageDefaults.getDefaultListingLanguageInfo();
-    return defaultLanguage.code || "en";
+  function resolveLanguageProfile(storage = {}) {
+    return languageDefaults.resolveLanguageProfile(storage);
   }
 
   function getLimitFollowupCopy(languageCode) {
@@ -1166,13 +1153,13 @@
         "selectedDescriptionLanguage",
         LANGUAGE_PREFERENCE_TOUCHED_KEY,
       ]);
-      const languageCode = resolvePreferredUiLanguageCode(storage);
+      const languageProfile = resolveLanguageProfile(storage);
       return {
-        languageCode,
-        copy: getLimitFollowupCopy(languageCode),
-        hasExplicitLanguagePreference: Boolean(
-          storage[LANGUAGE_PREFERENCE_TOUCHED_KEY],
-        ),
+        languageCode: languageProfile.uiLanguageCode,
+        languageSource: languageProfile.uiLanguageSource,
+        copy: getLimitFollowupCopy(languageProfile.uiLanguageCode),
+        hasExplicitLanguagePreference:
+          languageProfile.hasExplicitLanguagePreference,
       };
     } catch (error) {
       return {
@@ -7127,6 +7114,7 @@
       limitHitAt: offer.limitHitAt,
       reason,
       languageCode: languageContext.languageCode,
+      languageSource: languageContext.languageSource,
       hasExplicitLanguagePreference:
         languageContext.hasExplicitLanguagePreference,
     });
@@ -9648,6 +9636,7 @@
         "selectedLanguage",
         "selectedTitleLanguage",
         "selectedDescriptionLanguage",
+        LANGUAGE_PREFERENCE_TOUCHED_KEY,
         "tone",
         "useEmojis",
         HASHTAGS_STORAGE_KEY,
@@ -9664,27 +9653,31 @@
         userProfile,
       } = storage;
       const descriptionLength = normalizeDescriptionLength(storedDescriptionLength);
-      const languagePreferences = resolveListingLanguagePreferences(storage);
+      const languageProfile = resolveLanguageProfile(storage);
       const emojiAccess = canUseEmojiSetting(userProfile);
       const effectiveUseEmojis =
         emojiAccess &&
         (overrideUseEmojis === null
           ? useEmojis !== false
           : overrideUseEmojis === true);
-      const titleLanguageCode = languagePreferences.titleLanguageCode;
+      const titleLanguageCode = languageProfile.titleLanguageCode;
       const descriptionLanguageCode =
-        languagePreferences.descriptionLanguageCode;
+        languageProfile.descriptionLanguageCode;
       const legacyLanguageCode = descriptionLanguageCode || titleLanguageCode;
       trackGrowthEvent("generate_request", {
         mode,
         photoCount: imageUrls.length,
         titleLanguageCode,
         descriptionLanguageCode,
-        languageDefaultSource: languagePreferences.defaultSource,
-        languageDefaultCode: languagePreferences.defaultLanguageCode,
-        domainLanguageCode: languagePreferences.domainLanguageCode,
+        uiLanguageCode: languageProfile.uiLanguageCode,
+        uiLanguageSource: languageProfile.uiLanguageSource,
+        languageDefaultSource: languageProfile.defaultSource,
+        languageDefaultCode: languageProfile.defaultLanguageCode,
+        domainLanguageCode: languageProfile.domainLanguageCode,
         hasStoredLanguagePreference:
-          languagePreferences.hasStoredLanguagePreference,
+          languageProfile.hasStoredLanguagePreference,
+        hasExplicitLanguagePreference:
+          languageProfile.hasExplicitLanguagePreference,
         tone,
         useEmojis: effectiveUseEmojis,
         useHashtags: useHashtags !== false,
