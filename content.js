@@ -34,6 +34,7 @@
   const OFFER_DISMISSED_KEY_PREFIX = "quickvintOfferDismissed";
   const OFFER_LAST_SHOWN_KEY_PREFIX = "quickvintOfferLastShown";
   const OFFER_SHOW_COOLDOWN_MS = 7 * 24 * 60 * 60 * 1000;
+  const LIMIT_FOLLOWUP_CLOSE_DELAY_MS = 10 * 1000;
   const OPEN_SETTINGS_ON_NEXT_POPUP_KEY = "quickvintOpenSettingsOnNextPopup";
   const EMOJI_SEQUENCE_REGEX =
     /(?:[0-9#*]\uFE0F?\u20E3)|(?:[\u{1F1E6}-\u{1F1FF}]{2})|(?:\p{Emoji_Presentation}|\p{Emoji}\uFE0F)(?:\p{Emoji_Modifier})?(?:\u200D(?:\p{Emoji_Presentation}|\p{Emoji}\uFE0F)(?:\p{Emoji_Modifier})?)*/gu;
@@ -462,6 +463,9 @@
   let pendingGenerationOffer = null;
   let pendingLimitFollowupOffer = null;
   let limitFollowupOfferChecked = false;
+  let limitFollowupOfferFetchInFlight = false;
+  let limitFollowupRescueTimer = null;
+  let freeLimitPaywallCheckoutStarted = false;
   let activeFloatingPromptType = null;
 
   // --- HELPER FUNCTIONS ---
@@ -733,6 +737,26 @@
       .replace(/'/g, "&#39;");
   }
 
+  function clearLimitFollowupRescueTimer() {
+    if (!limitFollowupRescueTimer) return;
+    window.clearTimeout(limitFollowupRescueTimer);
+    limitFollowupRescueTimer = null;
+  }
+
+  function scheduleLimitFollowupRescueCheck(reason) {
+    clearLimitFollowupRescueTimer();
+    limitFollowupRescueTimer = window.setTimeout(() => {
+      limitFollowupRescueTimer = null;
+      if (freeLimitPaywallCheckoutStarted) return;
+      trackGrowthEvent("limit_followup_rescue_check", { reason });
+      maybeFetchAndShowLimitFollowupOffer({
+        force: true,
+        allowDuringDraft: true,
+        reason,
+      });
+    }, LIMIT_FOLLOWUP_CLOSE_DELAY_MS);
+  }
+
   function showLimitPaywall({
     title,
     message,
@@ -742,11 +766,19 @@
     actionUrl,
     secondaryActionText,
     secondaryActionUrl,
+    limitCode,
   }) {
+    const isFreeLimitPaywall = limitCode === "free_lifetime_limit";
+    if (isFreeLimitPaywall) {
+      freeLimitPaywallCheckoutStarted = false;
+      clearLimitFollowupRescueTimer();
+    }
+
     trackGrowthEvent("paywall_shown", {
       title,
       optionCount: options.length,
       actionText,
+      limitCode: limitCode || null,
     });
 
     let toast = document.getElementById("quickvint-toast");
@@ -831,6 +863,15 @@
         toast.classList.remove("visible");
         if (window.quickvintToastTimeout)
           clearTimeout(window.quickvintToastTimeout);
+        trackGrowthEvent("paywall_closed", {
+          title,
+          optionCount: options.length,
+          actionText,
+          limitCode: limitCode || null,
+        });
+        if (isFreeLimitPaywall && !freeLimitPaywallCheckoutStarted) {
+          scheduleLimitFollowupRescueCheck("paywall_closed");
+        }
       };
     }
 
@@ -854,6 +895,10 @@
       const optionNameEl = triggerButton?.querySelector(".paywall-option-name");
       const previousOptionName = optionNameEl?.textContent || "";
       const checkoutWindow = window.open("about:blank", "_blank");
+      if (isFreeLimitPaywall) {
+        freeLimitPaywallCheckoutStarted = true;
+        clearLimitFollowupRescueTimer();
+      }
       if (triggerButton) {
         triggerButton.dataset.checkoutPending = "true";
         triggerButton.disabled = true;
@@ -1176,6 +1221,7 @@
       actionUrl: pricingUrl,
       secondaryActionText: "Contact support",
       secondaryActionUrl: ACCOUNT_REVIEW_CONTACT_URL,
+      limitCode: "account_paused",
     });
   }
 
@@ -6953,7 +6999,7 @@
     });
   }
 
-  async function maybeShowPendingLimitFollowupOffer() {
+  async function maybeShowPendingLimitFollowupOffer({ allowDuringDraft = false } = {}) {
     const offer = pendingLimitFollowupOffer;
     if (!offer || activeFloatingPromptType || isPromptBlockingModalOpen()) return false;
     if (await isOfferLocallyDismissed(offer)) {
@@ -6966,7 +7012,7 @@
 
     const anchorInput = getPromptAnchorInput();
     if (!anchorInput) return false;
-    if (isListingDraftInProgress()) return false;
+    if (!allowDuringDraft && isListingDraftInProgress()) return false;
 
     const languageContext = await resolvePreferredUiLanguageContext();
     await markOfferShownLocally(offer);
@@ -7034,23 +7080,29 @@
     );
   }
 
-  function maybeShowPendingPrompts() {
+  function maybeShowPendingPrompts(options = {}) {
     maybeShowPendingGenerationOffer().then((shown) => {
       if (!shown) {
-        maybeShowPendingLimitFollowupOffer();
+        maybeShowPendingLimitFollowupOffer(options);
       }
     });
   }
 
-  async function maybeFetchAndShowLimitFollowupOffer() {
-    if (limitFollowupOfferChecked || !isAuthenticated || !generateBtn) return;
-    limitFollowupOfferChecked = true;
+  async function maybeFetchAndShowLimitFollowupOffer({
+    force = false,
+    allowDuringDraft = false,
+    reason = "auto",
+  } = {}) {
+    if ((!force && limitFollowupOfferChecked) || !isAuthenticated || !generateBtn) return;
+    if (limitFollowupOfferFetchInFlight) return;
+    if (!force) limitFollowupOfferChecked = true;
 
     try {
       const localOfferKey = { campaignKey: "limit_followup_offer_v1" };
       if (await isOfferLocallyDismissed(localOfferKey)) return;
       if (await wasOfferShownRecently(localOfferKey)) return;
 
+      limitFollowupOfferFetchInFlight = true;
       const offer = await fetchLimitFollowupOffer();
       if (
         !offer ||
@@ -7060,9 +7112,15 @@
         return;
       }
       pendingLimitFollowupOffer = offer;
-      maybeShowPendingPrompts();
+      maybeShowPendingPrompts({ allowDuringDraft });
+      trackGrowthEvent("limit_followup_offer_loaded", {
+        reason,
+        campaignKey: offer.campaignKey,
+      });
     } catch (error) {
       console.debug("AutoLister AI: limit follow-up offer skipped", error);
+    } finally {
+      limitFollowupOfferFetchInFlight = false;
     }
   }
 
@@ -8799,6 +8857,7 @@
         actionUrl: pricingUrl,
         secondaryActionText: limitMessage.secondaryActionText,
         secondaryActionUrl: pricingUrl,
+        limitCode: capacity.reason,
       });
       return;
     }
@@ -9597,6 +9656,7 @@
             actionUrl: pricingUrl,
             secondaryActionText: limitMessage.secondaryActionText,
             secondaryActionUrl: pricingUrl,
+            limitCode: errData.code,
           });
         } else {
           const isAccountPaused = errData.code === "account_paused";
