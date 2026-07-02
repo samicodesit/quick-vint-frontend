@@ -103,7 +103,7 @@
   let descriptionLengthToggle = null;
   let signInBtn = null;
   let isBusy = false;
-  let isAuthenticated = false;
+  let isAuthenticated = null;
   let pollInterval = null;
   let downloadedFiles = new Set();
   let pendingPhoneFiles = new Set();
@@ -5623,6 +5623,20 @@
     const descriptionLanguageField = document
       .getElementById(DESCRIPTION_LANGUAGE_SELECT_ID)
       ?.closest(".quickvint-lang-field");
+
+    if (isAuthenticated === null) {
+      if (signInBtn) signInBtn.style.display = "none";
+      if (generateBtn) generateBtn.style.display = "none";
+      if (phoneBtn) phoneBtn.style.display = "none";
+      if (batchBtn) batchBtn.style.display = "none";
+      if (reportBtn) reportBtn.style.display = "none";
+      if (emojiToggleBtn) emojiToggleBtn.style.display = "none";
+      if (hashtagsToggleBtn) hashtagsToggleBtn.style.display = "none";
+      if (descriptionLengthToggle) descriptionLengthToggle.style.display = "none";
+      if (titleLanguageField) titleLanguageField.style.display = "none";
+      if (descriptionLanguageField) descriptionLanguageField.style.display = "none";
+      return;
+    }
 
     // If not authenticated, show premium sign-in button and hide others
     if (!isAuthenticated) {
