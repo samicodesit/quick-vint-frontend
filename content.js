@@ -30,6 +30,7 @@
   const MEASUREMENT_ADVICE_LAST_SHOWN_KEY = "quickvintMeasurementAdviceLastShown";
   const EMOJI_RETRY_PROMPT_HANDLED_KEY = "quickvintEmojiRetryPromptHandled";
   const INLINE_LANGUAGE_HINT_DONE_KEY = "quickvintInlineLanguageHintDone";
+  const LANGUAGE_PREFERENCE_TOUCHED_KEY = "quickvintLanguagePreferenceTouched";
   const OFFER_DISMISSED_KEY_PREFIX = "quickvintOfferDismissed";
   const OFFER_LAST_SHOWN_KEY_PREFIX = "quickvintOfferLastShown";
   const OFFER_SHOW_COOLDOWN_MS = 7 * 24 * 60 * 60 * 1000;
@@ -71,6 +72,314 @@
     { code: "sk", name: "Slovenčina", shortName: "SK", flag: "sk", flagAlt: "Slovak Flag", flagEmoji: "🇸🇰" },
     { code: "sv", name: "Svenska", shortName: "SV", flag: "se", flagAlt: "Swedish Flag", flagEmoji: "🇸🇪" },
   ];
+  const LIMIT_FOLLOWUP_COPY = {
+    en: {
+      brandSub: "Vinted listing assistant",
+      kicker: "5 free listings used",
+      title: "Keep listing without waiting",
+      body: "You used your 5 free listings. This offer keeps your next listings moving today.",
+      discount: "20% off your first month",
+      offerSub: "Use at checkout",
+      noAccount: "No Vinted account connection needed",
+      stripe: "Secure Stripe checkout. Cancel anytime.",
+      primary: "View plans & use offer",
+      secondary: "Maybe later",
+      feedback: "🎁 Share feedback for free listings",
+      close: "Close offer",
+      copyCoupon: "Copy coupon code",
+      copied: "Copied",
+      feedbackPlaceholder: "What would make AutoLister worth upgrading for you?",
+    },
+    fr: {
+      brandSub: "Assistant d'annonces Vinted",
+      kicker: "5 annonces gratuites utilisées",
+      title: "Continuez à publier sans attendre",
+      body: "Vous avez utilisé vos 5 annonces gratuites. Cette offre vous aide à continuer aujourd'hui.",
+      discount: "-20 % sur votre premier mois",
+      offerSub: "À utiliser au paiement",
+      noAccount: "Aucune connexion à votre compte Vinted",
+      stripe: "Paiement sécurisé avec Stripe. Annulable à tout moment.",
+      primary: "Voir les abonnements",
+      secondary: "Plus tard",
+      feedback: "🎁 Donner un avis pour des annonces gratuites",
+      close: "Fermer l'offre",
+      copyCoupon: "Copier le code promo",
+      copied: "Copié",
+      feedbackPlaceholder: "Qu'est-ce qui rendrait AutoLister utile pour vous ?",
+    },
+    cz: {
+      brandSub: "Asistent pro inzeráty na Vinted",
+      kicker: "5 bezplatných inzerátů využito",
+      title: "Pokračujte bez čekání",
+      body: "Využili jste svých 5 bezplatných inzerátů. Tato nabídka vám pomůže pokračovat ještě dnes.",
+      discount: "20 % sleva na první měsíc",
+      offerSub: "Použijte u platby",
+      noAccount: "Bez připojení účtu Vinted",
+      stripe: "Bezpečná platba přes Stripe. Zrušení kdykoliv.",
+      primary: "Zobrazit plány",
+      secondary: "Později",
+      feedback: "🎁 Sdílet zpětnou vazbu za bezplatné inzeráty",
+      close: "Zavřít nabídku",
+      copyCoupon: "Zkopírovat slevový kód",
+      copied: "Zkopírováno",
+      feedbackPlaceholder: "Co by pro vás udělalo AutoLister užitečnějším?",
+    },
+    da: {
+      brandSub: "Assistent til Vinted-annoncer",
+      kicker: "5 gratis annoncer brugt",
+      title: "Fortsæt uden at vente",
+      body: "Du har brugt dine 5 gratis annoncer. Dette tilbud hjælper dig videre i dag.",
+      discount: "20 % rabat på din første måned",
+      offerSub: "Brug ved betaling",
+      noAccount: "Ingen forbindelse til din Vinted-konto",
+      stripe: "Sikker betaling med Stripe. Opsig når som helst.",
+      primary: "Se planer",
+      secondary: "Måske senere",
+      feedback: "🎁 Del feedback for gratis annoncer",
+      close: "Luk tilbud",
+      copyCoupon: "Kopiér rabatkode",
+      copied: "Kopieret",
+      feedbackPlaceholder: "Hvad ville gøre AutoLister værd at opgradere til?",
+    },
+    nl: {
+      brandSub: "Assistent voor Vinted-advertenties",
+      kicker: "5 gratis advertenties gebruikt",
+      title: "Blijf plaatsen zonder wachten",
+      body: "Je hebt je 5 gratis advertenties gebruikt. Deze aanbieding helpt je vandaag verder.",
+      discount: "20% korting op je eerste maand",
+      offerSub: "Gebruik bij het afrekenen",
+      noAccount: "Geen koppeling met je Vinted-account nodig",
+      stripe: "Veilig afrekenen via Stripe. Altijd opzegbaar.",
+      primary: "Bekijk plannen",
+      secondary: "Misschien later",
+      feedback: "🎁 Deel feedback voor gratis advertenties",
+      close: "Aanbieding sluiten",
+      copyCoupon: "Kortingscode kopiëren",
+      copied: "Gekopieerd",
+      feedbackPlaceholder: "Wat zou AutoLister voor jou de upgrade waard maken?",
+    },
+    de: {
+      brandSub: "Assistent für Vinted-Angebote",
+      kicker: "5 kostenlose Angebote genutzt",
+      title: "Weiter einstellen ohne Warten",
+      body: "Du hast deine 5 kostenlosen Angebote genutzt. Dieses Angebot hilft dir, heute weiterzumachen.",
+      discount: "20 % Rabatt auf den ersten Monat",
+      offerSub: "Beim Checkout verwenden",
+      noAccount: "Keine Verbindung zu deinem Vinted-Konto nötig",
+      stripe: "Sichere Zahlung über Stripe. Jederzeit kündbar.",
+      primary: "Tarife ansehen",
+      secondary: "Vielleicht später",
+      feedback: "🎁 Feedback teilen für kostenlose Angebote",
+      close: "Angebot schließen",
+      copyCoupon: "Gutscheincode kopieren",
+      copied: "Kopiert",
+      feedbackPlaceholder: "Was würde AutoLister für dich upgrade-würdig machen?",
+    },
+    el: {
+      brandSub: "Βοηθός αγγελιών Vinted",
+      kicker: "Χρησιμοποιήθηκαν 5 δωρεάν αγγελίες",
+      title: "Συνέχισε χωρίς αναμονή",
+      body: "Χρησιμοποίησες τις 5 δωρεάν αγγελίες σου. Αυτή η προσφορά σε βοηθά να συνεχίσεις σήμερα.",
+      discount: "20% έκπτωση στον πρώτο μήνα",
+      offerSub: "Χρήση στο checkout",
+      noAccount: "Δεν χρειάζεται σύνδεση με Vinted",
+      stripe: "Ασφαλής πληρωμή με Stripe. Ακύρωση όποτε θέλεις.",
+      primary: "Δες τα πλάνα",
+      secondary: "Ίσως αργότερα",
+      feedback: "🎁 Στείλε σχόλια για δωρεάν αγγελίες",
+      close: "Κλείσιμο προσφοράς",
+      copyCoupon: "Αντιγραφή κωδικού",
+      copied: "Αντιγράφηκε",
+      feedbackPlaceholder: "Τι θα έκανε το AutoLister πιο χρήσιμο για εσένα;",
+    },
+    hr: {
+      brandSub: "Asistent za Vinted oglase",
+      kicker: "5 besplatnih oglasa iskorišteno",
+      title: "Nastavi objavljivati bez čekanja",
+      body: "Iskoristili ste svojih 5 besplatnih oglasa. Ova ponuda vam pomaže nastaviti danas.",
+      discount: "20% popusta na prvi mjesec",
+      offerSub: "Upotrijebi pri plaćanju",
+      noAccount: "Nije potrebno povezivanje Vinted računa",
+      stripe: "Sigurno plaćanje putem Stripea. Otkažite bilo kada.",
+      primary: "Pogledaj planove",
+      secondary: "Možda kasnije",
+      feedback: "🎁 Pošalji povratnu informaciju za besplatne oglase",
+      close: "Zatvori ponudu",
+      copyCoupon: "Kopiraj kupon",
+      copied: "Kopirano",
+      feedbackPlaceholder: "Što bi AutoLister učinilo vrijednim nadogradnje?",
+    },
+    fi: {
+      brandSub: "Vinted-ilmoitusten apuri",
+      kicker: "5 ilmaista ilmoitusta käytetty",
+      title: "Jatka ilman odottamista",
+      body: "Olet käyttänyt 5 ilmaista ilmoitustasi. Tämä tarjous auttaa jatkamaan tänään.",
+      discount: "20 % alennus ensimmäisestä kuukaudesta",
+      offerSub: "Käytä kassalla",
+      noAccount: "Vinted-tiliä ei tarvitse yhdistää",
+      stripe: "Turvallinen Stripe-maksu. Peru milloin tahansa.",
+      primary: "Katso paketit",
+      secondary: "Ehkä myöhemmin",
+      feedback: "🎁 Jaa palaute ja saa ilmaisia ilmoituksia",
+      close: "Sulje tarjous",
+      copyCoupon: "Kopioi kuponkikoodi",
+      copied: "Kopioitu",
+      feedbackPlaceholder: "Mikä tekisi AutoListerista sinulle päivittämisen arvoisen?",
+    },
+    hu: {
+      brandSub: "Vinted hirdetéssegéd",
+      kicker: "5 ingyenes hirdetés felhasználva",
+      title: "Folytasd várakozás nélkül",
+      body: "Felhasználtad az 5 ingyenes hirdetésedet. Ez az ajánlat segít ma tovább haladni.",
+      discount: "20% kedvezmény az első hónapra",
+      offerSub: "Használd fizetéskor",
+      noAccount: "Nem kell Vinted-fiókot csatlakoztatni",
+      stripe: "Biztonságos Stripe fizetés. Bármikor lemondható.",
+      primary: "Csomagok megtekintése",
+      secondary: "Talán később",
+      feedback: "🎁 Visszajelzés ingyenes hirdetésekért",
+      close: "Ajánlat bezárása",
+      copyCoupon: "Kuponkód másolása",
+      copied: "Másolva",
+      feedbackPlaceholder: "Mitől érné meg számodra az AutoLister frissítése?",
+    },
+    it: {
+      brandSub: "Assistente per annunci Vinted",
+      kicker: "5 annunci gratis usati",
+      title: "Continua a pubblicare senza attese",
+      body: "Hai usato i tuoi 5 annunci gratis. Questa offerta ti aiuta a continuare oggi.",
+      discount: "20% di sconto sul primo mese",
+      offerSub: "Usalo al checkout",
+      noAccount: "Nessun collegamento al tuo account Vinted",
+      stripe: "Pagamento sicuro con Stripe. Puoi annullare quando vuoi.",
+      primary: "Vedi i piani",
+      secondary: "Forse dopo",
+      feedback: "🎁 Lascia un feedback per annunci gratis",
+      close: "Chiudi offerta",
+      copyCoupon: "Copia codice sconto",
+      copied: "Copiato",
+      feedbackPlaceholder: "Cosa renderebbe AutoLister utile per te?",
+    },
+    lt: {
+      brandSub: "Vinted skelbimų asistentas",
+      kicker: "5 nemokami skelbimai panaudoti",
+      title: "Tęskite be laukimo",
+      body: "Panaudojote 5 nemokamus skelbimus. Šis pasiūlymas padės tęsti šiandien.",
+      discount: "20 % nuolaida pirmajam mėnesiui",
+      offerSub: "Naudokite atsiskaitant",
+      noAccount: "Nereikia prijungti Vinted paskyros",
+      stripe: "Saugus mokėjimas per Stripe. Atšaukti galite bet kada.",
+      primary: "Peržiūrėti planus",
+      secondary: "Gal vėliau",
+      feedback: "🎁 Palikite atsiliepimą už nemokamus skelbimus",
+      close: "Uždaryti pasiūlymą",
+      copyCoupon: "Kopijuoti kupono kodą",
+      copied: "Nukopijuota",
+      feedbackPlaceholder: "Kas padarytų AutoLister vertą atnaujinimo jums?",
+    },
+    pl: {
+      brandSub: "Asystent ogłoszeń Vinted",
+      kicker: "Wykorzystano 5 darmowych ogłoszeń",
+      title: "Dodawaj dalej bez czekania",
+      body: "Wykorzystano 5 darmowych ogłoszeń. Ta oferta pomoże Ci kontynuować dzisiaj.",
+      discount: "20% zniżki na pierwszy miesiąc",
+      offerSub: "Użyj przy płatności",
+      noAccount: "Bez łączenia konta Vinted",
+      stripe: "Bezpieczna płatność Stripe. Anuluj w każdej chwili.",
+      primary: "Zobacz plany",
+      secondary: "Może później",
+      feedback: "🎁 Podziel się opinią za darmowe ogłoszenia",
+      close: "Zamknij ofertę",
+      copyCoupon: "Kopiuj kod rabatowy",
+      copied: "Skopiowano",
+      feedbackPlaceholder: "Co sprawiłoby, że AutoLister byłby wart przejścia na plan płatny?",
+    },
+    pt: {
+      brandSub: "Assistente de anúncios Vinted",
+      kicker: "5 anúncios grátis usados",
+      title: "Continue sem esperar",
+      body: "Usou os seus 5 anúncios grátis. Esta oferta ajuda-o a continuar hoje.",
+      discount: "20% de desconto no primeiro mês",
+      offerSub: "Use no checkout",
+      noAccount: "Não precisa de ligar a sua conta Vinted",
+      stripe: "Pagamento seguro com Stripe. Cancele quando quiser.",
+      primary: "Ver planos",
+      secondary: "Talvez depois",
+      feedback: "🎁 Dê feedback por anúncios grátis",
+      close: "Fechar oferta",
+      copyCoupon: "Copiar código promocional",
+      copied: "Copiado",
+      feedbackPlaceholder: "O que tornaria o AutoLister útil para si?",
+    },
+    ro: {
+      brandSub: "Asistent pentru anunțuri Vinted",
+      kicker: "5 anunțuri gratuite folosite",
+      title: "Continuă fără să aștepți",
+      body: "Ai folosit cele 5 anunțuri gratuite. Această ofertă te ajută să continui azi.",
+      discount: "20% reducere în prima lună",
+      offerSub: "Folosește la plată",
+      noAccount: "Nu trebuie conectat contul Vinted",
+      stripe: "Plată sigură prin Stripe. Anulezi oricând.",
+      primary: "Vezi planurile",
+      secondary: "Poate mai târziu",
+      feedback: "🎁 Trimite feedback pentru anunțuri gratuite",
+      close: "Închide oferta",
+      copyCoupon: "Copiază codul promoțional",
+      copied: "Copiat",
+      feedbackPlaceholder: "Ce ar face AutoLister util pentru tine?",
+    },
+    es: {
+      brandSub: "Asistente para anuncios de Vinted",
+      kicker: "5 anuncios gratis usados",
+      title: "Sigue publicando sin esperar",
+      body: "Has usado tus 5 anuncios gratis. Esta oferta te ayuda a seguir hoy.",
+      discount: "20% de descuento el primer mes",
+      offerSub: "Úsalo al pagar",
+      noAccount: "No necesitas conectar tu cuenta de Vinted",
+      stripe: "Pago seguro con Stripe. Cancela cuando quieras.",
+      primary: "Ver planes",
+      secondary: "Quizá luego",
+      feedback: "🎁 Envía feedback por anuncios gratis",
+      close: "Cerrar oferta",
+      copyCoupon: "Copiar código descuento",
+      copied: "Copiado",
+      feedbackPlaceholder: "¿Qué haría que AutoLister merezca la pena para ti?",
+    },
+    sk: {
+      brandSub: "Asistent pre inzeráty na Vinted",
+      kicker: "5 bezplatných inzerátov použitých",
+      title: "Pokračujte bez čakania",
+      body: "Použili ste 5 bezplatných inzerátov. Táto ponuka vám pomôže pokračovať ešte dnes.",
+      discount: "20 % zľava na prvý mesiac",
+      offerSub: "Použiť pri platbe",
+      noAccount: "Bez pripojenia účtu Vinted",
+      stripe: "Bezpečná platba cez Stripe. Zrušenie kedykoľvek.",
+      primary: "Zobraziť plány",
+      secondary: "Možno neskôr",
+      feedback: "🎁 Pošlite spätnú väzbu za bezplatné inzeráty",
+      close: "Zavrieť ponuku",
+      copyCoupon: "Kopírovať kupón",
+      copied: "Skopírované",
+      feedbackPlaceholder: "Čo by pre vás urobilo AutoLister užitočnejším?",
+    },
+    sv: {
+      brandSub: "Assistent för Vinted-annonser",
+      kicker: "5 gratis annonser använda",
+      title: "Fortsätt utan att vänta",
+      body: "Du har använt dina 5 gratis annonser. Det här erbjudandet hjälper dig fortsätta idag.",
+      discount: "20% rabatt första månaden",
+      offerSub: "Använd i kassan",
+      noAccount: "Ingen koppling till ditt Vinted-konto behövs",
+      stripe: "Säker betalning med Stripe. Avsluta när som helst.",
+      primary: "Se planer",
+      secondary: "Kanske senare",
+      feedback: "🎁 Dela feedback för gratis annonser",
+      close: "Stäng erbjudande",
+      copyCoupon: "Kopiera rabattkod",
+      copied: "Kopierat",
+      feedbackPlaceholder: "Vad skulle göra AutoLister värt att uppgradera för dig?",
+    },
+  };
   const WAND_ICON_SVG = `<svg fill="#ffffff" viewBox="0 0 512 512" version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink"> <path d="M454.321,219.727l-38.766-51.947l20.815-61.385c2.046-6.032,0.489-12.704-4.015-17.208 c-4.504-4.504-11.175-6.061-17.208-4.015l-61.384,20.815l-51.951-38.766c-5.103-3.809-11.929-4.392-17.605-1.499 c-5.676,2.893-9.217,8.755-9.136,15.125l0.829,64.815l-52.923,37.426c-5.201,3.678-7.863,9.989-6.867,16.282 c0.996,6.291,5.479,11.471,11.561,13.363l43.844,13.63L14.443,483.432c-6.535,6.534-6.535,17.131,0,23.666s17.131,6.535,23.666,0 l257.073-257.072l13.629,43.843c2.172,6.986,8.638,11.768,15.984,11.768c5.375,0,10.494-2.595,13.66-7.072l37.426-52.923 l64.815,0.828c6.322,0.051,12.233-3.462,15.125-9.136S458.131,224.833,454.321,219.727z"></path> <polygon points="173.373,67.274 160.014,42.848 146.656,67.274 122.23,80.632 146.656,93.992 160.014,118.417 173.373,93.992 197.799,80.632 "></polygon> <polygon points="362.946,384.489 352.14,364.731 341.335,384.489 321.577,395.294 341.335,406.1 352.14,425.856 362.946,406.1 382.703,395.294 "></polygon> <polygon points="378.142,19.757 367.337,0 356.531,19.757 336.774,30.563 356.531,41.369 367.337,61.126 378.142,41.369 397.9,30.563 "></polygon> <polygon points="490.635,142.513 484.167,130.689 477.701,142.513 465.876,148.979 477.701,155.446 484.167,167.27 490.635,155.446 502.458,148.979 "></polygon> <polygon points="492.626,294.117 465.876,301.951 439.128,294.117 446.962,320.865 439.128,347.615 465.876,339.781 492.626,347.615 484.791,320.865 "></polygon> </svg>`;
   const PHONE_ICON_SVG = `<svg fill="#ffffff" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M17 1.01L7 1c-1.1 0-2 .9-2 2v18c0 1.1.9 2 2 2h10c1.1 0 2-.9 2-2V3c0-1.1-.9-1.99-2-1.99zM17 19H7V5h10v14z"/></svg>`;
   const BATCH_ICON_SVG = `<svg fill="#ffffff" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M5 4h11.5A2.5 2.5 0 0 1 19 6.5V18H7.5A2.5 2.5 0 0 1 5 15.5V4Zm2 2v9.5c0 .28.22.5.5.5H17V6.5a.5.5 0 0 0-.5-.5H7Zm-3 2h1v9.5A1.5 1.5 0 0 0 6.5 19H17v1H6.5A2.5 2.5 0 0 1 4 17.5V8Zm5.25 6h5.5l-1.75-2.33-1.38 1.72-.95-1.14L9.25 14ZM10 9.5A1.5 1.5 0 1 0 10 12.5 1.5 1.5 0 0 0 10 9.5Z"/></svg>`;
@@ -636,6 +945,54 @@
 
   function resolveListingLanguagePreferences(storage = {}) {
     return languageDefaults.resolveListingLanguagePreferences(storage);
+  }
+
+  function resolvePreferredUiLanguageCode(storage = {}) {
+    if (storage[LANGUAGE_PREFERENCE_TOUCHED_KEY]) {
+      const explicitLanguage =
+        languageDefaults.getSupportedLanguageCode(
+          storage.selectedDescriptionLanguage,
+        ) ||
+        languageDefaults.getSupportedLanguageCode(storage.selectedTitleLanguage) ||
+        languageDefaults.getSupportedLanguageCode(storage.selectedLanguage);
+      const supportedExplicitLanguage =
+        languageDefaults.getSupportedLanguageCode(explicitLanguage);
+      if (supportedExplicitLanguage) return supportedExplicitLanguage;
+    }
+
+    const defaultLanguage = languageDefaults.getDefaultListingLanguageInfo();
+    return defaultLanguage.code || "en";
+  }
+
+  function getLimitFollowupCopy(languageCode) {
+    const supportedLanguage =
+      languageDefaults.getSupportedLanguageCode(languageCode) || "en";
+    return LIMIT_FOLLOWUP_COPY[supportedLanguage] || LIMIT_FOLLOWUP_COPY.en;
+  }
+
+  async function resolvePreferredUiLanguageContext() {
+    try {
+      const storage = await chrome.storage.local.get([
+        "selectedLanguage",
+        "selectedTitleLanguage",
+        "selectedDescriptionLanguage",
+        LANGUAGE_PREFERENCE_TOUCHED_KEY,
+      ]);
+      const languageCode = resolvePreferredUiLanguageCode(storage);
+      return {
+        languageCode,
+        copy: getLimitFollowupCopy(languageCode),
+        hasExplicitLanguagePreference: Boolean(
+          storage[LANGUAGE_PREFERENCE_TOUCHED_KEY],
+        ),
+      };
+    } catch (error) {
+      return {
+        languageCode: "en",
+        copy: LIMIT_FOLLOWUP_COPY.en,
+        hasExplicitLanguagePreference: false,
+      };
+    }
   }
 
   function markInlineLanguageHintDone() {
@@ -5822,6 +6179,7 @@
         field.classList.remove("open");
         chrome.storage.local.set({
           [storageKey]: lang.code,
+          [LANGUAGE_PREFERENCE_TOUCHED_KEY]: true,
         });
       });
       menu.appendChild(option);
@@ -6491,12 +6849,14 @@
     modal.style.bottom = "auto";
   }
 
-  function showLimitFollowupOfferModal(offer, anchorInput) {
+  function showLimitFollowupOfferModal(offer, anchorInput, copy) {
     document.getElementById(LIMIT_FOLLOWUP_MODAL_ID)?.remove();
     removeDescriptionApplyPrompt();
 
     const couponCode = offer.couponCode || "LISTFASTER20";
-    const discountLabel = offer.discountLabel || "20% off your first month";
+    const modalCopy = copy || LIMIT_FOLLOWUP_COPY.en;
+    const discountLabel =
+      modalCopy.discount || offer.discountLabel || LIMIT_FOLLOWUP_COPY.en.discount;
     const logoUrl = chrome.runtime.getURL("icons/icon48.png");
 
     return new Promise((resolve) => {
@@ -6514,32 +6874,32 @@
                 <img class="quickvint-limit-logo" src="${escapeHtml(logoUrl)}" alt="" />
                 <div>
                   <div class="quickvint-limit-brand-name">AutoLister AI</div>
-                  <div class="quickvint-limit-brand-sub">Vinted listing assistant</div>
+                  <div class="quickvint-limit-brand-sub">${escapeHtml(modalCopy.brandSub)}</div>
                 </div>
               </div>
-              <button type="button" class="quickvint-limit-close" aria-label="Close offer">&times;</button>
+              <button type="button" class="quickvint-limit-close" aria-label="${escapeHtml(modalCopy.close)}">&times;</button>
             </div>
             <div class="quickvint-limit-top">
-              <span class="quickvint-limit-kicker">5 free listings used</span>
+              <span class="quickvint-limit-kicker">${escapeHtml(modalCopy.kicker)}</span>
             </div>
-            <h2 class="quickvint-limit-title" id="quickvint-limit-title">Keep listing without waiting</h2>
-            <p class="quickvint-limit-copy">Your free trial is complete. This offer keeps your next listings moving today.</p>
+            <h2 class="quickvint-limit-title" id="quickvint-limit-title">${escapeHtml(modalCopy.title)}</h2>
+            <p class="quickvint-limit-copy">${escapeHtml(modalCopy.body)}</p>
             <div class="quickvint-limit-offer" aria-label="${escapeHtml(discountLabel)}">
               <div>
                 <div class="quickvint-limit-offer-main">${escapeHtml(discountLabel)}</div>
-                <div class="quickvint-limit-offer-sub">Use at checkout</div>
+                <div class="quickvint-limit-offer-sub">${escapeHtml(modalCopy.offerSub)}</div>
               </div>
-              <button type="button" class="quickvint-limit-code" aria-label="Copy coupon code ${escapeHtml(couponCode)}">${escapeHtml(couponCode)}</button>
+              <button type="button" class="quickvint-limit-code" aria-label="${escapeHtml(modalCopy.copyCoupon)} ${escapeHtml(couponCode)}">${escapeHtml(couponCode)}</button>
             </div>
             <ul class="quickvint-limit-points">
-              <li><span class="quickvint-limit-check">✓</span><span>No Vinted account connection needed</span></li>
-              <li><span class="quickvint-limit-check">✓</span><span>Secure Stripe checkout. Cancel anytime.</span></li>
+              <li><span class="quickvint-limit-check">✓</span><span>${escapeHtml(modalCopy.noAccount)}</span></li>
+              <li><span class="quickvint-limit-check">✓</span><span>${escapeHtml(modalCopy.stripe)}</span></li>
             </ul>
             <div class="quickvint-limit-actions">
-              <button type="button" class="quickvint-limit-primary">View plans & use offer</button>
-              <button type="button" class="quickvint-limit-secondary">Maybe later</button>
+              <button type="button" class="quickvint-limit-primary">${escapeHtml(modalCopy.primary)}</button>
+              <button type="button" class="quickvint-limit-secondary">${escapeHtml(modalCopy.secondary)}</button>
             </div>
-            <button type="button" class="quickvint-limit-feedback">🎁 Share feedback for free listings</button>
+            <button type="button" class="quickvint-limit-feedback">${escapeHtml(modalCopy.feedback)}</button>
           </div>
         </div>
       `;
@@ -6574,7 +6934,7 @@
           const previousText = button.textContent;
           try {
             await navigator.clipboard?.writeText(couponCode);
-            button.textContent = "Copied";
+            button.textContent = modalCopy.copied;
             trackGrowthEvent("limit_followup_coupon_copied", {
               campaignKey: offer.campaignKey,
               couponCode,
@@ -6608,14 +6968,22 @@
     if (!anchorInput) return false;
     if (isListingDraftInProgress()) return false;
 
+    const languageContext = await resolvePreferredUiLanguageContext();
     await markOfferShownLocally(offer);
     trackGrowthEvent("limit_followup_offer_shown", {
       campaignKey: offer.campaignKey,
       couponCode: offer.couponCode,
       limitHitAt: offer.limitHitAt,
+      languageCode: languageContext.languageCode,
+      hasExplicitLanguagePreference:
+        languageContext.hasExplicitLanguagePreference,
     });
 
-    const choice = await showLimitFollowupOfferModal(offer, anchorInput);
+    const choice = await showLimitFollowupOfferModal(
+      offer,
+      anchorInput,
+      languageContext.copy,
+    );
 
     if (choice === "feedback") {
       await dismissOfferLocally(offer);
@@ -6628,7 +6996,7 @@
       openReportModal({
         source: "limit_followup_offer",
         category: "idea",
-        placeholder: "What would make AutoLister worth upgrading for you?",
+        placeholder: languageContext.copy.feedbackPlaceholder,
       });
     }
 
@@ -6834,6 +7202,7 @@
         }
         chrome.storage.local.set({
           [storageKey]: e.target.value,
+          [LANGUAGE_PREFERENCE_TOUCHED_KEY]: true,
         });
       });
     };

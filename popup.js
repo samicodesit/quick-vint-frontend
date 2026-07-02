@@ -21,6 +21,7 @@ document.addEventListener("DOMContentLoaded", () => {
   const MAGIC_LINK_PENDING_KEY = "quickvintMagicLinkPending";
   const MAGIC_LINK_PENDING_MAX_AGE_MS = 15 * 60 * 1000;
   const MAGIC_LINK_RESEND_COOLDOWN_MS = 60 * 1000;
+  const LANGUAGE_PREFERENCE_TOUCHED_KEY = "quickvintLanguagePreferenceTouched";
   const languageDefaults = window.AutoListerLanguageDefaults;
 
   const TIER_DISPLAY_NAMES = {
@@ -1105,6 +1106,7 @@ document.addEventListener("DOMContentLoaded", () => {
           toggleDropdown(false);
           chrome.storage.local.set({
             [storageKey]: li.dataset.value,
+            [LANGUAGE_PREFERENCE_TOUCHED_KEY]: true,
           });
         });
       });

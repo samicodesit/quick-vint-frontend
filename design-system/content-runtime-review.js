@@ -174,6 +174,50 @@
       },
     },
     {
+      id: "limit-followup-offer-fr",
+      title: "Localized free-limit offer",
+      note: "Explicit French language choice localizes the same offer card.",
+      height: 640,
+      auth: true,
+      action: "none",
+      hasImages: false,
+      selectedLanguage: "fr",
+      selectedTitleLanguage: "fr",
+      selectedDescriptionLanguage: "fr",
+      languagePreferenceTouched: true,
+      userProfile: {
+        subscription_status: "free",
+        subscription_tier: "free",
+        api_calls_this_month: 5,
+        free_lifetime_generations_used: 5,
+        pack_credits: 0,
+      },
+      limitFollowupOffer: {
+        eligible: true,
+        campaignKey: "limit_followup_offer_v1",
+        couponCode: "LISTFASTER20",
+        discountLabel: "20% off your first month",
+        pricingUrl: "https://autolister.app/pricing?offer=preview",
+        limitHitAt: "2026-07-02T10:00:00.000Z",
+      },
+      verify(doc) {
+        const modal = doc.getElementById("quickvint-limit-followup-modal");
+        const text = modal?.textContent || "";
+        return (
+          /AutoLister AI/.test(text) &&
+          /Assistant d'annonces Vinted/.test(text) &&
+          /5 annonces gratuites utilisées/.test(text) &&
+          /Continuez à publier sans attendre/.test(text) &&
+          /LISTFASTER20/.test(text) &&
+          /-20 % sur votre premier mois/.test(text) &&
+          /Aucune connexion à votre compte Vinted/.test(text) &&
+          /Voir les abonnements/.test(text) &&
+          /Plus tard/.test(text) &&
+          /🎁 Donner un avis pour des annonces gratuites/.test(text)
+        );
+      },
+    },
+    {
       id: "missing-photo",
       title: "Missing photo error",
       note: "Real validation toast before the API is called.",
@@ -542,6 +586,7 @@
           scenario.id === "emoji-retry-prompt" ||
           scenario.id === "generation-offer-prompt" ||
           scenario.id === "limit-followup-offer" ||
+          scenario.id === "limit-followup-offer-fr" ||
           scenario.id === "success";
         return `
           <article class="ds-panel${wide ? " wide" : ""}">
@@ -590,9 +635,11 @@
         pack_credits: 0,
         ...(scenario.userProfile || {}),
       },
-      selectedLanguage: "en",
-      selectedTitleLanguage: "en",
-      selectedDescriptionLanguage: "nl",
+      selectedLanguage: scenario.selectedLanguage || "en",
+      selectedTitleLanguage: scenario.selectedTitleLanguage || "en",
+      selectedDescriptionLanguage: scenario.selectedDescriptionLanguage || "nl",
+      quickvintLanguagePreferenceTouched:
+        scenario.languagePreferenceTouched === true,
       tone: "standard",
       useEmojis: scenario.useEmojis === true,
       useBulletPoints: true,
