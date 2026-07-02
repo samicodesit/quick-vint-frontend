@@ -1077,6 +1077,11 @@
     return compressedImages;
   }
 
+  if (window.__AUTOLISTER_TEST_HOOKS__) {
+    window.__AUTOLISTER_TEST_HOOKS__.compressImage = compressImage;
+    window.__AUTOLISTER_TEST_HOOKS__.compressImages = compressImages;
+  }
+
   function getUploadedImageUrls() {
     const grid = document.querySelector(SELECTORS.mediaGrid);
     const root = grid || document;

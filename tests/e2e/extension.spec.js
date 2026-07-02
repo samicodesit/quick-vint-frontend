@@ -5,6 +5,8 @@ const { test, expect, chromium } = require("@playwright/test");
 const extensionPath = path.resolve(__dirname, "../..");
 const languageDefaultsPath = path.join(extensionPath, "language-defaults.js");
 const contentScriptPath = path.join(extensionPath, "content.js");
+const tinyPngDataUrl =
+  "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII=";
 const listingFixture = fs.readFileSync(
   path.resolve(__dirname, "../fixtures/vinted-listing.html"),
   "utf8",
@@ -152,6 +154,33 @@ async function openContentHarness(page, capacityResponse = null) {
   await expect(page.locator("#quickvint-hashtags-toggle")).toBeVisible();
 }
 
+async function openImageCompressionHarness(page, proxyResponse) {
+  await page.setContent(listingFixture, { waitUntil: "domcontentloaded" });
+  await installChromeHarness(page);
+  await page.evaluate((response) => {
+    const originalSendMessage = window.chrome.runtime.sendMessage;
+    window.__AUTOLISTER_TEST_HOOKS__ = {};
+    window.__proxyFetchMessages = [];
+    window.chrome.runtime.sendMessage = (message, callback) => {
+      if (message?.type === "PROXY_FETCH") {
+        window.__proxyFetchMessages.push(message);
+        setTimeout(() => callback?.(response), 0);
+        return;
+      }
+      originalSendMessage(message, callback);
+    };
+  }, proxyResponse);
+  await page.addScriptTag({ path: languageDefaultsPath });
+  await page.addScriptTag({ path: contentScriptPath });
+  await expect
+    .poll(() =>
+      page.evaluate(
+        () => typeof window.__AUTOLISTER_TEST_HOOKS__.compressImages,
+      ),
+    )
+    .toBe("function");
+}
+
 test.describe("AutoLister extension smoke flows", () => {
   test("loads the MV3 extension service worker and manifest", async () => {
     const { context, serviceWorker } = await loadExtension();
@@ -198,6 +227,66 @@ test.describe("AutoLister extension smoke flows", () => {
     expect(requestBodies[0].useEmojis).toBe(true);
     expect(requestBodies[0].descriptionLength).toBe("long");
     expect(requestBodies[0].useHashtags).toBe(true);
+  });
+
+  test("compresses remote Vinted images through the background proxy", async ({
+    page,
+  }) => {
+    await openImageCompressionHarness(page, {
+      ok: true,
+      data: tinyPngDataUrl,
+    });
+
+    const result = await page.evaluate(async () =>
+      window.__AUTOLISTER_TEST_HOOKS__.compressImages([
+        "https://images1.vinted.net/t/example/f800/item.webp?s=test",
+      ]),
+    );
+    const proxyFetchMessages = await page.evaluate(
+      () => window.__proxyFetchMessages,
+    );
+
+    expect(result).toHaveLength(1);
+    expect(result[0]).toMatch(/^data:image\/jpeg;base64,/);
+    expect(proxyFetchMessages).toEqual([
+      {
+        type: "PROXY_FETCH",
+        url: "https://images1.vinted.net/t/example/f800/item.webp?s=test",
+        options: { method: "GET" },
+        isBlob: true,
+      },
+    ]);
+  });
+
+  test("falls back to original remote image URLs when proxy compression fails", async ({
+    page,
+  }) => {
+    const imageUrls = [
+      "https://images1.vinted.net/t/example-1/f800/item.webp?s=test",
+      "https://images1.vinted.net/t/example-2/f800/item.webp?s=test",
+    ];
+    await openImageCompressionHarness(page, {
+      ok: false,
+      error: "HTTP 403",
+    });
+
+    const result = await page.evaluate(async (urls) => {
+      const warnings = [];
+      const originalWarn = console.warn;
+      console.warn = (...args) => warnings.push(args.join(" "));
+      try {
+        const images =
+          await window.__AUTOLISTER_TEST_HOOKS__.compressImages(urls);
+        return { images, warnings };
+      } finally {
+        console.warn = originalWarn;
+      }
+    }, imageUrls);
+
+    expect(result.images).toEqual(imageUrls);
+    expect(result.warnings).toEqual([
+      "AutoLister AI: 2/2 image(s) could not be compressed; using original URL fallback.",
+    ]);
   });
 
   test("saves description length preference and sends it with generation requests", async ({
