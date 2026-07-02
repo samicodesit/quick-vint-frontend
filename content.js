@@ -6606,6 +6606,7 @@
 
     const anchorInput = getPromptAnchorInput();
     if (!anchorInput) return false;
+    if (isListingDraftInProgress()) return false;
 
     await markOfferShownLocally(offer);
     trackGrowthEvent("limit_followup_offer_shown", {
@@ -6653,6 +6654,16 @@
     }
 
     return true;
+  }
+
+  function isListingDraftInProgress() {
+    const titleInput = document.querySelector(SELECTORS.title);
+    const descriptionInput = document.querySelector(SELECTORS.description);
+    return Boolean(
+      titleInput?.value?.trim() ||
+        descriptionInput?.value?.trim() ||
+        getVisibleUploadedPhotoCount() > 0,
+    );
   }
 
   function maybeShowPendingPrompts() {

@@ -132,7 +132,7 @@
       height: 640,
       auth: true,
       action: "none",
-      hasImages: true,
+      hasImages: false,
       userProfile: {
         subscription_status: "free",
         subscription_tier: "free",
