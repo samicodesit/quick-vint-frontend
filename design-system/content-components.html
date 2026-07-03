@@ -13,7 +13,7 @@
       --muted: #667085;
       --line: #e5e7eb;
       --panel: #ffffff;
-      --preview-frame-width: 1280px;
+      --preview-frame-width: 2048px;
     }
 
     * {
@@ -29,7 +29,7 @@
     }
 
     .ds-shell {
-      width: min(1500px, calc(100vw - 48px));
+      width: min(var(--preview-frame-width), calc(100vw - 48px));
       margin: 0 auto;
       padding: 28px 0 48px;
     }
@@ -240,7 +240,7 @@
     <section class="ds-grid" id="previewGrid"></section>
   </main>
 
-  <script src="./content-runtime-review.js?v=20260703-preview-layout-v2"></script>
+  <script src="./content-runtime-review.js?v=20260703-vinted-sell-layout"></script>
 </body>
 
 </html>

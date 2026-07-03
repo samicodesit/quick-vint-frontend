@@ -584,7 +584,7 @@
   }
 
   function getScenarioFrameHeight(scenario) {
-    return Math.max(scenario.height || 0, 760);
+    return Math.max(scenario.height || 0, 1180);
   }
 
   function renderPanels() {
@@ -653,56 +653,91 @@
     const safeInitialDescription = escapeTextAreaValue(initialDescription);
     const media = hasImages
       ? `
-        <section data-testid="media-upload-grid" class="mock-media-grid">
-          <div class="photo-box">
-            <div data-testid="image-wrapper-0">
-              <img class="web_ui__Image__content" src="${imageDataUrl}" alt="Uploaded photo 1" />
+        <div class="mock-upload-dropzone">
+          <section data-testid="media-upload-grid" class="mock-media-grid">
+            <div class="photo-box">
+              <div data-testid="image-wrapper-0">
+                <img class="web_ui__Image__content" src="${imageDataUrl}" alt="Uploaded photo 1" />
+              </div>
             </div>
-          </div>
-          <div class="photo-box">
-            <div data-testid="image-wrapper-1">
-              <img class="web_ui__Image__content" src="${imageDataUrl}" alt="Uploaded photo 2" />
+            <div class="photo-box">
+              <div data-testid="image-wrapper-1">
+                <img class="web_ui__Image__content" src="${imageDataUrl}" alt="Uploaded photo 2" />
+              </div>
             </div>
-          </div>
-        </section>
+          </section>
+        </div>
       `
       : `
-        <section data-testid="media-upload-grid" class="mock-media-grid empty">
-          <div class="mock-empty-photo">No photos</div>
-        </section>
+        <div class="mock-upload-dropzone">
+          <section data-testid="media-upload-grid" class="mock-media-grid empty">
+            <button class="mock-upload-button" type="button">+ Upload photos</button>
+          </section>
+        </div>
       `;
 
     return `
       <main class="mock-page">
-        <div class="mock-topbar">
-          <div class="mock-brand">Vinted</div>
-          <div class="mock-search"></div>
-          <div class="mock-pill"></div>
-        </div>
-        <div class="mock-layout">
-          <section class="mock-card" aria-label="Vinted item listing form">
-            <div class="mock-card-title">Vinted item listing</div>
-            ${media}
-            <label class="mock-field">
-              <div data-testid="title--title" class="mock-field-title">Title</div>
-              <div class="mock-input-shell">
-                <input data-testid="title--input" class="mock-input" value="" placeholder="Item title" />
-              </div>
-            </label>
-            <label class="mock-field">
-              <div data-testid="description--title" class="mock-field-title">Description</div>
-              <div class="mock-input-shell">
-                <textarea data-testid="description--input" class="mock-textarea" placeholder="Describe your item">${safeInitialDescription}</textarea>
-              </div>
-            </label>
-          </section>
-          <aside class="mock-side-rail" aria-hidden="true">
-            <div class="mock-side-card">
-              <div class="mock-side-line wide"></div>
-              <div class="mock-side-line"></div>
-              <div class="mock-side-line short"></div>
+        <header class="mock-vinted-header" aria-hidden="true">
+          <div class="mock-vinted-inner">
+            <div class="mock-brand">Vinted</div>
+            <div class="mock-catalogue">Catalogue</div>
+            <div class="mock-search">Search for items</div>
+            <div class="mock-header-icons">
+              <span></span><span></span><span></span>
+              <div class="mock-avatar"></div>
+              <button type="button">Sell now</button>
+              <span>EN</span>
             </div>
-          </aside>
+          </div>
+          <nav class="mock-vinted-cats">
+            <span>Women</span><span>Men</span><span>Designer</span><span>Kids</span>
+            <span>Home</span><span>Electronics</span><span>Books & Media</span>
+            <span>Hobbies & collectibles</span><span>Sports</span>
+          </nav>
+        </header>
+
+        <div class="mock-sell-page">
+          <h1 class="mock-page-title">Sell an item</h1>
+
+          <section class="mock-section">
+            <h2 class="mock-section-title">Photos</h2>
+            ${media}
+          </section>
+
+          <section class="mock-section">
+            <h2 class="mock-section-title">About your item</h2>
+            <div class="mock-card" aria-label="Vinted item listing form">
+              <label class="mock-field mock-field-title-row">
+                <div data-testid="title--title" class="mock-field-title">Title</div>
+                <div class="mock-input-shell">
+                  <input data-testid="title--input" class="mock-input" value="" placeholder="Tell buyers what you're selling" />
+                </div>
+              </label>
+              <label class="mock-field mock-field-description-row">
+                <div data-testid="description--title" class="mock-field-title">Description</div>
+                <div class="mock-input-shell">
+                  <textarea data-testid="description--input" class="mock-textarea" placeholder="Tell buyers more about it">${safeInitialDescription}</textarea>
+                </div>
+              </label>
+            </div>
+          </section>
+
+          <section class="mock-section">
+            <h2 class="mock-section-title">Item details</h2>
+            <div class="mock-card mock-simple-card" aria-hidden="true">
+              <div class="mock-row-label">Category</div>
+              <div class="mock-row-value">Select a category</div>
+            </div>
+          </section>
+
+          <section class="mock-section">
+            <h2 class="mock-section-title">Pricing</h2>
+            <div class="mock-card mock-simple-card" aria-hidden="true">
+              <div class="mock-row-label">Price</div>
+              <div class="mock-row-value">€0.00</div>
+            </div>
+          </section>
         </div>
       </main>
     `;
@@ -722,118 +757,160 @@
     html, body {
       margin: 0;
       min-height: 100%;
-      overflow: hidden;
-      background: #f3f6fb;
-      color: #111827;
+      overflow: auto;
+      background: #ffffff;
+      color: #333333;
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
       -webkit-font-smoothing: antialiased;
     }
     .mock-page {
       min-height: ${frameHeight}px;
-      padding: 24px 28px 140px;
-      background:
-        linear-gradient(90deg, rgba(226, 232, 240, 0.74) 1px, transparent 1px),
-        linear-gradient(rgba(226, 232, 240, 0.74) 1px, transparent 1px),
-        #f3f6fb;
-      background-size: 24px 24px;
+      padding: 0 0 140px;
+      background: #ffffff;
     }
-    .mock-topbar {
+    .mock-vinted-header {
+      border-bottom: 1px solid #e5e5e5;
+      background: #ffffff;
+    }
+    .mock-vinted-inner {
       display: grid;
-      grid-template-columns: 130px minmax(240px, 1fr) 112px;
+      grid-template-columns: 96px 112px minmax(360px, 1fr) auto;
       align-items: center;
-      gap: 18px;
-      width: min(1280px, calc(100% - 8px));
-      height: 52px;
-      margin: 0 auto 28px;
-      padding: 0 18px;
-      border: 1px solid #e2e8f0;
-      border-radius: 8px;
-      background: rgba(255, 255, 255, 0.92);
-      box-shadow: 0 8px 22px rgba(15, 23, 42, 0.05);
-    }
-    .mock-brand {
-      color: #111827;
-      font-size: 15px;
-      font-weight: 850;
-    }
-    .mock-search,
-    .mock-pill,
-    .mock-side-line {
-      border-radius: 999px;
-      background: #e8edf5;
-    }
-    .mock-search {
-      height: 30px;
-    }
-    .mock-pill {
-      justify-self: end;
-      width: 92px;
-      height: 30px;
-      background: #d8f3ea;
-    }
-    .mock-layout {
-      display: grid;
-      grid-template-columns: minmax(520px, 620px) minmax(430px, 1fr);
-      align-items: start;
-      gap: 28px;
-      width: min(1280px, calc(100% - 8px));
+      gap: 10px;
+      width: 1420px;
+      height: 48px;
       margin: 0 auto;
     }
-    .mock-card {
-      padding: 28px;
-      border: 1px solid #e5e7eb;
-      border-radius: 8px;
-      background: #ffffff;
-      box-shadow: 0 10px 26px rgba(15, 23, 42, 0.07);
+    .mock-brand {
+      color: #007782;
+      font-size: 24px;
+      font-weight: 900;
+      font-style: italic;
+      letter-spacing: -0.02em;
     }
-    .mock-card-title {
-      margin-bottom: 18px;
-      color: #111827;
-      font-size: 16px;
+    .mock-catalogue,
+    .mock-search {
+      height: 34px;
+      display: flex;
+      align-items: center;
+      background: #f2f5f5;
+      color: #5f6b6d;
+      font-size: 14px;
+    }
+    .mock-catalogue {
+      justify-content: center;
+      border-radius: 4px 0 0 4px;
+      border-right: 1px solid #d8e0e1;
+    }
+    .mock-search {
+      padding: 0 14px;
+      border-radius: 0 4px 4px 0;
+    }
+    .mock-header-icons {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      color: #6b7280;
+      font-size: 13px;
+    }
+    .mock-header-icons span {
+      width: 18px;
+      height: 18px;
+      border: 2px solid #7b8789;
+      border-radius: 999px;
+      display: inline-block;
+    }
+    .mock-header-icons span:last-child {
+      width: auto;
+      height: auto;
+      border: 0;
+      border-radius: 0;
+      color: #374151;
+      font-weight: 700;
+    }
+    .mock-avatar {
+      width: 28px;
+      height: 28px;
+      border-radius: 999px;
+      background: linear-gradient(135deg, #1f2937, #9ca3af);
+    }
+    .mock-header-icons button {
+      height: 30px;
+      padding: 0 14px;
+      border: 0;
+      border-radius: 4px;
+      background: #007782;
+      color: #ffffff;
+      font: inherit;
       font-weight: 800;
     }
-    .mock-side-rail {
-      min-height: 560px;
-      padding: 0 6px;
+    .mock-vinted-cats {
+      width: 1420px;
+      margin: 0 auto;
+      height: 42px;
+      display: flex;
+      align-items: center;
+      gap: 30px;
+      color: #5f6368;
+      font-size: 14px;
+      white-space: nowrap;
     }
-    .mock-side-card {
-      width: min(360px, 100%);
-      height: 180px;
-      margin-left: auto;
+    .mock-sell-page {
+      width: 890px;
+      margin-left: 442px;
+      padding-top: 34px;
+    }
+    .mock-page-title {
+      margin: 0 0 28px;
+      color: #111827;
+      font-size: 24px;
+      font-weight: 760;
+      line-height: 1.2;
+    }
+    .mock-section {
+      margin-top: 28px;
+    }
+    .mock-section-title {
+      margin: 0 0 14px;
+      color: #111827;
+      font-size: 18px;
+      font-weight: 760;
+      line-height: 1.25;
+    }
+    .mock-upload-dropzone,
+    .mock-card {
+      border: 1px solid #dddddd;
+      border-radius: 6px;
+      background: #ffffff;
+    }
+    .mock-upload-dropzone {
+      height: 218px;
       padding: 22px;
-      border: 1px solid #e2e8f0;
-      border-radius: 8px;
-      background: rgba(255, 255, 255, 0.7);
-    }
-    .mock-side-line {
-      height: 12px;
-      margin-bottom: 14px;
-    }
-    .mock-side-line.wide {
-      width: 82%;
-    }
-    .mock-side-line.short {
-      width: 48%;
     }
     .mock-media-grid {
       display: grid;
-      grid-template-columns: repeat(4, 88px);
-      gap: 12px;
-      margin-bottom: 22px;
+      grid-template-columns: repeat(5, 92px);
+      align-content: start;
+      gap: 14px;
+      width: 100%;
+      height: 100%;
+      padding: 18px;
+      border: 1px dashed #b8c5c7;
+      border-radius: 4px;
     }
-    .photo-box,
-    .mock-empty-photo {
-      width: 88px;
-      height: 88px;
+    .mock-media-grid.empty {
       display: grid;
       place-items: center;
-      border: 1px solid #dbe3f0;
-      border-radius: 8px;
-      background: #f1f5f9;
+    }
+    .photo-box {
+      width: 92px;
+      height: 92px;
+      display: grid;
+      place-items: center;
+      border: 1px solid #d9e4e6;
+      border-radius: 6px;
+      background: #f2f7fb;
       overflow: hidden;
-      color: #94a3b8;
-      font-size: 11px;
-      font-weight: 700;
     }
     .photo-box img {
       width: 100%;
@@ -841,74 +918,88 @@
       object-fit: cover;
       display: block;
     }
+    .mock-upload-button {
+      min-height: 40px;
+      padding: 0 20px;
+      border: 1px solid #007782;
+      border-radius: 4px;
+      background: #ffffff;
+      color: #007782;
+      font: inherit;
+      font-size: 15px;
+      font-weight: 760;
+    }
+    .mock-card {
+      overflow: hidden;
+    }
     .mock-field {
-      display: block;
-      margin-top: 20px;
+      display: grid;
+      grid-template-columns: 375px minmax(0, 1fr);
+      column-gap: 48px;
+      align-items: start;
+      min-height: 204px;
+      padding: 24px;
+      margin: 0;
+    }
+    .mock-field + .mock-field {
+      border-top: 1px solid #dddddd;
     }
     .mock-field-title {
-      margin-bottom: 8px;
-      color: #334155;
-      font-size: 13px;
+      color: #111827;
+      font-size: 16px;
       font-weight: 760;
+      line-height: 1.35;
+    }
+    .mock-input-shell {
+      min-width: 0;
     }
     .mock-input,
     .mock-textarea {
       width: 100%;
-      border: 1px solid #cbd5e1;
-      border-radius: 8px;
+      border: 0;
+      border-bottom: 1px solid #e5e5e5;
+      border-radius: 0;
       background: #ffffff;
       color: #111827;
       font: inherit;
-      font-size: 14px;
+      font-size: 16px;
       outline: none;
     }
     .mock-input {
-      height: 48px;
-      padding: 0 14px;
+      height: 42px;
+      padding: 0;
     }
     .mock-textarea {
-      min-height: 142px;
-      padding: 12px 14px;
+      min-height: 118px;
+      padding: 12px 0 0;
       resize: none;
     }
-    @media (max-width: 1180px) {
-      .mock-page { padding: 24px 20px 120px; }
-      .mock-topbar,
-      .mock-layout {
-        width: 100%;
-      }
-      .mock-layout {
-        grid-template-columns: minmax(500px, 560px) minmax(420px, 1fr);
-        gap: 20px;
-      }
-      .mock-side-card {
-        display: none;
-      }
+    .mock-field > div[style*="margin-top"] {
+      grid-column: 2;
+      justify-self: end;
+      width: 100%;
+      max-width: 430px;
     }
-    @media (max-width: 980px) {
-      .mock-topbar {
-        grid-template-columns: 120px minmax(160px, 1fr);
-      }
-      .mock-pill {
-        display: none;
-      }
-      .mock-layout {
-        grid-template-columns: 1fr;
-      }
-      .mock-side-rail {
-        display: none;
-      }
+    .mock-simple-card {
+      display: grid;
+      grid-template-columns: 375px minmax(0, 1fr);
+      column-gap: 48px;
+      align-items: center;
+      min-height: 70px;
+      padding: 0 24px;
     }
-    @media (max-width: 560px) {
-      .mock-page { padding: 12px; }
-      .mock-topbar { display: none; }
-      .mock-card { padding: 14px; }
-      .mock-media-grid { grid-template-columns: repeat(2, 70px); }
-      .photo-box,
-      .mock-empty-photo {
-        width: 70px;
-        height: 70px;
-      }
+    .mock-row-label {
+      color: #111827;
+      font-size: 16px;
+      font-weight: 760;
+    }
+    .mock-row-value {
+      height: 42px;
+      display: flex;
+      align-items: center;
+      border-bottom: 1px solid #e5e5e5;
+      color: #8a8f98;
+      font-size: 16px;
     }
   </style>
 </head>
