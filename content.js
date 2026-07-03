@@ -32,8 +32,6 @@
   const BATCH_UPLOAD_STALE_MS = 15000;
   const BATCH_UPLOAD_IDLE_TIMEOUT_MS = 5 * 60 * 1000;
   const BATCH_UPLOAD_WAIT_TIMEOUT_MS = 60000;
-  const MEASUREMENT_ADVICE_HIDDEN_KEY = "quickvintHideMeasurementAdvice";
-  const MEASUREMENT_ADVICE_LAST_SHOWN_KEY = "quickvintMeasurementAdviceLastShown";
   const EMOJI_RETRY_PROMPT_HANDLED_KEY = "quickvintEmojiRetryPromptHandled";
   const INLINE_LANGUAGE_HINT_DONE_KEY = "quickvintInlineLanguageHintDone";
   const LANGUAGE_PREFERENCE_TOUCHED_KEY = "quickvintLanguagePreferenceTouched";
@@ -1022,28 +1020,6 @@
     }
   }
 
-  function getTodayKey() {
-    return new Date().toISOString().slice(0, 10);
-  }
-
-  async function shouldShowMeasurementAdvice() {
-    const {
-      [MEASUREMENT_ADVICE_HIDDEN_KEY]: hidden,
-      [MEASUREMENT_ADVICE_LAST_SHOWN_KEY]: lastShown,
-    } = await chrome.storage.local.get([
-      MEASUREMENT_ADVICE_HIDDEN_KEY,
-      MEASUREMENT_ADVICE_LAST_SHOWN_KEY,
-    ]);
-
-    return !hidden && lastShown !== getTodayKey();
-  }
-
-  async function markMeasurementAdviceShown() {
-    await chrome.storage.local.set({
-      [MEASUREMENT_ADVICE_LAST_SHOWN_KEY]: getTodayKey(),
-    });
-  }
-
   function createAnalyticsClientId() {
     if (crypto?.randomUUID) return crypto.randomUUID();
     return `cid_${Date.now()}_${Math.random().toString(36).slice(2)}`;
@@ -1154,27 +1130,6 @@
     if (!response.ok) {
       throw new Error("Report could not be sent.");
     }
-  }
-
-  function hideMeasurementAdviceForever() {
-    chrome.storage.local.set({
-      [MEASUREMENT_ADVICE_HIDDEN_KEY]: true,
-    });
-  }
-
-  async function maybeShowMeasurementAdvice(measurementAdvice) {
-    if (!measurementAdvice || !measurementAdvice.trim()) return;
-    if (!(await shouldShowMeasurementAdvice())) return;
-
-    await markMeasurementAdviceShown();
-    setTimeout(() => {
-      showToast(
-        "Tip: for clothing, adding simple measurements can reduce buyer questions.",
-        "info",
-        { text: "Don't show again", onClick: hideMeasurementAdviceForever },
-        false,
-      );
-    }, 300);
   }
 
   function escapeHtml(value) {
@@ -11134,10 +11089,6 @@
 
       if (manageButtonState) {
         setButtonSuccessState();
-      }
-
-      if (showMeasurementAdvice && measurementAdvice && measurementAdvice.trim()) {
-        await maybeShowMeasurementAdvice(measurementAdvice);
       }
 
       trackGrowthEvent("generate_success", {

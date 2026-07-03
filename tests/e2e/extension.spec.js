@@ -859,7 +859,7 @@ test.describe("AutoLister extension smoke flows", () => {
     expect(requestBodies[0].useEmojis).toBe(false);
   });
 
-  test("lets users permanently hide clothing measurement advice", async ({
+  test("does not show clothing measurement advice toast", async ({
     page,
   }) => {
     await page.route("https://autolister.app/api/generate", (route) =>
@@ -876,19 +876,9 @@ test.describe("AutoLister extension smoke flows", () => {
 
     await openContentHarness(page);
     await page.locator("#quickvint-gen-btn").click();
-
-    const toast = page.locator("#quickvint-toast.info");
-    await expect(toast).toBeVisible();
-    await expect(toast).toContainText(
-      "adding simple measurements can reduce buyer questions",
+    await expect(page.locator('[data-testid="title--input"]')).toHaveValue(
+      "Black Test Jacket",
     );
-
-    await page.locator("#quickvint-toast .toast-action-button").click();
-    await expect(toast).not.toBeVisible();
-
-    await page.waitForTimeout(2100);
-    await page.locator('[data-testid="description--input"]').fill("");
-    await page.locator("#quickvint-gen-btn").click();
     await page.waitForTimeout(700);
 
     await expect(page.locator("#quickvint-toast.info")).not.toBeVisible();

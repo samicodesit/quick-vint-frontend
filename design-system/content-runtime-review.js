@@ -905,7 +905,7 @@
           return new Response(JSON.stringify({
             title: "Vintage denim jacket",
             description: "Light blue denim jacket in good condition. Easy to style and ready for everyday wear.",
-            measurementAdvice: "Tip: add measurements if you want fewer buyer questions.",
+            measurementAdvice: "",
           }), {
             status: 200,
             headers: { "Content-Type": "application/json" },
