@@ -13,6 +13,7 @@
       --muted: #667085;
       --line: #e5e7eb;
       --panel: #ffffff;
+      --preview-frame-width: 1280px;
     }
 
     * {
@@ -78,8 +79,10 @@
 
     .ds-grid {
       display: grid;
-      grid-template-columns: 1fr;
+      grid-template-columns: minmax(var(--preview-frame-width), 1fr);
       gap: 18px;
+      overflow-x: auto;
+      padding-bottom: 8px;
     }
 
     .ds-panel {
@@ -97,10 +100,6 @@
 
     .ds-panel.needs-attention {
       border-color: #fecaca;
-    }
-
-    .ds-panel.wide {
-      grid-column: 1 / -1;
     }
 
     .ds-panel-head {
@@ -134,7 +133,7 @@
     .ds-stage {
       position: relative;
       min-height: 620px;
-      overflow: visible;
+      overflow: auto;
       border-radius: 8px;
       border: 1px solid #edf0f5;
       background: #f8fafc;
@@ -143,6 +142,7 @@
     .ds-frame {
       display: block;
       width: 100%;
+      min-width: var(--preview-frame-width);
       border: 0;
       background: #fff;
       border-radius: 8px;
@@ -243,7 +243,7 @@
     <section class="ds-grid" id="previewGrid"></section>
   </main>
 
-  <script src="./content-runtime-review.js?v=20260703-preview-layout"></script>
+  <script src="./content-runtime-review.js?v=20260703-preview-layout-v2"></script>
 </body>
 
 </html>

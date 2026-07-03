@@ -591,15 +591,8 @@
     const grid = document.getElementById("previewGrid");
     grid.innerHTML = scenarios
       .map((scenario) => {
-        const wide =
-          scenario.id === "signed-in" ||
-          scenario.id === "emoji-retry-prompt" ||
-          scenario.id === "generation-offer-prompt" ||
-          scenario.id === "limit-followup-offer" ||
-          scenario.id === "limit-followup-offer-fr" ||
-          scenario.id === "success";
         return `
-          <article class="ds-panel${wide ? " wide" : ""}">
+          <article class="ds-panel">
             <div class="ds-panel-head">
               <div>
                 <h2 class="ds-panel-title">${scenario.title}</h2>
@@ -717,7 +710,7 @@
 
   function frameHtml(scenario) {
     const storage = scenarioStorage(scenario);
-    const extensionAssetBaseUrl = new URL("/ui-components/", window.location.href).href;
+    const extensionAssetBaseUrl = new URL("../", window.location.href).href;
     const frameHeight = getScenarioFrameHeight(scenario);
     return `<!doctype html>
 <html lang="en">
