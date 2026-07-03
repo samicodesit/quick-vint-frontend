@@ -38,10 +38,15 @@
   const OFFER_DISMISSED_KEY_PREFIX = "quickvintOfferDismissed";
   const OFFER_LAST_SHOWN_KEY_PREFIX = "quickvintOfferLastShown";
   const OFFER_SHOW_COOLDOWN_MS = 7 * 24 * 60 * 60 * 1000;
+  const FREE_LIMIT_OFFER_COPY_KEY = "free_limit";
+  const STARTER_DAILY_LIMIT_OFFER_COPY_KEY = "starter_daily_limit";
   const FREE_LIFETIME_LIMIT = 5;
   const LIMIT_FOLLOWUP_COUPON_CODE = "LISTFASTER20";
   const LIMIT_FOLLOWUP_CLOSE_DELAY_MS = 10 * 1000;
+  const STARTER_DAILY_LIMIT_CLOSE_DELAY_MS = 650;
   const LIMIT_FOLLOWUP_RETURN_DELAY_MS = 4 * 1000;
+  const STARTER_DAILY_LIMIT_RETURN_DELAY_MS = 250;
+  const USER_USAGE_SNAPSHOT_STORAGE_KEY = "quickvintUserUsageSnapshot";
   const OPEN_SETTINGS_ON_NEXT_POPUP_KEY = "quickvintOpenSettingsOnNextPopup";
   const EMOJI_SEQUENCE_REGEX =
     /(?:[0-9#*]\uFE0F?\u20E3)|(?:[\u{1F1E6}-\u{1F1FF}]{2})|(?:\p{Emoji_Presentation}|\p{Emoji}\uFE0F)(?:\p{Emoji_Modifier})?(?:\u200D(?:\p{Emoji_Presentation}|\p{Emoji}\uFE0F)(?:\p{Emoji_Modifier})?)*/gu;
@@ -388,6 +393,394 @@
       feedbackPlaceholder: "Vad skulle göra AutoLister värt att uppgradera för dig?",
     },
   };
+  const LIMIT_FOLLOWUP_COPY_OVERRIDES = {
+    [STARTER_DAILY_LIMIT_OFFER_COPY_KEY]: {
+      en: {
+        kicker: "Starter daily limit reached",
+        title: "Need more listings today?",
+        body: "You hit today's Starter limit. Use this offer for Pro if you want to keep listing with higher daily limits.",
+        primary: "Upgrade to Pro & use offer",
+        feedback: "Tell us what limit you need",
+        feedbackPlaceholder: "What daily limit would fit the way you sell?",
+      },
+      fr: {
+        kicker: "Limite quotidienne Starter atteinte",
+        title: "Besoin de plus d'annonces aujourd'hui ?",
+        body: "Vous avez atteint la limite Starter du jour. Utilisez cette offre pour passer à Pro et continuer avec des limites plus hautes.",
+        primary: "Passer à Pro",
+        feedback: "Dites-nous la limite voulue",
+        feedbackPlaceholder: "Quelle limite quotidienne conviendrait à votre façon de vendre ?",
+      },
+      cz: {
+        kicker: "Denní limit Starter dosažen",
+        title: "Potřebujete dnes více inzerátů?",
+        body: "Dosáhli jste dnešního limitu Starter. Použijte tuto nabídku na Pro, pokud chcete pokračovat s vyššími denními limity.",
+        primary: "Přejít na Pro",
+        feedback: "Řekněte nám, jaký limit potřebujete",
+        feedbackPlaceholder: "Jaký denní limit by odpovídal vašemu prodeji?",
+      },
+      da: {
+        kicker: "Starter-dagsgrænse nået",
+        title: "Har du brug for flere annoncer i dag?",
+        body: "Du har ramt dagens Starter-grænse. Brug tilbuddet på Pro, hvis du vil fortsætte med højere dagsgrænser.",
+        primary: "Opgrader til Pro",
+        feedback: "Fortæl os hvilken grænse du har brug for",
+        feedbackPlaceholder: "Hvilken dagsgrænse passer til din måde at sælge på?",
+      },
+      nl: {
+        kicker: "Starter-daglimiet bereikt",
+        title: "Vandaag meer advertenties nodig?",
+        body: "Je hebt de Starter-limiet van vandaag bereikt. Gebruik deze aanbieding voor Pro als je door wilt met hogere daglimieten.",
+        primary: "Upgrade naar Pro",
+        feedback: "Vertel welke limiet je nodig hebt",
+        feedbackPlaceholder: "Welke daglimiet past bij hoe jij verkoopt?",
+      },
+      de: {
+        kicker: "Starter-Tageslimit erreicht",
+        title: "Heute mehr Angebote nötig?",
+        body: "Du hast das heutige Starter-Limit erreicht. Nutze dieses Angebot für Pro, wenn du mit höheren Tageslimits weitermachen möchtest.",
+        primary: "Auf Pro upgraden",
+        feedback: "Sag uns, welches Limit du brauchst",
+        feedbackPlaceholder: "Welches Tageslimit passt zu deiner Verkaufsweise?",
+      },
+      el: {
+        kicker: "Έφτασες το ημερήσιο όριο Starter",
+        title: "Χρειάζεσαι περισσότερες αγγελίες σήμερα;",
+        body: "Έφτασες το σημερινό όριο Starter. Χρησιμοποίησε την προσφορά για Pro αν θέλεις να συνεχίσεις με υψηλότερα ημερήσια όρια.",
+        primary: "Αναβάθμιση σε Pro",
+        feedback: "Πες μας τι όριο χρειάζεσαι",
+        feedbackPlaceholder: "Ποιο ημερήσιο όριο ταιριάζει στον τρόπο που πουλάς;",
+      },
+      hr: {
+        kicker: "Dosegnut dnevni limit Startera",
+        title: "Trebate više oglasa danas?",
+        body: "Dosegnuli ste današnji Starter limit. Iskoristite ponudu za Pro ako želite nastaviti s višim dnevnim limitima.",
+        primary: "Nadogradi na Pro",
+        feedback: "Recite nam koji limit trebate",
+        feedbackPlaceholder: "Koji bi dnevni limit odgovarao vašem načinu prodaje?",
+      },
+      fi: {
+        kicker: "Starterin päivärajasi täyttyi",
+        title: "Tarvitsetko lisää ilmoituksia tänään?",
+        body: "Tämän päivän Starter-raja tuli täyteen. Käytä tarjous Pro-pakettiin, jos haluat jatkaa suuremmilla päivärajolla.",
+        primary: "Päivitä Prohon",
+        feedback: "Kerro meille tarvitsemasi raja",
+        feedbackPlaceholder: "Mikä päiväraja sopisi tapaasi myydä?",
+      },
+      hu: {
+        kicker: "Elérted a Starter napi limitet",
+        title: "Ma még több hirdetés kell?",
+        body: "Elérted a mai Starter limitet. Használd ezt az ajánlatot Pro csomagra, ha magasabb napi limittel folytatnád.",
+        primary: "Váltás Pro csomagra",
+        feedback: "Mondd el, milyen limit kell",
+        feedbackPlaceholder: "Milyen napi limit illene az értékesítési szokásaidhoz?",
+      },
+      it: {
+        kicker: "Limite giornaliero Starter raggiunto",
+        title: "Ti servono altri annunci oggi?",
+        body: "Hai raggiunto il limite Starter di oggi. Usa questa offerta per Pro se vuoi continuare con limiti giornalieri più alti.",
+        primary: "Passa a Pro",
+        feedback: "Dicci quale limite ti serve",
+        feedbackPlaceholder: "Quale limite giornaliero si adatta al tuo modo di vendere?",
+      },
+      lt: {
+        kicker: "Starter dienos limitas pasiektas",
+        title: "Reikia daugiau skelbimų šiandien?",
+        body: "Pasiekėte šiandienos Starter limitą. Naudokite šį Pro pasiūlymą, jei norite tęsti su didesniais dienos limitais.",
+        primary: "Atnaujinti į Pro",
+        feedback: "Pasakykite, kokio limito reikia",
+        feedbackPlaceholder: "Koks dienos limitas tiktų jūsų pardavimo būdui?",
+      },
+      pl: {
+        kicker: "Dzienny limit Starter osiągnięty",
+        title: "Potrzebujesz dziś więcej ogłoszeń?",
+        body: "Osiągnięto dzisiejszy limit Starter. Użyj tej oferty na Pro, jeśli chcesz kontynuować z wyższymi limitami dziennymi.",
+        primary: "Przejdź na Pro",
+        feedback: "Powiedz, jakiego limitu potrzebujesz",
+        feedbackPlaceholder: "Jaki dzienny limit pasuje do Twojego sposobu sprzedaży?",
+      },
+      pt: {
+        kicker: "Limite diário Starter atingido",
+        title: "Precisa de mais anúncios hoje?",
+        body: "Atingiu o limite Starter de hoje. Use esta oferta para Pro se quiser continuar com limites diários mais altos.",
+        primary: "Mudar para Pro",
+        feedback: "Diga-nos o limite de que precisa",
+        feedbackPlaceholder: "Que limite diário combina com a forma como vende?",
+      },
+      ro: {
+        kicker: "Limita zilnică Starter atinsă",
+        title: "Ai nevoie de mai multe anunțuri azi?",
+        body: "Ai atins limita Starter de azi. Folosește această ofertă pentru Pro dacă vrei să continui cu limite zilnice mai mari.",
+        primary: "Treci la Pro",
+        feedback: "Spune-ne ce limită ai nevoie",
+        feedbackPlaceholder: "Ce limită zilnică se potrivește modului tău de vânzare?",
+      },
+      es: {
+        kicker: "Límite diario de Starter alcanzado",
+        title: "¿Necesitas más anuncios hoy?",
+        body: "Has alcanzado el límite Starter de hoy. Usa esta oferta para Pro si quieres seguir con límites diarios más altos.",
+        primary: "Pasar a Pro",
+        feedback: "Dinos qué límite necesitas",
+        feedbackPlaceholder: "¿Qué límite diario encaja con tu forma de vender?",
+      },
+      sk: {
+        kicker: "Denný limit Starter dosiahnutý",
+        title: "Potrebujete dnes viac inzerátov?",
+        body: "Dosiahli ste dnešný limit Starter. Použite túto ponuku na Pro, ak chcete pokračovať s vyššími dennými limitmi.",
+        primary: "Prejsť na Pro",
+        feedback: "Povedzte nám, aký limit potrebujete",
+        feedbackPlaceholder: "Aký denný limit by sedel vášmu predaju?",
+      },
+      sv: {
+        kicker: "Starter-dagsgräns nådd",
+        title: "Behöver du fler annonser idag?",
+        body: "Du har nått dagens Starter-gräns. Använd erbjudandet för Pro om du vill fortsätta med högre dagsgränser.",
+        primary: "Uppgradera till Pro",
+        feedback: "Berätta vilken gräns du behöver",
+        feedbackPlaceholder: "Vilken dagsgräns passar hur du säljer?",
+      },
+    },
+  };
+  const DESCRIPTION_FOOTER_COPY = {
+    en: {
+      title: "Saved note",
+      label: "Description note",
+      placeholder: "Smoke-free home. Happy to bundle items.",
+      bullets: [
+        "Appears on every future listing",
+        "Added before hashtags",
+        "No links or contact details",
+      ],
+      locked: "Available during the free trial and on Pro or Business.",
+      saved: "Saved note updated.",
+      cleared: "Saved note cleared.",
+      clear: "Clear",
+      cancel: "Cancel",
+      save: "Save",
+      close: "Close saved note form",
+    },
+    fr: {
+      title: "Note enregistrée",
+      label: "Note de description",
+      placeholder: "Maison non-fumeur. Regroupement possible.",
+      bullets: ["Ajoutée à chaque future annonce", "Placée avant les hashtags", "Pas de liens ni coordonnées"],
+      locked: "Disponible avec l'essai gratuit et les offres Pro ou Business.",
+      saved: "Note enregistrée.",
+      cleared: "Note supprimée.",
+      clear: "Effacer",
+      cancel: "Annuler",
+      save: "Enregistrer",
+      close: "Fermer la note enregistrée",
+    },
+    cz: {
+      title: "Uložená poznámka",
+      label: "Poznámka k popisu",
+      placeholder: "Nekuřácká domácnost. Ráda sloučím více věcí.",
+      bullets: ["Zobrazí se u každého dalšího inzerátu", "Přidá se před hashtagy", "Bez odkazů a kontaktních údajů"],
+      locked: "Dostupné ve zkušební verzi zdarma a v tarifech Pro nebo Business.",
+      saved: "Poznámka uložena.",
+      cleared: "Poznámka vymazána.",
+      clear: "Vymazat",
+      cancel: "Zrušit",
+      save: "Uložit",
+      close: "Zavřít uloženou poznámku",
+    },
+    da: {
+      title: "Gemt note",
+      label: "Note til beskrivelse",
+      placeholder: "Røgfrit hjem. Samler gerne varer.",
+      bullets: ["Vises på alle fremtidige annoncer", "Tilføjes før hashtags", "Ingen links eller kontaktoplysninger"],
+      locked: "Tilgængelig i gratis prøveperiode og på Pro eller Business.",
+      saved: "Note gemt.",
+      cleared: "Note ryddet.",
+      clear: "Ryd",
+      cancel: "Annuller",
+      save: "Gem",
+      close: "Luk gemt note",
+    },
+    nl: {
+      title: "Opgeslagen notitie",
+      label: "Notitie voor beschrijving",
+      placeholder: "Rookvrij huis. Bundelen is mogelijk.",
+      bullets: ["Verschijnt bij elke toekomstige advertentie", "Komt voor de hashtags", "Geen links of contactgegevens"],
+      locked: "Beschikbaar tijdens de gratis proefperiode en met Pro of Business.",
+      saved: "Notitie opgeslagen.",
+      cleared: "Notitie gewist.",
+      clear: "Wissen",
+      cancel: "Annuleren",
+      save: "Opslaan",
+      close: "Opgeslagen notitie sluiten",
+    },
+    de: {
+      title: "Gespeicherte Notiz",
+      label: "Notiz für Beschreibung",
+      placeholder: "Rauchfreier Haushalt. Kombiversand möglich.",
+      bullets: ["Erscheint bei jedem künftigen Angebot", "Wird vor Hashtags eingefügt", "Keine Links oder Kontaktdaten"],
+      locked: "Verfügbar im kostenlosen Test und mit Pro oder Business.",
+      saved: "Notiz gespeichert.",
+      cleared: "Notiz gelöscht.",
+      clear: "Löschen",
+      cancel: "Abbrechen",
+      save: "Speichern",
+      close: "Gespeicherte Notiz schließen",
+    },
+    el: {
+      title: "Αποθηκευμένη σημείωση",
+      label: "Σημείωση περιγραφής",
+      placeholder: "Σπίτι χωρίς καπνό. Μπορώ να συνδυάσω προϊόντα.",
+      bullets: ["Εμφανίζεται σε κάθε μελλοντική αγγελία", "Μπαίνει πριν από τα hashtags", "Χωρίς links ή στοιχεία επικοινωνίας"],
+      locked: "Διαθέσιμο στη δωρεάν δοκιμή και στα Pro ή Business.",
+      saved: "Η σημείωση αποθηκεύτηκε.",
+      cleared: "Η σημείωση διαγράφηκε.",
+      clear: "Διαγραφή",
+      cancel: "Άκυρο",
+      save: "Αποθήκευση",
+      close: "Κλείσιμο αποθηκευμένης σημείωσης",
+    },
+    hr: {
+      title: "Spremljena napomena",
+      label: "Napomena za opis",
+      placeholder: "Dom bez dima. Mogu spojiti više artikala.",
+      bullets: ["Pojavljuje se na svakoj budućoj objavi", "Dodaje se prije hashtagova", "Bez linkova ili kontakt podataka"],
+      locked: "Dostupno u besplatnoj probi i na Pro ili Business planu.",
+      saved: "Napomena spremljena.",
+      cleared: "Napomena obrisana.",
+      clear: "Obriši",
+      cancel: "Odustani",
+      save: "Spremi",
+      close: "Zatvori spremljenu napomenu",
+    },
+    fi: {
+      title: "Tallennettu huomautus",
+      label: "Kuvaustekstiin lisättävä huomautus",
+      placeholder: "Savuton koti. Yhdistelen mielelläni tuotteita.",
+      bullets: ["Näkyy jokaisessa tulevassa ilmoituksessa", "Lisätään ennen hashtageja", "Ei linkkejä tai yhteystietoja"],
+      locked: "Saatavilla ilmaisessa kokeilussa sekä Pro- tai Business-tilillä.",
+      saved: "Huomautus tallennettu.",
+      cleared: "Huomautus tyhjennetty.",
+      clear: "Tyhjennä",
+      cancel: "Peruuta",
+      save: "Tallenna",
+      close: "Sulje tallennettu huomautus",
+    },
+    hu: {
+      title: "Mentett megjegyzés",
+      label: "Leírás megjegyzése",
+      placeholder: "Dohányfüstmentes otthon. Több terméket is össze tudok vonni.",
+      bullets: ["Minden jövőbeli hirdetésben megjelenik", "A hashtagek elé kerül", "Nincsenek linkek vagy elérhetőségek"],
+      locked: "Elérhető az ingyenes próba alatt, valamint Pro vagy Business csomaggal.",
+      saved: "Megjegyzés mentve.",
+      cleared: "Megjegyzés törölve.",
+      clear: "Törlés",
+      cancel: "Mégse",
+      save: "Mentés",
+      close: "Mentett megjegyzés bezárása",
+    },
+    it: {
+      title: "Nota salvata",
+      label: "Nota per la descrizione",
+      placeholder: "Casa senza fumo. Posso unire più articoli.",
+      bullets: ["Compare in ogni annuncio futuro", "Viene aggiunta prima degli hashtag", "Niente link o contatti"],
+      locked: "Disponibile nella prova gratuita e con Pro o Business.",
+      saved: "Nota salvata.",
+      cleared: "Nota eliminata.",
+      clear: "Cancella",
+      cancel: "Annulla",
+      save: "Salva",
+      close: "Chiudi nota salvata",
+    },
+    lt: {
+      title: "Išsaugota pastaba",
+      label: "Aprašymo pastaba",
+      placeholder: "Namai be dūmų. Galiu sujungti kelias prekes.",
+      bullets: ["Rodoma kiekviename būsimame skelbime", "Pridedama prieš grotažymes", "Be nuorodų ar kontaktų"],
+      locked: "Pasiekiama nemokamos bandomosios versijos metu ir su Pro arba Business.",
+      saved: "Pastaba išsaugota.",
+      cleared: "Pastaba išvalyta.",
+      clear: "Išvalyti",
+      cancel: "Atšaukti",
+      save: "Išsaugoti",
+      close: "Uždaryti išsaugotą pastabą",
+    },
+    pl: {
+      title: "Zapisana notatka",
+      label: "Notatka do opisu",
+      placeholder: "Dom bez dymu. Chętnie połączę kilka rzeczy.",
+      bullets: ["Pojawia się w każdej przyszłej ofercie", "Dodawana przed hashtagami", "Bez linków i danych kontaktowych"],
+      locked: "Dostępne w darmowej wersji próbnej oraz w Pro lub Business.",
+      saved: "Notatka zapisana.",
+      cleared: "Notatka usunięta.",
+      clear: "Wyczyść",
+      cancel: "Anuluj",
+      save: "Zapisz",
+      close: "Zamknij zapisaną notatkę",
+    },
+    pt: {
+      title: "Nota guardada",
+      label: "Nota da descrição",
+      placeholder: "Casa sem fumo. Posso juntar artigos.",
+      bullets: ["Aparece em todos os anúncios futuros", "É adicionada antes das hashtags", "Sem links ou contactos"],
+      locked: "Disponível no teste gratuito e nos planos Pro ou Business.",
+      saved: "Nota guardada.",
+      cleared: "Nota apagada.",
+      clear: "Limpar",
+      cancel: "Cancelar",
+      save: "Guardar",
+      close: "Fechar nota guardada",
+    },
+    ro: {
+      title: "Notă salvată",
+      label: "Notă pentru descriere",
+      placeholder: "Casă fără fum. Pot grupa articole.",
+      bullets: ["Apare la fiecare anunț viitor", "Este adăugată înainte de hashtaguri", "Fără linkuri sau date de contact"],
+      locked: "Disponibil în perioada gratuită și pe Pro sau Business.",
+      saved: "Notă salvată.",
+      cleared: "Notă ștearsă.",
+      clear: "Șterge",
+      cancel: "Anulează",
+      save: "Salvează",
+      close: "Închide nota salvată",
+    },
+    es: {
+      title: "Nota guardada",
+      label: "Nota para la descripción",
+      placeholder: "Casa sin humo. Puedo agrupar artículos.",
+      bullets: ["Aparece en todos los anuncios futuros", "Se añade antes de los hashtags", "Sin enlaces ni datos de contacto"],
+      locked: "Disponible en la prueba gratuita y en Pro o Business.",
+      saved: "Nota guardada.",
+      cleared: "Nota eliminada.",
+      clear: "Borrar",
+      cancel: "Cancelar",
+      save: "Guardar",
+      close: "Cerrar nota guardada",
+    },
+    sk: {
+      title: "Uložená poznámka",
+      label: "Poznámka k popisu",
+      placeholder: "Nefajčiarska domácnosť. Rada spojím viac vecí.",
+      bullets: ["Zobrazí sa pri každom budúcom inzeráte", "Pridá sa pred hashtagy", "Bez odkazov a kontaktných údajov"],
+      locked: "Dostupné v bezplatnej skúšobnej verzii a v Pro alebo Business.",
+      saved: "Poznámka uložená.",
+      cleared: "Poznámka vymazaná.",
+      clear: "Vymazať",
+      cancel: "Zrušiť",
+      save: "Uložiť",
+      close: "Zavrieť uloženú poznámku",
+    },
+    sv: {
+      title: "Sparad notis",
+      label: "Notis till beskrivning",
+      placeholder: "Rökfritt hem. Samfraktar gärna.",
+      bullets: ["Visas på varje framtida annons", "Läggs till före hashtags", "Inga länkar eller kontaktuppgifter"],
+      locked: "Tillgängligt under gratis testperiod och med Pro eller Business.",
+      saved: "Notis sparad.",
+      cleared: "Notis rensad.",
+      clear: "Rensa",
+      cancel: "Avbryt",
+      save: "Spara",
+      close: "Stäng sparad notis",
+    },
+  };
   const WAND_ICON_SVG = `<svg fill="#ffffff" viewBox="0 0 512 512" version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink"> <path d="M454.321,219.727l-38.766-51.947l20.815-61.385c2.046-6.032,0.489-12.704-4.015-17.208 c-4.504-4.504-11.175-6.061-17.208-4.015l-61.384,20.815l-51.951-38.766c-5.103-3.809-11.929-4.392-17.605-1.499 c-5.676,2.893-9.217,8.755-9.136,15.125l0.829,64.815l-52.923,37.426c-5.201,3.678-7.863,9.989-6.867,16.282 c0.996,6.291,5.479,11.471,11.561,13.363l43.844,13.63L14.443,483.432c-6.535,6.534-6.535,17.131,0,23.666s17.131,6.535,23.666,0 l257.073-257.072l13.629,43.843c2.172,6.986,8.638,11.768,15.984,11.768c5.375,0,10.494-2.595,13.66-7.072l37.426-52.923 l64.815,0.828c6.322,0.051,12.233-3.462,15.125-9.136S458.131,224.833,454.321,219.727z"></path> <polygon points="173.373,67.274 160.014,42.848 146.656,67.274 122.23,80.632 146.656,93.992 160.014,118.417 173.373,93.992 197.799,80.632 "></polygon> <polygon points="362.946,384.489 352.14,364.731 341.335,384.489 321.577,395.294 341.335,406.1 352.14,425.856 362.946,406.1 382.703,395.294 "></polygon> <polygon points="378.142,19.757 367.337,0 356.531,19.757 336.774,30.563 356.531,41.369 367.337,61.126 378.142,41.369 397.9,30.563 "></polygon> <polygon points="490.635,142.513 484.167,130.689 477.701,142.513 465.876,148.979 477.701,155.446 484.167,167.27 490.635,155.446 502.458,148.979 "></polygon> <polygon points="492.626,294.117 465.876,301.951 439.128,294.117 446.962,320.865 439.128,347.615 465.876,339.781 492.626,347.615 484.791,320.865 "></polygon> </svg>`;
   const PHONE_ICON_SVG = `<svg fill="#ffffff" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M17 1.01L7 1c-1.1 0-2 .9-2 2v18c0 1.1.9 2 2 2h10c1.1 0 2-.9 2-2V3c0-1.1-.9-1.99-2-1.99zM17 19H7V5h10v14z"/></svg>`;
   const BATCH_ICON_SVG = `<svg fill="#ffffff" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M5 4h11.5A2.5 2.5 0 0 1 19 6.5V18H7.5A2.5 2.5 0 0 1 5 15.5V4Zm2 2v9.5c0 .28.22.5.5.5H17V6.5a.5.5 0 0 0-.5-.5H7Zm-3 2h1v9.5A1.5 1.5 0 0 0 6.5 19H17v1H6.5A2.5 2.5 0 0 1 4 17.5V8Zm5.25 6h5.5l-1.75-2.33-1.38 1.72-.95-1.14L9.25 14ZM10 9.5A1.5 1.5 0 1 0 10 12.5 1.5 1.5 0 0 0 10 9.5Z"/></svg>`;
@@ -472,10 +865,11 @@
   let batchImagePreloadCache = new Map();
   let pendingGenerationOffer = null;
   let pendingLimitFollowupOffer = null;
-  let limitFollowupOfferChecked = false;
+  const limitFollowupOfferChecked = new Set();
   let limitFollowupRescueTimer = null;
   let limitFollowupReturnTimer = null;
-  let freeLimitPaywallCheckoutStarted = false;
+  let starterDailyLimitReturnTimer = null;
+  let limitOfferPaywallCheckoutStarted = false;
   let activeFloatingPromptType = null;
   let activePaywallCleanup = null;
   let limitFollowupResumeListenersBound = false;
@@ -763,6 +1157,12 @@
     limitFollowupReturnTimer = null;
   }
 
+  function clearStarterDailyLimitReturnTimer() {
+    if (!starterDailyLimitReturnTimer) return;
+    window.clearTimeout(starterDailyLimitReturnTimer);
+    starterDailyLimitReturnTimer = null;
+  }
+
   function clearPaywallPositioning() {
     if (!activePaywallCleanup) return;
     activePaywallCleanup();
@@ -846,9 +1246,31 @@
     });
   }
 
-  async function queueLocalLimitFollowupOffer(reason) {
+  function getRescueOfferCopyKey(limitCode, currentTier) {
+    const tier = normalizeTier(currentTier);
+    if (limitCode === "free_lifetime_limit") {
+      return FREE_LIMIT_OFFER_COPY_KEY;
+    }
+    if (limitCode === "daily_limit" && tier === "starter") {
+      return STARTER_DAILY_LIMIT_OFFER_COPY_KEY;
+    }
+    return null;
+  }
+
+  function getOfferCampaignKey(copyKey = FREE_LIMIT_OFFER_COPY_KEY) {
+    return copyKey === STARTER_DAILY_LIMIT_OFFER_COPY_KEY
+      ? "starter_daily_limit_offer_v1"
+      : "limit_followup_offer_v1";
+  }
+
+  async function queueLocalLimitFollowupOffer(
+    reason,
+    copyKey = FREE_LIMIT_OFFER_COPY_KEY,
+  ) {
+    const campaignKey = getOfferCampaignKey(copyKey);
     const offer = {
-      campaignKey: "limit_followup_offer_v1",
+      campaignKey,
+      copyKey,
       couponCode: LIMIT_FOLLOWUP_COUPON_CODE,
       discountLabel: LIMIT_FOLLOWUP_COPY.en.discount,
       pricingUrl: await getPricingUrl(),
@@ -862,26 +1284,46 @@
     trackGrowthEvent("limit_followup_offer_loaded", {
       reason,
       campaignKey: offer.campaignKey,
-      source: "client_free_limit_paywall",
+      source:
+        copyKey === STARTER_DAILY_LIMIT_OFFER_COPY_KEY
+          ? "client_starter_daily_limit_paywall"
+          : "client_free_limit_paywall",
     });
     maybeShowPendingPrompts({ allowDuringDraft: true, reason });
   }
 
-  function scheduleLimitFollowupRescueCheck(reason) {
+  function scheduleLimitFollowupRescueCheck(
+    reason,
+    copyKey = FREE_LIMIT_OFFER_COPY_KEY,
+  ) {
     clearLimitFollowupRescueTimer();
     limitFollowupRescueTimer = window.setTimeout(() => {
       limitFollowupRescueTimer = null;
-      if (freeLimitPaywallCheckoutStarted) return;
-      trackGrowthEvent("limit_followup_rescue_check", { reason });
-      queueLocalLimitFollowupOffer(reason);
-    }, LIMIT_FOLLOWUP_CLOSE_DELAY_MS);
+      if (limitOfferPaywallCheckoutStarted) return;
+      trackGrowthEvent("limit_followup_rescue_check", { reason, copyKey });
+      queueLocalLimitFollowupOffer(reason, copyKey);
+    }, copyKey === STARTER_DAILY_LIMIT_OFFER_COPY_KEY
+      ? STARTER_DAILY_LIMIT_CLOSE_DELAY_MS
+      : LIMIT_FOLLOWUP_CLOSE_DELAY_MS);
   }
 
   function scheduleLimitFollowupReturnCheck() {
+    clearStarterDailyLimitReturnTimer();
+    starterDailyLimitReturnTimer = window.setTimeout(() => {
+      starterDailyLimitReturnTimer = null;
+      maybeFetchAndShowLimitFollowupOffer({
+        reason: "starter_daily_limit_return",
+        onlyCopyKey: STARTER_DAILY_LIMIT_OFFER_COPY_KEY,
+      });
+    }, STARTER_DAILY_LIMIT_RETURN_DELAY_MS);
+
     clearLimitFollowupReturnTimer();
     limitFollowupReturnTimer = window.setTimeout(() => {
       limitFollowupReturnTimer = null;
-      maybeFetchAndShowLimitFollowupOffer({ reason: "return_visit" });
+      maybeFetchAndShowLimitFollowupOffer({
+        reason: "return_visit",
+        onlyCopyKey: FREE_LIMIT_OFFER_COPY_KEY,
+      });
     }, LIMIT_FOLLOWUP_RETURN_DELAY_MS);
   }
 
@@ -895,15 +1337,16 @@
     secondaryActionText,
     secondaryActionUrl,
     limitCode,
+    currentTier,
   }) {
     removeDescriptionApplyPrompt();
     if (activeLimitFollowupOfferCleanup) {
       activeLimitFollowupOfferCleanup("cancel");
     }
     clearPaywallPositioning();
-    const isFreeLimitPaywall = limitCode === "free_lifetime_limit";
-    if (isFreeLimitPaywall) {
-      freeLimitPaywallCheckoutStarted = false;
+    const rescueOfferCopyKey = getRescueOfferCopyKey(limitCode, currentTier);
+    if (rescueOfferCopyKey) {
+      limitOfferPaywallCheckoutStarted = false;
       clearLimitFollowupRescueTimer();
     }
 
@@ -1018,8 +1461,8 @@
           actionText,
           limitCode: limitCode || null,
         });
-        if (isFreeLimitPaywall && !freeLimitPaywallCheckoutStarted) {
-          scheduleLimitFollowupRescueCheck("paywall_closed");
+        if (rescueOfferCopyKey && !limitOfferPaywallCheckoutStarted) {
+          scheduleLimitFollowupRescueCheck("paywall_closed", rescueOfferCopyKey);
         }
       };
     }
@@ -1062,8 +1505,8 @@
 
       try {
         const checkoutUrl = await createCheckoutForPaywall(option);
-        if (isFreeLimitPaywall) {
-          freeLimitPaywallCheckoutStarted = true;
+        if (rescueOfferCopyKey) {
+          limitOfferPaywallCheckoutStarted = true;
           clearLimitFollowupRescueTimer();
         }
         trackGrowthEvent("checkout_opened", {
@@ -1079,8 +1522,8 @@
       } catch (error) {
         if (checkoutWindow) checkoutWindow.close();
         console.error("Paywall checkout error:", error);
-        if (isFreeLimitPaywall && !freeLimitPaywallCheckoutStarted) {
-          scheduleLimitFollowupRescueCheck("checkout_failed");
+        if (rescueOfferCopyKey && !limitOfferPaywallCheckoutStarted) {
+          scheduleLimitFollowupRescueCheck("checkout_failed", rescueOfferCopyKey);
         }
         clearPaywallPositioning();
         trackGrowthEvent("checkout_failed", {
@@ -1157,13 +1600,29 @@
     return languageDefaults.resolveLanguageProfile(storage);
   }
 
-  function getLimitFollowupCopy(languageCode) {
+  function getLimitFollowupCopy(
+    languageCode,
+    copyKey = FREE_LIMIT_OFFER_COPY_KEY,
+  ) {
     const supportedLanguage =
       languageDefaults.getSupportedLanguageCode(languageCode) || "en";
-    return LIMIT_FOLLOWUP_COPY[supportedLanguage] || LIMIT_FOLLOWUP_COPY.en;
+    const baseCopy = LIMIT_FOLLOWUP_COPY[supportedLanguage] || LIMIT_FOLLOWUP_COPY.en;
+    const overrideCopy =
+      LIMIT_FOLLOWUP_COPY_OVERRIDES[copyKey]?.[supportedLanguage] ||
+      LIMIT_FOLLOWUP_COPY_OVERRIDES[copyKey]?.en ||
+      null;
+    return overrideCopy ? { ...baseCopy, ...overrideCopy } : baseCopy;
   }
 
-  async function resolvePreferredUiLanguageContext() {
+  function getDescriptionFooterCopy(languageCode) {
+    const supportedLanguage =
+      languageDefaults.getSupportedLanguageCode(languageCode) || "en";
+    return DESCRIPTION_FOOTER_COPY[supportedLanguage] || DESCRIPTION_FOOTER_COPY.en;
+  }
+
+  async function resolvePreferredUiLanguageContext(
+    copyKey = FREE_LIMIT_OFFER_COPY_KEY,
+  ) {
     try {
       const storage = await chrome.storage.local.get([
         "selectedLanguage",
@@ -1175,14 +1634,14 @@
       return {
         languageCode: languageProfile.uiLanguageCode,
         languageSource: languageProfile.uiLanguageSource,
-        copy: getLimitFollowupCopy(languageProfile.uiLanguageCode),
+        copy: getLimitFollowupCopy(languageProfile.uiLanguageCode, copyKey),
         hasExplicitLanguagePreference:
           languageProfile.hasExplicitLanguagePreference,
       };
     } catch (error) {
       return {
         languageCode: "en",
-        copy: LIMIT_FOLLOWUP_COPY.en,
+        copy: getLimitFollowupCopy("en", copyKey),
         hasExplicitLanguagePreference: false,
       };
     }
@@ -1245,6 +1704,51 @@
       Number(profile?.free_lifetime_generations_used || 0) >= FREE_LIFETIME_LIMIT &&
       Number(profile?.pack_credits || 0) <= 0
     );
+  }
+
+  function hasLocalStarterDailyLimitReached(profile, usage = null) {
+    const tier = normalizeTier(usage?.tier || profile?.subscription_tier);
+    const isActive = profile?.subscription_status === "active";
+    if (!isActive || tier !== "starter") return false;
+
+    const limits = usage?.limits || PLAN_LIMITS.starter;
+    const dailyLimit = Number(limits?.daily || PLAN_LIMITS.starter.daily);
+    const monthlyLimit = Number(limits?.monthly || PLAN_LIMITS.starter.monthly);
+    const dailyUsed = Number(usage?.daily || 0);
+    const monthlyUsed = Number(
+      usage?.monthly ?? profile?.api_calls_this_month ?? 0,
+    );
+    const packCredits = Number(
+      usage?.packCredits ?? profile?.pack_credits ?? 0,
+    );
+
+    return (
+      dailyLimit > 0 &&
+      monthlyLimit > 0 &&
+      dailyUsed >= dailyLimit &&
+      monthlyUsed < monthlyLimit &&
+      packCredits <= 0
+    );
+  }
+
+  async function getCurrentUserUsageSnapshot() {
+    let usage = null;
+    try {
+      const response = await sendMessage({ type: "GET_USER_USAGE_COUNT" });
+      if (response && typeof response === "object") {
+        usage = { ...response, fetchedAt: Date.now() };
+        await chrome.storage.local.set({
+          [USER_USAGE_SNAPSHOT_STORAGE_KEY]: usage,
+        });
+      }
+    } catch (error) {
+      usage = null;
+    }
+
+    if (usage) return usage;
+
+    const stored = await chrome.storage.local.get(USER_USAGE_SNAPSHOT_STORAGE_KEY);
+    return stored[USER_USAGE_SNAPSHOT_STORAGE_KEY] || null;
   }
 
   function canUseEmojiSetting(profile) {
@@ -1412,6 +1916,7 @@
       secondaryActionText: "Contact support",
       secondaryActionUrl: ACCOUNT_REVIEW_CONTACT_URL,
       limitCode: "account_paused",
+      currentTier: "free",
     });
   }
 
@@ -2442,6 +2947,14 @@
         color: #475569;
         font-size: 13px;
         line-height: 1.45;
+      }
+
+      #${DESCRIPTION_FOOTER_MODAL_ID} .quickvint-footer-copy {
+        padding-left: 18px;
+      }
+
+      #${DESCRIPTION_FOOTER_MODAL_ID} .quickvint-footer-copy li {
+        margin: 2px 0;
       }
 
       #${DESCRIPTION_FOOTER_MODAL_ID} .quickvint-footer-close {
@@ -6200,6 +6713,7 @@
   }
 
   function updateDescriptionFooterModalState(modal, { allowed, text, status = "" }) {
+    const copy = modal.__descriptionFooterCopy || DESCRIPTION_FOOTER_COPY.en;
     const textarea = modal.querySelector(".quickvint-footer-textarea");
     const counter = modal.querySelector(".quickvint-footer-count");
     const statusEl = modal.querySelector(".quickvint-footer-status");
@@ -6217,7 +6731,7 @@
     }
     if (statusEl) {
       const message = !allowed
-        ? "Saved notes are available during the free trial and on Pro or Business."
+        ? copy.locked
         : validation.ok
           ? status
           : validation.error;
@@ -6246,7 +6760,11 @@
         <div class="quickvint-footer-head">
           <div>
             <h2 id="quickvint-footer-title" class="quickvint-footer-title">Saved note</h2>
-            <p class="quickvint-footer-copy">Added to generated descriptions before hashtags. Do not include links or contact details.</p>
+            <ul class="quickvint-footer-copy">
+              <li></li>
+              <li></li>
+              <li></li>
+            </ul>
           </div>
           <button type="button" class="quickvint-footer-close" aria-label="Close saved note form">&times;</button>
         </div>
@@ -6295,19 +6813,56 @@
     return modal;
   }
 
+  function applyDescriptionFooterModalCopy(modal, copy) {
+    modal.__descriptionFooterCopy = copy;
+    const title = modal.querySelector(".quickvint-footer-title");
+    const label = modal.querySelector(".quickvint-footer-label");
+    const textarea = modal.querySelector(".quickvint-footer-textarea");
+    const closeButton = modal.querySelector(".quickvint-footer-close");
+    const clearButton = modal.querySelector(".quickvint-footer-clear");
+    const cancelButton = modal.querySelector(".quickvint-footer-secondary");
+    const saveButton = modal.querySelector(".quickvint-footer-save");
+
+    if (title) title.textContent = copy.title;
+    if (label) label.textContent = copy.label;
+    if (textarea) textarea.placeholder = copy.placeholder;
+    if (closeButton) closeButton.setAttribute("aria-label", copy.close);
+    if (clearButton) clearButton.textContent = copy.clear;
+    if (cancelButton) cancelButton.textContent = copy.cancel;
+    if (saveButton) saveButton.textContent = copy.save;
+
+    modal.querySelectorAll(".quickvint-footer-copy li").forEach((item, index) => {
+      item.textContent = copy.bullets[index] || "";
+    });
+  }
+
   async function openDescriptionFooterModal() {
     const modal = getOrCreateDescriptionFooterModal();
-    const { [DESCRIPTION_FOOTER_STORAGE_KEY]: storedText = "", userProfile = null } =
+    const storage =
       await new Promise((resolve) => {
         chrome.storage.local.get(
-          { [DESCRIPTION_FOOTER_STORAGE_KEY]: "", userProfile: null },
+          {
+            [DESCRIPTION_FOOTER_STORAGE_KEY]: "",
+            userProfile: null,
+            selectedLanguage: null,
+            selectedTitleLanguage: null,
+            selectedDescriptionLanguage: null,
+            [LANGUAGE_PREFERENCE_TOUCHED_KEY]: false,
+          },
           (result) => resolve(result),
         );
       });
+    const {
+      [DESCRIPTION_FOOTER_STORAGE_KEY]: storedText = "",
+      userProfile = null,
+    } = storage;
+    const languageProfile = resolveLanguageProfile(storage);
+    const copy = getDescriptionFooterCopy(languageProfile.uiLanguageCode);
     const allowed = canUseDescriptionFooterSetting(userProfile);
     const text = typeof storedText === "string" ? storedText : "";
     const textarea = modal.querySelector(".quickvint-footer-textarea");
 
+    applyDescriptionFooterModalCopy(modal, copy);
     modal.dataset.allowed = allowed ? "true" : "false";
     if (textarea) {
       textarea.value = text;
@@ -6320,6 +6875,7 @@
     trackGrowthEvent("description_footer_opened", {
       source: "listing_tools",
       allowed,
+      languageCode: languageProfile.uiLanguageCode,
       hasDescriptionFooter: /\S/.test(text),
       descriptionFooterLength: text.length,
     });
@@ -6334,6 +6890,7 @@
   async function saveDescriptionFooterFromModal() {
     const modal = document.getElementById(DESCRIPTION_FOOTER_MODAL_ID);
     if (!modal || modal.dataset.allowed !== "true") return;
+    const copy = modal.__descriptionFooterCopy || DESCRIPTION_FOOTER_COPY.en;
     const textarea = modal.querySelector(".quickvint-footer-textarea");
     const text = textarea?.value || "";
     const validation = validateDescriptionFooterText(text);
@@ -6352,7 +6909,7 @@
     syncDescriptionFooterButtonState();
     closeDescriptionFooterModal();
     showToast(
-      /\S/.test(validation.text) ? "Saved note updated." : "Saved note cleared.",
+      /\S/.test(validation.text) ? copy.saved : copy.cleared,
       "success",
     );
     trackGrowthEvent("description_footer_saved", {
@@ -7585,7 +8142,7 @@
       return false;
     }
 
-    const languageContext = await resolvePreferredUiLanguageContext();
+    const languageContext = await resolvePreferredUiLanguageContext(offer.copyKey);
     await markOfferShownLocally(offer);
     trackGrowthEvent("limit_followup_offer_shown", {
       campaignKey: offer.campaignKey,
@@ -7665,36 +8222,60 @@
     force = false,
     allowDuringDraft = false,
     reason = "auto",
+    onlyCopyKey = null,
   } = {}) {
-    if ((!force && limitFollowupOfferChecked) || !isAuthenticated || !generateBtn) return;
-    if (!force) limitFollowupOfferChecked = true;
+    if (!isAuthenticated || !generateBtn) return;
 
     try {
-      const localOfferKey = { campaignKey: "limit_followup_offer_v1" };
-      if (await isOfferLocallyDismissed(localOfferKey)) return;
-      if (await wasOfferShownRecently(localOfferKey)) return;
+      const copyKeysToCheck = onlyCopyKey
+        ? [onlyCopyKey]
+        : [STARTER_DAILY_LIMIT_OFFER_COPY_KEY, FREE_LIMIT_OFFER_COPY_KEY];
 
       const { userProfile = null } = await chrome.storage.local.get("userProfile");
-      if (!hasLocalFreeLimitReached(userProfile)) return;
 
-      const offer = {
-        campaignKey: "limit_followup_offer_v1",
-        couponCode: LIMIT_FOLLOWUP_COUPON_CODE,
-        discountLabel: LIMIT_FOLLOWUP_COPY.en.discount,
-        pricingUrl: await getPricingUrl(),
-        limitHitAt: new Date().toISOString(),
-      };
+      for (const copyKey of copyKeysToCheck) {
+        const checkedKey = `return:${copyKey}`;
+        if (!force && limitFollowupOfferChecked.has(checkedKey)) continue;
+        if (!force) limitFollowupOfferChecked.add(checkedKey);
 
-      if (await isOfferLocallyDismissed(offer)) return;
-      if (await wasOfferShownRecently(offer)) return;
+        const campaignKey = getOfferCampaignKey(copyKey);
+        const localOfferKey = { campaignKey };
+        if (await isOfferLocallyDismissed(localOfferKey)) continue;
+        if (await wasOfferShownRecently(localOfferKey)) continue;
 
-      pendingLimitFollowupOffer = offer;
-      maybeShowPendingPrompts({ allowDuringDraft, reason });
-      trackGrowthEvent("limit_followup_offer_loaded", {
-        reason,
-        campaignKey: offer.campaignKey,
-        source: "local_free_limit_profile",
-      });
+        let source = "local_free_limit_profile";
+        let eligible = false;
+        if (copyKey === STARTER_DAILY_LIMIT_OFFER_COPY_KEY) {
+          const usage = await getCurrentUserUsageSnapshot();
+          eligible = hasLocalStarterDailyLimitReached(userProfile, usage);
+          source = "local_starter_daily_usage";
+        } else {
+          eligible = hasLocalFreeLimitReached(userProfile);
+        }
+
+        if (!eligible) continue;
+
+        const offer = {
+          campaignKey,
+          copyKey,
+          couponCode: LIMIT_FOLLOWUP_COUPON_CODE,
+          discountLabel: LIMIT_FOLLOWUP_COPY.en.discount,
+          pricingUrl: await getPricingUrl(),
+          limitHitAt: new Date().toISOString(),
+        };
+
+        if (await isOfferLocallyDismissed(offer)) continue;
+        if (await wasOfferShownRecently(offer)) continue;
+
+        pendingLimitFollowupOffer = offer;
+        maybeShowPendingPrompts({ allowDuringDraft, reason });
+        trackGrowthEvent("limit_followup_offer_loaded", {
+          reason,
+          campaignKey: offer.campaignKey,
+          source,
+        });
+        return;
+      }
     } catch (error) {
       console.debug("AutoLister AI: limit follow-up offer skipped", error);
     }
@@ -9434,6 +10015,7 @@
         secondaryActionText: limitMessage.secondaryActionText,
         secondaryActionUrl: pricingUrl,
         limitCode: capacity.reason,
+        currentTier: capacity.tier,
       });
       return;
     }
@@ -10262,6 +10844,7 @@
             secondaryActionText: limitMessage.secondaryActionText,
             secondaryActionUrl: pricingUrl,
             limitCode: errData.code,
+            currentTier: errData.currentTier,
           });
         } else {
           const isAccountPaused = errData.code === "account_paused";

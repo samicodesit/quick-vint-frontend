@@ -46,6 +46,171 @@ document.addEventListener("DOMContentLoaded", () => {
     business: "Upgrade to Business (€19.99/mo)",
   };
 
+  const DESCRIPTION_FOOTER_COPY = {
+    en: {
+      title: "Saved note",
+      placeholder: "Smoke-free home. Happy to bundle items.",
+      bullets: ["Appears on every future listing", "Added before hashtags", "No links or contact details"],
+      locked: "Available during the free trial and on Pro or Business.",
+      saved: "Saved.",
+      cleared: "Cleared.",
+      clear: "Clear",
+    },
+    fr: {
+      title: "Note enregistrée",
+      placeholder: "Maison non-fumeur. Regroupement possible.",
+      bullets: ["Ajoutée à chaque future annonce", "Placée avant les hashtags", "Pas de liens ni coordonnées"],
+      locked: "Disponible avec l'essai gratuit et les offres Pro ou Business.",
+      saved: "Enregistrée.",
+      cleared: "Effacée.",
+      clear: "Effacer",
+    },
+    cz: {
+      title: "Uložená poznámka",
+      placeholder: "Nekuřácká domácnost. Ráda sloučím více věcí.",
+      bullets: ["Zobrazí se u každého dalšího inzerátu", "Přidá se před hashtagy", "Bez odkazů a kontaktních údajů"],
+      locked: "Dostupné ve zkušební verzi zdarma a v tarifech Pro nebo Business.",
+      saved: "Uloženo.",
+      cleared: "Vymazáno.",
+      clear: "Vymazat",
+    },
+    da: {
+      title: "Gemt note",
+      placeholder: "Røgfrit hjem. Samler gerne varer.",
+      bullets: ["Vises på alle fremtidige annoncer", "Tilføjes før hashtags", "Ingen links eller kontaktoplysninger"],
+      locked: "Tilgængelig i gratis prøveperiode og på Pro eller Business.",
+      saved: "Gemt.",
+      cleared: "Ryddet.",
+      clear: "Ryd",
+    },
+    nl: {
+      title: "Opgeslagen notitie",
+      placeholder: "Rookvrij huis. Bundelen is mogelijk.",
+      bullets: ["Verschijnt bij elke toekomstige advertentie", "Komt voor de hashtags", "Geen links of contactgegevens"],
+      locked: "Beschikbaar tijdens de gratis proefperiode en met Pro of Business.",
+      saved: "Opgeslagen.",
+      cleared: "Gewist.",
+      clear: "Wissen",
+    },
+    de: {
+      title: "Gespeicherte Notiz",
+      placeholder: "Rauchfreier Haushalt. Kombiversand möglich.",
+      bullets: ["Erscheint bei jedem künftigen Angebot", "Wird vor Hashtags eingefügt", "Keine Links oder Kontaktdaten"],
+      locked: "Verfügbar im kostenlosen Test und mit Pro oder Business.",
+      saved: "Gespeichert.",
+      cleared: "Gelöscht.",
+      clear: "Löschen",
+    },
+    el: {
+      title: "Αποθηκευμένη σημείωση",
+      placeholder: "Σπίτι χωρίς καπνό. Μπορώ να συνδυάσω προϊόντα.",
+      bullets: ["Εμφανίζεται σε κάθε μελλοντική αγγελία", "Μπαίνει πριν από τα hashtags", "Χωρίς links ή στοιχεία επικοινωνίας"],
+      locked: "Διαθέσιμο στη δωρεάν δοκιμή και στα Pro ή Business.",
+      saved: "Αποθηκεύτηκε.",
+      cleared: "Διαγράφηκε.",
+      clear: "Διαγραφή",
+    },
+    hr: {
+      title: "Spremljena napomena",
+      placeholder: "Dom bez dima. Mogu spojiti više artikala.",
+      bullets: ["Pojavljuje se na svakoj budućoj objavi", "Dodaje se prije hashtagova", "Bez linkova ili kontakt podataka"],
+      locked: "Dostupno u besplatnoj probi i na Pro ili Business planu.",
+      saved: "Spremljeno.",
+      cleared: "Obrisano.",
+      clear: "Obriši",
+    },
+    fi: {
+      title: "Tallennettu huomautus",
+      placeholder: "Savuton koti. Yhdistelen mielelläni tuotteita.",
+      bullets: ["Näkyy jokaisessa tulevassa ilmoituksessa", "Lisätään ennen hashtageja", "Ei linkkejä tai yhteystietoja"],
+      locked: "Saatavilla ilmaisessa kokeilussa sekä Pro- tai Business-tilillä.",
+      saved: "Tallennettu.",
+      cleared: "Tyhjennetty.",
+      clear: "Tyhjennä",
+    },
+    hu: {
+      title: "Mentett megjegyzés",
+      placeholder: "Dohányfüstmentes otthon. Több terméket is össze tudok vonni.",
+      bullets: ["Minden jövőbeli hirdetésben megjelenik", "A hashtagek elé kerül", "Nincsenek linkek vagy elérhetőségek"],
+      locked: "Elérhető az ingyenes próba alatt, valamint Pro vagy Business csomaggal.",
+      saved: "Mentve.",
+      cleared: "Törölve.",
+      clear: "Törlés",
+    },
+    it: {
+      title: "Nota salvata",
+      placeholder: "Casa senza fumo. Posso unire più articoli.",
+      bullets: ["Compare in ogni annuncio futuro", "Viene aggiunta prima degli hashtag", "Niente link o contatti"],
+      locked: "Disponibile nella prova gratuita e con Pro o Business.",
+      saved: "Salvata.",
+      cleared: "Eliminata.",
+      clear: "Cancella",
+    },
+    lt: {
+      title: "Išsaugota pastaba",
+      placeholder: "Namai be dūmų. Galiu sujungti kelias prekes.",
+      bullets: ["Rodoma kiekviename būsimame skelbime", "Pridedama prieš grotažymes", "Be nuorodų ar kontaktų"],
+      locked: "Pasiekiama nemokamos bandomosios versijos metu ir su Pro arba Business.",
+      saved: "Išsaugota.",
+      cleared: "Išvalyta.",
+      clear: "Išvalyti",
+    },
+    pl: {
+      title: "Zapisana notatka",
+      placeholder: "Dom bez dymu. Chętnie połączę kilka rzeczy.",
+      bullets: ["Pojawia się w każdej przyszłej ofercie", "Dodawana przed hashtagami", "Bez linków i danych kontaktowych"],
+      locked: "Dostępne w darmowej wersji próbnej oraz w Pro lub Business.",
+      saved: "Zapisano.",
+      cleared: "Wyczyszczono.",
+      clear: "Wyczyść",
+    },
+    pt: {
+      title: "Nota guardada",
+      placeholder: "Casa sem fumo. Posso juntar artigos.",
+      bullets: ["Aparece em todos os anúncios futuros", "É adicionada antes das hashtags", "Sem links ou contactos"],
+      locked: "Disponível no teste gratuito e nos planos Pro ou Business.",
+      saved: "Guardada.",
+      cleared: "Apagada.",
+      clear: "Limpar",
+    },
+    ro: {
+      title: "Notă salvată",
+      placeholder: "Casă fără fum. Pot grupa articole.",
+      bullets: ["Apare la fiecare anunț viitor", "Este adăugată înainte de hashtaguri", "Fără linkuri sau date de contact"],
+      locked: "Disponibil în perioada gratuită și pe Pro sau Business.",
+      saved: "Salvată.",
+      cleared: "Ștearsă.",
+      clear: "Șterge",
+    },
+    es: {
+      title: "Nota guardada",
+      placeholder: "Casa sin humo. Puedo agrupar artículos.",
+      bullets: ["Aparece en todos los anuncios futuros", "Se añade antes de los hashtags", "Sin enlaces ni datos de contacto"],
+      locked: "Disponible en la prueba gratuita y en Pro o Business.",
+      saved: "Guardada.",
+      cleared: "Eliminada.",
+      clear: "Borrar",
+    },
+    sk: {
+      title: "Uložená poznámka",
+      placeholder: "Nefajčiarska domácnosť. Rada spojím viac vecí.",
+      bullets: ["Zobrazí sa pri každom budúcom inzeráte", "Pridá sa pred hashtagy", "Bez odkazov a kontaktných údajov"],
+      locked: "Dostupné v bezplatnej skúšobnej verzii a v Pro alebo Business.",
+      saved: "Uložené.",
+      cleared: "Vymazané.",
+      clear: "Vymazať",
+    },
+    sv: {
+      title: "Sparad notis",
+      placeholder: "Rökfritt hem. Samfraktar gärna.",
+      bullets: ["Visas på varje framtida annons", "Läggs till före hashtags", "Inga länkar eller kontaktuppgifter"],
+      locked: "Tillgängligt under gratis testperiod och med Pro eller Business.",
+      saved: "Sparad.",
+      cleared: "Rensad.",
+      clear: "Rensa",
+    },
+  };
+
   // --- SUPABASE CLIENT ---
   const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
@@ -87,12 +252,15 @@ document.addEventListener("DOMContentLoaded", () => {
   const toneOptions = document.querySelectorAll('input[name="tone"]');
   const emojiToggle = document.getElementById("emojiToggle");
   const emojiToggleContainer = document.getElementById("emojiToggleContainer");
+  const descriptionFooterTitle = document.getElementById("descriptionFooterTitle");
+  const descriptionFooterHelp = document.getElementById("descriptionFooterHelp");
   const descriptionFooterTextarea = document.getElementById("descriptionFooterText");
   const descriptionFooterCount = document.getElementById("descriptionFooterCount");
   const descriptionFooterStatus = document.getElementById("descriptionFooterStatus");
   const descriptionFooterClear = document.getElementById("descriptionFooterClear");
   const formatOptions = document.querySelectorAll('input[name="format"]');
   let descriptionFooterSaveTimer = null;
+  let currentDescriptionFooterCopy = DESCRIPTION_FOOTER_COPY.en;
   let renderRequestId = 0;
   let profileRefreshInFlight = false;
   let lastProfileRefreshAt = 0;
@@ -283,6 +451,41 @@ document.addEventListener("DOMContentLoaded", () => {
       return true;
     }
     return tier === "pro" || tier === "business";
+  }
+
+  function getDescriptionFooterCopy(languageCode) {
+    const supportedLanguage =
+      languageDefaults.getSupportedLanguageCode(languageCode) || "en";
+    return DESCRIPTION_FOOTER_COPY[supportedLanguage] || DESCRIPTION_FOOTER_COPY.en;
+  }
+
+  async function resolveDescriptionFooterCopy(storage = {}) {
+    const hostname = await getActiveVintedHostname();
+    const languageProfile = languageDefaults.resolveLanguageProfile(storage, {
+      hostname,
+    });
+    return getDescriptionFooterCopy(languageProfile.uiLanguageCode);
+  }
+
+  function applyDescriptionFooterSettingsCopy(copy) {
+    currentDescriptionFooterCopy = copy;
+    if (descriptionFooterTitle) {
+      descriptionFooterTitle.textContent = copy.title;
+    }
+    if (descriptionFooterHelp) {
+      descriptionFooterHelp.innerHTML = "";
+      copy.bullets.forEach((bullet) => {
+        const item = document.createElement("li");
+        item.textContent = bullet;
+        descriptionFooterHelp.appendChild(item);
+      });
+    }
+    if (descriptionFooterTextarea) {
+      descriptionFooterTextarea.placeholder = copy.placeholder;
+    }
+    if (descriptionFooterClear) {
+      descriptionFooterClear.textContent = copy.clear;
+    }
   }
 
   function validateDescriptionFooterText(value) {
@@ -1181,7 +1384,7 @@ document.addEventListener("DOMContentLoaded", () => {
     }
     if (descriptionFooterStatus) {
       const message = !allowed
-        ? "Available during the free trial and on Pro or Business."
+        ? currentDescriptionFooterCopy.locked
         : validation.ok
           ? status
           : validation.error;
@@ -1215,7 +1418,9 @@ document.addEventListener("DOMContentLoaded", () => {
           updateDescriptionFooterSettingsState({
             allowed: true,
             text: validation.text,
-            status: /\S/.test(validation.text) ? "Saved." : "",
+            status: /\S/.test(validation.text)
+              ? currentDescriptionFooterCopy.saved
+              : "",
           });
         },
       );
@@ -1230,9 +1435,15 @@ document.addEventListener("DOMContentLoaded", () => {
         "useEmojis",
         "useBulletPoints",
         DESCRIPTION_FOOTER_STORAGE_KEY,
+        "selectedLanguage",
+        "selectedTitleLanguage",
+        "selectedDescriptionLanguage",
+        LANGUAGE_PREFERENCE_TOUCHED_KEY,
         "userProfile",
       ],
-      (result) => {
+      async (result) => {
+        const descriptionFooterCopy = await resolveDescriptionFooterCopy(result);
+        applyDescriptionFooterSettingsCopy(descriptionFooterCopy);
         const profile = result.userProfile || {};
         const tier = normalizeTier(profile.subscription_tier);
         const isActive = profile.subscription_status === "active";
@@ -1344,7 +1555,7 @@ document.addEventListener("DOMContentLoaded", () => {
           updateDescriptionFooterSettingsState({
             allowed: true,
             text: "",
-            status: "Cleared.",
+            status: currentDescriptionFooterCopy.cleared,
           });
         });
       });

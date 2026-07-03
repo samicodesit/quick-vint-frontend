@@ -3,6 +3,7 @@ importScripts("lib/supabase.js");
 
 const ANALYTICS_CLIENT_ID_KEY = "analyticsClientId";
 const ACCOUNT_EMAIL_STORAGE_KEY = "accountEmail";
+const USER_USAGE_SNAPSHOT_STORAGE_KEY = "quickvintUserUsageSnapshot";
 
 function createAnalyticsClientId() {
   if (globalThis.crypto?.randomUUID) return globalThis.crypto.randomUUID();
@@ -345,7 +346,7 @@ async function fetchUserUsageCount() {
 
     if (limitError) throw limitError;
 
-    return {
+    const usage = {
       daily: entitlement.tier === "free" ? null : limit?.count || 0,
       monthly: entitlement.tier === "free" ? null : monthly,
       tier: entitlement.tier,
@@ -354,7 +355,10 @@ async function fetchUserUsageCount() {
       freeLifetimeUsed,
       freeLifetimeLimit: FREE_LIFETIME_LIMIT,
       packCredits,
+      fetchedAt: Date.now(),
     };
+    await chrome.storage.local.set({ [USER_USAGE_SNAPSHOT_STORAGE_KEY]: usage });
+    return usage;
   } catch (error) {
     console.error("Failed to fetch user day count:", error);
     return {

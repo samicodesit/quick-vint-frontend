@@ -700,6 +700,18 @@
       line-height: 1.3;
     }
 
+    .saved-note-help {
+      margin: 5px 0 0;
+      padding-left: 16px;
+      color: #6b7280;
+      font-size: 11px;
+      line-height: 1.35;
+    }
+
+    .saved-note-help li {
+      margin: 1px 0;
+    }
+
     .saved-note-row {
       display: block;
     }
@@ -1505,8 +1517,12 @@
 
           <div class="setting-row saved-note-row">
             <div class="setting-label-container">
-              <span class="setting-label">Saved note <span class="new-badge">NEW</span></span>
-              <span class="setting-sublabel">Added before hashtags on generated descriptions</span>
+              <span class="setting-label"><span id="descriptionFooterTitle">Saved note</span> <span class="new-badge">NEW</span></span>
+              <ul id="descriptionFooterHelp" class="saved-note-help">
+                <li>Appears on every future listing</li>
+                <li>Added before hashtags</li>
+                <li>No links or contact details</li>
+              </ul>
             </div>
             <textarea id="descriptionFooterText" class="saved-note-textarea" maxlength="240"
               placeholder="Smoke-free home. Happy to bundle items."></textarea>

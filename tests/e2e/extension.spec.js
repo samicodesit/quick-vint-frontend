@@ -103,6 +103,24 @@ function installChromeHarness(page, capacityResponse = null, initialStorage = {}
               user: storage.supabaseSession?.user || null,
               profile: storage.userProfile,
             };
+          } else if (message?.type === "GET_USER_USAGE_COUNT") {
+            response = storage.__usageResponse || {
+              daily: 0,
+              monthly: Number(storage.userProfile?.api_calls_this_month || 0),
+              tier: storage.userProfile?.subscription_tier || "free",
+              isLegacy: false,
+              limits: {
+                free: { daily: 5, monthly: 5 },
+                starter: { daily: 10, monthly: 75 },
+                pro: { daily: 25, monthly: 250 },
+                business: { daily: 60, monthly: 600 },
+              }[storage.userProfile?.subscription_tier || "free"],
+              freeLifetimeUsed: Number(
+                storage.userProfile?.free_lifetime_generations_used || 0,
+              ),
+              freeLifetimeLimit: 5,
+              packCredits: Number(storage.userProfile?.pack_credits || 0),
+            };
           } else if (message?.type === "CREATE_CHECKOUT") {
             response = storage.__checkoutResponse || {
               ok: true,
@@ -513,6 +531,9 @@ test.describe("AutoLister extension smoke flows", () => {
 
     await openContentHarness(page);
     await page.locator("#quickvint-description-footer-btn").click();
+    await expect(page.locator(".quickvint-footer-copy")).toContainText(
+      "Appears on every future listing",
+    );
     await page.locator("#quickvint-footer-text").fill(savedNote);
     await page.locator(".quickvint-footer-save").click();
 
@@ -528,6 +549,37 @@ test.describe("AutoLister extension smoke flows", () => {
     await page.locator("#quickvint-gen-btn").click();
     await expect.poll(() => requestBodies.length).toBe(1);
     expect(requestBodies[0].descriptionFooterText).toBe(savedNote);
+  });
+
+  test("localizes saved note helper copy from the selected UI language", async ({
+    page,
+  }) => {
+    await page.route("https://autolister.app/api/generate", (route) =>
+      route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          title: "Black Test Jacket",
+          description: "Clean black jacket.",
+          measurementAdvice: "",
+        }),
+      }),
+    );
+
+    await openContentHarness(page, null, {
+      initialStorage: {
+        selectedDescriptionLanguage: "fr",
+        quickvintLanguagePreferenceTouched: true,
+      },
+    });
+
+    await page.locator("#quickvint-description-footer-btn").click();
+    await expect(page.locator("#quickvint-footer-title")).toHaveText(
+      "Note enregistrée",
+    );
+    await expect(page.locator(".quickvint-footer-copy")).toContainText(
+      "Ajoutée à chaque future annonce",
+    );
   });
 
   test("does not send saved description notes for active Starter users", async ({
@@ -1022,6 +1074,141 @@ test.describe("AutoLister extension smoke flows", () => {
     await expect(offer).toContainText("5 free listings used");
     await expect(offer).toContainText("Keep listing without waiting");
     await expect(offer).toContainText("LISTFASTER20");
+  });
+
+  test("shows a localized Pro offer after Starter users close the daily-limit paywall", async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 1800, height: 900 });
+    await page.route("https://autolister.app/api/generate", (route) =>
+      route.fulfill({
+        status: 429,
+        contentType: "application/json",
+        body: JSON.stringify({
+          code: "daily_limit",
+          currentTier: "starter",
+          nextTier: "pro",
+          currentLimit: 10,
+          error: "Daily usage limit reached.",
+        }),
+      }),
+    );
+
+    await openContentHarness(page, null, {
+      shortenOfferTimers: true,
+      initialStorage: {
+        quickvintLanguagePreferenceTouched: true,
+        selectedLanguage: "fr",
+        selectedTitleLanguage: "fr",
+        selectedDescriptionLanguage: "fr",
+        userProfile: {
+          subscription_status: "active",
+          subscription_tier: "starter",
+          api_calls_this_month: 20,
+          pack_credits: 0,
+        },
+      },
+    });
+
+    await page.locator("#quickvint-gen-btn").click();
+    await expect(page.locator("#quickvint-toast.paywall")).toContainText(
+      "Daily limit reached",
+    );
+    await page.locator("#quickvint-toast .paywall-close").click();
+
+    const offer = page.locator("#quickvint-limit-followup-modal");
+    await expect(offer).toBeVisible();
+    await expect(offer).toContainText("Limite quotidienne Starter atteinte");
+    await expect(offer).toContainText("Besoin de plus d'annonces aujourd'hui");
+    await expect(offer).toContainText("LISTFASTER20");
+  });
+
+  test("does not show the Pro offer for Starter monthly limits", async ({
+    page,
+  }) => {
+    await page.route("https://autolister.app/api/generate", (route) =>
+      route.fulfill({
+        status: 429,
+        contentType: "application/json",
+        body: JSON.stringify({
+          code: "monthly_limit",
+          currentTier: "starter",
+          nextTier: "pro",
+          currentLimit: 75,
+          error: "Monthly usage limit reached.",
+        }),
+      }),
+    );
+
+    await openContentHarness(page, null, {
+      shortenOfferTimers: true,
+      initialStorage: {
+        userProfile: {
+          subscription_status: "active",
+          subscription_tier: "starter",
+          api_calls_this_month: 75,
+          pack_credits: 0,
+        },
+      },
+    });
+
+    await page.locator("#quickvint-gen-btn").click();
+    await expect(page.locator("#quickvint-toast.paywall")).toContainText(
+      "Monthly limit reached",
+    );
+    await page.locator("#quickvint-toast .paywall-close").click();
+    await page.waitForTimeout(100);
+
+    await expect(page.locator("#quickvint-limit-followup-modal")).toHaveCount(0);
+  });
+
+  test("shows the Starter daily-limit offer on return while the daily limit is still reached", async ({
+    page,
+  }) => {
+    await openContentHarness(page, null, {
+      emptyListing: true,
+      shortenOfferTimers: true,
+      initialStorage: {
+        userProfile: {
+          subscription_status: "active",
+          subscription_tier: "starter",
+          api_calls_this_month: 20,
+          pack_credits: 0,
+        },
+        __usageResponse: {
+          daily: 10,
+          monthly: 20,
+          tier: "starter",
+          isLegacy: false,
+          limits: { daily: 10, monthly: 75 },
+          freeLifetimeUsed: 5,
+          freeLifetimeLimit: 5,
+          packCredits: 0,
+        },
+      },
+    });
+
+    const offer = page.locator("#quickvint-limit-followup-modal");
+    await expect(offer).toBeVisible();
+    await expect(offer).toContainText("Starter daily limit reached");
+    await expect(offer).toContainText("Need more listings today?");
+
+    await offer.locator(".quickvint-limit-close").click();
+    await expect(offer).toHaveCount(0);
+    await expect
+      .poll(() =>
+        page.evaluate(
+          () =>
+            window.__extensionHarness.storage[
+              "quickvintOfferDismissed:test-user:starter_daily_limit_offer_v1"
+            ],
+        ),
+      )
+      .toBeTruthy();
+
+    await page.evaluate(() => window.dispatchEvent(new Event("focus")));
+    await page.waitForTimeout(100);
+    await expect(page.locator("#quickvint-limit-followup-modal")).toHaveCount(0);
   });
 
   test("opens checkout from the free-limit paywall when a plan is clicked", async ({
