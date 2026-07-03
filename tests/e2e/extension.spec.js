@@ -551,6 +551,55 @@ test.describe("AutoLister extension smoke flows", () => {
     expect(requestBodies[0].descriptionFooterText).toBe(savedNote);
   });
 
+  test("lets users skip the saved note for the current listing without deleting it", async ({
+    page,
+  }) => {
+    const requestBodies = [];
+    const savedNote = "  Smoke-free home.\n\nShips fast.  ";
+    await page.route("https://autolister.app/api/generate", (route) => {
+      requestBodies.push(route.request().postDataJSON());
+      return route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          title: "Black Test Jacket",
+          description: "Clean black jacket.",
+          measurementAdvice: "",
+        }),
+      });
+    });
+
+    await openContentHarness(page, null, {
+      initialStorage: {
+        descriptionFooterText: savedNote,
+      },
+    });
+    await page.waitForTimeout(1100);
+
+    await expect(page.locator("#quickvint-description-footer-btn")).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+    await page.locator("#quickvint-description-footer-btn").click();
+    await expect(page.locator("#quickvint-description-footer-btn")).toHaveAttribute(
+      "aria-pressed",
+      "false",
+    );
+
+    const storedNote = await page.evaluate(() =>
+      chrome.storage.local.get("descriptionFooterText"),
+    );
+    expect(storedNote.descriptionFooterText).toBe(savedNote);
+
+    await page.locator("#quickvint-gen-btn").click();
+    await expect.poll(() => requestBodies.length).toBe(1);
+    expect(requestBodies[0]).not.toHaveProperty("descriptionFooterText");
+
+    await page.locator("#quickvint-description-footer-edit-btn").click();
+    await expect(page.locator("#quickvint-footer-text")).toHaveValue(savedNote);
+    await page.locator(".quickvint-footer-secondary").click();
+  });
+
   test("localizes saved note helper copy from the selected UI language", async ({
     page,
   }) => {

@@ -9,8 +9,10 @@
   const EMOJI_TOGGLE_ID = "quickvint-emoji-toggle";
   const HASHTAGS_TOGGLE_ID = "quickvint-hashtags-toggle";
   const DESCRIPTION_FOOTER_BTN_ID = "quickvint-description-footer-btn";
+  const DESCRIPTION_FOOTER_EDIT_BTN_ID = "quickvint-description-footer-edit-btn";
   const DESCRIPTION_FOOTER_STORAGE_KEY = "descriptionFooterText";
   const DESCRIPTION_FOOTER_MAX_LENGTH = 240;
+  const DESCRIPTION_FOOTER_INCLUDE_DEFAULT = true;
   const DESCRIPTION_LENGTH_TOGGLE_ID = "quickvint-description-length-toggle";
   const DESCRIPTION_LENGTH_STORAGE_KEY = "descriptionLength";
   const HASHTAGS_STORAGE_KEY = "useHashtags";
@@ -552,6 +554,8 @@
         "No links or contact details",
       ],
       locked: "Available during the free trial and on Pro or Business.",
+      includeLabel: "Use on this listing",
+      skipped: "Saved note is off for this listing.",
       saved: "Saved note updated.",
       cleared: "Saved note cleared.",
       clear: "Clear",
@@ -565,6 +569,8 @@
       placeholder: "Maison non-fumeur. Regroupement possible.",
       bullets: ["Ajoutée à chaque future annonce", "Placée avant les hashtags", "Pas de liens ni coordonnées"],
       locked: "Disponible avec l'essai gratuit et les offres Pro ou Business.",
+      includeLabel: "Utiliser pour cette annonce",
+      skipped: "La note est désactivée pour cette annonce.",
       saved: "Note enregistrée.",
       cleared: "Note supprimée.",
       clear: "Effacer",
@@ -578,6 +584,8 @@
       placeholder: "Nekuřácká domácnost. Ráda sloučím více věcí.",
       bullets: ["Zobrazí se u každého dalšího inzerátu", "Přidá se před hashtagy", "Bez odkazů a kontaktních údajů"],
       locked: "Dostupné ve zkušební verzi zdarma a v tarifech Pro nebo Business.",
+      includeLabel: "Použít u tohoto inzerátu",
+      skipped: "Poznámka je pro tento inzerát vypnutá.",
       saved: "Poznámka uložena.",
       cleared: "Poznámka vymazána.",
       clear: "Vymazat",
@@ -591,6 +599,8 @@
       placeholder: "Røgfrit hjem. Samler gerne varer.",
       bullets: ["Vises på alle fremtidige annoncer", "Tilføjes før hashtags", "Ingen links eller kontaktoplysninger"],
       locked: "Tilgængelig i gratis prøveperiode og på Pro eller Business.",
+      includeLabel: "Brug på denne annonce",
+      skipped: "Noten er slået fra for denne annonce.",
       saved: "Note gemt.",
       cleared: "Note ryddet.",
       clear: "Ryd",
@@ -604,6 +614,8 @@
       placeholder: "Rookvrij huis. Bundelen is mogelijk.",
       bullets: ["Verschijnt bij elke toekomstige advertentie", "Komt voor de hashtags", "Geen links of contactgegevens"],
       locked: "Beschikbaar tijdens de gratis proefperiode en met Pro of Business.",
+      includeLabel: "Gebruiken voor deze advertentie",
+      skipped: "Notitie staat uit voor deze advertentie.",
       saved: "Notitie opgeslagen.",
       cleared: "Notitie gewist.",
       clear: "Wissen",
@@ -617,6 +629,8 @@
       placeholder: "Rauchfreier Haushalt. Kombiversand möglich.",
       bullets: ["Erscheint bei jedem künftigen Angebot", "Wird vor Hashtags eingefügt", "Keine Links oder Kontaktdaten"],
       locked: "Verfügbar im kostenlosen Test und mit Pro oder Business.",
+      includeLabel: "Für dieses Angebot verwenden",
+      skipped: "Notiz ist für dieses Angebot deaktiviert.",
       saved: "Notiz gespeichert.",
       cleared: "Notiz gelöscht.",
       clear: "Löschen",
@@ -630,6 +644,8 @@
       placeholder: "Σπίτι χωρίς καπνό. Μπορώ να συνδυάσω προϊόντα.",
       bullets: ["Εμφανίζεται σε κάθε μελλοντική αγγελία", "Μπαίνει πριν από τα hashtags", "Χωρίς links ή στοιχεία επικοινωνίας"],
       locked: "Διαθέσιμο στη δωρεάν δοκιμή και στα Pro ή Business.",
+      includeLabel: "Χρήση σε αυτή την αγγελία",
+      skipped: "Η σημείωση είναι απενεργοποιημένη για αυτή την αγγελία.",
       saved: "Η σημείωση αποθηκεύτηκε.",
       cleared: "Η σημείωση διαγράφηκε.",
       clear: "Διαγραφή",
@@ -643,6 +659,8 @@
       placeholder: "Dom bez dima. Mogu spojiti više artikala.",
       bullets: ["Pojavljuje se na svakoj budućoj objavi", "Dodaje se prije hashtagova", "Bez linkova ili kontakt podataka"],
       locked: "Dostupno u besplatnoj probi i na Pro ili Business planu.",
+      includeLabel: "Koristi na ovoj objavi",
+      skipped: "Napomena je isključena za ovu objavu.",
       saved: "Napomena spremljena.",
       cleared: "Napomena obrisana.",
       clear: "Obriši",
@@ -656,6 +674,8 @@
       placeholder: "Savuton koti. Yhdistelen mielelläni tuotteita.",
       bullets: ["Näkyy jokaisessa tulevassa ilmoituksessa", "Lisätään ennen hashtageja", "Ei linkkejä tai yhteystietoja"],
       locked: "Saatavilla ilmaisessa kokeilussa sekä Pro- tai Business-tilillä.",
+      includeLabel: "Käytä tässä ilmoituksessa",
+      skipped: "Huomautus on pois päältä tässä ilmoituksessa.",
       saved: "Huomautus tallennettu.",
       cleared: "Huomautus tyhjennetty.",
       clear: "Tyhjennä",
@@ -669,6 +689,8 @@
       placeholder: "Dohányfüstmentes otthon. Több terméket is össze tudok vonni.",
       bullets: ["Minden jövőbeli hirdetésben megjelenik", "A hashtagek elé kerül", "Nincsenek linkek vagy elérhetőségek"],
       locked: "Elérhető az ingyenes próba alatt, valamint Pro vagy Business csomaggal.",
+      includeLabel: "Használat ennél a hirdetésnél",
+      skipped: "A megjegyzés ki van kapcsolva ennél a hirdetésnél.",
       saved: "Megjegyzés mentve.",
       cleared: "Megjegyzés törölve.",
       clear: "Törlés",
@@ -682,6 +704,8 @@
       placeholder: "Casa senza fumo. Posso unire più articoli.",
       bullets: ["Compare in ogni annuncio futuro", "Viene aggiunta prima degli hashtag", "Niente link o contatti"],
       locked: "Disponibile nella prova gratuita e con Pro o Business.",
+      includeLabel: "Usa in questo annuncio",
+      skipped: "La nota è disattivata per questo annuncio.",
       saved: "Nota salvata.",
       cleared: "Nota eliminata.",
       clear: "Cancella",
@@ -695,6 +719,8 @@
       placeholder: "Namai be dūmų. Galiu sujungti kelias prekes.",
       bullets: ["Rodoma kiekviename būsimame skelbime", "Pridedama prieš grotažymes", "Be nuorodų ar kontaktų"],
       locked: "Pasiekiama nemokamos bandomosios versijos metu ir su Pro arba Business.",
+      includeLabel: "Naudoti šiame skelbime",
+      skipped: "Pastaba šiame skelbime išjungta.",
       saved: "Pastaba išsaugota.",
       cleared: "Pastaba išvalyta.",
       clear: "Išvalyti",
@@ -708,6 +734,8 @@
       placeholder: "Dom bez dymu. Chętnie połączę kilka rzeczy.",
       bullets: ["Pojawia się w każdej przyszłej ofercie", "Dodawana przed hashtagami", "Bez linków i danych kontaktowych"],
       locked: "Dostępne w darmowej wersji próbnej oraz w Pro lub Business.",
+      includeLabel: "Użyj w tej ofercie",
+      skipped: "Notatka jest wyłączona dla tej oferty.",
       saved: "Notatka zapisana.",
       cleared: "Notatka usunięta.",
       clear: "Wyczyść",
@@ -721,6 +749,8 @@
       placeholder: "Casa sem fumo. Posso juntar artigos.",
       bullets: ["Aparece em todos os anúncios futuros", "É adicionada antes das hashtags", "Sem links ou contactos"],
       locked: "Disponível no teste gratuito e nos planos Pro ou Business.",
+      includeLabel: "Usar neste anúncio",
+      skipped: "A nota está desativada neste anúncio.",
       saved: "Nota guardada.",
       cleared: "Nota apagada.",
       clear: "Limpar",
@@ -734,6 +764,8 @@
       placeholder: "Casă fără fum. Pot grupa articole.",
       bullets: ["Apare la fiecare anunț viitor", "Este adăugată înainte de hashtaguri", "Fără linkuri sau date de contact"],
       locked: "Disponibil în perioada gratuită și pe Pro sau Business.",
+      includeLabel: "Folosește la acest anunț",
+      skipped: "Nota este dezactivată pentru acest anunț.",
       saved: "Notă salvată.",
       cleared: "Notă ștearsă.",
       clear: "Șterge",
@@ -747,6 +779,8 @@
       placeholder: "Casa sin humo. Puedo agrupar artículos.",
       bullets: ["Aparece en todos los anuncios futuros", "Se añade antes de los hashtags", "Sin enlaces ni datos de contacto"],
       locked: "Disponible en la prueba gratuita y en Pro o Business.",
+      includeLabel: "Usar en este anuncio",
+      skipped: "La nota está desactivada para este anuncio.",
       saved: "Nota guardada.",
       cleared: "Nota eliminada.",
       clear: "Borrar",
@@ -760,6 +794,8 @@
       placeholder: "Nefajčiarska domácnosť. Rada spojím viac vecí.",
       bullets: ["Zobrazí sa pri každom budúcom inzeráte", "Pridá sa pred hashtagy", "Bez odkazov a kontaktných údajov"],
       locked: "Dostupné v bezplatnej skúšobnej verzii a v Pro alebo Business.",
+      includeLabel: "Použiť v tomto inzeráte",
+      skipped: "Poznámka je pre tento inzerát vypnutá.",
       saved: "Poznámka uložená.",
       cleared: "Poznámka vymazaná.",
       clear: "Vymazať",
@@ -773,6 +809,8 @@
       placeholder: "Rökfritt hem. Samfraktar gärna.",
       bullets: ["Visas på varje framtida annons", "Läggs till före hashtags", "Inga länkar eller kontaktuppgifter"],
       locked: "Tillgängligt under gratis testperiod och med Pro eller Business.",
+      includeLabel: "Använd i denna annons",
+      skipped: "Notisen är avstängd för denna annons.",
       saved: "Notis sparad.",
       cleared: "Notis rensad.",
       clear: "Rensa",
@@ -814,6 +852,7 @@
   let emojiToggleBtn = null;
   let hashtagsToggleBtn = null;
   let descriptionFooterBtn = null;
+  let descriptionFooterEditBtn = null;
   let descriptionLengthToggle = null;
   let signInBtn = null;
   let isBusy = false;
@@ -865,6 +904,8 @@
   let batchImagePreloadCache = new Map();
   let pendingGenerationOffer = null;
   let pendingLimitFollowupOffer = null;
+  let descriptionFooterListingKey = "";
+  let descriptionFooterIncludeForListing = DESCRIPTION_FOOTER_INCLUDE_DEFAULT;
   const limitFollowupOfferChecked = new Set();
   let limitFollowupRescueTimer = null;
   let limitFollowupReturnTimer = null;
@@ -6078,6 +6119,72 @@
         box-shadow: 0 1px 3px rgba(15, 23, 42, 0.16);
       }
 
+      .quickvint-note-control {
+        display: inline-flex;
+        align-items: center;
+        height: 38px;
+        border: 1px solid #d9dde8;
+        border-radius: 8px;
+        background: #ffffff;
+        box-shadow: 0 6px 16px rgba(15, 23, 42, 0.07);
+        overflow: hidden;
+        transition: border-color 0.22s ease, box-shadow 0.22s ease, transform 0.22s ease;
+      }
+
+      .quickvint-note-control .quickvint-binary-toggle {
+        height: 36px;
+        min-height: 36px;
+        border: 0;
+        border-radius: 0;
+        box-shadow: none;
+      }
+
+      .quickvint-note-control:hover {
+        border-color: #b8c0d8;
+        box-shadow: 0 8px 18px rgba(15, 23, 42, 0.09);
+        transform: translateY(-1px);
+      }
+
+      .quickvint-note-control:hover .quickvint-binary-toggle,
+      .quickvint-note-control:hover .quickvint-note-edit {
+        transform: none;
+      }
+
+      .quickvint-note-edit {
+        appearance: none;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 36px;
+        height: 36px;
+        min-width: 36px;
+        padding: 0;
+        border: 0;
+        border-left: 1px solid #e2e8f0;
+        border-radius: 0;
+        background: #ffffff;
+        color: #475569;
+        cursor: pointer;
+        box-shadow: none;
+        transition: background 0.22s ease, color 0.22s ease;
+      }
+
+      .quickvint-note-edit:hover {
+        background: #f8fafc;
+        color: #4338ca;
+      }
+
+      .quickvint-note-edit:disabled {
+        cursor: wait;
+        opacity: 0.58;
+        transform: none;
+      }
+
+      .quickvint-note-edit svg {
+        width: 15px;
+        height: 15px;
+      }
+
       @keyframes quickvintSkeletonSweep {
         0% {
           transform: translateX(-100%);
@@ -6091,6 +6198,7 @@
         #${DESCRIPTION_LENGTH_TOGGLE_ID},
         #${DESCRIPTION_LENGTH_TOGGLE_ID} .quickvint-length-option,
         .quickvint-binary-toggle,
+        .quickvint-note-edit,
         .quickvint-binary-toggle .quickvint-toggle-switch,
         .quickvint-binary-toggle .quickvint-toggle-knob {
           transition-duration: 1ms !important;
@@ -6098,6 +6206,8 @@
 
         #${DESCRIPTION_LENGTH_TOGGLE_ID}:hover,
         .quickvint-binary-toggle:hover,
+        .quickvint-note-control:hover,
+        .quickvint-note-edit:hover,
         #${DESCRIPTION_LENGTH_TOGGLE_ID} .quickvint-length-option[aria-pressed="true"] {
           transform: none;
         }
@@ -6865,6 +6975,7 @@
 
     applyDescriptionFooterModalCopy(modal, copy);
     modal.dataset.allowed = allowed ? "true" : "false";
+    modal.dataset.hadText = /\S/.test(text) ? "true" : "false";
     if (textarea) {
       textarea.value = text;
     }
@@ -6907,6 +7018,10 @@
     await chrome.storage.local.set({
       [DESCRIPTION_FOOTER_STORAGE_KEY]: validation.text,
     });
+    ensureDescriptionFooterListingState();
+    if (/\S/.test(validation.text) && modal.dataset.hadText !== "true") {
+      descriptionFooterIncludeForListing = true;
+    }
     syncDescriptionFooterButtonState();
     closeDescriptionFooterModal();
     showToast(
@@ -6926,6 +7041,9 @@
     const textarea = modal.querySelector(".quickvint-footer-textarea");
     if (textarea) textarea.value = "";
     await chrome.storage.local.set({ [DESCRIPTION_FOOTER_STORAGE_KEY]: "" });
+    ensureDescriptionFooterListingState();
+    descriptionFooterIncludeForListing = DESCRIPTION_FOOTER_INCLUDE_DEFAULT;
+    modal.dataset.hadText = "false";
     updateDescriptionFooterModalState(modal, {
       allowed: true,
       text: "",
@@ -7100,6 +7218,18 @@
     `;
   }
 
+  function getCurrentDescriptionFooterListingKey() {
+    return `${window.location.origin}${window.location.pathname}${window.location.search}`;
+  }
+
+  function ensureDescriptionFooterListingState() {
+    const listingKey = getCurrentDescriptionFooterListingKey();
+    if (listingKey !== descriptionFooterListingKey) {
+      descriptionFooterListingKey = listingKey;
+      descriptionFooterIncludeForListing = DESCRIPTION_FOOTER_INCLUDE_DEFAULT;
+    }
+  }
+
   function createHashtagsToggleButton() {
     const btn = document.createElement("button");
     btn.id = HASHTAGS_TOGGLE_ID;
@@ -7145,37 +7275,73 @@
     }, 1000);
   }
 
-  function setDescriptionFooterButtonState({ enabled, hasText }) {
+  function setDescriptionFooterButtonState({ enabled, hasText, copy }) {
     if (!descriptionFooterBtn) return;
+    ensureDescriptionFooterListingState();
+    const includeForListing =
+      enabled && hasText && descriptionFooterIncludeForListing;
     setPreferenceLoadingState(descriptionFooterBtn, false);
     descriptionFooterBtn.disabled = false;
     descriptionFooterBtn.setAttribute(
       "aria-pressed",
-      enabled && hasText ? "true" : "false",
+      includeForListing ? "true" : "false",
+    );
+    descriptionFooterBtn.setAttribute(
+      "aria-label",
+      hasText
+        ? copy?.includeLabel || "Use saved note on this listing"
+        : "Add a saved note before hashtags",
     );
     descriptionFooterBtn.title = enabled
       ? hasText
-        ? "Saved note will be added before hashtags"
+        ? includeForListing
+          ? "Saved note will be added before hashtags"
+          : copy?.skipped || "Saved note is off for this listing."
         : "Add a saved note before hashtags"
       : "Saved notes are available during the free trial and on Pro or Business.";
+    setDescriptionFooterEditButtonState({ enabled });
+  }
+
+  function setDescriptionFooterEditButtonState({ enabled }) {
+    if (!descriptionFooterEditBtn) return;
+    descriptionFooterEditBtn.disabled = false;
+    descriptionFooterEditBtn.title = enabled
+      ? "Edit saved note"
+      : "Saved notes are available during the free trial and on Pro or Business.";
+    descriptionFooterEditBtn.setAttribute("aria-label", "Edit saved note");
   }
 
   async function syncDescriptionFooterButtonState() {
     if (!descriptionFooterBtn || extensionContextInvalidated) return;
     if (descriptionFooterBtn.dataset.loading !== "false") {
       setBinaryToggleLoadingState(descriptionFooterBtn, true);
+      if (descriptionFooterEditBtn) {
+        descriptionFooterEditBtn.disabled = true;
+      }
     }
     try {
-      const { [DESCRIPTION_FOOTER_STORAGE_KEY]: storedText = "", userProfile = null } =
-        await new Promise((resolve) => {
-          chrome.storage.local.get(
-            { [DESCRIPTION_FOOTER_STORAGE_KEY]: "", userProfile: null },
-            (result) => resolve(result),
-          );
-        });
+      const storage = await new Promise((resolve) => {
+        chrome.storage.local.get(
+          {
+            [DESCRIPTION_FOOTER_STORAGE_KEY]: "",
+            userProfile: null,
+            selectedLanguage: null,
+            selectedTitleLanguage: null,
+            selectedDescriptionLanguage: null,
+            [LANGUAGE_PREFERENCE_TOUCHED_KEY]: false,
+          },
+          (result) => resolve(result),
+        );
+      });
+      const {
+        [DESCRIPTION_FOOTER_STORAGE_KEY]: storedText = "",
+        userProfile = null,
+      } = storage;
+      const languageProfile = resolveLanguageProfile(storage);
       setDescriptionFooterButtonState({
         enabled: canUseDescriptionFooterSetting(userProfile),
         hasText: /\S/.test(typeof storedText === "string" ? storedText : ""),
+        copy: getDescriptionFooterCopy(languageProfile.uiLanguageCode),
       });
     } catch (error) {
       if (handleExtensionContextInvalidated(error)) return;
@@ -7184,7 +7350,10 @@
     }
   }
 
-  function createDescriptionFooterButton() {
+  function createDescriptionFooterControl() {
+    const wrapper = document.createElement("div");
+    wrapper.className = "quickvint-note-control";
+
     const btn = document.createElement("button");
     btn.id = DESCRIPTION_FOOTER_BTN_ID;
     btn.type = "button";
@@ -7195,13 +7364,54 @@
     btn.dataset.loading = "true";
     btn.disabled = true;
     btn.innerHTML = createBinaryToggleMarkup("Note");
-    btn.addEventListener("click", () => {
+    btn.addEventListener("click", async () => {
+      if (btn.dataset.loading === "true" || btn.disabled) return;
+      ensureDescriptionFooterListingState();
+      const { [DESCRIPTION_FOOTER_STORAGE_KEY]: storedText = "", userProfile = null } =
+        await chrome.storage.local.get({
+          [DESCRIPTION_FOOTER_STORAGE_KEY]: "",
+          userProfile: null,
+        });
+      const enabled = canUseDescriptionFooterSetting(userProfile);
+      const hasText = /\S/.test(
+        typeof storedText === "string" ? storedText : "",
+      );
+      if (!enabled || !hasText) {
+        openDescriptionFooterModal();
+        return;
+      }
+      descriptionFooterIncludeForListing = !descriptionFooterIncludeForListing;
+      syncDescriptionFooterButtonState();
+      trackGrowthEvent("description_footer_include_changed", {
+        source: "listing_tools",
+        enabled: descriptionFooterIncludeForListing,
+      });
+    });
+
+    const editBtn = document.createElement("button");
+    editBtn.id = DESCRIPTION_FOOTER_EDIT_BTN_ID;
+    editBtn.type = "button";
+    editBtn.className = "quickvint-note-edit";
+    editBtn.setAttribute("aria-label", "Edit saved note");
+    editBtn.title = "Edit saved note";
+    editBtn.innerHTML = `
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <path d="M12 20h9" />
+        <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5Z" />
+      </svg>
+    `;
+    editBtn.addEventListener("click", () => {
       if (btn.dataset.loading === "true") return;
       openDescriptionFooterModal();
     });
+
+    wrapper.appendChild(btn);
+    wrapper.appendChild(editBtn);
+    descriptionFooterBtn = btn;
+    descriptionFooterEditBtn = editBtn;
     syncDescriptionFooterButtonState();
     startDescriptionFooterSync();
-    return btn;
+    return wrapper;
   }
 
   function startDescriptionFooterSync() {
@@ -10726,8 +10936,12 @@
           ? useEmojis !== false
           : overrideUseEmojis === true);
       const descriptionFooterAccess = canUseDescriptionFooterSetting(userProfile);
+      ensureDescriptionFooterListingState();
+      const effectiveDescriptionFooterIncluded =
+        descriptionFooterAccess && descriptionFooterIncludeForListing;
       const descriptionFooterText =
-        descriptionFooterAccess && typeof storedDescriptionFooterText === "string"
+        effectiveDescriptionFooterIncluded &&
+        typeof storedDescriptionFooterText === "string"
           ? storedDescriptionFooterText
           : "";
       const descriptionFooterValidation =
@@ -10763,6 +10977,7 @@
         useBulletPoints: Boolean(useBulletPoints),
         descriptionLength,
         hasDescriptionFooter: /\S/.test(effectiveDescriptionFooterText),
+        descriptionFooterIncluded: effectiveDescriptionFooterIncluded,
         descriptionFooterLength: effectiveDescriptionFooterText.length,
         emojiRetry: Boolean(emojiRetry),
       });
@@ -11015,9 +11230,13 @@
       emojiToggleBtn = document.getElementById(EMOJI_TOGGLE_ID);
       hashtagsToggleBtn = document.getElementById(HASHTAGS_TOGGLE_ID);
       descriptionFooterBtn = document.getElementById(DESCRIPTION_FOOTER_BTN_ID);
+      descriptionFooterEditBtn = document.getElementById(
+        DESCRIPTION_FOOTER_EDIT_BTN_ID,
+      );
       if (!descriptionFooterBtn) {
-        descriptionFooterBtn = createDescriptionFooterButton();
-        document.querySelector(".quickvint-tool-options")?.appendChild(descriptionFooterBtn);
+        document
+          .querySelector(".quickvint-tool-options")
+          ?.appendChild(createDescriptionFooterControl());
       }
       descriptionLengthToggle = document.getElementById(
         DESCRIPTION_LENGTH_TOGGLE_ID,
@@ -11055,7 +11274,7 @@
       reportBtn = createReportButton();
       descriptionLengthToggle = createDescriptionLengthToggle();
       hashtagsToggleBtn = createHashtagsToggleButton();
-      descriptionFooterBtn = createDescriptionFooterButton();
+      const descriptionFooterControl = createDescriptionFooterControl();
       emojiToggleBtn = createEmojiToggleButton();
       signInBtn = createSignInComponent();
 
@@ -11065,7 +11284,7 @@
       primaryTools.appendChild(reportBtn);
       toolOptions.appendChild(descriptionLengthToggle);
       toolOptions.appendChild(hashtagsToggleBtn);
-      toolOptions.appendChild(descriptionFooterBtn);
+      toolOptions.appendChild(descriptionFooterControl);
       toolOptions.appendChild(emojiToggleBtn);
       toolsWrapper.appendChild(primaryTools);
       toolsWrapper.appendChild(toolOptions);
