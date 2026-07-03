@@ -1314,6 +1314,7 @@
       maybeFetchAndShowLimitFollowupOffer({
         reason: "starter_daily_limit_return",
         onlyCopyKey: STARTER_DAILY_LIMIT_OFFER_COPY_KEY,
+        allowDuringDraft: true,
       });
     }, STARTER_DAILY_LIMIT_RETURN_DELAY_MS);
 
@@ -8254,6 +8255,7 @@
         }
 
         if (!eligible) continue;
+        if (!allowDuringDraft && isListingDraftInProgress()) continue;
 
         const offer = {
           campaignKey,
