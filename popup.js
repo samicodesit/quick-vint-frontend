@@ -22,6 +22,8 @@ document.addEventListener("DOMContentLoaded", () => {
   const MAGIC_LINK_PENDING_MAX_AGE_MS = 15 * 60 * 1000;
   const MAGIC_LINK_RESEND_COOLDOWN_MS = 60 * 1000;
   const LANGUAGE_PREFERENCE_TOUCHED_KEY = "quickvintLanguagePreferenceTouched";
+  const DESCRIPTION_FOOTER_STORAGE_KEY = "descriptionFooterText";
+  const DESCRIPTION_FOOTER_MAX_LENGTH = 240;
   const languageDefaults = window.AutoListerLanguageDefaults;
 
   const TIER_DISPLAY_NAMES = {
@@ -85,7 +87,12 @@ document.addEventListener("DOMContentLoaded", () => {
   const toneOptions = document.querySelectorAll('input[name="tone"]');
   const emojiToggle = document.getElementById("emojiToggle");
   const emojiToggleContainer = document.getElementById("emojiToggleContainer");
+  const descriptionFooterTextarea = document.getElementById("descriptionFooterText");
+  const descriptionFooterCount = document.getElementById("descriptionFooterCount");
+  const descriptionFooterStatus = document.getElementById("descriptionFooterStatus");
+  const descriptionFooterClear = document.getElementById("descriptionFooterClear");
   const formatOptions = document.querySelectorAll('input[name="format"]');
+  let descriptionFooterSaveTimer = null;
   let renderRequestId = 0;
   let profileRefreshInFlight = false;
   let lastProfileRefreshAt = 0;
@@ -268,6 +275,37 @@ document.addEventListener("DOMContentLoaded", () => {
       return true;
     }
     return tier === "pro" || tier === "business";
+  }
+
+  function canUseDescriptionFooterSetting(profile) {
+    const tier = normalizeTier(profile?.subscription_tier);
+    if (profile?.subscription_status !== "active" || tier === "free") {
+      return true;
+    }
+    return tier === "pro" || tier === "business";
+  }
+
+  function validateDescriptionFooterText(value) {
+    const text = typeof value === "string" ? value : "";
+    if (text.length > DESCRIPTION_FOOTER_MAX_LENGTH) {
+      return {
+        ok: false,
+        error: `Max ${DESCRIPTION_FOOTER_MAX_LENGTH} characters.`,
+      };
+    }
+
+    const hasLink =
+      /\b(?:https?:\/\/|www\.|[a-z0-9-]+\.(?:com|net|org|co|io|app|fr|de|nl|it|es|pl|pt|be|uk|co\.uk)\b)/i.test(
+        text,
+      );
+    const hasEmail = /\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/i.test(text);
+    const hasPhone = /(?:\+|00)?\d[\d\s().-]{7,}\d/.test(text);
+
+    if (hasLink || hasEmail || hasPhone) {
+      return { ok: false, error: "No links, email addresses, or phone numbers." };
+    }
+
+    return { ok: true, text };
   }
 
   function showMessage(msg, type = "info") {
@@ -1125,10 +1163,75 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   // --- SETTINGS LOGIC ---
+  function updateDescriptionFooterSettingsState({
+    allowed,
+    text,
+    status = "",
+  }) {
+    const currentText =
+      typeof text === "string" ? text : descriptionFooterTextarea?.value || "";
+    const validation = validateDescriptionFooterText(currentText);
+
+    if (descriptionFooterTextarea) {
+      descriptionFooterTextarea.disabled = !allowed;
+      descriptionFooterTextarea.maxLength = DESCRIPTION_FOOTER_MAX_LENGTH;
+    }
+    if (descriptionFooterCount) {
+      descriptionFooterCount.textContent = `${currentText.length}/${DESCRIPTION_FOOTER_MAX_LENGTH}`;
+    }
+    if (descriptionFooterStatus) {
+      const message = !allowed
+        ? "Available during the free trial and on Pro or Business."
+        : validation.ok
+          ? status
+          : validation.error;
+      descriptionFooterStatus.textContent = message;
+      descriptionFooterStatus.dataset.state = validation.ok || !allowed ? "default" : "error";
+    }
+    if (descriptionFooterClear) {
+      descriptionFooterClear.disabled = !allowed || currentText.length === 0;
+    }
+
+    return validation;
+  }
+
+  function scheduleDescriptionFooterSave() {
+    if (!descriptionFooterTextarea || descriptionFooterTextarea.disabled) return;
+    const text = descriptionFooterTextarea.value;
+    const validation = updateDescriptionFooterSettingsState({
+      allowed: true,
+      text,
+    });
+
+    if (descriptionFooterSaveTimer) {
+      clearTimeout(descriptionFooterSaveTimer);
+    }
+    if (!validation.ok) return;
+
+    descriptionFooterSaveTimer = setTimeout(() => {
+      chrome.storage.local.set(
+        { [DESCRIPTION_FOOTER_STORAGE_KEY]: validation.text },
+        () => {
+          updateDescriptionFooterSettingsState({
+            allowed: true,
+            text: validation.text,
+            status: /\S/.test(validation.text) ? "Saved." : "",
+          });
+        },
+      );
+    }, 250);
+  }
+
   function setupSettings() {
     // Load saved settings and user profile for tier check
     chrome.storage.local.get(
-      ["tone", "useEmojis", "useBulletPoints", "userProfile"],
+      [
+        "tone",
+        "useEmojis",
+        "useBulletPoints",
+        DESCRIPTION_FOOTER_STORAGE_KEY,
+        "userProfile",
+      ],
       (result) => {
         const profile = result.userProfile || {};
         const tier = normalizeTier(profile.subscription_tier);
@@ -1136,6 +1239,7 @@ document.addEventListener("DOMContentLoaded", () => {
         const hasProAccess =
           isActive && (tier === "pro" || tier === "business");
         const hasEmojiAccess = canUseEmojiSetting(profile);
+        const hasDescriptionFooterAccess = canUseDescriptionFooterSetting(profile);
 
         // Set Tone
         const savedTone = result.tone || "standard";
@@ -1159,6 +1263,17 @@ document.addEventListener("DOMContentLoaded", () => {
         );
         if (formatInput) formatInput.checked = true;
 
+        if (descriptionFooterTextarea) {
+          descriptionFooterTextarea.value =
+            typeof result[DESCRIPTION_FOOTER_STORAGE_KEY] === "string"
+              ? result[DESCRIPTION_FOOTER_STORAGE_KEY]
+              : "";
+          updateDescriptionFooterSettingsState({
+            allowed: hasDescriptionFooterAccess,
+            text: descriptionFooterTextarea.value,
+          });
+        }
+
         // Apply tier gating AND reset if expired
         if (!hasProAccess) {
           // If they lost access but still have premium tone selected, reset to standard
@@ -1172,7 +1287,11 @@ document.addEventListener("DOMContentLoaded", () => {
           }
 
         }
-        updateSettingsAccess(hasProAccess, hasEmojiAccess);
+        updateSettingsAccess(
+          hasProAccess,
+          hasEmojiAccess,
+          hasDescriptionFooterAccess,
+        );
       },
     );
 
@@ -1209,6 +1328,27 @@ document.addEventListener("DOMContentLoaded", () => {
         }
       });
     });
+
+    if (descriptionFooterTextarea) {
+      descriptionFooterTextarea.addEventListener("input", scheduleDescriptionFooterSave);
+    }
+    if (descriptionFooterClear) {
+      descriptionFooterClear.addEventListener("click", () => {
+        if (!descriptionFooterTextarea || descriptionFooterTextarea.disabled) return;
+        if (descriptionFooterSaveTimer) {
+          clearTimeout(descriptionFooterSaveTimer);
+          descriptionFooterSaveTimer = null;
+        }
+        descriptionFooterTextarea.value = "";
+        chrome.storage.local.set({ [DESCRIPTION_FOOTER_STORAGE_KEY]: "" }, () => {
+          updateDescriptionFooterSettingsState({
+            allowed: true,
+            text: "",
+            status: "Cleared.",
+          });
+        });
+      });
+    }
   }
 
   function refreshSettingsAccess() {
@@ -1218,15 +1358,24 @@ document.addEventListener("DOMContentLoaded", () => {
       const isActive = profile.subscription_status === "active";
       const hasProAccess =
         isActive && (tier === "pro" || tier === "business");
-      updateSettingsAccess(hasProAccess, canUseEmojiSetting(profile));
+      updateSettingsAccess(
+        hasProAccess,
+        canUseEmojiSetting(profile),
+        canUseDescriptionFooterSetting(profile),
+      );
     });
   }
 
-  function updateSettingsAccess(hasProAccess, hasEmojiAccess = false) {
+  function updateSettingsAccess(
+    hasProAccess,
+    hasEmojiAccess = false,
+    hasDescriptionFooterAccess = false,
+  ) {
     const toneContainer = document.querySelector(".tone-grid");
     const emojiContainer = emojiToggle?.closest(".toggle-container");
     const infoNote = document.querySelector(".info-note");
     const upgradeNote = document.querySelector(".upgrade-note");
+    const descriptionFooterText = descriptionFooterTextarea?.value || "";
 
     if (hasProAccess) {
       // Full access - enable everything
@@ -1242,6 +1391,10 @@ document.addEventListener("DOMContentLoaded", () => {
           emojiContainer.classList.toggle("locked", !hasEmojiAccess);
         }
       }
+      updateDescriptionFooterSettingsState({
+        allowed: hasDescriptionFooterAccess,
+        text: descriptionFooterText,
+      });
       if (infoNote) infoNote.style.display = "none";
       if (upgradeNote) upgradeNote.style.display = "none";
     } else {
@@ -1260,6 +1413,10 @@ document.addEventListener("DOMContentLoaded", () => {
           emojiContainer.classList.toggle("locked", !hasEmojiAccess);
         }
       }
+      updateDescriptionFooterSettingsState({
+        allowed: hasDescriptionFooterAccess,
+        text: descriptionFooterText,
+      });
       if (infoNote) infoNote.style.display = "none";
       if (upgradeNote) upgradeNote.style.display = "flex";
     }

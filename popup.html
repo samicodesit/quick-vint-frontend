@@ -693,6 +693,90 @@
       color: #1f2937;
     }
 
+    .setting-sublabel {
+      margin-top: 2px;
+      color: #6b7280;
+      font-size: 11px;
+      line-height: 1.3;
+    }
+
+    .saved-note-row {
+      display: block;
+    }
+
+    .saved-note-textarea {
+      width: 100%;
+      min-height: 86px;
+      margin-top: 10px;
+      padding: 10px;
+      border: 1px solid #d1d5db;
+      border-radius: 8px;
+      background: #ffffff;
+      color: #111827;
+      font: inherit;
+      font-size: 12px;
+      line-height: 1.45;
+      resize: vertical;
+      outline: none;
+      box-sizing: border-box;
+      transition: border-color 0.16s ease, box-shadow 0.16s ease;
+    }
+
+    .saved-note-textarea:focus {
+      border-color: #6366f1;
+      box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.14);
+    }
+
+    .saved-note-textarea:disabled {
+      background: #f8fafc;
+      color: #64748b;
+      cursor: not-allowed;
+    }
+
+    .saved-note-meta {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 10px;
+      min-height: 20px;
+      margin-top: 7px;
+      color: #6b7280;
+      font-size: 11px;
+      line-height: 1.35;
+    }
+
+    .saved-note-status[data-state="error"] {
+      color: #b45309;
+    }
+
+    .saved-note-actions {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-shrink: 0;
+    }
+
+    .saved-note-count {
+      white-space: nowrap;
+    }
+
+    .saved-note-clear {
+      border: 0;
+      background: transparent;
+      color: #4f46e5;
+      cursor: pointer;
+      font: inherit;
+      font-size: 11px;
+      font-weight: 700;
+      line-height: 1.2;
+      padding: 0;
+    }
+
+    .saved-note-clear:disabled {
+      color: #9ca3af;
+      cursor: not-allowed;
+    }
+
     /* Format Options - Inline */
     .format-buttons-row {
       display: flex;
@@ -1419,6 +1503,24 @@
 
           <div class="setting-divider"></div>
 
+          <div class="setting-row saved-note-row">
+            <div class="setting-label-container">
+              <span class="setting-label">Saved note <span class="new-badge">NEW</span></span>
+              <span class="setting-sublabel">Added before hashtags on generated descriptions</span>
+            </div>
+            <textarea id="descriptionFooterText" class="saved-note-textarea" maxlength="240"
+              placeholder="Smoke-free home. Happy to bundle items."></textarea>
+            <div class="saved-note-meta">
+              <span id="descriptionFooterStatus" class="saved-note-status"></span>
+              <span class="saved-note-actions">
+                <span id="descriptionFooterCount" class="saved-note-count">0/240</span>
+                <button id="descriptionFooterClear" class="saved-note-clear" type="button">Clear</button>
+              </span>
+            </div>
+          </div>
+
+          <div class="setting-divider"></div>
+
           <div class="setting-group">
             <label class="form-label">Description Tone <span class="new-badge">NEW</span></label>
             <div class="tone-slider">
@@ -1477,7 +1579,7 @@
             <line x1="12" y1="16" x2="12.01" y2="16"></line>
           </svg>
           <div>
-            <strong>Upgrade to unlock:</strong> Description tone options are available on
+            <strong>Upgrade to unlock:</strong> Saved notes and description tone options are available on
             <strong>Pro & Business</strong> plans. Emojis are included in the free trial and Pro & Business.
             <a href="#" class="upgrade-link" id="settingsUpgradeLink">View Plans →</a>
           </div>

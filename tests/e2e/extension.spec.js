@@ -197,6 +197,7 @@ async function openContentHarness(page, capacityResponse = null, options = {}) {
     page.locator("#quickvint-description-length-toggle"),
   ).toBeVisible();
   await expect(page.locator("#quickvint-hashtags-toggle")).toBeVisible();
+  await expect(page.locator("#quickvint-description-footer-btn")).toBeVisible();
 }
 
 async function openImageCompressionHarness(page, proxyResponse) {
@@ -490,6 +491,82 @@ test.describe("AutoLister extension smoke flows", () => {
     await page.locator("#quickvint-gen-btn").click();
     await expect.poll(() => requestBodies.length).toBe(1);
     expect(requestBodies[0].useHashtags).toBe(false);
+  });
+
+  test("saves description note text exactly and sends it with generation requests", async ({
+    page,
+  }) => {
+    const requestBodies = [];
+    const savedNote = "  Smoke-free home.\n\nShips fast.  ";
+    await page.route("https://autolister.app/api/generate", (route) => {
+      requestBodies.push(route.request().postDataJSON());
+      return route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          title: "Black Test Jacket",
+          description: "Clean black jacket.",
+          measurementAdvice: "",
+        }),
+      });
+    });
+
+    await openContentHarness(page);
+    await page.locator("#quickvint-description-footer-btn").click();
+    await page.locator("#quickvint-footer-text").fill(savedNote);
+    await page.locator(".quickvint-footer-save").click();
+
+    const storedNote = await page.evaluate(() =>
+      chrome.storage.local.get("descriptionFooterText"),
+    );
+    expect(storedNote.descriptionFooterText).toBe(savedNote);
+    await expect(page.locator("#quickvint-description-footer-btn")).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+
+    await page.locator("#quickvint-gen-btn").click();
+    await expect.poll(() => requestBodies.length).toBe(1);
+    expect(requestBodies[0].descriptionFooterText).toBe(savedNote);
+  });
+
+  test("does not send saved description notes for active Starter users", async ({
+    page,
+  }) => {
+    const requestBodies = [];
+    await page.route("https://autolister.app/api/generate", (route) => {
+      requestBodies.push(route.request().postDataJSON());
+      return route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          title: "Black Test Jacket",
+          description: "Clean black jacket.",
+          measurementAdvice: "",
+        }),
+      });
+    });
+
+    await openContentHarness(page, null, {
+      initialStorage: {
+        descriptionFooterText: "  Smoke-free home.\n\nShips fast.  ",
+        userProfile: {
+          subscription_status: "active",
+          subscription_tier: "starter",
+          api_calls_this_month: 0,
+          pack_credits: 0,
+        },
+      },
+    });
+    await page.waitForTimeout(1100);
+
+    await expect(page.locator("#quickvint-description-footer-btn")).toHaveAttribute(
+      "aria-pressed",
+      "false",
+    );
+    await page.locator("#quickvint-gen-btn").click();
+    await expect.poll(() => requestBodies.length).toBe(1);
+    expect(requestBodies[0]).not.toHaveProperty("descriptionFooterText");
   });
 
   test("lets free users remove emojis locally and saves the preference", async ({

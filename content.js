@@ -5,8 +5,12 @@
   const BATCH_BTN_ID = "quickvint-batch-btn";
   const REPORT_BTN_ID = "quickvint-report-btn";
   const REPORT_MODAL_ID = "quickvint-report-modal";
+  const DESCRIPTION_FOOTER_MODAL_ID = "quickvint-description-footer-modal";
   const EMOJI_TOGGLE_ID = "quickvint-emoji-toggle";
   const HASHTAGS_TOGGLE_ID = "quickvint-hashtags-toggle";
+  const DESCRIPTION_FOOTER_BTN_ID = "quickvint-description-footer-btn";
+  const DESCRIPTION_FOOTER_STORAGE_KEY = "descriptionFooterText";
+  const DESCRIPTION_FOOTER_MAX_LENGTH = 240;
   const DESCRIPTION_LENGTH_TOGGLE_ID = "quickvint-description-length-toggle";
   const DESCRIPTION_LENGTH_STORAGE_KEY = "descriptionLength";
   const HASHTAGS_STORAGE_KEY = "useHashtags";
@@ -416,6 +420,7 @@
   let reportBtn = null;
   let emojiToggleBtn = null;
   let hashtagsToggleBtn = null;
+  let descriptionFooterBtn = null;
   let descriptionLengthToggle = null;
   let signInBtn = null;
   let isBusy = false;
@@ -459,6 +464,7 @@
   let batchTabStatusTimer = null;
   let emojiToggleSyncTimer = null;
   let hashtagsToggleSyncTimer = null;
+  let descriptionFooterSyncTimer = null;
   let descriptionLengthSyncTimer = null;
   let extensionContextInvalidated = false;
   let isBatchPollInFlight = false;
@@ -1249,6 +1255,40 @@
     return tier === "pro" || tier === "business";
   }
 
+  function canUseDescriptionFooterSetting(profile) {
+    const tier = normalizeTier(profile?.subscription_tier);
+    if (profile?.subscription_status !== "active" || tier === "free") {
+      return true;
+    }
+    return tier === "pro" || tier === "business";
+  }
+
+  function validateDescriptionFooterText(value) {
+    const text = typeof value === "string" ? value : "";
+    if (text.length > DESCRIPTION_FOOTER_MAX_LENGTH) {
+      return {
+        ok: false,
+        error: `Saved note must be ${DESCRIPTION_FOOTER_MAX_LENGTH} characters or less.`,
+      };
+    }
+
+    const hasLink =
+      /\b(?:https?:\/\/|www\.|[a-z0-9-]+\.(?:com|net|org|co|io|app|fr|de|nl|it|es|pl|pt|be|uk|co\.uk)\b)/i.test(
+        text,
+      );
+    const hasEmail = /\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/i.test(text);
+    const hasPhone = /(?:\+|00)?\d[\d\s().-]{7,}\d/.test(text);
+
+    if (hasLink || hasEmail || hasPhone) {
+      return {
+        ok: false,
+        error: "Saved note cannot include links, email addresses, or phone numbers.",
+      };
+    }
+
+    return { ok: true, text };
+  }
+
   function getProfileUserId() {
     return new Promise((resolve) => {
       chrome.storage.local.get(["supabaseSession"], ({ supabaseSession }) => {
@@ -1537,6 +1577,10 @@
       window.clearInterval(hashtagsToggleSyncTimer);
       hashtagsToggleSyncTimer = null;
     }
+    if (descriptionFooterSyncTimer) {
+      window.clearInterval(descriptionFooterSyncTimer);
+      descriptionFooterSyncTimer = null;
+    }
     if (emojiToggleSyncTimer) {
       window.clearInterval(emojiToggleSyncTimer);
       emojiToggleSyncTimer = null;
@@ -1739,6 +1783,9 @@
     }
     if (changes[HASHTAGS_STORAGE_KEY]) {
       syncHashtagsToggleState();
+    }
+    if (changes[DESCRIPTION_FOOTER_STORAGE_KEY] || changes.userProfile) {
+      syncDescriptionFooterButtonState();
     }
     if (changes[DESCRIPTION_LENGTH_STORAGE_KEY]) {
       syncDescriptionLengthToggleState();
@@ -2346,6 +2393,163 @@
       #${REPORT_MODAL_ID} .quickvint-report-submit:disabled {
         cursor: progress;
         opacity: 0.75;
+      }
+
+      #${DESCRIPTION_FOOTER_MODAL_ID} {
+        position: fixed;
+        inset: 0;
+        z-index: 2147483646;
+        display: none;
+        align-items: center;
+        justify-content: center;
+        padding: 20px;
+        background: rgba(15, 23, 42, 0.36);
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      }
+
+      #${DESCRIPTION_FOOTER_MODAL_ID}.visible {
+        display: flex;
+      }
+
+      #${DESCRIPTION_FOOTER_MODAL_ID} .quickvint-footer-card {
+        width: min(440px, 100%);
+        padding: 18px;
+        border: 1px solid rgba(148, 163, 184, 0.28);
+        border-radius: 14px;
+        background: #ffffff;
+        color: #111827;
+        box-shadow: 0 24px 60px rgba(15, 23, 42, 0.24);
+      }
+
+      #${DESCRIPTION_FOOTER_MODAL_ID} .quickvint-footer-head {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 14px;
+      }
+
+      #${DESCRIPTION_FOOTER_MODAL_ID} .quickvint-footer-title {
+        margin: 0;
+        color: #0f172a;
+        font-size: 18px;
+        font-weight: 800;
+        line-height: 1.25;
+      }
+
+      #${DESCRIPTION_FOOTER_MODAL_ID} .quickvint-footer-copy,
+      #${DESCRIPTION_FOOTER_MODAL_ID} .quickvint-footer-status {
+        margin: 7px 0 14px;
+        color: #475569;
+        font-size: 13px;
+        line-height: 1.45;
+      }
+
+      #${DESCRIPTION_FOOTER_MODAL_ID} .quickvint-footer-close {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 30px;
+        height: 30px;
+        border: 0;
+        border-radius: 8px;
+        background: transparent;
+        color: #64748b;
+        cursor: pointer;
+        font-size: 22px;
+        line-height: 1;
+      }
+
+      #${DESCRIPTION_FOOTER_MODAL_ID} .quickvint-footer-close:hover {
+        background: #f1f5f9;
+        color: #0f172a;
+      }
+
+      #${DESCRIPTION_FOOTER_MODAL_ID} .quickvint-footer-label {
+        display: block;
+        margin: 0 0 7px;
+        color: #334155;
+        font-size: 12px;
+        font-weight: 760;
+      }
+
+      #${DESCRIPTION_FOOTER_MODAL_ID} .quickvint-footer-textarea {
+        width: 100%;
+        min-height: 126px;
+        resize: vertical;
+        padding: 11px;
+        border: 1px solid #cbd5e1;
+        border-radius: 10px;
+        background: #ffffff;
+        color: #0f172a;
+        font: inherit;
+        font-size: 14px;
+        line-height: 1.4;
+        outline: none;
+        transition: border-color 0.14s ease, box-shadow 0.14s ease;
+      }
+
+      #${DESCRIPTION_FOOTER_MODAL_ID} .quickvint-footer-textarea:focus {
+        border-color: #6366f1;
+        box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.14);
+      }
+
+      #${DESCRIPTION_FOOTER_MODAL_ID} .quickvint-footer-textarea:disabled {
+        background: #f8fafc;
+        color: #64748b;
+        cursor: not-allowed;
+      }
+
+      #${DESCRIPTION_FOOTER_MODAL_ID} .quickvint-footer-meta {
+        display: flex;
+        justify-content: space-between;
+        gap: 12px;
+        min-height: 18px;
+        margin-top: 7px;
+        color: #64748b;
+        font-size: 12px;
+        line-height: 1.35;
+      }
+
+      #${DESCRIPTION_FOOTER_MODAL_ID} .quickvint-footer-status[data-state="error"] {
+        color: #b45309;
+      }
+
+      #${DESCRIPTION_FOOTER_MODAL_ID} .quickvint-footer-actions {
+        display: flex;
+        justify-content: flex-end;
+        gap: 10px;
+        margin-top: 15px;
+      }
+
+      #${DESCRIPTION_FOOTER_MODAL_ID} .quickvint-footer-secondary,
+      #${DESCRIPTION_FOOTER_MODAL_ID} .quickvint-footer-clear,
+      #${DESCRIPTION_FOOTER_MODAL_ID} .quickvint-footer-save {
+        height: 38px;
+        padding: 0 14px;
+        border-radius: 10px;
+        font-size: 14px;
+        font-weight: 760;
+        cursor: pointer;
+      }
+
+      #${DESCRIPTION_FOOTER_MODAL_ID} .quickvint-footer-secondary,
+      #${DESCRIPTION_FOOTER_MODAL_ID} .quickvint-footer-clear {
+        border: 1px solid #d7dce7;
+        background: #ffffff;
+        color: #334155;
+      }
+
+      #${DESCRIPTION_FOOTER_MODAL_ID} .quickvint-footer-save {
+        border: 0;
+        background: ${PRIMARY_BUTTON_BACKGROUND};
+        color: #ffffff;
+        box-shadow: 0 8px 18px rgba(79, 70, 229, 0.24);
+      }
+
+      #${DESCRIPTION_FOOTER_MODAL_ID} .quickvint-footer-save:disabled,
+      #${DESCRIPTION_FOOTER_MODAL_ID} .quickvint-footer-clear:disabled {
+        cursor: not-allowed;
+        opacity: 0.55;
       }
 
       /* Modal Styles */
@@ -5995,6 +6199,186 @@
     }
   }
 
+  function updateDescriptionFooterModalState(modal, { allowed, text, status = "" }) {
+    const textarea = modal.querySelector(".quickvint-footer-textarea");
+    const counter = modal.querySelector(".quickvint-footer-count");
+    const statusEl = modal.querySelector(".quickvint-footer-status");
+    const saveButton = modal.querySelector(".quickvint-footer-save");
+    const clearButton = modal.querySelector(".quickvint-footer-clear");
+    const currentText = typeof text === "string" ? text : textarea?.value || "";
+    const validation = validateDescriptionFooterText(currentText);
+
+    if (textarea) {
+      textarea.disabled = !allowed;
+      textarea.maxLength = DESCRIPTION_FOOTER_MAX_LENGTH;
+    }
+    if (counter) {
+      counter.textContent = `${currentText.length}/${DESCRIPTION_FOOTER_MAX_LENGTH}`;
+    }
+    if (statusEl) {
+      const message = !allowed
+        ? "Saved notes are available during the free trial and on Pro or Business."
+        : validation.ok
+          ? status
+          : validation.error;
+      statusEl.textContent = message;
+      statusEl.dataset.state = validation.ok || !allowed ? "default" : "error";
+    }
+    if (saveButton) {
+      saveButton.disabled = !allowed || !validation.ok;
+    }
+    if (clearButton) {
+      clearButton.disabled = !allowed || currentText.length === 0;
+    }
+  }
+
+  function getOrCreateDescriptionFooterModal() {
+    let modal = document.getElementById(DESCRIPTION_FOOTER_MODAL_ID);
+    if (modal) return modal;
+
+    modal = document.createElement("div");
+    modal.id = DESCRIPTION_FOOTER_MODAL_ID;
+    modal.setAttribute("role", "dialog");
+    modal.setAttribute("aria-modal", "true");
+    modal.setAttribute("aria-labelledby", "quickvint-footer-title");
+    modal.innerHTML = `
+      <div class="quickvint-footer-card">
+        <div class="quickvint-footer-head">
+          <div>
+            <h2 id="quickvint-footer-title" class="quickvint-footer-title">Saved note</h2>
+            <p class="quickvint-footer-copy">Added to generated descriptions before hashtags. Do not include links or contact details.</p>
+          </div>
+          <button type="button" class="quickvint-footer-close" aria-label="Close saved note form">&times;</button>
+        </div>
+
+        <label class="quickvint-footer-label" for="quickvint-footer-text">Description note</label>
+        <textarea id="quickvint-footer-text" class="quickvint-footer-textarea" placeholder="Smoke-free home. Happy to bundle items."></textarea>
+        <div class="quickvint-footer-meta">
+          <span class="quickvint-footer-status"></span>
+          <span class="quickvint-footer-count">0/${DESCRIPTION_FOOTER_MAX_LENGTH}</span>
+        </div>
+
+        <div class="quickvint-footer-actions">
+          <button type="button" class="quickvint-footer-clear">Clear</button>
+          <button type="button" class="quickvint-footer-secondary">Cancel</button>
+          <button type="button" class="quickvint-footer-save">Save</button>
+        </div>
+      </div>
+    `;
+
+    const close = () => closeDescriptionFooterModal();
+    modal.addEventListener("click", (event) => {
+      if (event.target === modal) close();
+    });
+    modal.querySelector(".quickvint-footer-close")?.addEventListener("click", close);
+    modal
+      .querySelector(".quickvint-footer-secondary")
+      ?.addEventListener("click", close);
+    modal
+      .querySelector(".quickvint-footer-save")
+      ?.addEventListener("click", saveDescriptionFooterFromModal);
+    modal
+      .querySelector(".quickvint-footer-clear")
+      ?.addEventListener("click", clearDescriptionFooterFromModal);
+    modal
+      .querySelector(".quickvint-footer-textarea")
+      ?.addEventListener("input", () => {
+        const textarea = modal.querySelector(".quickvint-footer-textarea");
+        const allowed = modal.dataset.allowed === "true";
+        updateDescriptionFooterModalState(modal, {
+          allowed,
+          text: textarea?.value || "",
+        });
+      });
+
+    document.body.appendChild(modal);
+    return modal;
+  }
+
+  async function openDescriptionFooterModal() {
+    const modal = getOrCreateDescriptionFooterModal();
+    const { [DESCRIPTION_FOOTER_STORAGE_KEY]: storedText = "", userProfile = null } =
+      await new Promise((resolve) => {
+        chrome.storage.local.get(
+          { [DESCRIPTION_FOOTER_STORAGE_KEY]: "", userProfile: null },
+          (result) => resolve(result),
+        );
+      });
+    const allowed = canUseDescriptionFooterSetting(userProfile);
+    const text = typeof storedText === "string" ? storedText : "";
+    const textarea = modal.querySelector(".quickvint-footer-textarea");
+
+    modal.dataset.allowed = allowed ? "true" : "false";
+    if (textarea) {
+      textarea.value = text;
+    }
+    updateDescriptionFooterModalState(modal, { allowed, text });
+    modal.classList.add("visible");
+    if (allowed) {
+      setTimeout(() => textarea?.focus(), 0);
+    }
+    trackGrowthEvent("description_footer_opened", {
+      source: "listing_tools",
+      allowed,
+      hasDescriptionFooter: /\S/.test(text),
+      descriptionFooterLength: text.length,
+    });
+  }
+
+  function closeDescriptionFooterModal() {
+    document
+      .getElementById(DESCRIPTION_FOOTER_MODAL_ID)
+      ?.classList.remove("visible");
+  }
+
+  async function saveDescriptionFooterFromModal() {
+    const modal = document.getElementById(DESCRIPTION_FOOTER_MODAL_ID);
+    if (!modal || modal.dataset.allowed !== "true") return;
+    const textarea = modal.querySelector(".quickvint-footer-textarea");
+    const text = textarea?.value || "";
+    const validation = validateDescriptionFooterText(text);
+
+    if (!validation.ok) {
+      updateDescriptionFooterModalState(modal, {
+        allowed: true,
+        text,
+      });
+      return;
+    }
+
+    await chrome.storage.local.set({
+      [DESCRIPTION_FOOTER_STORAGE_KEY]: validation.text,
+    });
+    syncDescriptionFooterButtonState();
+    closeDescriptionFooterModal();
+    showToast(
+      /\S/.test(validation.text) ? "Saved note updated." : "Saved note cleared.",
+      "success",
+    );
+    trackGrowthEvent("description_footer_saved", {
+      source: "listing_tools",
+      hasDescriptionFooter: /\S/.test(validation.text),
+      descriptionFooterLength: validation.text.length,
+    });
+  }
+
+  async function clearDescriptionFooterFromModal() {
+    const modal = document.getElementById(DESCRIPTION_FOOTER_MODAL_ID);
+    if (!modal || modal.dataset.allowed !== "true") return;
+    const textarea = modal.querySelector(".quickvint-footer-textarea");
+    if (textarea) textarea.value = "";
+    await chrome.storage.local.set({ [DESCRIPTION_FOOTER_STORAGE_KEY]: "" });
+    updateDescriptionFooterModalState(modal, {
+      allowed: true,
+      text: "",
+      status: "Cleared.",
+    });
+    syncDescriptionFooterButtonState();
+    trackGrowthEvent("description_footer_cleared", {
+      source: "listing_tools",
+    });
+  }
+
   function normalizeDescriptionLength(value) {
     return value === "short" ? "short" : "long";
   }
@@ -6200,6 +6584,81 @@
         return;
       }
       syncHashtagsToggleState();
+    }, 1000);
+  }
+
+  function setDescriptionFooterButtonState({ enabled, hasText }) {
+    if (!descriptionFooterBtn) return;
+    setPreferenceLoadingState(descriptionFooterBtn, false);
+    descriptionFooterBtn.disabled = false;
+    descriptionFooterBtn.setAttribute(
+      "aria-pressed",
+      enabled && hasText ? "true" : "false",
+    );
+    descriptionFooterBtn.title = enabled
+      ? hasText
+        ? "Saved note will be added before hashtags"
+        : "Add a saved note before hashtags"
+      : "Saved notes are available during the free trial and on Pro or Business.";
+  }
+
+  async function syncDescriptionFooterButtonState() {
+    if (!descriptionFooterBtn || extensionContextInvalidated) return;
+    if (descriptionFooterBtn.dataset.loading !== "false") {
+      setBinaryToggleLoadingState(descriptionFooterBtn, true);
+    }
+    try {
+      const { [DESCRIPTION_FOOTER_STORAGE_KEY]: storedText = "", userProfile = null } =
+        await new Promise((resolve) => {
+          chrome.storage.local.get(
+            { [DESCRIPTION_FOOTER_STORAGE_KEY]: "", userProfile: null },
+            (result) => resolve(result),
+          );
+        });
+      setDescriptionFooterButtonState({
+        enabled: canUseDescriptionFooterSetting(userProfile),
+        hasText: /\S/.test(typeof storedText === "string" ? storedText : ""),
+      });
+    } catch (error) {
+      if (handleExtensionContextInvalidated(error)) return;
+      console.warn("AutoLister AI: failed to load saved note setting", error);
+      setDescriptionFooterButtonState({ enabled: false, hasText: false });
+    }
+  }
+
+  function createDescriptionFooterButton() {
+    const btn = document.createElement("button");
+    btn.id = DESCRIPTION_FOOTER_BTN_ID;
+    btn.type = "button";
+    btn.className = "quickvint-binary-toggle";
+    btn.setAttribute("aria-label", "Edit saved note for generated descriptions");
+    btn.setAttribute("aria-pressed", "mixed");
+    btn.setAttribute("aria-busy", "true");
+    btn.dataset.loading = "true";
+    btn.disabled = true;
+    btn.innerHTML = createBinaryToggleMarkup("Note");
+    btn.addEventListener("click", () => {
+      if (btn.dataset.loading === "true") return;
+      openDescriptionFooterModal();
+    });
+    syncDescriptionFooterButtonState();
+    startDescriptionFooterSync();
+    return btn;
+  }
+
+  function startDescriptionFooterSync() {
+    if (descriptionFooterSyncTimer) return;
+    descriptionFooterSyncTimer = window.setInterval(() => {
+      if (
+        extensionContextInvalidated ||
+        !descriptionFooterBtn ||
+        !document.body.contains(descriptionFooterBtn)
+      ) {
+        window.clearInterval(descriptionFooterSyncTimer);
+        descriptionFooterSyncTimer = null;
+        return;
+      }
+      syncDescriptionFooterButtonState();
     }, 1000);
   }
 
@@ -6516,6 +6975,7 @@
       if (reportBtn) reportBtn.style.display = "none";
       if (emojiToggleBtn) emojiToggleBtn.style.display = "none";
       if (hashtagsToggleBtn) hashtagsToggleBtn.style.display = "none";
+      if (descriptionFooterBtn) descriptionFooterBtn.style.display = "none";
       if (descriptionLengthToggle) descriptionLengthToggle.style.display = "none";
       if (titleLanguageField) titleLanguageField.style.display = "none";
       if (descriptionLanguageField) descriptionLanguageField.style.display = "none";
@@ -6531,6 +6991,7 @@
       if (reportBtn) reportBtn.style.display = "none";
       if (emojiToggleBtn) emojiToggleBtn.style.display = "none";
       if (hashtagsToggleBtn) hashtagsToggleBtn.style.display = "none";
+      if (descriptionFooterBtn) descriptionFooterBtn.style.display = "none";
       if (descriptionLengthToggle) descriptionLengthToggle.style.display = "none";
       if (titleLanguageField) titleLanguageField.style.display = "none";
       if (descriptionLanguageField) descriptionLanguageField.style.display = "none";
@@ -6546,6 +7007,7 @@
     if (reportBtn) reportBtn.style.display = "inline-flex";
     if (descriptionLengthToggle) descriptionLengthToggle.style.display = "inline-grid";
     if (hashtagsToggleBtn) hashtagsToggleBtn.style.display = "inline-flex";
+    if (descriptionFooterBtn) descriptionFooterBtn.style.display = "inline-flex";
     if (emojiToggleBtn) emojiToggleBtn.style.display = "inline-flex";
     if (titleLanguageField) titleLanguageField.style.display = "inline-flex";
     if (descriptionLanguageField) {
@@ -9657,6 +10119,7 @@
         "tone",
         "useEmojis",
         HASHTAGS_STORAGE_KEY,
+        DESCRIPTION_FOOTER_STORAGE_KEY,
         "useBulletPoints",
         DESCRIPTION_LENGTH_STORAGE_KEY,
         "userProfile",
@@ -9665,6 +10128,7 @@
         tone = "standard",
         useEmojis = true,
         [HASHTAGS_STORAGE_KEY]: useHashtags = true,
+        [DESCRIPTION_FOOTER_STORAGE_KEY]: storedDescriptionFooterText = "",
         useBulletPoints = true,
         [DESCRIPTION_LENGTH_STORAGE_KEY]: storedDescriptionLength = "long",
         userProfile,
@@ -9677,6 +10141,20 @@
         (overrideUseEmojis === null
           ? useEmojis !== false
           : overrideUseEmojis === true);
+      const descriptionFooterAccess = canUseDescriptionFooterSetting(userProfile);
+      const descriptionFooterText =
+        descriptionFooterAccess && typeof storedDescriptionFooterText === "string"
+          ? storedDescriptionFooterText
+          : "";
+      const descriptionFooterValidation =
+        validateDescriptionFooterText(descriptionFooterText);
+
+      if (!descriptionFooterValidation.ok) {
+        showToast(descriptionFooterValidation.error, "error");
+        throw new Error(descriptionFooterValidation.error);
+      }
+
+      const effectiveDescriptionFooterText = descriptionFooterValidation.text;
       const titleLanguageCode = languageProfile.titleLanguageCode;
       const descriptionLanguageCode =
         languageProfile.descriptionLanguageCode;
@@ -9700,6 +10178,8 @@
         useHashtags: useHashtags !== false,
         useBulletPoints: Boolean(useBulletPoints),
         descriptionLength,
+        hasDescriptionFooter: /\S/.test(effectiveDescriptionFooterText),
+        descriptionFooterLength: effectiveDescriptionFooterText.length,
         emojiRetry: Boolean(emojiRetry),
       });
       const { access_token } = await sendMessage({ type: "GET_ACCESS_TOKEN" });
@@ -9713,6 +10193,24 @@
       // Compress images before sending to API to reduce token usage
       const compressedImages = await compressImages(imageUrls);
 
+      const requestBody = {
+        imageUrls: compressedImages,
+        languageCode: legacyLanguageCode,
+        titleLanguageCode,
+        descriptionLanguageCode,
+        tone,
+        useEmojis: effectiveUseEmojis,
+        useHashtags: useHashtags !== false,
+        emojiRetry: Boolean(emojiRetry),
+        useBulletPoints,
+        descriptionLength,
+        generationMode: requestGenerationMode,
+      };
+
+      if (/\S/.test(effectiveDescriptionFooterText)) {
+        requestBody.descriptionFooterText = effectiveDescriptionFooterText;
+      }
+
       const response = await fetch(`${API_BASE}/api/generate`, {
         method: "POST",
         headers: {
@@ -9721,19 +10219,7 @@
           "X-Autolister-Extension-Version":
             chrome.runtime.getManifest().version,
         },
-        body: JSON.stringify({
-          imageUrls: compressedImages,
-          languageCode: legacyLanguageCode,
-          titleLanguageCode,
-          descriptionLanguageCode,
-          tone,
-          useEmojis: effectiveUseEmojis,
-          useHashtags: useHashtags !== false,
-          emojiRetry: Boolean(emojiRetry),
-          useBulletPoints,
-          descriptionLength,
-          generationMode: requestGenerationMode,
-        }),
+        body: JSON.stringify(requestBody),
       });
 
       if (response.status === 401) {
@@ -9943,6 +10429,11 @@
       }
       emojiToggleBtn = document.getElementById(EMOJI_TOGGLE_ID);
       hashtagsToggleBtn = document.getElementById(HASHTAGS_TOGGLE_ID);
+      descriptionFooterBtn = document.getElementById(DESCRIPTION_FOOTER_BTN_ID);
+      if (!descriptionFooterBtn) {
+        descriptionFooterBtn = createDescriptionFooterButton();
+        document.querySelector(".quickvint-tool-options")?.appendChild(descriptionFooterBtn);
+      }
       descriptionLengthToggle = document.getElementById(
         DESCRIPTION_LENGTH_TOGGLE_ID,
       );
@@ -9950,6 +10441,7 @@
       injectFieldLanguageControls();
       syncEmojiToggleState();
       syncHashtagsToggleState();
+      syncDescriptionFooterButtonState();
       syncDescriptionLengthToggleState();
       updateButtonUI();
       return true;
@@ -9978,6 +10470,7 @@
       reportBtn = createReportButton();
       descriptionLengthToggle = createDescriptionLengthToggle();
       hashtagsToggleBtn = createHashtagsToggleButton();
+      descriptionFooterBtn = createDescriptionFooterButton();
       emojiToggleBtn = createEmojiToggleButton();
       signInBtn = createSignInComponent();
 
@@ -9987,6 +10480,7 @@
       primaryTools.appendChild(reportBtn);
       toolOptions.appendChild(descriptionLengthToggle);
       toolOptions.appendChild(hashtagsToggleBtn);
+      toolOptions.appendChild(descriptionFooterBtn);
       toolOptions.appendChild(emojiToggleBtn);
       toolsWrapper.appendChild(primaryTools);
       toolsWrapper.appendChild(toolOptions);
