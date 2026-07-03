@@ -40,7 +40,11 @@
       hasImages: true,
       verify(doc) {
         const signIn = doc.getElementById("quickvint-signin-btn");
-        return isVisible(doc, signIn);
+        return (
+          isVisible(doc, signIn) &&
+          !isVisible(doc, doc.querySelector(".quickvint-note-control")) &&
+          !isVisible(doc, doc.getElementById("quickvint-description-footer-edit-btn"))
+        );
       },
     },
     {
@@ -138,6 +142,7 @@
         subscription_tier: "free",
         api_calls_this_month: 5,
         free_lifetime_generations_used: 5,
+        free_lifetime_generations_limit: 5,
         pack_credits: 0,
       },
       limitFollowupOffer: {
@@ -190,6 +195,7 @@
         subscription_tier: "free",
         api_calls_this_month: 5,
         free_lifetime_generations_used: 5,
+        free_lifetime_generations_limit: 5,
         pack_credits: 0,
       },
       limitFollowupOffer: {
@@ -274,7 +280,7 @@
           desc?.value === "My original description." &&
           doc.querySelector('[data-testid="title--input"]')?.value === "" &&
           doc.defaultView.__generateCallCount === 0 &&
-          /Description already has text/.test(prompt?.textContent || "") &&
+          /Update existing description/.test(prompt?.textContent || "") &&
           /Replace/.test(prompt?.textContent || "") &&
           /Add below/.test(prompt?.textContent || "") &&
           /Cancel/.test(prompt?.textContent || "")
@@ -446,7 +452,7 @@
           /€5\.99/.test(toastText) &&
           /Tailored limits/.test(toastText) &&
           /support@autolister\.app/.test(toastText) &&
-          /Buy one-time credits/.test(toastText) &&
+          /One-time credits/.test(toastText) &&
           /One-time purchase/.test(toastText) &&
           !/Current plan/.test(toastText) &&
           !/Compare all plans/.test(toastText) &&
@@ -577,6 +583,10 @@
     return !!doc.querySelector("#quickvint-toast .paywall-action");
   }
 
+  function getScenarioFrameHeight(scenario) {
+    return Math.max(scenario.height || 0, 760);
+  }
+
   function renderPanels() {
     const grid = document.getElementById("previewGrid");
     grid.innerHTML = scenarios
@@ -605,7 +615,7 @@
                 class="ds-frame"
                 title="${escapeAttr(scenario.title)}"
                 data-scenario-id="${escapeAttr(scenario.id)}"
-                style="height: ${scenario.height}px"
+                style="height: ${getScenarioFrameHeight(scenario)}px"
               ></iframe>
             </div>
           </article>
@@ -671,21 +681,35 @@
 
     return `
       <main class="mock-page">
-        <div class="mock-card">
-          <div class="mock-card-title">Vinted item listing</div>
-          ${media}
-          <label class="mock-field">
-            <div data-testid="title--title" class="mock-field-title">Title</div>
-            <div class="mock-input-shell">
-              <input data-testid="title--input" class="mock-input" value="" placeholder="Item title" />
+        <div class="mock-topbar">
+          <div class="mock-brand">Vinted</div>
+          <div class="mock-search"></div>
+          <div class="mock-pill"></div>
+        </div>
+        <div class="mock-layout">
+          <section class="mock-card" aria-label="Vinted item listing form">
+            <div class="mock-card-title">Vinted item listing</div>
+            ${media}
+            <label class="mock-field">
+              <div data-testid="title--title" class="mock-field-title">Title</div>
+              <div class="mock-input-shell">
+                <input data-testid="title--input" class="mock-input" value="" placeholder="Item title" />
+              </div>
+            </label>
+            <label class="mock-field">
+              <div data-testid="description--title" class="mock-field-title">Description</div>
+              <div class="mock-input-shell">
+                <textarea data-testid="description--input" class="mock-textarea" placeholder="Describe your item">${safeInitialDescription}</textarea>
+              </div>
+            </label>
+          </section>
+          <aside class="mock-side-rail" aria-hidden="true">
+            <div class="mock-side-card">
+              <div class="mock-side-line wide"></div>
+              <div class="mock-side-line"></div>
+              <div class="mock-side-line short"></div>
             </div>
-          </label>
-          <label class="mock-field">
-            <div data-testid="description--title" class="mock-field-title">Description</div>
-            <div class="mock-input-shell">
-              <textarea data-testid="description--input" class="mock-textarea" placeholder="Describe your item">${safeInitialDescription}</textarea>
-            </div>
-          </label>
+          </aside>
         </div>
       </main>
     `;
@@ -694,6 +718,7 @@
   function frameHtml(scenario) {
     const storage = scenarioStorage(scenario);
     const extensionAssetBaseUrl = new URL("/ui-components/", window.location.href).href;
+    const frameHeight = getScenarioFrameHeight(scenario);
     return `<!doctype html>
 <html lang="en">
 <head>
@@ -705,44 +730,108 @@
       margin: 0;
       min-height: 100%;
       overflow: hidden;
-      background: #f8fafc;
+      background: #f3f6fb;
       color: #111827;
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
       -webkit-font-smoothing: antialiased;
     }
     .mock-page {
-      min-height: ${scenario.height}px;
-      padding: 16px;
+      min-height: ${frameHeight}px;
+      padding: 24px 28px 140px;
       background:
         linear-gradient(90deg, rgba(226, 232, 240, 0.74) 1px, transparent 1px),
         linear-gradient(rgba(226, 232, 240, 0.74) 1px, transparent 1px),
-        #f8fafc;
+        #f3f6fb;
       background-size: 24px 24px;
     }
+    .mock-topbar {
+      display: grid;
+      grid-template-columns: 130px minmax(240px, 1fr) 112px;
+      align-items: center;
+      gap: 18px;
+      width: min(1280px, calc(100% - 8px));
+      height: 52px;
+      margin: 0 auto 28px;
+      padding: 0 18px;
+      border: 1px solid #e2e8f0;
+      border-radius: 8px;
+      background: rgba(255, 255, 255, 0.92);
+      box-shadow: 0 8px 22px rgba(15, 23, 42, 0.05);
+    }
+    .mock-brand {
+      color: #111827;
+      font-size: 15px;
+      font-weight: 850;
+    }
+    .mock-search,
+    .mock-pill,
+    .mock-side-line {
+      border-radius: 999px;
+      background: #e8edf5;
+    }
+    .mock-search {
+      height: 30px;
+    }
+    .mock-pill {
+      justify-self: end;
+      width: 92px;
+      height: 30px;
+      background: #d8f3ea;
+    }
+    .mock-layout {
+      display: grid;
+      grid-template-columns: minmax(520px, 620px) minmax(430px, 1fr);
+      align-items: start;
+      gap: 28px;
+      width: min(1280px, calc(100% - 8px));
+      margin: 0 auto;
+    }
     .mock-card {
-      width: min(100%, 760px);
-      padding: 16px;
+      padding: 28px;
       border: 1px solid #e5e7eb;
       border-radius: 8px;
       background: #ffffff;
       box-shadow: 0 10px 26px rgba(15, 23, 42, 0.07);
     }
     .mock-card-title {
-      margin-bottom: 12px;
+      margin-bottom: 18px;
       color: #111827;
-      font-size: 14px;
+      font-size: 16px;
       font-weight: 800;
+    }
+    .mock-side-rail {
+      min-height: 560px;
+      padding: 0 6px;
+    }
+    .mock-side-card {
+      width: min(360px, 100%);
+      height: 180px;
+      margin-left: auto;
+      padding: 22px;
+      border: 1px solid #e2e8f0;
+      border-radius: 8px;
+      background: rgba(255, 255, 255, 0.7);
+    }
+    .mock-side-line {
+      height: 12px;
+      margin-bottom: 14px;
+    }
+    .mock-side-line.wide {
+      width: 82%;
+    }
+    .mock-side-line.short {
+      width: 48%;
     }
     .mock-media-grid {
       display: grid;
-      grid-template-columns: repeat(4, 70px);
-      gap: 10px;
-      margin-bottom: 16px;
+      grid-template-columns: repeat(4, 88px);
+      gap: 12px;
+      margin-bottom: 22px;
     }
     .photo-box,
     .mock-empty-photo {
-      width: 70px;
-      height: 70px;
+      width: 88px;
+      height: 88px;
       display: grid;
       place-items: center;
       border: 1px solid #dbe3f0;
@@ -761,7 +850,7 @@
     }
     .mock-field {
       display: block;
-      margin-top: 14px;
+      margin-top: 20px;
     }
     .mock-field-title {
       margin-bottom: 8px;
@@ -781,25 +870,51 @@
       outline: none;
     }
     .mock-input {
-      height: 40px;
-      padding: 0 12px;
+      height: 48px;
+      padding: 0 14px;
     }
     .mock-textarea {
-      min-height: 74px;
-      padding: 10px 12px;
+      min-height: 142px;
+      padding: 12px 14px;
       resize: none;
     }
-    #quickvint-toast {
-      top: 18px !important;
-      right: 18px !important;
-      left: auto !important;
+    @media (max-width: 1180px) {
+      .mock-page { padding: 24px 20px 120px; }
+      .mock-topbar,
+      .mock-layout {
+        width: 100%;
+      }
+      .mock-layout {
+        grid-template-columns: minmax(500px, 560px) minmax(420px, 1fr);
+        gap: 20px;
+      }
+      .mock-side-card {
+        display: none;
+      }
+    }
+    @media (max-width: 980px) {
+      .mock-topbar {
+        grid-template-columns: 120px minmax(160px, 1fr);
+      }
+      .mock-pill {
+        display: none;
+      }
+      .mock-layout {
+        grid-template-columns: 1fr;
+      }
+      .mock-side-rail {
+        display: none;
+      }
     }
     @media (max-width: 560px) {
       .mock-page { padding: 12px; }
+      .mock-topbar { display: none; }
       .mock-card { padding: 14px; }
-      #quickvint-toast {
-        right: 12px !important;
-        left: 12px !important;
+      .mock-media-grid { grid-template-columns: repeat(2, 70px); }
+      .photo-box,
+      .mock-empty-photo {
+        width: 70px;
+        height: 70px;
       }
     }
   </style>
@@ -814,7 +929,15 @@
       const nativeSetTimeout = window.setTimeout.bind(window);
 
       window.setTimeout = (callback, delay, ...args) => {
-        const reviewDelay = delay === 4000 ? 60000 : delay;
+        const isFollowupScenario =
+          scenario.id === "limit-followup-offer" ||
+          scenario.id === "limit-followup-offer-fr";
+        const reviewDelay =
+          delay === 4000
+            ? isFollowupScenario
+              ? 150
+              : 60000
+            : delay;
         return nativeSetTimeout(callback, reviewDelay, ...args);
       };
 
@@ -930,15 +1053,23 @@
           scenario.action === "generate-existing-cancel"
         ) {
           generate?.click();
-          const buttonClass =
+          const buttonSelector =
             scenario.action === "generate-existing-replace"
-              ? ".quickvint-apply-replace"
+              ? "[data-quickvint-prompt-action='0']"
               : scenario.action === "generate-existing-add"
-                ? ".quickvint-apply-add"
-                : ".quickvint-apply-cancel";
-          setTimeout(() => {
-            document.querySelector(buttonClass)?.click();
-          }, 120);
+                ? "[data-quickvint-prompt-action='1']"
+                : "[data-quickvint-prompt-action='2']";
+          const clickWhenReady = (attempt = 0) => {
+            const button = document.querySelector(buttonSelector);
+            if (button) {
+              button.click();
+              return;
+            }
+            if (attempt < 20) {
+              setTimeout(() => clickWhenReady(attempt + 1), 100);
+            }
+          };
+          setTimeout(clickWhenReady, 120);
           return;
         }
         if (

@@ -196,6 +196,11 @@ async function openContentHarness(page, capacityResponse = null, options = {}) {
   }
   await page.addScriptTag({ path: languageDefaultsPath });
   await page.addScriptTag({ path: contentScriptPath });
+  if (options.expectAuthenticated === false) {
+    await expect(page.locator("#quickvint-signin-btn")).toBeVisible();
+    await expect(page.locator("#quickvint-gen-btn")).not.toBeVisible();
+    return;
+  }
   try {
     await expect(page.locator("#quickvint-gen-btn")).toBeVisible();
   } catch (err) {
@@ -246,6 +251,26 @@ async function openImageCompressionHarness(page, proxyResponse) {
 }
 
 test.describe("AutoLister extension smoke flows", () => {
+  test("hides listing tools and saved-note edit control while signed out", async ({
+    page,
+  }) => {
+    await openContentHarness(page, null, {
+      expectAuthenticated: false,
+      initialStorage: {
+        supabaseSession: null,
+        userProfile: null,
+      },
+    });
+
+    await expect(page.locator(".quickvint-note-control")).not.toBeVisible();
+    await expect(
+      page.locator("#quickvint-description-footer-edit-btn"),
+    ).not.toBeVisible();
+    await expect(
+      page.locator("#quickvint-description-footer-btn"),
+    ).not.toBeVisible();
+  });
+
   test("loads the MV3 extension service worker and manifest", async () => {
     const { context, serviceWorker } = await loadExtension();
     try {

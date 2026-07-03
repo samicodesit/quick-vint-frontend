@@ -7689,6 +7689,9 @@
     const descriptionLanguageField = document
       .getElementById(DESCRIPTION_LANGUAGE_SELECT_ID)
       ?.closest(".quickvint-lang-field");
+    const descriptionFooterControl = descriptionFooterBtn?.closest(
+      ".quickvint-note-control",
+    );
 
     if (isAuthenticated === null) {
       if (signInBtn) signInBtn.style.display = "none";
@@ -7698,7 +7701,9 @@
       if (reportBtn) reportBtn.style.display = "none";
       if (emojiToggleBtn) emojiToggleBtn.style.display = "none";
       if (hashtagsToggleBtn) hashtagsToggleBtn.style.display = "none";
-      if (descriptionFooterBtn) descriptionFooterBtn.style.display = "none";
+      if (descriptionFooterControl) {
+        descriptionFooterControl.style.display = "none";
+      }
       if (descriptionLengthToggle) descriptionLengthToggle.style.display = "none";
       if (titleLanguageField) titleLanguageField.style.display = "none";
       if (descriptionLanguageField) descriptionLanguageField.style.display = "none";
@@ -7714,7 +7719,9 @@
       if (reportBtn) reportBtn.style.display = "none";
       if (emojiToggleBtn) emojiToggleBtn.style.display = "none";
       if (hashtagsToggleBtn) hashtagsToggleBtn.style.display = "none";
-      if (descriptionFooterBtn) descriptionFooterBtn.style.display = "none";
+      if (descriptionFooterControl) {
+        descriptionFooterControl.style.display = "none";
+      }
       if (descriptionLengthToggle) descriptionLengthToggle.style.display = "none";
       if (titleLanguageField) titleLanguageField.style.display = "none";
       if (descriptionLanguageField) descriptionLanguageField.style.display = "none";
@@ -7730,7 +7737,9 @@
     if (reportBtn) reportBtn.style.display = "inline-flex";
     if (descriptionLengthToggle) descriptionLengthToggle.style.display = "inline-grid";
     if (hashtagsToggleBtn) hashtagsToggleBtn.style.display = "inline-flex";
-    if (descriptionFooterBtn) descriptionFooterBtn.style.display = "inline-flex";
+    if (descriptionFooterControl) {
+      descriptionFooterControl.style.display = "inline-flex";
+    }
     if (emojiToggleBtn) emojiToggleBtn.style.display = "inline-flex";
     if (titleLanguageField) titleLanguageField.style.display = "inline-flex";
     if (descriptionLanguageField) {
