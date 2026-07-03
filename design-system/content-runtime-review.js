@@ -856,7 +856,7 @@
       white-space: nowrap;
     }
     .mock-sell-page {
-      width: 890px;
+      width: 960px;
       margin-left: 442px;
       padding-top: 34px;
     }
@@ -978,7 +978,7 @@
       grid-column: 2;
       justify-self: end;
       width: 100%;
-      max-width: 430px;
+      max-width: none;
     }
     .mock-simple-card {
       display: grid;
