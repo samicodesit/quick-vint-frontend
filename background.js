@@ -839,6 +839,33 @@ async function notifyVintedTabsCheckoutFulfilled() {
   }
 }
 
+async function openActionPopup() {
+  try {
+    await chrome.action.openPopup();
+    return { ok: true };
+  } catch (error) {
+    return {
+      ok: false,
+      error: error?.message || "Unable to open extension popup.",
+    };
+  }
+}
+
+async function openAuthTab() {
+  try {
+    await chrome.tabs.create({
+      url: chrome.runtime.getURL("popup.html?source=vinted_signin_fallback"),
+      active: true,
+    });
+    return { ok: true };
+  } catch (error) {
+    return {
+      ok: false,
+      error: error?.message || "Unable to open AutoLister sign-in.",
+    };
+  }
+}
+
 chrome.runtime.onMessageExternal.addListener((message, sender, sendResponse) => {
   if (!isAllowedExternalSender(sender)) {
     return false;
@@ -862,26 +889,7 @@ chrome.runtime.onMessageExternal.addListener((message, sender, sendResponse) => 
     message?.type === "OPEN_SIGNIN_POPUP" ||
     message?.type === "OPEN_POPUP"
   ) {
-    try {
-      const maybePromise = chrome.action.openPopup();
-      if (maybePromise?.then) {
-        maybePromise
-          .then(() => sendResponse({ ok: true }))
-          .catch((error) =>
-            sendResponse({
-              ok: false,
-              error: error?.message || "Unable to open extension popup.",
-            }),
-          );
-      } else {
-        sendResponse({ ok: true });
-      }
-    } catch (error) {
-      sendResponse({
-        ok: false,
-        error: error?.message || "Unable to open extension popup.",
-      });
-    }
+    openActionPopup().then(sendResponse);
     return true;
   }
 
@@ -960,8 +968,11 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         break;
 
       case "OPEN_POPUP":
-        chrome.action.openPopup();
-        sendResponse({ ok: true });
+        sendResponse(await openActionPopup());
+        break;
+
+      case "OPEN_AUTH_TAB":
+        sendResponse(await openAuthTab());
         break;
 
       case "CREATE_CHECKOUT": {

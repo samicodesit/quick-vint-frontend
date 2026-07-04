@@ -1,4 +1,11 @@
 document.addEventListener("DOMContentLoaded", () => {
+  if (
+    new URLSearchParams(window.location.search).get("source") ===
+    "vinted_signin_fallback"
+  ) {
+    document.body.classList.add("auth-tab-mode");
+  }
+
   // --- CONSTANTS & CONFIGURATION ---
   const API_BASE = "https://autolister.app";
   const SUPABASE_URL = "https://jqloiovdwjaornnfvmyu.supabase.co";

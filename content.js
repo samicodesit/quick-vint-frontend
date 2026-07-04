@@ -2097,6 +2097,81 @@
     });
   }
 
+  async function openSignInPopup(source, context = {}) {
+    const eventContext = {
+      source,
+      path: window.location.pathname,
+      ...context,
+    };
+
+    try {
+      const response = await new Promise((resolve) => {
+        chrome.runtime.sendMessage({ type: "OPEN_POPUP" }, (result) => {
+          const lastError = chrome.runtime.lastError;
+          if (lastError) {
+            resolve({
+              ok: false,
+              error: lastError.message || "Unable to open extension popup.",
+            });
+            return;
+          }
+          resolve(result || { ok: true });
+        });
+      });
+
+      if (response?.ok === false) {
+        throw new Error(response.error || "Unable to open extension popup.");
+      }
+
+      trackGrowthEvent("signin_popup_opened", eventContext);
+      return true;
+    } catch (error) {
+      const message = error?.message || "Unable to open extension popup.";
+      trackGrowthEvent("signin_popup_failed", {
+        ...eventContext,
+        message,
+      });
+      return openSignInTabFallback(eventContext);
+    }
+  }
+
+  async function openSignInTabFallback(eventContext) {
+    try {
+      const response = await new Promise((resolve) => {
+        chrome.runtime.sendMessage({ type: "OPEN_AUTH_TAB" }, (result) => {
+          const lastError = chrome.runtime.lastError;
+          if (lastError) {
+            resolve({
+              ok: false,
+              error: lastError.message || "Unable to open AutoLister sign-in.",
+            });
+            return;
+          }
+          resolve(result || { ok: true });
+        });
+      });
+
+      if (response?.ok === false) {
+        throw new Error(response.error || "Unable to open AutoLister sign-in.");
+      }
+
+      trackGrowthEvent("signin_auth_tab_opened", eventContext);
+      return true;
+    } catch (error) {
+      trackGrowthEvent("signin_auth_tab_failed", {
+        ...eventContext,
+        message: error?.message || "Unable to open AutoLister sign-in.",
+      });
+      showToast(
+        "Open AutoLister from the browser toolbar to sign in.",
+        "info",
+        null,
+        false,
+      );
+      return false;
+    }
+  }
+
   function isExtensionContextInvalidatedError(error) {
     return /Extension context invalidated/i.test(error?.message || String(error || ""));
   }
@@ -7726,7 +7801,7 @@
       trackGrowthEvent("signin_cta_click", {
         path: window.location.pathname,
       });
-      chrome.runtime.sendMessage({ type: "OPEN_POPUP" });
+      openSignInPopup("signed_out_cta");
     });
 
     return btn;
@@ -8000,7 +8075,9 @@
           await chrome.storage.local.set({
             [OPEN_SETTINGS_ON_NEXT_POPUP_KEY]: Date.now(),
           });
-          chrome.runtime.sendMessage({ type: "OPEN_POPUP" });
+          await openSignInPopup("emoji_settings_prompt", {
+            requestedPanel: "settings",
+          });
           return false;
         }
         return true;
@@ -11285,7 +11362,7 @@
   async function onGenerateClick() {
     if (!isAuthenticated) {
       trackGrowthEvent("generate_blocked", { reason: "signed_out" });
-      chrome.runtime.sendMessage({ type: "OPEN_POPUP" });
+      await openSignInPopup("generate_blocked", { reason: "signed_out" });
       return;
     }
 
