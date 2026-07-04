@@ -37,6 +37,7 @@
   const LANGUAGE_PREFERENCE_TOUCHED_KEY = "quickvintLanguagePreferenceTouched";
   const OFFER_DISMISSED_KEY_PREFIX = "quickvintOfferDismissed";
   const OFFER_LAST_SHOWN_KEY_PREFIX = "quickvintOfferLastShown";
+  const LIMIT_PAYWALL_SEEN_KEY_PREFIX = "quickvintLimitPaywallSeen";
   const OFFER_SHOW_COOLDOWN_MS = 7 * 24 * 60 * 60 * 1000;
   const FREE_LIMIT_OFFER_COPY_KEY = "free_limit";
   const STARTER_DAILY_LIMIT_OFFER_COPY_KEY = "starter_daily_limit";
@@ -44,6 +45,7 @@
   const LIMIT_FOLLOWUP_COUPON_CODE = "LISTFASTER20";
   const LIMIT_FOLLOWUP_CLOSE_DELAY_MS = 10 * 1000;
   const STARTER_DAILY_LIMIT_CLOSE_DELAY_MS = 650;
+  const LIMIT_FOLLOWUP_RETURN_DELAY_MS = 250;
   const STARTER_DAILY_LIMIT_RETURN_DELAY_MS = 250;
   const USER_USAGE_SNAPSHOT_STORAGE_KEY = "quickvintUserUsageSnapshot";
   const OPEN_SETTINGS_ON_NEXT_POPUP_KEY = "quickvintOpenSettingsOnNextPopup";
@@ -908,6 +910,7 @@
   let descriptionFooterIncludeForListing = DESCRIPTION_FOOTER_INCLUDE_DEFAULT;
   const limitFollowupOfferChecked = new Set();
   let limitFollowupRescueTimer = null;
+  let limitFollowupReturnTimer = null;
   let starterDailyLimitReturnTimer = null;
   let limitOfferPaywallCheckoutStarted = false;
   let activeFloatingPromptType = null;
@@ -1148,6 +1151,12 @@
     limitFollowupRescueTimer = null;
   }
 
+  function clearLimitFollowupReturnTimer() {
+    if (!limitFollowupReturnTimer) return;
+    window.clearTimeout(limitFollowupReturnTimer);
+    limitFollowupReturnTimer = null;
+  }
+
   function clearStarterDailyLimitReturnTimer() {
     if (!starterDailyLimitReturnTimer) return;
     window.clearTimeout(starterDailyLimitReturnTimer);
@@ -1308,6 +1317,15 @@
         allowDuringDraft: true,
       });
     }, STARTER_DAILY_LIMIT_RETURN_DELAY_MS);
+
+    clearLimitFollowupReturnTimer();
+    limitFollowupReturnTimer = window.setTimeout(() => {
+      limitFollowupReturnTimer = null;
+      maybeFetchAndShowLimitFollowupOffer({
+        reason: "return_after_paywall",
+        onlyCopyKey: FREE_LIMIT_OFFER_COPY_KEY,
+      });
+    }, LIMIT_FOLLOWUP_RETURN_DELAY_MS);
   }
 
   function showLimitPaywall({
@@ -1331,6 +1349,7 @@
     if (rescueOfferCopyKey) {
       limitOfferPaywallCheckoutStarted = false;
       clearLimitFollowupRescueTimer();
+      markLimitPaywallSeenLocally(rescueOfferCopyKey).catch(() => {});
     }
 
     trackGrowthEvent("paywall_shown", {
@@ -1835,6 +1854,25 @@
     const key = await getPerUserStorageKey(
       OFFER_LAST_SHOWN_KEY_PREFIX,
       offer.campaignKey,
+    );
+    await chrome.storage.local.set({ [key]: Date.now() });
+  }
+
+  async function hasLimitPaywallBeenSeenLocally(copyKey) {
+    const campaignKey = getOfferCampaignKey(copyKey);
+    const key = await getPerUserStorageKey(
+      LIMIT_PAYWALL_SEEN_KEY_PREFIX,
+      campaignKey,
+    );
+    const result = await chrome.storage.local.get(key);
+    return Boolean(result[key]);
+  }
+
+  async function markLimitPaywallSeenLocally(copyKey) {
+    const campaignKey = getOfferCampaignKey(copyKey);
+    const key = await getPerUserStorageKey(
+      LIMIT_PAYWALL_SEEN_KEY_PREFIX,
+      campaignKey,
     );
     await chrome.storage.local.set({ [key]: Date.now() });
   }
@@ -8505,9 +8543,10 @@
           eligible = hasLocalStarterDailyLimitReached(userProfile, usage);
           source = "local_starter_daily_usage";
         } else {
+          if (!(await hasLimitPaywallBeenSeenLocally(copyKey))) continue;
           const usage = await getUsageForOfferCheck();
           eligible = hasLocalFreeLimitReached(userProfile, usage);
-          source = "local_free_limit_usage";
+          source = "local_free_limit_after_paywall";
         }
 
         if (!eligible) continue;
