@@ -838,6 +838,9 @@
     `mailto:${SUPPORT_EMAIL}?subject=AutoLister%20AI%20tailored%20limits`;
   const ACCOUNT_REVIEW_CONTACT_URL =
     `mailto:${SUPPORT_EMAIL}?subject=AutoLister%20AI%20account%20review`;
+  const GENERATION_OUTPUT_EDIT_DEBOUNCE_MS = 1400;
+  const GENERATION_OUTPUT_EDIT_TRACKING_TTL_MS = 5 * 60 * 1000;
+  const GENERATION_OUTPUT_EDIT_MAX_SNAPSHOTS = 8;
   const PRIMARY_BUTTON_BACKGROUND =
     "linear-gradient(135deg, #5b54f0 0%, #4338ca 100%)";
   const languageDefaults = window.AutoListerLanguageDefaults;
@@ -7975,6 +7978,11 @@
     return String(value || "").replace(/\r\n/g, "\n");
   }
 
+  function createOutputTrackingId() {
+    if (globalThis.crypto?.randomUUID) return globalThis.crypto.randomUUID();
+    return `out_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+  }
+
   function startGenerationOutputEditTracking({
     mode,
     photoCount,
@@ -7987,7 +7995,7 @@
     appliedDescription,
   }) {
     if (activeGenerationOutputEditCleanup) {
-      activeGenerationOutputEditCleanup();
+      activeGenerationOutputEditCleanup("new_generation");
     }
 
     const titleInput = document.querySelector(SELECTORS.title);
@@ -7996,67 +8004,142 @@
 
     const initialTitle = normalizeTrackedOutputText(appliedTitle);
     const initialDescription = normalizeTrackedOutputText(appliedDescription);
+    const outputTrackingId = createOutputTrackingId();
     const startedAt = Date.now();
-    let hasTrackedEdit = false;
+    let snapshotCount = 0;
+    let lastSnapshotAt = startedAt;
+    let lastSnapshotTitle = initialTitle;
+    let lastSnapshotDescription = initialDescription;
     let debounceTimer = null;
     let expiryTimer = null;
+    let isCleanedUp = false;
 
-    const cleanup = () => {
-      if (debounceTimer) clearTimeout(debounceTimer);
-      if (expiryTimer) clearTimeout(expiryTimer);
-      titleInput?.removeEventListener("input", scheduleCheck);
-      descInput?.removeEventListener("input", scheduleCheck);
-      titleInput?.removeEventListener("change", scheduleCheck);
-      descInput?.removeEventListener("change", scheduleCheck);
-      if (activeGenerationOutputEditCleanup === cleanup) {
-        activeGenerationOutputEditCleanup = null;
+    const readCurrentOutput = () => ({
+      title: normalizeTrackedOutputText(titleInput?.value),
+      description: normalizeTrackedOutputText(descInput?.value),
+    });
+
+    const hasChangedFromInitial = ({ title, description }) => ({
+      titleChanged: Boolean(titleInput) && title !== initialTitle,
+      descriptionChanged:
+        Boolean(descInput) && description !== initialDescription,
+    });
+
+    const hasChangedFromPrevious = ({ title, description }) => ({
+      titleChangedSincePrevious:
+        Boolean(titleInput) && title !== lastSnapshotTitle,
+      descriptionChangedSincePrevious:
+        Boolean(descInput) && description !== lastSnapshotDescription,
+    });
+
+    const trackSnapshot = (reason) => {
+      if (snapshotCount >= GENERATION_OUTPUT_EDIT_MAX_SNAPSHOTS) return false;
+
+      const current = readCurrentOutput();
+      const changedFromInitial = hasChangedFromInitial(current);
+      const changedFromPrevious = hasChangedFromPrevious(current);
+      if (
+        !changedFromInitial.titleChanged &&
+        !changedFromInitial.descriptionChanged
+      ) {
+        return false;
       }
-    };
+      if (
+        !changedFromPrevious.titleChangedSincePrevious &&
+        !changedFromPrevious.descriptionChangedSincePrevious
+      ) {
+        return false;
+      }
 
-    const checkForEdit = () => {
-      if (hasTrackedEdit) return;
-
-      const currentTitle = normalizeTrackedOutputText(titleInput?.value);
-      const currentDescription = normalizeTrackedOutputText(descInput?.value);
-      const titleChanged = Boolean(titleInput) && currentTitle !== initialTitle;
-      const descriptionChanged =
-        Boolean(descInput) && currentDescription !== initialDescription;
-
-      if (!titleChanged && !descriptionChanged) return;
-
-      hasTrackedEdit = true;
-      cleanup();
+      const now = Date.now();
+      snapshotCount += 1;
       trackGrowthEvent("generation_output_edited", {
         mode,
         photoCount,
         titleLanguageCode,
         descriptionLanguageCode,
         descriptionApplyChoice,
-        editDelayMs: Date.now() - startedAt,
-        titleChanged,
-        descriptionChanged,
+        outputTrackingId,
+        editSequence: snapshotCount,
+        editSnapshotReason: reason,
+        editDelayMs: now - startedAt,
+        msSincePreviousEditSnapshot: now - lastSnapshotAt,
+        titleChanged: changedFromInitial.titleChanged,
+        descriptionChanged: changedFromInitial.descriptionChanged,
+        titleChangedSincePrevious:
+          changedFromPrevious.titleChangedSincePrevious,
+        descriptionChangedSincePrevious:
+          changedFromPrevious.descriptionChangedSincePrevious,
         generatedTitle: normalizeTrackedOutputText(generatedTitle),
         generatedDescription: normalizeTrackedOutputText(generatedDescription),
         appliedTitle: initialTitle,
         appliedDescription: initialDescription,
-        currentTitle,
-        currentDescription,
-        titleLengthDelta: currentTitle.length - initialTitle.length,
+        previousTitle: lastSnapshotTitle,
+        previousDescription: lastSnapshotDescription,
+        currentTitle: current.title,
+        currentDescription: current.description,
+        titleLengthDelta: current.title.length - initialTitle.length,
         descriptionLengthDelta:
-          currentDescription.length - initialDescription.length,
+          current.description.length - initialDescription.length,
+        titleLengthDeltaSincePrevious:
+          current.title.length - lastSnapshotTitle.length,
+        descriptionLengthDeltaSincePrevious:
+          current.description.length - lastSnapshotDescription.length,
+        snapshotLimit:
+          GENERATION_OUTPUT_EDIT_MAX_SNAPSHOTS,
       });
+
+      lastSnapshotAt = now;
+      lastSnapshotTitle = current.title;
+      lastSnapshotDescription = current.description;
+      return true;
+    };
+
+    const cleanup = (reason = "cleanup") => {
+      if (isCleanedUp) return;
+      isCleanedUp = true;
+      if (debounceTimer) clearTimeout(debounceTimer);
+      if (expiryTimer) clearTimeout(expiryTimer);
+      trackSnapshot(reason);
+      titleInput?.removeEventListener("input", scheduleCheck);
+      descInput?.removeEventListener("input", scheduleCheck);
+      titleInput?.removeEventListener("change", scheduleCheck);
+      descInput?.removeEventListener("change", scheduleCheck);
+      window.removeEventListener("pagehide", handlePageHide);
+      if (activeGenerationOutputEditCleanup === cleanup) {
+        activeGenerationOutputEditCleanup = null;
+      }
+    };
+
+    const checkForEdit = () => {
+      trackSnapshot("idle");
+      if (snapshotCount >= GENERATION_OUTPUT_EDIT_MAX_SNAPSHOTS) {
+        cleanup("snapshot_limit");
+      }
     };
 
     function scheduleCheck() {
       if (debounceTimer) clearTimeout(debounceTimer);
-      debounceTimer = setTimeout(checkForEdit, 1200);
+      debounceTimer = setTimeout(
+        checkForEdit,
+        GENERATION_OUTPUT_EDIT_DEBOUNCE_MS,
+      );
+    }
+
+    function handlePageHide() {
+      cleanup("pagehide");
+      flushGrowthEvents();
     }
 
     titleInput?.addEventListener("input", scheduleCheck);
     descInput?.addEventListener("input", scheduleCheck);
     titleInput?.addEventListener("change", scheduleCheck);
     descInput?.addEventListener("change", scheduleCheck);
-    expiryTimer = setTimeout(cleanup, 5 * 60 * 1000);
+    window.addEventListener("pagehide", handlePageHide);
+    expiryTimer = setTimeout(
+      () => cleanup("expired"),
+      GENERATION_OUTPUT_EDIT_TRACKING_TTL_MS,
+    );
     activeGenerationOutputEditCleanup = cleanup;
   }
 
@@ -10864,7 +10947,7 @@
     }
     removeDescriptionApplyPrompt();
     if (activeGenerationOutputEditCleanup) {
-      activeGenerationOutputEditCleanup();
+      activeGenerationOutputEditCleanup("new_generation");
     }
     updateButtonUI();
 
