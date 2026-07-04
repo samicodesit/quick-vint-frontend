@@ -1698,11 +1698,18 @@
     return profile?.subscription_status !== "active" || tier === "free";
   }
 
-  function hasLocalFreeLimitReached(profile) {
+  function hasLocalFreeLimitReached(profile, usage = null) {
+    const freeLifetimeUsed = Number(
+      usage?.freeLifetimeUsed ?? profile?.free_lifetime_generations_used ?? 0,
+    );
+    const packCredits = Number(
+      usage?.packCredits ?? profile?.pack_credits ?? 0,
+    );
+
     return (
       isFreeProfile(profile) &&
-      Number(profile?.free_lifetime_generations_used || 0) >= FREE_LIFETIME_LIMIT &&
-      Number(profile?.pack_credits || 0) <= 0
+      freeLifetimeUsed >= FREE_LIFETIME_LIMIT &&
+      packCredits <= 0
     );
   }
 
@@ -8490,6 +8497,13 @@
         : [STARTER_DAILY_LIMIT_OFFER_COPY_KEY, FREE_LIMIT_OFFER_COPY_KEY];
 
       const { userProfile = null } = await chrome.storage.local.get("userProfile");
+      let usageSnapshot = null;
+      const getUsageForOfferCheck = async () => {
+        if (!usageSnapshot) {
+          usageSnapshot = await getCurrentUserUsageSnapshot();
+        }
+        return usageSnapshot;
+      };
 
       for (const copyKey of copyKeysToCheck) {
         const checkedKey = `return:${copyKey}`;
@@ -8504,11 +8518,13 @@
         let source = "local_free_limit_profile";
         let eligible = false;
         if (copyKey === STARTER_DAILY_LIMIT_OFFER_COPY_KEY) {
-          const usage = await getCurrentUserUsageSnapshot();
+          const usage = await getUsageForOfferCheck();
           eligible = hasLocalStarterDailyLimitReached(userProfile, usage);
           source = "local_starter_daily_usage";
         } else {
-          eligible = hasLocalFreeLimitReached(userProfile);
+          const usage = await getUsageForOfferCheck();
+          eligible = hasLocalFreeLimitReached(userProfile, usage);
+          source = "local_free_limit_usage";
         }
 
         if (!eligible) continue;
