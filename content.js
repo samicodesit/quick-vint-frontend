@@ -44,7 +44,6 @@
   const LIMIT_FOLLOWUP_COUPON_CODE = "LISTFASTER20";
   const LIMIT_FOLLOWUP_CLOSE_DELAY_MS = 10 * 1000;
   const STARTER_DAILY_LIMIT_CLOSE_DELAY_MS = 650;
-  const LIMIT_FOLLOWUP_RETURN_DELAY_MS = 4 * 1000;
   const STARTER_DAILY_LIMIT_RETURN_DELAY_MS = 250;
   const USER_USAGE_SNAPSHOT_STORAGE_KEY = "quickvintUserUsageSnapshot";
   const OPEN_SETTINGS_ON_NEXT_POPUP_KEY = "quickvintOpenSettingsOnNextPopup";
@@ -909,7 +908,6 @@
   let descriptionFooterIncludeForListing = DESCRIPTION_FOOTER_INCLUDE_DEFAULT;
   const limitFollowupOfferChecked = new Set();
   let limitFollowupRescueTimer = null;
-  let limitFollowupReturnTimer = null;
   let starterDailyLimitReturnTimer = null;
   let limitOfferPaywallCheckoutStarted = false;
   let activeFloatingPromptType = null;
@@ -1150,12 +1148,6 @@
     limitFollowupRescueTimer = null;
   }
 
-  function clearLimitFollowupReturnTimer() {
-    if (!limitFollowupReturnTimer) return;
-    window.clearTimeout(limitFollowupReturnTimer);
-    limitFollowupReturnTimer = null;
-  }
-
   function clearStarterDailyLimitReturnTimer() {
     if (!starterDailyLimitReturnTimer) return;
     window.clearTimeout(starterDailyLimitReturnTimer);
@@ -1316,15 +1308,6 @@
         allowDuringDraft: true,
       });
     }, STARTER_DAILY_LIMIT_RETURN_DELAY_MS);
-
-    clearLimitFollowupReturnTimer();
-    limitFollowupReturnTimer = window.setTimeout(() => {
-      limitFollowupReturnTimer = null;
-      maybeFetchAndShowLimitFollowupOffer({
-        reason: "return_visit",
-        onlyCopyKey: FREE_LIMIT_OFFER_COPY_KEY,
-      });
-    }, LIMIT_FOLLOWUP_RETURN_DELAY_MS);
   }
 
   function showLimitPaywall({
