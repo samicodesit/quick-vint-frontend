@@ -137,6 +137,7 @@
       auth: true,
       action: "none",
       hasImages: false,
+      limitPaywallSeen: true,
       userProfile: {
         subscription_status: "free",
         subscription_tier: "free",
@@ -186,6 +187,7 @@
       auth: true,
       action: "none",
       hasImages: false,
+      limitPaywallSeen: true,
       selectedLanguage: "fr",
       selectedTitleLanguage: "fr",
       selectedDescriptionLanguage: "fr",
@@ -646,6 +648,12 @@
       tone: "standard",
       useEmojis: scenario.useEmojis === true,
       useBulletPoints: true,
+      ...(scenario.limitPaywallSeen
+        ? {
+            "quickvintLimitPaywallSeen:preview@autolister.app:limit_followup_offer_v1":
+              Date.now(),
+          }
+        : {}),
     };
   }
 
