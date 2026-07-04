@@ -11,6 +11,8 @@ const listingFixture = fs.readFileSync(
   path.resolve(__dirname, "../fixtures/vinted-listing.html"),
   "utf8",
 );
+const freeLimitPaywallSeenStorageKey =
+  "quickvintLimitPaywallSeen:test-user:limit_followup_offer_v1";
 
 async function loadExtension() {
   const userDataDir = fs.mkdtempSync(
@@ -382,6 +384,70 @@ test.describe("AutoLister extension smoke flows", () => {
     expect(requestBodies[0].useEmojis).toBe(true);
     expect(requestBodies[0].descriptionLength).toBe("long");
     expect(requestBodies[0].useHashtags).toBe(true);
+  });
+
+  test("tracks generated output edits after users change generated copy", async ({
+    page,
+  }) => {
+    const eventBatches = [];
+    await page.route("https://autolister.app/api/events/track", (route) => {
+      eventBatches.push(route.request().postDataJSON());
+      return route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ ok: true }),
+      });
+    });
+    await page.route("https://autolister.app/api/generate", (route) =>
+      route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          title: "Black Test Jacket",
+          description: "Clean black jacket in good condition.",
+          measurementAdvice: "",
+        }),
+      }),
+    );
+
+    await openContentHarness(page);
+    await page.locator("#quickvint-gen-btn").click();
+    await expect(page.locator('[data-testid="title--input"]')).toHaveValue(
+      "Black Test Jacket",
+    );
+
+    await page
+      .locator('[data-testid="title--input"]')
+      .fill("Black Test Jacket Size M");
+    await page
+      .locator('[data-testid="description--input"]')
+      .fill("Clean black jacket in good condition.\nSmoke-free home.");
+
+    await expect
+      .poll(
+        () =>
+          eventBatches
+            .flatMap((batch) => batch.events || [])
+            .find((event) => event.event === "generation_output_edited"),
+        { timeout: 5000 },
+      )
+      .toBeTruthy();
+    const events = eventBatches.flatMap((batch) => batch.events || []);
+    const event = events.find(
+      (candidate) => candidate.event === "generation_output_edited",
+    );
+
+    expect(event.context.editSequence).toBe(1);
+    expect(event.context.titleChanged).toBe(true);
+    expect(event.context.descriptionChanged).toBe(true);
+    expect(event.context.generatedTitle).toBe("Black Test Jacket");
+    expect(event.context.appliedDescription).toBe(
+      "Clean black jacket in good condition.",
+    );
+    expect(event.context.currentTitle).toBe("Black Test Jacket Size M");
+    expect(event.context.currentDescription).toContain("Smoke-free home.");
+    expect(event.context.titleLengthDelta).toBeGreaterThan(0);
+    expect(event.context.descriptionLengthDelta).toBeGreaterThan(0);
   });
 
   test("compresses remote Vinted images through the background proxy", async ({
@@ -989,6 +1055,7 @@ test.describe("AutoLister extension smoke flows", () => {
     await openContentHarness(page, null, {
       shortenOfferTimers: true,
       initialStorage: {
+        [freeLimitPaywallSeenStorageKey]: Date.now(),
         userProfile: {
           subscription_status: "free",
           subscription_tier: "free",
@@ -1004,7 +1071,28 @@ test.describe("AutoLister extension smoke flows", () => {
     await expect(page.locator("#quickvint-limit-followup-modal")).toHaveCount(0);
   });
 
-  test("shows the return-visit offer on an empty listing after local free limit is reached", async ({
+  test("does not show the free return-visit offer before the free-limit paywall was seen", async ({
+    page,
+  }) => {
+    await openContentHarness(page, null, {
+      emptyListing: true,
+      shortenOfferTimers: true,
+      initialStorage: {
+        userProfile: {
+          subscription_status: "free",
+          subscription_tier: "free",
+          api_calls_this_month: 5,
+          free_lifetime_generations_used: 5,
+          pack_credits: 0,
+        },
+      },
+    });
+
+    await page.waitForTimeout(500);
+    await expect(page.locator("#quickvint-limit-followup-modal")).toHaveCount(0);
+  });
+
+  test("shows the return-visit offer on an empty listing after the free-limit paywall was seen", async ({
     page,
   }) => {
     let offerFetchCount = 0;
@@ -1020,6 +1108,7 @@ test.describe("AutoLister extension smoke flows", () => {
       emptyListing: true,
       shortenOfferTimers: true,
       initialStorage: {
+        [freeLimitPaywallSeenStorageKey]: Date.now(),
         userProfile: {
           subscription_status: "free",
           subscription_tier: "free",
@@ -1044,6 +1133,7 @@ test.describe("AutoLister extension smoke flows", () => {
       emptyListing: true,
       shortenOfferTimers: true,
       initialStorage: {
+        [freeLimitPaywallSeenStorageKey]: Date.now(),
         selectedLanguage: "fr",
         selectedTitleLanguage: "fr",
         selectedDescriptionLanguage: "fr",
@@ -1070,6 +1160,7 @@ test.describe("AutoLister extension smoke flows", () => {
       emptyListing: true,
       shortenOfferTimers: true,
       initialStorage: {
+        [freeLimitPaywallSeenStorageKey]: Date.now(),
         quickvintLanguagePreferenceTouched: true,
         selectedLanguage: "en",
         selectedTitleLanguage: "fr",
