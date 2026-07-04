@@ -6131,6 +6131,22 @@
         transform: translateY(-1px);
       }
 
+      .quickvint-note-control[data-active="true"] {
+        border-color: #8b7cf6;
+        background: linear-gradient(135deg, #eef2ff 0%, #f5f3ff 100%);
+        box-shadow: 0 8px 20px rgba(79, 70, 229, 0.16);
+      }
+
+      .quickvint-note-control[data-active="true"] .quickvint-binary-toggle,
+      .quickvint-note-control[data-active="true"] .quickvint-note-edit {
+        background: transparent;
+      }
+
+      .quickvint-note-control[data-active="true"] .quickvint-note-edit {
+        border-left-color: rgba(139, 124, 246, 0.45);
+        color: #4338ca;
+      }
+
       .quickvint-note-control:hover .quickvint-binary-toggle,
       .quickvint-note-control:hover .quickvint-note-edit {
         transform: none;
@@ -7272,6 +7288,9 @@
       "aria-pressed",
       includeForListing ? "true" : "false",
     );
+    descriptionFooterBtn
+      .closest(".quickvint-note-control")
+      ?.setAttribute("data-active", includeForListing ? "true" : "false");
     descriptionFooterBtn.setAttribute(
       "aria-label",
       hasText
