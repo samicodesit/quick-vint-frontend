@@ -422,6 +422,7 @@ test.describe("AutoLister extension smoke flows", () => {
     await page
       .locator('[data-testid="description--input"]')
       .fill("Clean black jacket in good condition.\nSmoke-free home.");
+    await page.evaluate(() => window.dispatchEvent(new Event("pagehide")));
 
     await expect
       .poll(
@@ -438,6 +439,10 @@ test.describe("AutoLister extension smoke flows", () => {
     );
 
     expect(event.context.editSequence).toBe(1);
+    expect(event.context.editSummarySequence).toBe(1);
+    expect(event.context.editSummaryReason).toBe("pagehide");
+    expect(event.context.editEventCount).toBeGreaterThanOrEqual(2);
+    expect(event.context.changedFields).toBe("title,description");
     expect(event.context.titleChanged).toBe(true);
     expect(event.context.descriptionChanged).toBe(true);
     expect(event.context.generatedTitle).toBe("Black Test Jacket");

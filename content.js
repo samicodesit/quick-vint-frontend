@@ -839,9 +839,9 @@
     `mailto:${SUPPORT_EMAIL}?subject=AutoLister%20AI%20tailored%20limits`;
   const ACCOUNT_REVIEW_CONTACT_URL =
     `mailto:${SUPPORT_EMAIL}?subject=AutoLister%20AI%20account%20review`;
-  const GENERATION_OUTPUT_EDIT_DEBOUNCE_MS = 1400;
+  const GENERATION_OUTPUT_EDIT_SUMMARY_IDLE_MS = 20 * 1000;
   const GENERATION_OUTPUT_EDIT_TRACKING_TTL_MS = 5 * 60 * 1000;
-  const GENERATION_OUTPUT_EDIT_MAX_SNAPSHOTS = 8;
+  const GENERATION_OUTPUT_EDIT_MAX_SUMMARIES = 3;
   const PRIMARY_BUTTON_BACKGROUND =
     "linear-gradient(135deg, #5b54f0 0%, #4338ca 100%)";
   const languageDefaults = window.AutoListerLanguageDefaults;
@@ -8130,11 +8130,18 @@
     const initialDescription = normalizeTrackedOutputText(appliedDescription);
     const outputTrackingId = createOutputTrackingId();
     const startedAt = Date.now();
-    let snapshotCount = 0;
-    let lastSnapshotAt = startedAt;
-    let lastSnapshotTitle = initialTitle;
-    let lastSnapshotDescription = initialDescription;
-    let debounceTimer = null;
+    let summaryCount = 0;
+    let editEventCount = 0;
+    let titleEditEventCount = 0;
+    let descriptionEditEventCount = 0;
+    let firstEditAt = null;
+    let lastEditAt = startedAt;
+    let lastObservedTitle = initialTitle;
+    let lastObservedDescription = initialDescription;
+    let lastEmittedTitle = initialTitle;
+    let lastEmittedDescription = initialDescription;
+    let lastSummaryAt = startedAt;
+    let summaryTimer = null;
     let expiryTimer = null;
     let isCleanedUp = false;
 
@@ -8149,34 +8156,48 @@
         Boolean(descInput) && description !== initialDescription,
     });
 
-    const hasChangedFromPrevious = ({ title, description }) => ({
-      titleChangedSincePrevious:
-        Boolean(titleInput) && title !== lastSnapshotTitle,
-      descriptionChangedSincePrevious:
-        Boolean(descInput) && description !== lastSnapshotDescription,
+    const hasChangedFromLastObserved = ({ title, description }) => ({
+      titleChangedSinceLastObserved:
+        Boolean(titleInput) && title !== lastObservedTitle,
+      descriptionChangedSinceLastObserved:
+        Boolean(descInput) && description !== lastObservedDescription,
     });
 
-    const trackSnapshot = (reason) => {
-      if (snapshotCount >= GENERATION_OUTPUT_EDIT_MAX_SNAPSHOTS) return false;
+    const hasChangedSinceLastSummary = ({ title, description }) =>
+      (Boolean(titleInput) && title !== lastEmittedTitle) ||
+      (Boolean(descInput) && description !== lastEmittedDescription);
 
+    const summarizeChangedFields = ({ titleChanged, descriptionChanged }) => {
+      const fields = [];
+      if (titleChanged) fields.push("title");
+      if (descriptionChanged) fields.push("description");
+      return fields.join(",");
+    };
+
+    const trackSummary = (reason) => {
+      if (summaryCount >= GENERATION_OUTPUT_EDIT_MAX_SUMMARIES) return false;
+      if (!firstEditAt || editEventCount <= 0) return false;
       const current = readCurrentOutput();
       const changedFromInitial = hasChangedFromInitial(current);
-      const changedFromPrevious = hasChangedFromPrevious(current);
       if (
         !changedFromInitial.titleChanged &&
         !changedFromInitial.descriptionChanged
       ) {
         return false;
       }
-      if (
-        !changedFromPrevious.titleChangedSincePrevious &&
-        !changedFromPrevious.descriptionChangedSincePrevious
-      ) {
+      if (!hasChangedSinceLastSummary(current)) {
         return false;
       }
 
       const now = Date.now();
-      snapshotCount += 1;
+      summaryCount += 1;
+      const changedSinceLastSummary = {
+        titleChangedSincePrevious:
+          Boolean(titleInput) && current.title !== lastEmittedTitle,
+        descriptionChangedSincePrevious:
+          Boolean(descInput) &&
+          current.description !== lastEmittedDescription,
+      };
       trackGrowthEvent("generation_output_edited", {
         mode,
         photoCount,
@@ -8184,51 +8205,61 @@
         descriptionLanguageCode,
         descriptionApplyChoice,
         outputTrackingId,
-        editSequence: snapshotCount,
+        editSequence: summaryCount,
         editSnapshotReason: reason,
         editDelayMs: now - startedAt,
-        msSincePreviousEditSnapshot: now - lastSnapshotAt,
+        msSincePreviousEditSnapshot: now - lastSummaryAt,
         titleChanged: changedFromInitial.titleChanged,
         descriptionChanged: changedFromInitial.descriptionChanged,
         titleChangedSincePrevious:
-          changedFromPrevious.titleChangedSincePrevious,
+          changedSinceLastSummary.titleChangedSincePrevious,
         descriptionChangedSincePrevious:
-          changedFromPrevious.descriptionChangedSincePrevious,
+          changedSinceLastSummary.descriptionChangedSincePrevious,
         generatedTitle: normalizeTrackedOutputText(generatedTitle),
         generatedDescription: normalizeTrackedOutputText(generatedDescription),
         appliedTitle: initialTitle,
         appliedDescription: initialDescription,
-        previousTitle: lastSnapshotTitle,
-        previousDescription: lastSnapshotDescription,
+        previousTitle: lastEmittedTitle,
+        previousDescription: lastEmittedDescription,
         currentTitle: current.title,
         currentDescription: current.description,
+        finalTitle: current.title,
+        finalDescription: current.description,
+        editSummaryReason: reason,
+        editSummarySequence: summaryCount,
+        editEventCount,
+        titleEditEventCount,
+        descriptionEditEventCount,
+        changedFields: summarizeChangedFields(changedFromInitial),
         titleLengthDelta: current.title.length - initialTitle.length,
         descriptionLengthDelta:
           current.description.length - initialDescription.length,
-        titleLengthDeltaSincePrevious:
-          current.title.length - lastSnapshotTitle.length,
-        descriptionLengthDeltaSincePrevious:
-          current.description.length - lastSnapshotDescription.length,
-        snapshotLimit:
-          GENERATION_OUTPUT_EDIT_MAX_SNAPSHOTS,
+        editStartedDelayMs: firstEditAt - startedAt,
+        editDurationMs: now - firstEditAt,
+        editIdleMs: now - lastEditAt,
+        summaryLimit: GENERATION_OUTPUT_EDIT_MAX_SUMMARIES,
       });
 
-      lastSnapshotAt = now;
-      lastSnapshotTitle = current.title;
-      lastSnapshotDescription = current.description;
+      lastEmittedTitle = current.title;
+      lastEmittedDescription = current.description;
+      lastSummaryAt = now;
+      editEventCount = 0;
+      titleEditEventCount = 0;
+      descriptionEditEventCount = 0;
+      firstEditAt = null;
       return true;
     };
 
     const cleanup = (reason = "cleanup") => {
       if (isCleanedUp) return;
       isCleanedUp = true;
-      if (debounceTimer) clearTimeout(debounceTimer);
+      if (summaryTimer) clearTimeout(summaryTimer);
       if (expiryTimer) clearTimeout(expiryTimer);
-      trackSnapshot(reason);
-      titleInput?.removeEventListener("input", scheduleCheck);
-      descInput?.removeEventListener("input", scheduleCheck);
-      titleInput?.removeEventListener("change", scheduleCheck);
-      descInput?.removeEventListener("change", scheduleCheck);
+      trackSummary(reason);
+      titleInput?.removeEventListener("input", handleTitleInput);
+      descInput?.removeEventListener("input", handleDescriptionInput);
+      titleInput?.removeEventListener("change", handleTitleChange);
+      descInput?.removeEventListener("change", handleDescriptionChange);
       window.removeEventListener("pagehide", handlePageHide);
       if (activeGenerationOutputEditCleanup === cleanup) {
         activeGenerationOutputEditCleanup = null;
@@ -8236,29 +8267,78 @@
     };
 
     const checkForEdit = () => {
-      trackSnapshot("idle");
-      if (snapshotCount >= GENERATION_OUTPUT_EDIT_MAX_SNAPSHOTS) {
-        cleanup("snapshot_limit");
+      trackSummary("idle");
+      if (summaryCount >= GENERATION_OUTPUT_EDIT_MAX_SUMMARIES) {
+        cleanup("summary_limit");
       }
     };
 
-    function scheduleCheck() {
-      if (debounceTimer) clearTimeout(debounceTimer);
-      debounceTimer = setTimeout(
+    function scheduleSummary() {
+      if (summaryTimer) clearTimeout(summaryTimer);
+      summaryTimer = setTimeout(
         checkForEdit,
-        GENERATION_OUTPUT_EDIT_DEBOUNCE_MS,
+        GENERATION_OUTPUT_EDIT_SUMMARY_IDLE_MS,
       );
     }
+
+    function recordOutputEdit(field) {
+      if (isCleanedUp) return;
+
+      const current = readCurrentOutput();
+      const changedFromInitial = hasChangedFromInitial(current);
+      const changedFromLastObserved = hasChangedFromLastObserved(current);
+      if (
+        !changedFromInitial.titleChanged &&
+        !changedFromInitial.descriptionChanged
+      ) {
+        lastObservedTitle = current.title;
+        lastObservedDescription = current.description;
+        return;
+      }
+      if (
+        !changedFromLastObserved.titleChangedSinceLastObserved &&
+        !changedFromLastObserved.descriptionChangedSinceLastObserved
+      ) {
+        return;
+      }
+
+      const now = Date.now();
+      if (!firstEditAt) firstEditAt = now;
+      lastEditAt = now;
+      editEventCount += 1;
+      if (
+        field === "title" ||
+        changedFromLastObserved.titleChangedSinceLastObserved
+      ) {
+        titleEditEventCount += 1;
+      }
+      if (
+        field === "description" ||
+        changedFromLastObserved.descriptionChangedSinceLastObserved
+      ) {
+        descriptionEditEventCount += 1;
+      }
+      lastObservedTitle = current.title;
+      lastObservedDescription = current.description;
+      scheduleSummary();
+    }
+
+    const handleTitleInput = () => recordOutputEdit("title");
+    const handleDescriptionInput = () =>
+      recordOutputEdit("description");
+    const handleTitleChange = () => recordOutputEdit("title");
+    const handleDescriptionChange = () =>
+      recordOutputEdit("description");
 
     function handlePageHide() {
       cleanup("pagehide");
       flushGrowthEvents();
     }
 
-    titleInput?.addEventListener("input", scheduleCheck);
-    descInput?.addEventListener("input", scheduleCheck);
-    titleInput?.addEventListener("change", scheduleCheck);
-    descInput?.addEventListener("change", scheduleCheck);
+    titleInput?.addEventListener("input", handleTitleInput);
+    descInput?.addEventListener("input", handleDescriptionInput);
+    titleInput?.addEventListener("change", handleTitleChange);
+    descInput?.addEventListener("change", handleDescriptionChange);
     window.addEventListener("pagehide", handlePageHide);
     expiryTimer = setTimeout(
       () => cleanup("expired"),
