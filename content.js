@@ -2242,11 +2242,11 @@
   /**
    * Compresses and resizes an image to reduce token usage for AI processing.
    * @param {string} imageUrl - The original image URL
-   * @param {number} maxDimension - Maximum width or height (default: 1024)
-   * @param {number} quality - JPEG quality 0-1 (default: 0.8)
+   * @param {number} maxDimension - Maximum width or height (default: 1280)
+   * @param {number} quality - JPEG quality 0-1 (default: 0.82)
    * @returns {Promise<string>} Base64 encoded compressed image
    */
-  async function compressImage(imageUrl, maxDimension = 1024, quality = 0.8) {
+  async function compressImage(imageUrl, maxDimension = 1280, quality = 0.82) {
     return new Promise((resolve, reject) => {
       const img = new Image();
       const isRemoteUrl = /^https?:\/\//i.test(imageUrl);
