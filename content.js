@@ -889,10 +889,8 @@
   let batchProgressStatus = null;
   let batchGenerationCapacity = null;
   let batchCapacityLoading = false;
-  let batchReceivedEventSent = false;
   let listingToolsReadyTracked = false;
   let signedOutToolsReadyTracked = false;
-  let batchCompleteReceivedEventSent = false;
   let eventQueue = [];
   let eventFlushTimer = null;
   let batchTabStatusTimer = null;
@@ -8927,8 +8925,6 @@
   function closeModal() {
     const modal = document.getElementById(MODAL_ID);
     const sessionId = modal?.dataset?.sessionId;
-    const receivedCount = downloadedFiles.size;
-
     if (activePhoneUploadSessionId === sessionId) {
       activePhoneUploadSessionId = null;
     }
@@ -8953,13 +8949,6 @@
     phoneUploadPreviewUrls.forEach((url) => URL.revokeObjectURL(url));
     phoneUploadPreviewUrls = [];
     displayedPhoneUploadPreviewCount = 0;
-
-    if (sessionId) {
-      trackGrowthEvent("phone_upload_close", {
-        mode: "single",
-        receivedCount,
-      });
-    }
 
     // Notify server to clean up session and delete files
     if (sessionId && chrome.runtime?.id) {
@@ -9105,12 +9094,6 @@
                         phoneUploadPreviewUrls.push(result.previewUrl);
                       }
                     }
-                  });
-                  trackGrowthEvent("phone_upload_received", {
-                    mode: "single",
-                    receivedCount: filesToInject.length,
-                    failedDownloadCount,
-                    totalReceivedCount: downloadedFiles.size,
                   });
                   schedulePhoneUploadPreviewReveal();
                 } else {
@@ -9359,8 +9342,6 @@
     batchProgressStatus = null;
     batchGenerationCapacity = null;
     batchCapacityLoading = false;
-    batchReceivedEventSent = false;
-    batchCompleteReceivedEventSent = false;
     isBatchPollInFlight = false;
     batchImagePreloadUrls = new Set();
     batchImagePreloadCache = new Map();
@@ -9415,8 +9396,6 @@
 
   function closeBatchModal({ cleanup = true } = {}) {
     const sessionId = batchUploadSessionId;
-    const receivedCount = batchRemoteFiles.length;
-    const groupedCount = batchMarkedGroups.length;
     const wasComplete = batchIsComplete;
     document.getElementById(BATCH_MODAL_ID)?.remove();
     setBatchModalScrollLock(false);
@@ -9440,16 +9419,6 @@
           body: JSON.stringify({}),
         },
       }).catch(() => {});
-    }
-
-    if (sessionId) {
-      trackGrowthEvent("phone_upload_close", {
-        mode: "batch",
-        cleanup: Boolean(cleanup),
-        complete: wasComplete,
-        receivedCount,
-        groupedCount,
-      });
     }
 
     resetBatchState();
@@ -10567,23 +10536,6 @@
         if (batchRemoteFiles.length !== batchLastFileCount) {
           batchLastFileCount = batchRemoteFiles.length;
           batchLastFileChangeAt = Date.now();
-          if (!batchReceivedEventSent) {
-            batchReceivedEventSent = true;
-            trackGrowthEvent("phone_upload_received", {
-              mode: "batch",
-              receivedCount: batchRemoteFiles.length,
-              complete: false,
-            });
-          }
-        }
-
-        if (batchIsComplete && !batchCompleteReceivedEventSent && batchRemoteFiles.length > 0) {
-          batchCompleteReceivedEventSent = true;
-          trackGrowthEvent("phone_upload_received", {
-            mode: "batch",
-            receivedCount: batchRemoteFiles.length,
-            complete: true,
-          });
         }
 
         preloadBatchImages(files);
