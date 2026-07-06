@@ -918,6 +918,7 @@
   let limitFollowupResumeListenersBound = false;
   let capturedPromptUpload = null;
   let suppressNextFileInputCapture = false;
+  const boundPromptUploadFileInputs = new WeakSet();
 
   // --- HELPER FUNCTIONS ---
 
@@ -2681,6 +2682,28 @@
   }
 
   function bindPromptUploadFileCapture() {
+    const bindFileInput = (input) => {
+      if (!(input instanceof HTMLInputElement)) return;
+      if (!input.matches?.(SELECTORS.fileInput)) return;
+      if (boundPromptUploadFileInputs.has(input)) return;
+
+      boundPromptUploadFileInputs.add(input);
+      input.addEventListener("change", () => {
+        if (suppressNextFileInputCapture) return;
+        if (!input.files?.length) return;
+        registerPromptUploadFiles(input.files, "manual_file_input");
+      });
+    };
+
+    const bindFileInputsIn = (root = document) => {
+      if (root instanceof HTMLInputElement) {
+        bindFileInput(root);
+        return;
+      }
+      if (!(root instanceof Document || root instanceof Element)) return;
+      root.querySelectorAll?.(SELECTORS.fileInput).forEach(bindFileInput);
+    };
+
     const invalidateOnMediaEdit = (event) => {
       const target = event.target;
       if (!(target instanceof Element)) return;
@@ -2696,18 +2719,13 @@
       }
     };
 
-    document.addEventListener(
-      "change",
-      (event) => {
-        const input = event.target;
-        if (!(input instanceof HTMLInputElement)) return;
-        if (!input.matches?.(SELECTORS.fileInput)) return;
-        if (suppressNextFileInputCapture) return;
-        if (!input.files?.length) return;
-        registerPromptUploadFiles(input.files, "manual_file_input");
-      },
-      true,
-    );
+    bindFileInputsIn(document);
+    const fileInputObserver = new MutationObserver((mutations) => {
+      mutations.forEach((mutation) => {
+        mutation.addedNodes.forEach((node) => bindFileInputsIn(node));
+      });
+    });
+    fileInputObserver.observe(document.body, { childList: true, subtree: true });
 
     document.addEventListener("click", invalidateOnMediaEdit, true);
     document.addEventListener(
@@ -2734,6 +2752,7 @@
     );
 
     window.addEventListener("pagehide", () => {
+      fileInputObserver.disconnect();
       revokeCapturedPromptUpload("pagehide");
     });
   }
