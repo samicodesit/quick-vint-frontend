@@ -2505,6 +2505,21 @@
       });
   }
 
+  function buildImageSourceTelemetry(imageEntries) {
+    return imageEntries.map((entry, index) => ({
+      index: index + 1,
+      sourceSelection: entry.sourceSelection,
+      sourceKind: getImageUrlKind(entry.url),
+      sourceUrl: getSafeImageUrlForMetadata(entry.url),
+      currentSrcUrl: getSafeImageUrlForMetadata(entry.currentUrl),
+      bestSrcsetUrl: getSafeImageUrlForMetadata(entry.bestSrcsetUrl),
+      domNaturalWidth: entry.domNaturalWidth,
+      domNaturalHeight: entry.domNaturalHeight,
+      renderedWidth: entry.renderedWidth,
+      renderedHeight: entry.renderedHeight,
+    }));
+  }
+
   function getUploadedImageUrls() {
     return getUploadedImageEntries().map((entry) => entry.url);
   }
@@ -11250,6 +11265,7 @@
   } = {}) {
     const imageEntries = getUploadedImageEntries();
     const imageUrls = imageEntries.map((entry) => entry.url);
+    const imageSourceTelemetry = buildImageSourceTelemetry(imageEntries);
     const mode = manageButtonState ? "manual" : "batch";
     const requestGenerationMode = generationMode || mode;
 
@@ -11259,6 +11275,15 @@
         showToast("Please upload at least one image.", "error");
       }
       throw new Error("Please upload at least one image.");
+    }
+
+    if (manageButtonState) {
+      trackGrowthEvent("generate_click", {
+        mode: "manual",
+        descriptionApplyChoice,
+        photoCount: imageUrls.length,
+        imageSources: imageSourceTelemetry,
+      });
     }
 
     if (manageButtonState) {
@@ -11326,6 +11351,7 @@
       trackGrowthEvent("generate_request", {
         mode,
         photoCount: imageUrls.length,
+        imageSources: imageSourceTelemetry,
         titleLanguageCode,
         descriptionLanguageCode,
         uiLanguageCode: languageProfile.uiLanguageCode,
@@ -11564,10 +11590,6 @@
     }
 
     try {
-      trackGrowthEvent("generate_click", {
-        mode: "manual",
-        descriptionApplyChoice,
-      });
       await generateCurrentListing({
         descriptionApplyChoice,
         manageButtonState: true,

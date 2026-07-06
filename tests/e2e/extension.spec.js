@@ -359,6 +359,14 @@ test.describe("AutoLister extension smoke flows", () => {
 
   test("generates listing copy into Vinted fields", async ({ page }) => {
     const requestBodies = [];
+    const eventBatches = [];
+    await page.route("https://autolister.app/api/events/track", (route) => {
+      eventBatches.push(route.request().postDataJSON());
+      return route.fulfill({
+        status: 204,
+        body: "",
+      });
+    });
     await page.route("https://autolister.app/api/generate", (route) => {
       requestBodies.push(route.request().postDataJSON());
       return route.fulfill({
@@ -384,6 +392,32 @@ test.describe("AutoLister extension smoke flows", () => {
     expect(requestBodies[0].useEmojis).toBe(true);
     expect(requestBodies[0].descriptionLength).toBe("long");
     expect(requestBodies[0].useHashtags).toBe(true);
+
+    await expect
+      .poll(
+        () =>
+          eventBatches
+            .flatMap((batch) => batch.events || [])
+            .filter((event) =>
+              ["generate_click", "generate_request"].includes(event.event),
+            ),
+        { timeout: 5000 },
+      )
+      .toHaveLength(2);
+
+    const events = eventBatches.flatMap((batch) => batch.events || []);
+    for (const eventName of ["generate_click", "generate_request"]) {
+      const event = events.find((candidate) => candidate.event === eventName);
+      expect(event.context.photoCount).toBe(1);
+      expect(event.context.imageSources).toHaveLength(1);
+      expect(event.context.imageSources[0]).toMatchObject({
+        index: 1,
+        sourceKind: "data_url",
+        sourceUrl: null,
+      });
+      expect(event.context.imageSources[0].domNaturalWidth).toBeGreaterThan(0);
+      expect(event.context.imageSources[0].domNaturalHeight).toBeGreaterThan(0);
+    }
   });
 
   test("tracks generated output edits after users change generated copy", async ({
