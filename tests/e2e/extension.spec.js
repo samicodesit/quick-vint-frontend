@@ -420,6 +420,86 @@ test.describe("AutoLister extension smoke flows", () => {
     }
   });
 
+  test("uses captured uploaded files for generation when they match Vinted photos", async ({
+    page,
+  }) => {
+    const requestBodies = [];
+    const eventBatches = [];
+    await page.route("https://autolister.app/api/events/track", (route) => {
+      eventBatches.push(route.request().postDataJSON());
+      return route.fulfill({
+        status: 204,
+        body: "",
+      });
+    });
+    await page.route("https://autolister.app/api/generate", (route) => {
+      requestBodies.push(route.request().postDataJSON());
+      return route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          title: "Captured Original Jacket",
+          description: "Generated from captured upload file.",
+          measurementAdvice: "",
+        }),
+      });
+    });
+
+    await openContentHarness(page);
+
+    const uploadBuffer = Buffer.from(tinyPngDataUrl.split(",")[1], "base64");
+    await page.setInputFiles('[data-testid="add-photos-input"]', {
+      name: "original-upload.png",
+      mimeType: "image/png",
+      buffer: uploadBuffer,
+    });
+    await page.locator("#quickvint-gen-btn").click();
+
+    await expect(page.locator('[data-testid="title--input"]')).toHaveValue(
+      "Captured Original Jacket",
+    );
+    expect(requestBodies[0].imageMetadata).toHaveLength(1);
+    expect(requestBodies[0].imageMetadata[0]).toMatchObject({
+      sourceSelection: "captured_upload_file",
+      promptSource: "captured_upload_file",
+      sourceKind: "blob_url",
+      sourceUrl: null,
+      capturedUploadAvailable: true,
+      capturedUploadSource: "manual_file_input",
+      capturedUploadFileCount: 1,
+      capturedUploadMatchStatus: "count_match_by_order",
+      capturedUploadFile: {
+        index: 1,
+        captureSource: "manual_file_input",
+        fileName: "original-upload.png",
+        fileType: "image/png",
+        fileSizeBytes: uploadBuffer.length,
+        promptSourceKind: "captured_file_object_url",
+      },
+      vintedSourceSelection: "current_src",
+      vintedSourceKind: "data_url",
+      vintedSourceUrl: null,
+    });
+
+    await expect
+      .poll(
+        () =>
+          eventBatches
+            .flatMap((batch) => batch.events || [])
+            .find((event) => event.event === "generate_request")?.context
+            ?.imageSources?.[0],
+        { timeout: 5000 },
+      )
+      .toMatchObject({
+        sourceSelection: "captured_upload_file",
+        promptSource: "captured_upload_file",
+        sourceKind: "blob_url",
+        sourceUrl: null,
+        capturedUploadSource: "manual_file_input",
+        capturedUploadMatchStatus: "count_match_by_order",
+      });
+  });
+
   test("tracks generated output edits after users change generated copy", async ({
     page,
   }) => {

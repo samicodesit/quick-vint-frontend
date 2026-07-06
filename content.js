@@ -61,6 +61,7 @@
       '[data-testid^="image-wrapper-"] img.web_ui__Image__content, .photo-box__image-container img.web_ui__Image__content, img[alt^="Uploaded photo"]',
     mediaDeleteButton: '[data-testid^="media-select-grid-delete-button-"]',
     mediaRotateButton: '[data-testid^="media-select-grid-rotate-button-"]',
+    mediaEditButton: '[data-testid^="media-select-grid-edit-button-"]',
     mediaAddPhotosButton:
       '[data-testid="add-photos-icon-button"], button[aria-label="Add photos"]',
     fileInput:
@@ -842,6 +843,7 @@
   const GENERATION_OUTPUT_EDIT_SUMMARY_IDLE_MS = 20 * 1000;
   const GENERATION_OUTPUT_EDIT_TRACKING_TTL_MS = 5 * 60 * 1000;
   const GENERATION_OUTPUT_EDIT_MAX_SUMMARIES = 3;
+  const CAPTURED_PROMPT_UPLOAD_TTL_MS = 30 * 60 * 1000;
   const PRIMARY_BUTTON_BACKGROUND =
     "linear-gradient(135deg, #5b54f0 0%, #4338ca 100%)";
   const languageDefaults = window.AutoListerLanguageDefaults;
@@ -914,6 +916,8 @@
   let activeFloatingPromptType = null;
   let activePaywallCleanup = null;
   let limitFollowupResumeListenersBound = false;
+  let capturedPromptUpload = null;
+  let suppressNextFileInputCapture = false;
 
   // --- HELPER FUNCTIONS ---
 
@@ -2307,6 +2311,102 @@
     };
   }
 
+  function revokeCapturedPromptUpload(reason = "replace") {
+    if (!capturedPromptUpload) return;
+    capturedPromptUpload.files.forEach((entry) => {
+      if (entry.objectUrl) {
+        URL.revokeObjectURL(entry.objectUrl);
+      }
+    });
+    capturedPromptUpload = null;
+    if (reason !== "replace") {
+      console.debug(`AutoLister AI: cleared captured prompt upload (${reason}).`);
+    }
+  }
+
+  function buildCapturedUploadFileMetadata(file, index, source) {
+    return {
+      index: index + 1,
+      captureSource: source,
+      fileName: file?.name || null,
+      fileType: file?.type || null,
+      fileSizeBytes: typeof file?.size === "number" ? file.size : null,
+      fileLastModified:
+        typeof file?.lastModified === "number" ? file.lastModified : null,
+      promptSourceKind: "captured_file_object_url",
+    };
+  }
+
+  function registerPromptUploadFiles(files, source) {
+    const fileList = Array.from(files || []).filter(Boolean);
+    if (!fileList.length) return;
+
+    revokeCapturedPromptUpload("replace");
+    capturedPromptUpload = {
+      source,
+      capturedAt: Date.now(),
+      files: fileList.map((file, index) => ({
+        objectUrl: URL.createObjectURL(file),
+        metadata: buildCapturedUploadFileMetadata(file, index, source),
+      })),
+    };
+  }
+
+  function getActiveCapturedPromptUpload() {
+    if (!capturedPromptUpload) return null;
+    const ageMs = Date.now() - capturedPromptUpload.capturedAt;
+    if (ageMs > CAPTURED_PROMPT_UPLOAD_TTL_MS) {
+      revokeCapturedPromptUpload("expired");
+      return null;
+    }
+    return capturedPromptUpload;
+  }
+
+  function applyCapturedPromptUploadSources(domEntries) {
+    const capturedUpload = getActiveCapturedPromptUpload();
+    if (!capturedUpload) return domEntries;
+
+    const matchStatus =
+      capturedUpload.files.length === domEntries.length
+        ? "count_match_by_order"
+        : "count_mismatch_fallback_to_vinted";
+
+    if (matchStatus !== "count_match_by_order") {
+      return domEntries.map((entry) => ({
+        ...entry,
+        promptSource: "vinted_dom_image",
+        capturedUploadAvailable: true,
+        capturedUploadSource: capturedUpload.source,
+        capturedUploadFileCount: capturedUpload.files.length,
+        capturedUploadMatchStatus: matchStatus,
+      }));
+    }
+
+    return domEntries.map((entry, index) => {
+      const capturedFile = capturedUpload.files[index];
+      return {
+        ...entry,
+        url: capturedFile.objectUrl,
+        promptSource: "captured_upload_file",
+        sourceSelection: "captured_upload_file",
+        capturedUploadAvailable: true,
+        capturedUploadSource: capturedUpload.source,
+        capturedUploadFileCount: capturedUpload.files.length,
+        capturedUploadMatchStatus: matchStatus,
+        capturedUploadFile: capturedFile.metadata,
+        vintedSourceSelection: entry.sourceSelection,
+        vintedSourceKind: getImageUrlKind(entry.url),
+        vintedSourceUrl: getSafeImageUrlForMetadata(entry.url),
+        vintedCurrentSrcUrl: getSafeImageUrlForMetadata(entry.currentUrl),
+        vintedBestSrcsetUrl: getSafeImageUrlForMetadata(entry.bestSrcsetUrl),
+        vintedDomNaturalWidth: entry.domNaturalWidth,
+        vintedDomNaturalHeight: entry.domNaturalHeight,
+        vintedRenderedWidth: entry.renderedWidth,
+        vintedRenderedHeight: entry.renderedHeight,
+      };
+    });
+  }
+
   async function compressImageWithMetadata(
     imageUrl,
     maxDimension = 1280,
@@ -2434,12 +2534,27 @@
         return await compressImageWithMetadata(entry.url, 1280, 0.82, {
           index: index + 1,
           sourceSelection: entry.sourceSelection,
+          promptSource: entry.promptSource || "vinted_dom_image",
           domNaturalWidth: entry.domNaturalWidth,
           domNaturalHeight: entry.domNaturalHeight,
           renderedWidth: entry.renderedWidth,
           renderedHeight: entry.renderedHeight,
           currentSrcUrl: getSafeImageUrlForMetadata(entry.currentUrl),
           bestSrcsetUrl: getSafeImageUrlForMetadata(entry.bestSrcsetUrl),
+          capturedUploadAvailable: entry.capturedUploadAvailable || false,
+          capturedUploadSource: entry.capturedUploadSource || null,
+          capturedUploadFileCount: entry.capturedUploadFileCount || null,
+          capturedUploadMatchStatus: entry.capturedUploadMatchStatus || null,
+          capturedUploadFile: entry.capturedUploadFile || null,
+          vintedSourceSelection: entry.vintedSourceSelection || null,
+          vintedSourceKind: entry.vintedSourceKind || null,
+          vintedSourceUrl: entry.vintedSourceUrl || null,
+          vintedCurrentSrcUrl: entry.vintedCurrentSrcUrl || null,
+          vintedBestSrcsetUrl: entry.vintedBestSrcsetUrl || null,
+          vintedDomNaturalWidth: entry.vintedDomNaturalWidth || null,
+          vintedDomNaturalHeight: entry.vintedDomNaturalHeight || null,
+          vintedRenderedWidth: entry.vintedRenderedWidth || null,
+          vintedRenderedHeight: entry.vintedRenderedHeight || null,
         });
       } catch (error) {
         failedCount += 1;
@@ -2448,12 +2563,29 @@
           metadata: {
             index: index + 1,
             sourceSelection: entry.sourceSelection,
+            promptSource: entry.promptSource || "vinted_dom_image",
             sourceKind: getImageUrlKind(entry.url),
             sourceUrl: getSafeImageUrlForMetadata(entry.url),
             domNaturalWidth: entry.domNaturalWidth,
             domNaturalHeight: entry.domNaturalHeight,
             renderedWidth: entry.renderedWidth,
             renderedHeight: entry.renderedHeight,
+            currentSrcUrl: getSafeImageUrlForMetadata(entry.currentUrl),
+            bestSrcsetUrl: getSafeImageUrlForMetadata(entry.bestSrcsetUrl),
+            capturedUploadAvailable: entry.capturedUploadAvailable || false,
+            capturedUploadSource: entry.capturedUploadSource || null,
+            capturedUploadFileCount: entry.capturedUploadFileCount || null,
+            capturedUploadMatchStatus: entry.capturedUploadMatchStatus || null,
+            capturedUploadFile: entry.capturedUploadFile || null,
+            vintedSourceSelection: entry.vintedSourceSelection || null,
+            vintedSourceKind: entry.vintedSourceKind || null,
+            vintedSourceUrl: entry.vintedSourceUrl || null,
+            vintedCurrentSrcUrl: entry.vintedCurrentSrcUrl || null,
+            vintedBestSrcsetUrl: entry.vintedBestSrcsetUrl || null,
+            vintedDomNaturalWidth: entry.vintedDomNaturalWidth || null,
+            vintedDomNaturalHeight: entry.vintedDomNaturalHeight || null,
+            vintedRenderedWidth: entry.vintedRenderedWidth || null,
+            vintedRenderedHeight: entry.vintedRenderedHeight || null,
             compressionFailed: true,
             error: error?.message || "Compression failed",
           },
@@ -2487,11 +2619,12 @@
     const images = Array.from(root.querySelectorAll(SELECTORS.mediaImage));
     const seenUrls = new Set();
 
-    return images
+    const domEntries = images
       .map((img) => {
         const source = getBestImageSource(img);
         return {
           ...source,
+          promptSource: "vinted_dom_image",
           domNaturalWidth: img.naturalWidth || null,
           domNaturalHeight: img.naturalHeight || null,
           renderedWidth: img.clientWidth || null,
@@ -2503,12 +2636,15 @@
         seenUrls.add(entry.url);
         return true;
       });
+
+    return applyCapturedPromptUploadSources(domEntries);
   }
 
   function buildImageSourceTelemetry(imageEntries) {
     return imageEntries.map((entry, index) => ({
       index: index + 1,
       sourceSelection: entry.sourceSelection,
+      promptSource: entry.promptSource || "vinted_dom_image",
       sourceKind: getImageUrlKind(entry.url),
       sourceUrl: getSafeImageUrlForMetadata(entry.url),
       currentSrcUrl: getSafeImageUrlForMetadata(entry.currentUrl),
@@ -2517,6 +2653,20 @@
       domNaturalHeight: entry.domNaturalHeight,
       renderedWidth: entry.renderedWidth,
       renderedHeight: entry.renderedHeight,
+      capturedUploadAvailable: entry.capturedUploadAvailable || false,
+      capturedUploadSource: entry.capturedUploadSource || null,
+      capturedUploadFileCount: entry.capturedUploadFileCount || null,
+      capturedUploadMatchStatus: entry.capturedUploadMatchStatus || null,
+      capturedUploadFile: entry.capturedUploadFile || null,
+      vintedSourceSelection: entry.vintedSourceSelection || null,
+      vintedSourceKind: entry.vintedSourceKind || null,
+      vintedSourceUrl: entry.vintedSourceUrl || null,
+      vintedCurrentSrcUrl: entry.vintedCurrentSrcUrl || null,
+      vintedBestSrcsetUrl: entry.vintedBestSrcsetUrl || null,
+      vintedDomNaturalWidth: entry.vintedDomNaturalWidth || null,
+      vintedDomNaturalHeight: entry.vintedDomNaturalHeight || null,
+      vintedRenderedWidth: entry.vintedRenderedWidth || null,
+      vintedRenderedHeight: entry.vintedRenderedHeight || null,
     }));
   }
 
@@ -2528,6 +2678,64 @@
     const grid = document.querySelector(SELECTORS.mediaGrid);
     if (!grid) return getUploadedImageUrls().length;
     return grid.querySelectorAll(SELECTORS.mediaPhotoBox).length;
+  }
+
+  function bindPromptUploadFileCapture() {
+    const invalidateOnMediaEdit = (event) => {
+      const target = event.target;
+      if (!(target instanceof Element)) return;
+      const mediaGrid = target.closest?.(SELECTORS.mediaGrid);
+      if (!mediaGrid) return;
+
+      if (
+        target.closest?.(SELECTORS.mediaDeleteButton) ||
+        target.closest?.(SELECTORS.mediaRotateButton) ||
+        target.closest?.(SELECTORS.mediaEditButton)
+      ) {
+        revokeCapturedPromptUpload("media_edit");
+      }
+    };
+
+    document.addEventListener(
+      "change",
+      (event) => {
+        const input = event.target;
+        if (!(input instanceof HTMLInputElement)) return;
+        if (!input.matches?.(SELECTORS.fileInput)) return;
+        if (suppressNextFileInputCapture) return;
+        if (!input.files?.length) return;
+        registerPromptUploadFiles(input.files, "manual_file_input");
+      },
+      true,
+    );
+
+    document.addEventListener("click", invalidateOnMediaEdit, true);
+    document.addEventListener(
+      "dragstart",
+      (event) => {
+        const target = event.target;
+        if (!(target instanceof Element)) return;
+        if (target.closest?.(SELECTORS.mediaGrid)) {
+          revokeCapturedPromptUpload("media_reorder");
+        }
+      },
+      true,
+    );
+    document.addEventListener(
+      "drop",
+      (event) => {
+        const target = event.target;
+        if (!(target instanceof Element)) return;
+        if (target.closest?.(SELECTORS.mediaGrid)) {
+          revokeCapturedPromptUpload("media_reorder");
+        }
+      },
+      true,
+    );
+
+    window.addEventListener("pagehide", () => {
+      revokeCapturedPromptUpload("pagehide");
+    });
   }
 
   // --- AUTHENTICATION & STATE SYNC ---
@@ -9253,7 +9461,7 @@
               const failedDownloadCount = downloads.length - filesToInject.length;
 
               if (filesToInject.length > 0) {
-                if (injectFilesIntoVinted(filesToInject)) {
+                if (injectFilesIntoVinted(filesToInject, "phone_upload_single")) {
                   downloads.forEach((result) => {
                     if (result.file) {
                       downloadedFiles.add(result.key);
@@ -9379,15 +9587,21 @@
     }
   }
 
-  function injectFilesIntoVinted(files) {
+  function injectFilesIntoVinted(files, uploadSource = "autolister_injected_files") {
     const fileInput = document.querySelector(SELECTORS.fileInput);
     if (!fileInput || files.length === 0) return false;
+
+    registerPromptUploadFiles(files, uploadSource);
 
     const dataTransfer = new DataTransfer();
     files.forEach((file) => dataTransfer.items.add(file));
 
     fileInput.files = dataTransfer.files;
+    suppressNextFileInputCapture = true;
     fileInput.dispatchEvent(new Event("change", { bubbles: true }));
+    setTimeout(() => {
+      suppressNextFileInputCapture = false;
+    }, 0);
     return true;
   }
 
@@ -11213,7 +11427,7 @@
       }
 
       showBatchTabStatus(`${listingPrefix}: adding photos...`);
-      if (!injectFilesIntoVinted(filesToInject)) {
+      if (!injectFilesIntoVinted(filesToInject, "phone_upload_batch")) {
         throw new Error("Could not add photos to the Vinted listing.");
       }
 
@@ -11707,6 +11921,7 @@
 
   function init() {
     injectStylesheet();
+    bindPromptUploadFileCapture();
     bindLimitFollowupResumeListeners();
     initializeAuthState();
     startInjectionObserver();
