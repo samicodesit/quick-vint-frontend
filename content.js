@@ -2246,7 +2246,73 @@
    * @param {number} quality - JPEG quality 0-1 (default: 0.82)
    * @returns {Promise<string>} Base64 encoded compressed image
    */
-  async function compressImage(imageUrl, maxDimension = 1280, quality = 0.82) {
+  function getImageUrlKind(url) {
+    if (/^data:/i.test(url)) return "data_url";
+    if (/^blob:/i.test(url)) return "blob_url";
+    if (/^https?:\/\//i.test(url)) return "remote_url";
+    return "unknown";
+  }
+
+  function getApproxDataUrlBytes(dataUrl) {
+    const commaIndex = dataUrl.indexOf(",");
+    if (commaIndex === -1) return null;
+    const base64 = dataUrl.slice(commaIndex + 1);
+    return Math.floor((base64.length * 3) / 4);
+  }
+
+  function getSafeImageUrlForMetadata(url) {
+    if (!/^https?:\/\//i.test(url)) return null;
+    try {
+      const parsed = new URL(url);
+      return `${parsed.origin}${parsed.pathname}`;
+    } catch {
+      return null;
+    }
+  }
+
+  function parseSrcsetCandidates(srcset) {
+    if (!srcset || typeof srcset !== "string") return [];
+    return srcset
+      .split(",")
+      .map((candidate) => {
+        const parts = candidate.trim().split(/\s+/);
+        const url = parts[0];
+        const descriptor = parts[1] || "";
+        const widthMatch = descriptor.match(/^(\d+)w$/);
+        const densityMatch = descriptor.match(/^(\d+(?:\.\d+)?)x$/);
+        const rank = widthMatch
+          ? Number(widthMatch[1])
+          : densityMatch
+            ? Number(densityMatch[1]) * 1000
+            : 0;
+        return url ? { url, rank } : null;
+      })
+      .filter(Boolean)
+      .sort((a, b) => b.rank - a.rank);
+  }
+
+  function getBestImageSource(img) {
+    const currentUrl = img.currentSrc || img.src || img.getAttribute("src") || "";
+    const srcsetCandidates = parseSrcsetCandidates(
+      img.getAttribute("srcset") || img.srcset || "",
+    );
+    const bestSrcset = srcsetCandidates[0]?.url || "";
+    const url = bestSrcset || currentUrl;
+
+    return {
+      url,
+      sourceSelection: bestSrcset && bestSrcset !== currentUrl ? "srcset_best" : "current_src",
+      currentUrl,
+      bestSrcsetUrl: bestSrcset,
+    };
+  }
+
+  async function compressImageWithMetadata(
+    imageUrl,
+    maxDimension = 1280,
+    quality = 0.82,
+    sourceMetadata = {},
+  ) {
     return new Promise((resolve, reject) => {
       const img = new Image();
       const isRemoteUrl = /^https?:\/\//i.test(imageUrl);
@@ -2257,8 +2323,10 @@
       img.onload = () => {
         try {
           // Calculate new dimensions while maintaining aspect ratio
-          let width = img.width;
-          let height = img.height;
+          const inputWidth = img.naturalWidth || img.width;
+          const inputHeight = img.naturalHeight || img.height;
+          let width = inputWidth;
+          let height = inputHeight;
 
           if (width > maxDimension || height > maxDimension) {
             if (width > height) {
@@ -2279,7 +2347,24 @@
 
           // Convert to base64 with compression
           const base64 = canvas.toDataURL("image/jpeg", quality);
-          resolve(base64);
+          resolve({
+            imageUrl: base64,
+            metadata: {
+              ...sourceMetadata,
+              sourceKind: getImageUrlKind(imageUrl),
+              sourceUrl: getSafeImageUrlForMetadata(imageUrl),
+              sourceNaturalWidth: sourceMetadata.sourceNaturalWidth || null,
+              sourceNaturalHeight: sourceMetadata.sourceNaturalHeight || null,
+              inputWidth,
+              inputHeight,
+              outputWidth: width,
+              outputHeight: height,
+              maxDimension,
+              jpegQuality: quality,
+              outputBytes: getApproxDataUrlBytes(base64),
+              resized: width !== inputWidth || height !== inputHeight,
+            },
+          });
         } catch (error) {
           reject(error);
         }
@@ -2311,6 +2396,11 @@
     });
   }
 
+  async function compressImage(imageUrl, maxDimension = 1280, quality = 0.82) {
+    const result = await compressImageWithMetadata(imageUrl, maxDimension, quality);
+    return result.imageUrl;
+  }
+
   /**
    * Compresses multiple images in parallel with error handling.
    * @param {string[]} imageUrls - Array of image URLs
@@ -2337,24 +2427,86 @@
     return compressedImages;
   }
 
+  async function compressImagesWithMetadata(imageEntries) {
+    let failedCount = 0;
+    const compressionPromises = imageEntries.map(async (entry, index) => {
+      try {
+        return await compressImageWithMetadata(entry.url, 1280, 0.82, {
+          index: index + 1,
+          sourceSelection: entry.sourceSelection,
+          domNaturalWidth: entry.domNaturalWidth,
+          domNaturalHeight: entry.domNaturalHeight,
+          renderedWidth: entry.renderedWidth,
+          renderedHeight: entry.renderedHeight,
+          currentSrcUrl: getSafeImageUrlForMetadata(entry.currentUrl),
+          bestSrcsetUrl: getSafeImageUrlForMetadata(entry.bestSrcsetUrl),
+        });
+      } catch (error) {
+        failedCount += 1;
+        return {
+          imageUrl: entry.url,
+          metadata: {
+            index: index + 1,
+            sourceSelection: entry.sourceSelection,
+            sourceKind: getImageUrlKind(entry.url),
+            sourceUrl: getSafeImageUrlForMetadata(entry.url),
+            domNaturalWidth: entry.domNaturalWidth,
+            domNaturalHeight: entry.domNaturalHeight,
+            renderedWidth: entry.renderedWidth,
+            renderedHeight: entry.renderedHeight,
+            compressionFailed: true,
+            error: error?.message || "Compression failed",
+          },
+        };
+      }
+    });
+
+    const results = await Promise.all(compressionPromises);
+    if (failedCount > 0) {
+      console.warn(
+        `AutoLister AI: ${failedCount}/${imageEntries.length} image(s) could not be compressed; using original URL fallback.`,
+      );
+    }
+
+    return {
+      imageUrls: results.map((result) => result.imageUrl),
+      imageMetadata: results.map((result) => result.metadata),
+    };
+  }
+
   if (window.__AUTOLISTER_TEST_HOOKS__) {
     window.__AUTOLISTER_TEST_HOOKS__.compressImage = compressImage;
     window.__AUTOLISTER_TEST_HOOKS__.compressImages = compressImages;
+    window.__AUTOLISTER_TEST_HOOKS__.compressImagesWithMetadata =
+      compressImagesWithMetadata;
   }
 
-  function getUploadedImageUrls() {
+  function getUploadedImageEntries() {
     const grid = document.querySelector(SELECTORS.mediaGrid);
     const root = grid || document;
     const images = Array.from(root.querySelectorAll(SELECTORS.mediaImage));
     const seenUrls = new Set();
 
     return images
-      .map((img) => img.currentSrc || img.src || img.getAttribute("src"))
-      .filter((url) => {
-        if (!url || seenUrls.has(url)) return false;
-        seenUrls.add(url);
+      .map((img) => {
+        const source = getBestImageSource(img);
+        return {
+          ...source,
+          domNaturalWidth: img.naturalWidth || null,
+          domNaturalHeight: img.naturalHeight || null,
+          renderedWidth: img.clientWidth || null,
+          renderedHeight: img.clientHeight || null,
+        };
+      })
+      .filter((entry) => {
+        if (!entry.url || seenUrls.has(entry.url)) return false;
+        seenUrls.add(entry.url);
         return true;
       });
+  }
+
+  function getUploadedImageUrls() {
+    return getUploadedImageEntries().map((entry) => entry.url);
   }
 
   function getVisibleUploadedPhotoCount() {
@@ -11096,7 +11248,8 @@
     overrideUseEmojis = null,
     generationMode = null,
   } = {}) {
-    const imageUrls = getUploadedImageUrls();
+    const imageEntries = getUploadedImageEntries();
+    const imageUrls = imageEntries.map((entry) => entry.url);
     const mode = manageButtonState ? "manual" : "batch";
     const requestGenerationMode = generationMode || mode;
 
@@ -11202,11 +11355,13 @@
         );
       }
 
-      // Compress images before sending to API to reduce token usage
-      const compressedImages = await compressImages(imageUrls);
+      // Compress images before sending to API to reduce token usage.
+      const { imageUrls: compressedImages, imageMetadata } =
+        await compressImagesWithMetadata(imageEntries);
 
       const requestBody = {
         imageUrls: compressedImages,
+        imageMetadata,
         languageCode: legacyLanguageCode,
         titleLanguageCode,
         descriptionLanguageCode,
