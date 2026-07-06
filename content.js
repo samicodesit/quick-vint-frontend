@@ -59,9 +59,6 @@
     mediaImageWrapper: '[data-testid^="image-wrapper-"]',
     mediaImage:
       '[data-testid^="image-wrapper-"] img.web_ui__Image__content, .photo-box__image-container img.web_ui__Image__content, img[alt^="Uploaded photo"]',
-    mediaDeleteButton: '[data-testid^="media-select-grid-delete-button-"]',
-    mediaRotateButton: '[data-testid^="media-select-grid-rotate-button-"]',
-    mediaEditButton: '[data-testid^="media-select-grid-edit-button-"]',
     mediaAddPhotosButton:
       '[data-testid="add-photos-icon-button"], button[aria-label="Add photos"]',
     fileInput:
@@ -919,6 +916,7 @@
   let capturedPromptUpload = null;
   let suppressNextFileInputCapture = false;
   const boundPromptUploadFileInputs = new WeakSet();
+  const boundPromptUploadMediaGrids = new WeakSet();
 
   // --- HELPER FUNCTIONS ---
 
@@ -2338,19 +2336,62 @@
     };
   }
 
-  function registerPromptUploadFiles(files, source) {
+  function registerPromptUploadFiles(files, source, { append = false } = {}) {
     const fileList = Array.from(files || []).filter(Boolean);
     if (!fileList.length) return;
 
-    revokeCapturedPromptUpload("replace");
+    const existingUpload = append ? getActiveCapturedPromptUpload() : null;
+    const existingFiles =
+      existingUpload && existingUpload.currentSetTrusted !== false
+        ? existingUpload.files
+        : [];
+    if (!existingFiles.length) {
+      revokeCapturedPromptUpload("replace");
+    }
+
+    const capturedAt = Date.now();
+    const newFiles = fileList.map((file, index) => ({
+      objectUrl: URL.createObjectURL(file),
+      metadata: buildCapturedUploadFileMetadata(
+        file,
+        existingFiles.length + index,
+        source,
+      ),
+    }));
+
     capturedPromptUpload = {
-      source,
-      capturedAt: Date.now(),
-      files: fileList.map((file, index) => ({
-        objectUrl: URL.createObjectURL(file),
-        metadata: buildCapturedUploadFileMetadata(file, index, source),
-      })),
+      source:
+        existingUpload && existingUpload.source !== source
+          ? "mixed_upload_sources"
+          : source,
+      capturedAt,
+      orderTrusted: existingUpload?.orderTrusted !== false,
+      currentSetTrusted: true,
+      files: [...existingFiles, ...newFiles],
     };
+  }
+
+  function removeCapturedPromptUploadAtIndex(index) {
+    const capturedUpload = getActiveCapturedPromptUpload();
+    if (!capturedUpload) return;
+
+    if (capturedUpload.orderTrusted === false) {
+      capturedUpload.currentSetTrusted = false;
+      capturedUpload.untrustedReason = "delete_after_reorder";
+      return;
+    }
+
+    if (!Number.isInteger(index) || index < 0 || index >= capturedUpload.files.length) {
+      capturedUpload.currentSetTrusted = false;
+      capturedUpload.untrustedReason = "delete_index_unmatched";
+      return;
+    }
+
+    const [removedFile] = capturedUpload.files.splice(index, 1);
+    if (removedFile?.objectUrl) {
+      URL.revokeObjectURL(removedFile.objectUrl);
+    }
+    capturedUpload.capturedAt = Date.now();
   }
 
   function getActiveCapturedPromptUpload() {
@@ -2368,11 +2409,18 @@
     if (!capturedUpload) return domEntries;
 
     const matchStatus =
-      capturedUpload.files.length === domEntries.length
-        ? "count_match_by_order"
-        : "count_mismatch_fallback_to_vinted";
+      capturedUpload.currentSetTrusted === false
+        ? `${capturedUpload.untrustedReason || "untrusted_set"}_fallback_to_vinted`
+        : capturedUpload.files.length === domEntries.length
+          ? capturedUpload.orderTrusted === false
+            ? "count_match_unordered"
+            : "count_match_by_order"
+          : "count_mismatch_fallback_to_vinted";
 
-    if (matchStatus !== "count_match_by_order") {
+    if (
+      matchStatus !== "count_match_by_order" &&
+      matchStatus !== "count_match_unordered"
+    ) {
       return domEntries.map((entry) => ({
         ...entry,
         promptSource: "vinted_dom_image",
@@ -2380,6 +2428,8 @@
         capturedUploadSource: capturedUpload.source,
         capturedUploadFileCount: capturedUpload.files.length,
         capturedUploadMatchStatus: matchStatus,
+        capturedUploadOrderTrusted: capturedUpload.orderTrusted !== false,
+        capturedUploadSetTrusted: capturedUpload.currentSetTrusted !== false,
       }));
     }
 
@@ -2394,6 +2444,8 @@
         capturedUploadSource: capturedUpload.source,
         capturedUploadFileCount: capturedUpload.files.length,
         capturedUploadMatchStatus: matchStatus,
+        capturedUploadOrderTrusted: capturedUpload.orderTrusted !== false,
+        capturedUploadSetTrusted: capturedUpload.currentSetTrusted !== false,
         capturedUploadFile: capturedFile.metadata,
         vintedSourceSelection: entry.sourceSelection,
         vintedSourceKind: getImageUrlKind(entry.url),
@@ -2546,6 +2598,8 @@
           capturedUploadSource: entry.capturedUploadSource || null,
           capturedUploadFileCount: entry.capturedUploadFileCount || null,
           capturedUploadMatchStatus: entry.capturedUploadMatchStatus || null,
+          capturedUploadOrderTrusted: entry.capturedUploadOrderTrusted ?? null,
+          capturedUploadSetTrusted: entry.capturedUploadSetTrusted ?? null,
           capturedUploadFile: entry.capturedUploadFile || null,
           vintedSourceSelection: entry.vintedSourceSelection || null,
           vintedSourceKind: entry.vintedSourceKind || null,
@@ -2577,6 +2631,8 @@
             capturedUploadSource: entry.capturedUploadSource || null,
             capturedUploadFileCount: entry.capturedUploadFileCount || null,
             capturedUploadMatchStatus: entry.capturedUploadMatchStatus || null,
+            capturedUploadOrderTrusted: entry.capturedUploadOrderTrusted ?? null,
+            capturedUploadSetTrusted: entry.capturedUploadSetTrusted ?? null,
             capturedUploadFile: entry.capturedUploadFile || null,
             vintedSourceSelection: entry.vintedSourceSelection || null,
             vintedSourceKind: entry.vintedSourceKind || null,
@@ -2658,6 +2714,8 @@
       capturedUploadSource: entry.capturedUploadSource || null,
       capturedUploadFileCount: entry.capturedUploadFileCount || null,
       capturedUploadMatchStatus: entry.capturedUploadMatchStatus || null,
+      capturedUploadOrderTrusted: entry.capturedUploadOrderTrusted ?? null,
+      capturedUploadSetTrusted: entry.capturedUploadSetTrusted ?? null,
       capturedUploadFile: entry.capturedUploadFile || null,
       vintedSourceSelection: entry.vintedSourceSelection || null,
       vintedSourceKind: entry.vintedSourceKind || null,
@@ -2682,17 +2740,30 @@
   }
 
   function bindPromptUploadFileCapture() {
+    const shouldAppendCapturedUploadFiles = () => {
+      const capturedUpload = getActiveCapturedPromptUpload();
+      if (!capturedUpload || capturedUpload.currentSetTrusted === false) {
+        return false;
+      }
+
+      return capturedUpload.files.length === getVisibleUploadedPhotoCount();
+    };
+
+    const captureInputFiles = (input) => {
+      if (suppressNextFileInputCapture) return;
+      if (!input.files?.length) return;
+      registerPromptUploadFiles(input.files, "manual_file_input", {
+        append: shouldAppendCapturedUploadFiles(),
+      });
+    };
+
     const bindFileInput = (input) => {
       if (!(input instanceof HTMLInputElement)) return;
       if (!input.matches?.(SELECTORS.fileInput)) return;
       if (boundPromptUploadFileInputs.has(input)) return;
 
       boundPromptUploadFileInputs.add(input);
-      input.addEventListener("change", () => {
-        if (suppressNextFileInputCapture) return;
-        if (!input.files?.length) return;
-        registerPromptUploadFiles(input.files, "manual_file_input");
-      });
+      input.addEventListener("change", () => captureInputFiles(input));
     };
 
     const bindFileInputsIn = (root = document) => {
@@ -2704,37 +2775,83 @@
       root.querySelectorAll?.(SELECTORS.fileInput).forEach(bindFileInput);
     };
 
-    const invalidateOnMediaEdit = (event) => {
-      const target = event.target;
-      if (!(target instanceof Element)) return;
-      const mediaGrid = target.closest?.(SELECTORS.mediaGrid);
-      if (!mediaGrid) return;
+    const getRemovedPhotoBoxIndex = (mutation) => {
+      const removedPhotoBox = Array.from(mutation.removedNodes || []).find(
+        (node) =>
+          node instanceof Element &&
+          node.matches?.(SELECTORS.mediaPhotoBox),
+      );
+      if (!removedPhotoBox) return null;
 
-      if (
-        target.closest?.(SELECTORS.mediaDeleteButton) ||
-        target.closest?.(SELECTORS.mediaRotateButton) ||
-        target.closest?.(SELECTORS.mediaEditButton)
-      ) {
-        revokeCapturedPromptUpload("media_edit");
+      let index = 0;
+      let sibling = mutation.previousSibling;
+      while (sibling) {
+        if (
+          sibling instanceof Element &&
+          sibling.matches?.(SELECTORS.mediaPhotoBox)
+        ) {
+          index += 1;
+        }
+        sibling = sibling.previousSibling;
       }
+      return index;
+    };
+
+    const bindMediaGrid = (grid) => {
+      if (!(grid instanceof Element)) return;
+      if (!grid.matches?.(SELECTORS.mediaGrid)) return;
+      if (boundPromptUploadMediaGrids.has(grid)) return;
+      boundPromptUploadMediaGrids.add(grid);
+
+      const mediaGridObserver = new MutationObserver((mutations) => {
+        const capturedUpload = getActiveCapturedPromptUpload();
+        if (!capturedUpload || capturedUpload.orderTrusted === false) return;
+
+        mutations.forEach((mutation) => {
+          const addedPhotoBox = Array.from(mutation.addedNodes || []).some(
+            (node) =>
+              node instanceof Element &&
+              node.matches?.(SELECTORS.mediaPhotoBox),
+          );
+          if (addedPhotoBox) return;
+
+          const removedIndex = getRemovedPhotoBoxIndex(mutation);
+          if (removedIndex !== null) {
+            removeCapturedPromptUploadAtIndex(removedIndex);
+          }
+        });
+      });
+      mediaGridObserver.observe(grid, { childList: true });
+    };
+
+    const bindMediaGridsIn = (root = document) => {
+      if (root instanceof Element && root.matches?.(SELECTORS.mediaGrid)) {
+        bindMediaGrid(root);
+      }
+      if (!(root instanceof Document || root instanceof Element)) return;
+      root.querySelectorAll?.(SELECTORS.mediaGrid).forEach(bindMediaGrid);
     };
 
     bindFileInputsIn(document);
+    bindMediaGridsIn(document);
     const fileInputObserver = new MutationObserver((mutations) => {
       mutations.forEach((mutation) => {
-        mutation.addedNodes.forEach((node) => bindFileInputsIn(node));
+        mutation.addedNodes.forEach((node) => {
+          bindFileInputsIn(node);
+          bindMediaGridsIn(node);
+        });
       });
     });
     fileInputObserver.observe(document.body, { childList: true, subtree: true });
 
-    document.addEventListener("click", invalidateOnMediaEdit, true);
     document.addEventListener(
       "dragstart",
       (event) => {
         const target = event.target;
         if (!(target instanceof Element)) return;
         if (target.closest?.(SELECTORS.mediaGrid)) {
-          revokeCapturedPromptUpload("media_reorder");
+          const capturedUpload = getActiveCapturedPromptUpload();
+          if (capturedUpload) capturedUpload.orderTrusted = false;
         }
       },
       true,
@@ -2745,7 +2862,8 @@
         const target = event.target;
         if (!(target instanceof Element)) return;
         if (target.closest?.(SELECTORS.mediaGrid)) {
-          revokeCapturedPromptUpload("media_reorder");
+          const capturedUpload = getActiveCapturedPromptUpload();
+          if (capturedUpload) capturedUpload.orderTrusted = false;
         }
       },
       true,
@@ -9610,7 +9728,11 @@
     const fileInput = document.querySelector(SELECTORS.fileInput);
     if (!fileInput || files.length === 0) return false;
 
-    registerPromptUploadFiles(files, uploadSource);
+    const capturedUpload = getActiveCapturedPromptUpload();
+    const append =
+      capturedUpload?.currentSetTrusted !== false &&
+      capturedUpload?.files?.length === getVisibleUploadedPhotoCount();
+    registerPromptUploadFiles(files, uploadSource, { append });
 
     const dataTransfer = new DataTransfer();
     files.forEach((file) => dataTransfer.items.add(file));

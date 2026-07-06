@@ -500,6 +500,210 @@ test.describe("AutoLister extension smoke flows", () => {
       });
   });
 
+  test("keeps captured original files through reorder-only changes", async ({
+    page,
+  }) => {
+    const requestBodies = [];
+    await page.route("https://autolister.app/api/events/track", (route) =>
+      route.fulfill({ status: 204, body: "" }),
+    );
+    await page.route("https://autolister.app/api/generate", (route) => {
+      requestBodies.push(route.request().postDataJSON());
+      return route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          title: "Reordered Original Photos",
+          description: "Generated from the captured original set.",
+          measurementAdvice: "",
+        }),
+      });
+    });
+
+    await openContentHarness(page);
+    await page.evaluate((src) => {
+      const grid = document.querySelector('[data-testid="media-upload-grid"]');
+      const box = document.createElement("div");
+      box.className = "photo-box";
+      box.innerHTML = `
+        <div class="photo-box__image-container" data-testid="image-wrapper-2">
+          <img class="web_ui__Image__content" alt="Uploaded photo 2" src="${src}" />
+        </div>
+      `;
+      grid.appendChild(box);
+    }, tinyPngDataUrl);
+
+    const uploadBuffer = Buffer.from(tinyPngDataUrl.split(",")[1], "base64");
+    await page.setInputFiles('[data-testid="add-photos-input"]', [
+      {
+        name: "first-original.png",
+        mimeType: "image/png",
+        buffer: uploadBuffer,
+      },
+      {
+        name: "second-original.png",
+        mimeType: "image/png",
+        buffer: uploadBuffer,
+      },
+    ]);
+    await page.locator('[data-testid="media-upload-grid"]').dispatchEvent("dragstart");
+    await page.locator("#quickvint-gen-btn").click();
+
+    await expect(page.locator('[data-testid="title--input"]')).toHaveValue(
+      "Reordered Original Photos",
+    );
+    expect(requestBodies[0].imageMetadata).toHaveLength(2);
+    expect(requestBodies[0].imageMetadata[0]).toMatchObject({
+      sourceSelection: "captured_upload_file",
+      promptSource: "captured_upload_file",
+      capturedUploadMatchStatus: "count_match_unordered",
+      capturedUploadOrderTrusted: false,
+      capturedUploadSetTrusted: true,
+    });
+  });
+
+  test("removes deleted captured originals when Vinted delete index is still trusted", async ({
+    page,
+  }) => {
+    const requestBodies = [];
+    await page.route("https://autolister.app/api/events/track", (route) =>
+      route.fulfill({ status: 204, body: "" }),
+    );
+    await page.route("https://autolister.app/api/generate", (route) => {
+      requestBodies.push(route.request().postDataJSON());
+      return route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          title: "Deleted Photo Removed",
+          description: "Generated without the deleted captured original.",
+          measurementAdvice: "",
+        }),
+      });
+    });
+
+    await openContentHarness(page);
+    await page.evaluate((src) => {
+      const grid = document.querySelector('[data-testid="media-upload-grid"]');
+      const firstBox = grid.querySelector(".photo-box");
+      const firstDelete = document.createElement("button");
+      firstDelete.type = "button";
+      firstDelete.dataset.testid = "media-select-grid-delete-button-0";
+      firstDelete.textContent = "Delete first";
+      firstBox.appendChild(firstDelete);
+
+      const secondBox = document.createElement("div");
+      secondBox.className = "photo-box";
+      secondBox.innerHTML = `
+        <div class="photo-box__image-container" data-testid="image-wrapper-2">
+          <img class="web_ui__Image__content" alt="Uploaded photo 2" src="${src}" />
+        </div>
+        <button type="button" data-testid="media-select-grid-delete-button-1">Delete second</button>
+      `;
+      grid.appendChild(secondBox);
+    }, tinyPngDataUrl);
+
+    const uploadBuffer = Buffer.from(tinyPngDataUrl.split(",")[1], "base64");
+    await page.setInputFiles('[data-testid="add-photos-input"]', [
+      {
+        name: "kept-original.png",
+        mimeType: "image/png",
+        buffer: uploadBuffer,
+      },
+      {
+        name: "deleted-original.png",
+        mimeType: "image/png",
+        buffer: uploadBuffer,
+      },
+    ]);
+    await page.locator('[data-testid="media-select-grid-delete-button-1"]').click();
+    await page.evaluate(() => {
+      document.querySelector('[data-testid="image-wrapper-2"]')?.closest(".photo-box")?.remove();
+    });
+    await page.locator("#quickvint-gen-btn").click();
+
+    await expect(page.locator('[data-testid="title--input"]')).toHaveValue(
+      "Deleted Photo Removed",
+    );
+    expect(requestBodies[0].imageMetadata).toHaveLength(1);
+    expect(requestBodies[0].imageMetadata[0]).toMatchObject({
+      sourceSelection: "captured_upload_file",
+      promptSource: "captured_upload_file",
+      capturedUploadFileCount: 1,
+      capturedUploadMatchStatus: "count_match_by_order",
+      capturedUploadFile: {
+        fileName: "kept-original.png",
+      },
+    });
+  });
+
+  test("falls back to visible Vinted images when deletion follows a reorder", async ({
+    page,
+  }) => {
+    const requestBodies = [];
+    await page.route("https://autolister.app/api/events/track", (route) =>
+      route.fulfill({ status: 204, body: "" }),
+    );
+    await page.route("https://autolister.app/api/generate", (route) => {
+      requestBodies.push(route.request().postDataJSON());
+      return route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          title: "Fallback After Reorder Delete",
+          description: "Generated from visible Vinted images.",
+          measurementAdvice: "",
+        }),
+      });
+    });
+
+    await openContentHarness(page);
+    await page.evaluate((src) => {
+      const grid = document.querySelector('[data-testid="media-upload-grid"]');
+      const box = document.createElement("div");
+      box.className = "photo-box";
+      box.innerHTML = `
+        <div class="photo-box__image-container" data-testid="image-wrapper-2">
+          <img class="web_ui__Image__content" alt="Uploaded photo 2" src="${src}" />
+        </div>
+      `;
+      grid.appendChild(box);
+    }, tinyPngDataUrl);
+
+    const uploadBuffer = Buffer.from(tinyPngDataUrl.split(",")[1], "base64");
+    await page.setInputFiles('[data-testid="add-photos-input"]', [
+      {
+        name: "first-original.png",
+        mimeType: "image/png",
+        buffer: uploadBuffer,
+      },
+      {
+        name: "second-original.png",
+        mimeType: "image/png",
+        buffer: uploadBuffer,
+      },
+    ]);
+    await page.locator('[data-testid="media-upload-grid"]').dispatchEvent("dragstart");
+    await page.evaluate(() => {
+      document.querySelector('[data-testid="image-wrapper-2"]')?.closest(".photo-box")?.remove();
+    });
+    await page.locator("#quickvint-gen-btn").click();
+
+    await expect(page.locator('[data-testid="title--input"]')).toHaveValue(
+      "Fallback After Reorder Delete",
+    );
+    expect(requestBodies[0].imageMetadata).toHaveLength(1);
+    expect(requestBodies[0].imageMetadata[0]).toMatchObject({
+      sourceSelection: "current_src",
+      promptSource: "vinted_dom_image",
+      capturedUploadFileCount: 2,
+      capturedUploadMatchStatus: "count_mismatch_fallback_to_vinted",
+      capturedUploadOrderTrusted: false,
+      capturedUploadSetTrusted: true,
+    });
+    expect(requestBodies[0].imageMetadata[0].capturedUploadFile).toBeNull();
+  });
+
   test("tracks generated output edits after users change generated copy", async ({
     page,
   }) => {
