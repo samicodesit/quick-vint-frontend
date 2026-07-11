@@ -841,6 +841,7 @@
   const GENERATION_OUTPUT_EDIT_TRACKING_TTL_MS = 5 * 60 * 1000;
   const GENERATION_OUTPUT_EDIT_MAX_SUMMARIES = 3;
   const CAPTURED_PROMPT_UPLOAD_TTL_MS = 30 * 60 * 1000;
+  const PHONE_UPLOAD_PENDING_GENERATE_BLOCK_MS = 5 * 60 * 1000;
   const PRIMARY_BUTTON_BACKGROUND =
     "linear-gradient(135deg, #5b54f0 0%, #4338ca 100%)";
   const languageDefaults = window.AutoListerLanguageDefaults;
@@ -863,6 +864,7 @@
   let pendingPhoneFiles = new Set();
   let isPhoneUploadPollInFlight = false;
   let activePhoneUploadSessionId = null;
+  let lastPhoneUploadState = null;
   let phoneUploadPreviewUrls = [];
   let displayedPhoneUploadPreviewCount = 0;
   let phoneUploadPreviewTimer = null;
@@ -9437,11 +9439,21 @@
   function closeModal() {
     const modal = document.getElementById(MODAL_ID);
     const sessionId = modal?.dataset?.sessionId;
-    if (activePhoneUploadSessionId === sessionId) {
-      activePhoneUploadSessionId = null;
-    }
+    rememberPhoneUploadState(sessionId);
+    const keepSessionAlive = Boolean(getIncompletePhoneUploadState());
     if (modal) {
       modal.remove();
+    }
+    if (!keepSessionAlive) {
+      finishPhoneUploadSession(sessionId);
+    }
+
+    maybeShowPendingPrompts();
+  }
+
+  function finishPhoneUploadSession(sessionId) {
+    if (activePhoneUploadSessionId === sessionId) {
+      activePhoneUploadSessionId = null;
     }
     if (pollInterval) {
       clearInterval(pollInterval);
@@ -9462,7 +9474,6 @@
     phoneUploadPreviewUrls = [];
     displayedPhoneUploadPreviewCount = 0;
 
-    // Notify server to clean up session and delete files
     if (sessionId && chrome.runtime?.id) {
       sendMessage({
         type: "PROXY_FETCH",
@@ -9472,10 +9483,8 @@
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({}),
         },
-      }).catch(() => {}); // Silent fail
+      }).catch(() => {});
     }
-
-    maybeShowPendingPrompts();
   }
 
   async function onPhoneUploadClick() {
@@ -9512,6 +9521,7 @@
       trackGrowthEvent("phone_upload_start", {
         mode: "single",
         available,
+        sessionId,
       });
       await createModal(sessionId);
       startPolling(sessionId);
@@ -9530,6 +9540,15 @@
 
     const statusEl = document.querySelector(`#${MODAL_ID} .status`);
     const initialImageCount = getVisibleUploadedPhotoCount();
+    lastPhoneUploadState = {
+      sessionId,
+      initialImageCount,
+      receivedCount: 0,
+      expectedCount: null,
+      complete: false,
+      startedAt: Date.now(),
+      updatedAt: Date.now(),
+    };
     schedulePhoneUploadAutoClose(sessionId);
 
     pollInterval = setInterval(async () => {
@@ -9557,6 +9576,7 @@
           typeof response.data === "string"
             ? JSON.parse(response.data)
             : response.data;
+        updateLastPhoneUploadState(sessionId, data, initialImageCount);
         if (data.files && data.files.length > 0) {
           const newRemoteFiles = data.files.filter((file) => {
             const fileKey = getPhoneUploadFileKey(file);
@@ -9641,6 +9661,13 @@
             updatePhoneUploadStatus(statusEl, initialImageCount);
           }
         }
+        if (
+          activePhoneUploadSessionId === sessionId &&
+          !document.getElementById(MODAL_ID) &&
+          !getIncompletePhoneUploadState()
+        ) {
+          finishPhoneUploadSession(sessionId);
+        }
       } catch (err) {
         console.error("Polling error:", err);
       } finally {
@@ -9670,11 +9697,7 @@
   }
 
   function isPhoneUploadSessionActive(sessionId) {
-    const modal = document.getElementById(MODAL_ID);
-    return (
-      activePhoneUploadSessionId === sessionId &&
-      modal?.dataset?.sessionId === sessionId
-    );
+    return activePhoneUploadSessionId === sessionId;
   }
 
   function getPhoneUploadFileKey(file) {
@@ -9746,10 +9769,80 @@
     return true;
   }
 
+  function updateLastPhoneUploadState(sessionId, data, initialImageCount) {
+    if (!lastPhoneUploadState || lastPhoneUploadState.sessionId !== sessionId) {
+      lastPhoneUploadState = {
+        sessionId,
+        initialImageCount,
+        receivedCount: 0,
+        expectedCount: null,
+        complete: false,
+        startedAt: Date.now(),
+        updatedAt: Date.now(),
+      };
+    }
+
+    const receivedCount = Math.max(
+      downloadedFiles.size,
+      Number(data?.count || 0),
+      Array.isArray(data?.files) ? data.files.length : 0,
+    );
+    const complete = data?.complete === true;
+    lastPhoneUploadState.receivedCount = receivedCount;
+    lastPhoneUploadState.expectedCount = complete ? receivedCount : null;
+    lastPhoneUploadState.complete = complete;
+    lastPhoneUploadState.updatedAt = Date.now();
+  }
+
+  function rememberPhoneUploadState(sessionId) {
+    if (!lastPhoneUploadState || lastPhoneUploadState.sessionId !== sessionId) {
+      return;
+    }
+    lastPhoneUploadState.receivedCount = Math.max(
+      lastPhoneUploadState.receivedCount || 0,
+      downloadedFiles.size,
+    );
+    lastPhoneUploadState.updatedAt = Date.now();
+  }
+
+  function getPhoneUploadVisibleAddedCount(state = lastPhoneUploadState) {
+    if (!state) return 0;
+    return Math.max(0, getVisibleUploadedPhotoCount() - state.initialImageCount);
+  }
+
+  function getIncompletePhoneUploadState() {
+    const state = lastPhoneUploadState;
+    if (!state) return null;
+    if (Date.now() - state.startedAt > PHONE_UPLOAD_PENDING_GENERATE_BLOCK_MS) {
+      return null;
+    }
+
+    const visibleAddedCount = getPhoneUploadVisibleAddedCount(state);
+    const hasPhotosInFlight =
+      (state.receivedCount || 0) > 0 ||
+      downloadedFiles.size > 0 ||
+      pendingPhoneFiles.size > 0 ||
+      visibleAddedCount > 0;
+    if (!hasPhotosInFlight) return null;
+
+    if (!state.complete) {
+      return { ...state, visibleAddedCount };
+    }
+
+    const expectedCount = Number(state.expectedCount || state.receivedCount || 0);
+    if (expectedCount > 0 && visibleAddedCount < expectedCount) {
+      return { ...state, expectedCount, visibleAddedCount };
+    }
+
+    return null;
+  }
+
   function updatePhoneUploadStatus(statusEl, initialImageCount) {
     if (!statusEl) return;
 
     const sentCount = downloadedFiles.size;
+    const expectedCount = Number(lastPhoneUploadState?.expectedCount || 0);
+    const isComplete = lastPhoneUploadState?.complete === true;
     const visiblePhoneUploadCount = Math.max(
       0,
       getVisibleUploadedPhotoCount() - initialImageCount,
@@ -9759,10 +9852,14 @@
     if (sentCount === 0) {
       statusEl.className = "status waiting";
       statusEl.textContent = "Waiting for photos from your phone...";
+    } else if (isComplete && expectedCount > 0 && visiblePhoneUploadCount >= expectedCount) {
+      statusEl.textContent = `${expectedCount} photo${
+        expectedCount !== 1 ? "s" : ""
+      } added.`;
     } else if (visiblePhoneUploadCount >= sentCount) {
       statusEl.textContent = `${sentCount} photo${
         sentCount !== 1 ? "s" : ""
-      } added. Ready for more.`;
+      } added. Waiting for more...`;
     } else {
       statusEl.textContent = `${sentCount} photo${
         sentCount !== 1 ? "s" : ""
@@ -11618,6 +11715,21 @@
     overrideUseEmojis = null,
     generationMode = null,
   } = {}) {
+    const incompletePhoneUpload = manageButtonState
+      ? getIncompletePhoneUploadState()
+      : null;
+    if (incompletePhoneUpload) {
+      trackGrowthEvent("phone_upload_generate_blocked", {
+        mode: "single",
+        sessionId: incompletePhoneUpload.sessionId,
+        receivedCount: incompletePhoneUpload.receivedCount || 0,
+        expectedCount: incompletePhoneUpload.expectedCount || null,
+        visibleAddedCount: incompletePhoneUpload.visibleAddedCount || 0,
+      });
+      showToast("Photos are still uploading. Wait a moment.", "error");
+      throw new Error("Photos are still uploading.");
+    }
+
     const imageEntries = getUploadedImageEntries();
     const imageUrls = imageEntries.map((entry) => entry.url);
     const imageSourceTelemetry = buildImageSourceTelemetry(imageEntries);
