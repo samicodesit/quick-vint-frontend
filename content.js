@@ -9443,19 +9443,20 @@
   function requestCloseModal() {
     if (
       getIncompletePhoneUploadState() &&
-      !window.confirm("Photos are still uploading. Close anyway?")
+      !window.confirm("Stop this upload? Added photos will stay.")
     ) {
       return false;
     }
-    closeModal();
+    closeModal({ cancelUpload: Boolean(getIncompletePhoneUploadState()) });
     return true;
   }
 
-  function closeModal() {
+  function closeModal({ cancelUpload = false } = {}) {
     const modal = document.getElementById(MODAL_ID);
     const sessionId = modal?.dataset?.sessionId || activePhoneUploadSessionId;
     rememberPhoneUploadState(sessionId);
-    const keepSessionAlive = Boolean(getIncompletePhoneUploadState());
+    const keepSessionAlive =
+      !cancelUpload && Boolean(getIncompletePhoneUploadState());
     if (modal) {
       modal.remove();
     }
@@ -9469,6 +9470,9 @@
   function finishPhoneUploadSession(sessionId) {
     if (activePhoneUploadSessionId === sessionId) {
       activePhoneUploadSessionId = null;
+    }
+    if (lastPhoneUploadState?.sessionId === sessionId) {
+      lastPhoneUploadState = null;
     }
     if (pollInterval) {
       clearInterval(pollInterval);

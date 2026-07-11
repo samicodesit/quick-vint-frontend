@@ -925,6 +925,12 @@ test.describe("AutoLister extension smoke flows", () => {
     const sessionId = await page
       .locator("#quickvint-phone-modal")
       .getAttribute("data-session-id");
+
+    await page.locator("#quickvint-phone-modal .generate-btn").click();
+    await page.waitForTimeout(500);
+    expect(generateRequests).toBe(0);
+    await expect(page.locator("#quickvint-phone-modal")).toBeVisible();
+
     const closePrompts = [];
     page.on("dialog", async (dialog) => {
       closePrompts.push(dialog.message());
@@ -937,22 +943,37 @@ test.describe("AutoLister extension smoke flows", () => {
 
     await page.locator("#quickvint-phone-modal .close-btn").click();
     await expect(page.locator("#quickvint-phone-modal")).toBeVisible();
-    expect(closePrompts).toEqual(["Photos are still uploading. Close anyway?"]);
+    expect(closePrompts).toEqual(["Stop this upload? Added photos will stay."]);
 
     await page.locator("#quickvint-phone-modal .close-btn").click();
     await expect(page.locator("#quickvint-phone-modal")).toHaveCount(0);
+    expect(closePrompts).toEqual([
+      "Stop this upload? Added photos will stay.",
+      "Stop this upload? Added photos will stay.",
+    ]);
+    await expect
+      .poll(() =>
+        page.evaluate(
+          (uploadSessionId) =>
+            window.__extensionHarness.runtimeMessages.some(
+              (message) =>
+                message?.type === "PROXY_FETCH" &&
+                String(message.url || "").includes("action=cleanup") &&
+                String(message.url || "").includes(
+                  `sessionId=${uploadSessionId}`,
+                ),
+            ),
+          sessionId,
+        ),
+      )
+      .toBe(true);
+
     await page.locator("#quickvint-phone-btn").click();
-    await expect(page.locator("#quickvint-phone-modal")).toHaveAttribute(
-      "data-session-id",
-      sessionId,
-    );
-
-    await page.locator("#quickvint-phone-modal .close-btn").click();
-    await page.locator("#quickvint-gen-btn").click();
-    await page.waitForTimeout(500);
-
-    expect(generateRequests).toBe(0);
-    await expect(page.locator('[data-testid="title--input"]')).toHaveValue("");
+    await expect(page.locator("#quickvint-phone-modal")).toBeVisible();
+    const newSessionId = await page
+      .locator("#quickvint-phone-modal")
+      .getAttribute("data-session-id");
+    expect(newSessionId).not.toBe(sessionId);
   });
 
   test("stops preference sync quietly when Chrome invalidates the extension context", async ({
