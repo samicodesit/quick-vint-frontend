@@ -922,6 +922,30 @@ test.describe("AutoLister extension smoke flows", () => {
 
     await page.locator("#quickvint-phone-btn").click();
     await expect(page.locator(".photo-box")).toHaveCount(6);
+    const sessionId = await page
+      .locator("#quickvint-phone-modal")
+      .getAttribute("data-session-id");
+    const closePrompts = [];
+    page.on("dialog", async (dialog) => {
+      closePrompts.push(dialog.message());
+      if (closePrompts.length === 1) {
+        await dialog.dismiss();
+      } else {
+        await dialog.accept();
+      }
+    });
+
+    await page.locator("#quickvint-phone-modal .close-btn").click();
+    await expect(page.locator("#quickvint-phone-modal")).toBeVisible();
+    expect(closePrompts).toEqual(["Photos are still uploading. Close anyway?"]);
+
+    await page.locator("#quickvint-phone-modal .close-btn").click();
+    await expect(page.locator("#quickvint-phone-modal")).toHaveCount(0);
+    await page.locator("#quickvint-phone-btn").click();
+    await expect(page.locator("#quickvint-phone-modal")).toHaveAttribute(
+      "data-session-id",
+      sessionId,
+    );
 
     await page.locator("#quickvint-phone-modal .close-btn").click();
     await page.locator("#quickvint-gen-btn").click();

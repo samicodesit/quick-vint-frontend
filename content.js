@@ -9418,9 +9418,13 @@
     );
 
     // Close button handlers
-    modal.querySelector(".close-x").addEventListener("click", closeModal);
-    modal.querySelector(".close-btn").addEventListener("click", closeModal);
+    modal.querySelector(".close-x").addEventListener("click", requestCloseModal);
+    modal.querySelector(".close-btn").addEventListener("click", requestCloseModal);
     modal.querySelector(".generate-btn").addEventListener("click", () => {
+      if (getIncompletePhoneUploadState()) {
+        showToast("Photos are still uploading. Wait a moment.", "info");
+        return;
+      }
       closeModal();
       // Trigger generate after a brief delay to ensure modal cleanup completes
       setTimeout(() => onGenerateClick(), 100);
@@ -9429,16 +9433,27 @@
     // Close when clicking outside modal (on backdrop)
     modal.addEventListener("click", (e) => {
       if (e.target === modal) {
-        closeModal();
+        requestCloseModal();
       }
     });
 
     return modal;
   }
 
+  function requestCloseModal() {
+    if (
+      getIncompletePhoneUploadState() &&
+      !window.confirm("Photos are still uploading. Close anyway?")
+    ) {
+      return false;
+    }
+    closeModal();
+    return true;
+  }
+
   function closeModal() {
     const modal = document.getElementById(MODAL_ID);
-    const sessionId = modal?.dataset?.sessionId;
+    const sessionId = modal?.dataset?.sessionId || activePhoneUploadSessionId;
     rememberPhoneUploadState(sessionId);
     const keepSessionAlive = Boolean(getIncompletePhoneUploadState());
     if (modal) {
@@ -9514,6 +9529,28 @@
 
     if (document.getElementById(MODAL_ID)) {
       closeModal();
+    }
+
+    const incompletePhoneUpload = getIncompletePhoneUploadState();
+    if (
+      incompletePhoneUpload?.sessionId &&
+      activePhoneUploadSessionId === incompletePhoneUpload.sessionId
+    ) {
+      try {
+        trackGrowthEvent("phone_upload_resume", {
+          mode: "single",
+          sessionId: incompletePhoneUpload.sessionId,
+        });
+        await createModal(incompletePhoneUpload.sessionId);
+        updatePhoneUploadStatus(
+          document.querySelector(`#${MODAL_ID} .status`),
+          incompletePhoneUpload.initialImageCount,
+        );
+        renderPhoneUploadPreviews();
+      } finally {
+        restorePhoneButton();
+      }
+      return;
     }
 
     const sessionId = generateSessionId();
