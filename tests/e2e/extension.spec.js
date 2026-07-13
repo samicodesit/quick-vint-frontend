@@ -63,11 +63,13 @@ function installChromeHarness(page, capacityResponse = null, initialStorage = {}
       ...initialStorage,
     };
     const runtimeMessages = [];
+    const runtimeListeners = [];
     const openedWindows = [];
 
     window.__extensionHarness = {
       storage,
       runtimeMessages,
+      runtimeListeners,
       openedWindows,
     };
 
@@ -89,7 +91,7 @@ function installChromeHarness(page, capacityResponse = null, initialStorage = {}
         id: "test-extension",
         getManifest: () => ({ version: "1.3.17" }),
         getURL: (assetPath) => `chrome-extension://test-extension/${assetPath}`,
-        onMessage: { addListener: () => {} },
+        onMessage: { addListener: (listener) => runtimeListeners.push(listener) },
         sendMessage: (message, callback) => {
           runtimeMessages.push(message);
           let response = { ok: true };
@@ -233,6 +235,7 @@ async function openContentHarness(page, capacityResponse = null, options = {}) {
   await expect(
     page.locator("#quickvint-description-length-toggle"),
   ).toBeVisible();
+  await expect(page.locator("#quickvint-output-shape-toggle")).toBeVisible();
   await expect(page.locator("#quickvint-hashtags-toggle")).toBeVisible();
   await expect(page.locator("#quickvint-description-footer-btn")).toBeVisible();
 }
@@ -430,6 +433,119 @@ test.describe("AutoLister extension smoke flows", () => {
       expect(event.context.imageSources[0].domNaturalWidth).toBeGreaterThan(0);
       expect(event.context.imageSources[0].domNaturalHeight).toBeGreaterThan(0);
     }
+  });
+
+  test("lets sellers switch output shape from the listing tools", async ({
+    page,
+  }) => {
+    const requestBodies = [];
+    await page.route("https://autolister.app/api/events/track", (route) =>
+      route.fulfill({ status: 204, body: "" }),
+    );
+    await page.route("https://autolister.app/api/generate", (route) => {
+      requestBodies.push(route.request().postDataJSON());
+      return route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          title: "Paragraph Test Jacket",
+          description: "Paragraph description.",
+          measurementAdvice: "",
+        }),
+      });
+    });
+
+    await openContentHarness(page);
+    await expect(page.locator("#quickvint-output-shape-toggle")).toBeVisible();
+    await expect(
+      page.locator("#quickvint-output-shape-toggle .format-icon-bullet"),
+    ).toHaveCount(3);
+    await expect(
+      page.locator("#quickvint-output-shape-toggle .format-icon-para span"),
+    ).toHaveCount(4);
+    await page
+      .locator("#quickvint-output-shape-toggle [data-format='paragraphs']")
+      .click();
+    await page.locator("#quickvint-gen-btn").click();
+
+    await expect.poll(() => requestBodies.length).toBe(1);
+    expect(requestBodies[0].useBulletPoints).toBe(false);
+    expect(
+      await page.evaluate(() => window.__extensionHarness.storage.useBulletPoints),
+    ).toBe(false);
+  });
+
+  test("uses captured batch files when Vinted thumbnails are late", async ({
+    page,
+  }) => {
+    const requestBodies = [];
+    await page.route("https://autolister.app/api/events/track", (route) =>
+      route.fulfill({ status: 204, body: "" }),
+    );
+    await page.route("https://autolister.app/api/generate", (route) => {
+      requestBodies.push(route.request().postDataJSON());
+      return route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          title: "Late Thumbnail Batch",
+          description: "Generated before Vinted thumbnails appeared.",
+          measurementAdvice: "",
+        }),
+      });
+    });
+
+    await openContentHarness(page, null, { emptyListing: true });
+
+    const result = await page.evaluate(async (dataUrl) => {
+      const originalSendMessage = window.chrome.runtime.sendMessage;
+      const originalSetInterval = window.setInterval.bind(window);
+      const originalNow = Date.now.bind(Date);
+      let fakeNow = originalNow();
+      const blob = await (await fetch(dataUrl)).blob();
+      const blobUrl = URL.createObjectURL(blob);
+
+      window.chrome.runtime.sendMessage = (message, callback) => {
+        if (message?.type === "PROXY_FETCH") {
+          setTimeout(() => callback?.({ ok: true, data: blobUrl }), 0);
+          return;
+        }
+        originalSendMessage(message, callback);
+      };
+      Date.now = () => fakeNow;
+      window.setInterval = (callback, delay, ...args) =>
+        originalSetInterval(
+          () => {
+            if (delay === 500) fakeNow += 61000;
+            callback(...args);
+          },
+          delay === 500 ? 5 : delay,
+        );
+
+      const listener = window.__extensionHarness.runtimeListeners.find(
+        (candidate) => typeof candidate === "function",
+      );
+      return await new Promise((resolve) => {
+        listener(
+          {
+            type: "RUN_BATCH_ITEM",
+            itemIndex: 1,
+            totalItems: 1,
+            files: [{ url: "https://phone-upload.test/item-a.jpg", name: "item-a.jpg" }],
+          },
+          {},
+          resolve,
+        );
+      });
+    }, tinyPngDataUrl);
+
+    expect(result).toMatchObject({ ok: true });
+    expect(requestBodies[0].imageMetadata).toHaveLength(1);
+    expect(requestBodies[0].imageMetadata[0]).toMatchObject({
+      sourceSelection: "captured_upload_file",
+      promptSource: "captured_upload_file",
+      capturedUploadSource: "phone_upload_batch",
+    });
   });
 
   test("uses captured uploaded files for generation when they match Vinted photos", async ({

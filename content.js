@@ -15,6 +15,8 @@
   const DESCRIPTION_FOOTER_INCLUDE_DEFAULT = true;
   const DESCRIPTION_LENGTH_TOGGLE_ID = "quickvint-description-length-toggle";
   const DESCRIPTION_LENGTH_STORAGE_KEY = "descriptionLength";
+  const OUTPUT_SHAPE_TOGGLE_ID = "quickvint-output-shape-toggle";
+  const OUTPUT_SHAPE_STORAGE_KEY = "useBulletPoints";
   const HASHTAGS_STORAGE_KEY = "useHashtags";
   const SIGN_IN_BTN_ID = "quickvint-signin-btn";
   const DESCRIPTION_APPLY_PROMPT_ID = "quickvint-description-apply-prompt";
@@ -856,6 +858,7 @@
   let descriptionFooterBtn = null;
   let descriptionFooterEditBtn = null;
   let descriptionLengthToggle = null;
+  let outputShapeToggleBtn = null;
   let signInBtn = null;
   let isBusy = false;
   let isAuthenticated = null;
@@ -899,6 +902,7 @@
   let hashtagsToggleSyncTimer = null;
   let descriptionFooterSyncTimer = null;
   let descriptionLengthSyncTimer = null;
+  let outputShapeToggleSyncTimer = null;
   let extensionContextInvalidated = false;
   let isBatchPollInFlight = false;
   let batchImagePreloadUrls = new Set();
@@ -2409,6 +2413,43 @@
   function applyCapturedPromptUploadSources(domEntries) {
     const capturedUpload = getActiveCapturedPromptUpload();
     if (!capturedUpload) return domEntries;
+
+    if (
+      capturedUpload.currentSetTrusted !== false &&
+      capturedUpload.source === "phone_upload_batch" &&
+      capturedUpload.files.length > domEntries.length
+    ) {
+      return capturedUpload.files.map((capturedFile, index) => ({
+        url: capturedFile.objectUrl,
+        promptSource: "captured_upload_file",
+        sourceSelection: "captured_upload_file",
+        currentUrl: null,
+        bestSrcsetUrl: null,
+        domNaturalWidth: null,
+        domNaturalHeight: null,
+        renderedWidth: null,
+        renderedHeight: null,
+        capturedUploadAvailable: true,
+        capturedUploadSource: capturedUpload.source,
+        capturedUploadFileCount: capturedUpload.files.length,
+        capturedUploadMatchStatus:
+          domEntries.length > 0
+            ? "partial_vinted_pending_using_captured"
+            : "vinted_pending_using_captured",
+        capturedUploadOrderTrusted: capturedUpload.orderTrusted !== false,
+        capturedUploadSetTrusted: true,
+        capturedUploadFile: capturedFile.metadata,
+        vintedSourceSelection: null,
+        vintedSourceKind: null,
+        vintedSourceUrl: null,
+        vintedCurrentSrcUrl: null,
+        vintedBestSrcsetUrl: null,
+        vintedDomNaturalWidth: null,
+        vintedDomNaturalHeight: null,
+        vintedRenderedWidth: null,
+        vintedRenderedHeight: null,
+      }));
+    }
 
     const matchStatus =
       capturedUpload.currentSetTrusted === false
@@ -6560,6 +6601,7 @@
       }
 
       #${DESCRIPTION_LENGTH_TOGGLE_ID}[data-loading="true"] .quickvint-length-option::after,
+      #${OUTPUT_SHAPE_TOGGLE_ID}[data-loading="true"] .format-chip::after,
       .quickvint-binary-toggle[data-loading="true"] .quickvint-toggle-label::after,
       .quickvint-binary-toggle[data-loading="true"] .quickvint-toggle-switch::after {
         content: "";
@@ -6568,6 +6610,139 @@
         background: linear-gradient(90deg, transparent 0%, rgba(255, 255, 255, 0.78) 50%, transparent 100%);
         transform: translateX(-100%);
         animation: quickvintSkeletonSweep 1.25s ease-in-out infinite;
+      }
+
+      #${OUTPUT_SHAPE_TOGGLE_ID} {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        height: 38px;
+        min-height: 38px;
+        padding: 3px;
+        border: 1px solid #d9dde8;
+        border-radius: 8px;
+        background: #ffffff;
+        box-shadow: 0 6px 16px rgba(15, 23, 42, 0.07);
+        transition: border-color 0.22s ease, box-shadow 0.22s ease, transform 0.22s ease;
+      }
+
+      #${OUTPUT_SHAPE_TOGGLE_ID}:hover {
+        border-color: #b8c0d8;
+        box-shadow: 0 8px 18px rgba(15, 23, 42, 0.09);
+        transform: translateY(-1px);
+      }
+
+      #${OUTPUT_SHAPE_TOGGLE_ID}[data-loading="true"] {
+        pointer-events: none;
+        border-color: #e2e8f0;
+        background: #ffffff;
+        box-shadow: 0 4px 12px rgba(15, 23, 42, 0.05);
+      }
+
+      #${OUTPUT_SHAPE_TOGGLE_ID}[data-loading="true"]:hover {
+        border-color: #e2e8f0;
+        box-shadow: 0 4px 12px rgba(15, 23, 42, 0.05);
+        transform: none;
+      }
+
+      #${OUTPUT_SHAPE_TOGGLE_ID} .quickvint-format-option {
+        appearance: none;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 34px;
+        height: 30px;
+        padding: 0;
+        border: 0;
+        background: transparent;
+        cursor: pointer;
+      }
+
+      #${OUTPUT_SHAPE_TOGGLE_ID} .quickvint-format-option:disabled {
+        cursor: wait;
+      }
+
+      #${OUTPUT_SHAPE_TOGGLE_ID} .format-chip {
+        position: relative;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 30px;
+        height: 30px;
+        overflow: hidden;
+        border: 1px solid transparent;
+        border-radius: 6px;
+        background: transparent;
+        transition: background 0.22s ease, border-color 0.22s ease, box-shadow 0.22s ease;
+      }
+
+      #${OUTPUT_SHAPE_TOGGLE_ID} .quickvint-format-option:hover .format-chip {
+        background: #f8fafc;
+      }
+
+      #${OUTPUT_SHAPE_TOGGLE_ID} .format-icon {
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+        width: 20px;
+      }
+
+      #${OUTPUT_SHAPE_TOGGLE_ID} .format-icon-bullet {
+        display: flex;
+        align-items: center;
+        gap: 3px;
+      }
+
+      #${OUTPUT_SHAPE_TOGGLE_ID} .format-icon-bullet::before {
+        content: "";
+        width: 4px;
+        height: 4px;
+        flex: 0 0 auto;
+        border-radius: 50%;
+        background: #d1d5db;
+        transition: background-color 0.2s;
+      }
+
+      #${OUTPUT_SHAPE_TOGGLE_ID} .format-icon-bullet span,
+      #${OUTPUT_SHAPE_TOGGLE_ID} .format-icon-para span {
+        display: block;
+        height: 3px;
+        border-radius: 1.5px;
+        background: #cccccc;
+        transition: background-color 0.2s;
+      }
+
+      #${OUTPUT_SHAPE_TOGGLE_ID} .format-icon-bullet span {
+        flex: 1;
+      }
+
+      #${OUTPUT_SHAPE_TOGGLE_ID} .format-icon-para span {
+        width: 100%;
+      }
+
+      #${OUTPUT_SHAPE_TOGGLE_ID} .format-icon-para span:last-child {
+        width: 60%;
+      }
+
+      #${OUTPUT_SHAPE_TOGGLE_ID} .quickvint-format-option[aria-pressed="true"] .format-chip {
+        background: #eef2ff;
+        border-color: #667eea;
+        box-shadow: 0 0 0 1px #667eea;
+      }
+
+      #${OUTPUT_SHAPE_TOGGLE_ID} .quickvint-format-option[aria-pressed="true"] .format-icon-bullet::before {
+        background: #667eea;
+      }
+
+      #${OUTPUT_SHAPE_TOGGLE_ID} .quickvint-format-option[aria-pressed="true"] .format-icon-bullet span,
+      #${OUTPUT_SHAPE_TOGGLE_ID} .quickvint-format-option[aria-pressed="true"] .format-icon-para span {
+        background: #a5b4fc;
+      }
+
+      #${OUTPUT_SHAPE_TOGGLE_ID}[data-loading="true"] .format-chip {
+        background: #eef2f7;
+        border-color: transparent;
+        box-shadow: none;
       }
 
       .quickvint-binary-toggle {
@@ -6786,6 +6961,8 @@
       @media (prefers-reduced-motion: reduce) {
         #${DESCRIPTION_LENGTH_TOGGLE_ID},
         #${DESCRIPTION_LENGTH_TOGGLE_ID} .quickvint-length-option,
+        #${OUTPUT_SHAPE_TOGGLE_ID},
+        #${OUTPUT_SHAPE_TOGGLE_ID} .format-chip,
         .quickvint-binary-toggle,
         .quickvint-note-edit,
         .quickvint-binary-toggle .quickvint-toggle-switch,
@@ -6794,6 +6971,7 @@
         }
 
         #${DESCRIPTION_LENGTH_TOGGLE_ID}:hover,
+        #${OUTPUT_SHAPE_TOGGLE_ID}:hover,
         .quickvint-binary-toggle:hover,
         .quickvint-note-control:hover,
         .quickvint-note-edit:hover,
@@ -6802,6 +6980,7 @@
         }
 
         #${DESCRIPTION_LENGTH_TOGGLE_ID}[data-loading="true"] .quickvint-length-option::after,
+        #${OUTPUT_SHAPE_TOGGLE_ID}[data-loading="true"] .format-chip::after,
         .quickvint-binary-toggle[data-loading="true"] .quickvint-toggle-label::after,
         .quickvint-binary-toggle[data-loading="true"] .quickvint-toggle-switch::after {
           animation: none;
@@ -7807,6 +7986,105 @@
     `;
   }
 
+  function setOutputShapeToggleState(useBulletPoints) {
+    if (!outputShapeToggleBtn) return;
+    setPreferenceLoadingState(outputShapeToggleBtn, false);
+    outputShapeToggleBtn.dataset.value = useBulletPoints ? "bullets" : "paragraphs";
+    outputShapeToggleBtn
+      .querySelectorAll(".quickvint-format-option")
+      .forEach((option) => {
+        const selected =
+          option.dataset.format === (useBulletPoints ? "bullets" : "paragraphs");
+        option.disabled = false;
+        option.setAttribute("aria-pressed", selected ? "true" : "false");
+      });
+    outputShapeToggleBtn.title = useBulletPoints
+      ? "Generated descriptions use bullet points"
+      : "Generated descriptions use paragraphs";
+  }
+
+  async function syncOutputShapeToggleState() {
+    if (!outputShapeToggleBtn || extensionContextInvalidated) return;
+    if (outputShapeToggleBtn.dataset.loading !== "false") {
+      setPreferenceLoadingState(outputShapeToggleBtn, true);
+    }
+    try {
+      const storage = await chrome.storage.local.get({
+        [OUTPUT_SHAPE_STORAGE_KEY]: true,
+      });
+      setOutputShapeToggleState(storage[OUTPUT_SHAPE_STORAGE_KEY] !== false);
+    } catch (error) {
+      if (handleExtensionContextInvalidated(error)) return;
+      console.warn("AutoLister AI: failed to load output shape setting", error);
+      setOutputShapeToggleState(true);
+    }
+  }
+
+  function createOutputShapeToggleButton() {
+    const btn = document.createElement("div");
+    btn.id = OUTPUT_SHAPE_TOGGLE_ID;
+    btn.setAttribute("role", "group");
+    btn.setAttribute("aria-label", "Description format");
+    btn.setAttribute("aria-busy", "true");
+    btn.dataset.loading = "true";
+    btn.innerHTML = `
+      <button type="button" class="quickvint-format-option" data-format="paragraphs" aria-label="Paragraphs" aria-pressed="false" disabled>
+        <span class="format-chip">
+          <span class="format-icon format-icon-para" aria-hidden="true">
+            <span></span>
+            <span></span>
+            <span></span>
+            <span></span>
+          </span>
+        </span>
+      </button>
+      <button type="button" class="quickvint-format-option" data-format="bullets" aria-label="Bullet points" aria-pressed="false" disabled>
+        <span class="format-chip">
+          <span class="format-icon" aria-hidden="true">
+            <span class="format-icon-bullet"><span></span></span>
+            <span class="format-icon-bullet"><span></span></span>
+            <span class="format-icon-bullet"><span></span></span>
+          </span>
+        </span>
+      </button>
+    `;
+    btn.addEventListener("click", async (event) => {
+      if (btn.dataset.loading === "true") return;
+      const option = event.target.closest(".quickvint-format-option");
+      if (!option || option.disabled) return;
+      const nextValue = option.dataset.format === "bullets";
+      const storage = await chrome.storage.local.get({
+        [OUTPUT_SHAPE_STORAGE_KEY]: true,
+      });
+      if ((storage[OUTPUT_SHAPE_STORAGE_KEY] !== false) === nextValue) return;
+      await chrome.storage.local.set({ [OUTPUT_SHAPE_STORAGE_KEY]: nextValue });
+      setOutputShapeToggleState(nextValue);
+      trackGrowthEvent("output_shape_toggle_changed", {
+        source: "listing_tools",
+        useBulletPoints: nextValue,
+      });
+    });
+    syncOutputShapeToggleState();
+    startOutputShapeToggleSync();
+    return btn;
+  }
+
+  function startOutputShapeToggleSync() {
+    if (outputShapeToggleSyncTimer) return;
+    outputShapeToggleSyncTimer = window.setInterval(() => {
+      if (
+        extensionContextInvalidated ||
+        !outputShapeToggleBtn ||
+        !document.body.contains(outputShapeToggleBtn)
+      ) {
+        window.clearInterval(outputShapeToggleSyncTimer);
+        outputShapeToggleSyncTimer = null;
+        return;
+      }
+      syncOutputShapeToggleState();
+    }, 1000);
+  }
+
   function getCurrentDescriptionFooterListingKey() {
     return `${window.location.origin}${window.location.pathname}${window.location.search}`;
   }
@@ -8338,6 +8616,7 @@
       if (reportBtn) reportBtn.style.display = "none";
       if (emojiToggleBtn) emojiToggleBtn.style.display = "none";
       if (hashtagsToggleBtn) hashtagsToggleBtn.style.display = "none";
+      if (outputShapeToggleBtn) outputShapeToggleBtn.style.display = "none";
       if (descriptionFooterControl) {
         descriptionFooterControl.style.display = "none";
       }
@@ -8356,6 +8635,7 @@
       if (reportBtn) reportBtn.style.display = "none";
       if (emojiToggleBtn) emojiToggleBtn.style.display = "none";
       if (hashtagsToggleBtn) hashtagsToggleBtn.style.display = "none";
+      if (outputShapeToggleBtn) outputShapeToggleBtn.style.display = "none";
       if (descriptionFooterControl) {
         descriptionFooterControl.style.display = "none";
       }
@@ -8373,6 +8653,7 @@
     if (batchBtn) batchBtn.style.display = "flex";
     if (reportBtn) reportBtn.style.display = "inline-flex";
     if (descriptionLengthToggle) descriptionLengthToggle.style.display = "inline-grid";
+    if (outputShapeToggleBtn) outputShapeToggleBtn.style.display = "inline-flex";
     if (hashtagsToggleBtn) hashtagsToggleBtn.style.display = "inline-flex";
     if (descriptionFooterControl) {
       descriptionFooterControl.style.display = "inline-flex";
@@ -11561,9 +11842,14 @@
     return new Promise((resolve, reject) => {
       const startedAt = Date.now();
       const timer = setInterval(() => {
+        const uploadedEntries = getUploadedImageEntries();
+        const capturedReadyCount = uploadedEntries.filter(
+          (entry) => entry.promptSource === "captured_upload_file",
+        ).length;
         if (
-          getVisibleUploadedPhotoCount() >= targetCount &&
-          getUploadedImageUrls().length >= targetCount
+          uploadedEntries.length >= targetCount &&
+          (getVisibleUploadedPhotoCount() >= targetCount ||
+            capturedReadyCount >= targetCount)
         ) {
           clearInterval(timer);
           resolve();
@@ -11813,7 +12099,7 @@
         "useEmojis",
         HASHTAGS_STORAGE_KEY,
         DESCRIPTION_FOOTER_STORAGE_KEY,
-        "useBulletPoints",
+        OUTPUT_SHAPE_STORAGE_KEY,
         DESCRIPTION_LENGTH_STORAGE_KEY,
         "userProfile",
       ]);
@@ -11822,7 +12108,7 @@
         useEmojis = true,
         [HASHTAGS_STORAGE_KEY]: useHashtags = true,
         [DESCRIPTION_FOOTER_STORAGE_KEY]: storedDescriptionFooterText = "",
-        useBulletPoints = true,
+        [OUTPUT_SHAPE_STORAGE_KEY]: useBulletPoints = true,
         [DESCRIPTION_LENGTH_STORAGE_KEY]: storedDescriptionLength = "long",
         userProfile,
       } = storage;
@@ -12123,6 +12409,12 @@
       }
       emojiToggleBtn = document.getElementById(EMOJI_TOGGLE_ID);
       hashtagsToggleBtn = document.getElementById(HASHTAGS_TOGGLE_ID);
+      outputShapeToggleBtn = document.getElementById(OUTPUT_SHAPE_TOGGLE_ID);
+      if (!outputShapeToggleBtn) {
+        const toolOptions = document.querySelector(".quickvint-tool-options");
+        outputShapeToggleBtn = createOutputShapeToggleButton();
+        toolOptions?.insertBefore(outputShapeToggleBtn, hashtagsToggleBtn || null);
+      }
       descriptionFooterBtn = document.getElementById(DESCRIPTION_FOOTER_BTN_ID);
       descriptionFooterEditBtn = document.getElementById(
         DESCRIPTION_FOOTER_EDIT_BTN_ID,
@@ -12139,6 +12431,7 @@
       injectFieldLanguageControls();
       syncEmojiToggleState();
       syncHashtagsToggleState();
+      syncOutputShapeToggleState();
       syncDescriptionFooterButtonState();
       syncDescriptionLengthToggleState();
       updateButtonUI();
@@ -12167,6 +12460,7 @@
       batchBtn = createBatchButton();
       reportBtn = createReportButton();
       descriptionLengthToggle = createDescriptionLengthToggle();
+      outputShapeToggleBtn = createOutputShapeToggleButton();
       hashtagsToggleBtn = createHashtagsToggleButton();
       const descriptionFooterControl = createDescriptionFooterControl();
       emojiToggleBtn = createEmojiToggleButton();
@@ -12177,6 +12471,7 @@
       primaryTools.appendChild(batchBtn);
       primaryTools.appendChild(reportBtn);
       toolOptions.appendChild(descriptionLengthToggle);
+      toolOptions.appendChild(outputShapeToggleBtn);
       toolOptions.appendChild(hashtagsToggleBtn);
       toolOptions.appendChild(descriptionFooterControl);
       toolOptions.appendChild(emojiToggleBtn);
