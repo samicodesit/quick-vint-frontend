@@ -241,10 +241,29 @@ function getUsageLimits(profile) {
       ? LEGACY_TIER_LIMITS
       : CURRENT_TIER_LIMITS;
 
+  const baseLimits = source[tier] || CURRENT_TIER_LIMITS.free;
+  const hasActiveCustomLimits = Boolean(
+    profile?.custom_limit_expires_at &&
+      new Date(profile.custom_limit_expires_at) > new Date(),
+  );
+  const customDaily =
+    hasActiveCustomLimits && Number(profile?.custom_daily_limit) > 0
+      ? Number(profile.custom_daily_limit)
+      : null;
+  const customMonthly =
+    hasActiveCustomLimits && Number(profile?.custom_monthly_limit) > 0
+      ? Number(profile.custom_monthly_limit)
+      : null;
+
   return {
     tier,
     isLegacy: tier !== "free" && Boolean(profile?.is_legacy_plan),
-    limits: source[tier] || CURRENT_TIER_LIMITS.free,
+    isCustomPlan: tier !== "free" && hasActiveCustomLimits,
+    limits: {
+      ...baseLimits,
+      ...(customDaily !== null ? { daily: customDaily } : {}),
+      ...(customMonthly !== null ? { monthly: customMonthly } : {}),
+    },
   };
 }
 
@@ -269,7 +288,7 @@ async function updateAndStoreUserProfile() {
     const { data: profile, error: profileError } = await authClient
       .from("profiles")
       .select(
-        "email, subscription_status, api_calls_this_month, subscription_tier, current_period_end, is_legacy_plan, free_lifetime_generations_used, pack_credits",
+        "email, subscription_status, api_calls_this_month, subscription_tier, current_period_end, is_legacy_plan, free_lifetime_generations_used, pack_credits, custom_daily_limit, custom_monthly_limit, custom_limit_expires_at",
       )
       .eq("id", user.id)
       .single();
@@ -317,7 +336,7 @@ async function fetchUserUsageCount() {
     const { data: profile, error: profileError } = await authClient
       .from("profiles")
       .select(
-        "subscription_status, subscription_tier, api_calls_this_month, is_legacy_plan, free_lifetime_generations_used, pack_credits",
+        "subscription_status, subscription_tier, api_calls_this_month, is_legacy_plan, free_lifetime_generations_used, pack_credits, custom_daily_limit, custom_monthly_limit, custom_limit_expires_at",
       )
       .eq("id", user.id)
       .single();
@@ -351,6 +370,7 @@ async function fetchUserUsageCount() {
       monthly: entitlement.tier === "free" ? null : monthly,
       tier: entitlement.tier,
       isLegacy: entitlement.isLegacy,
+      isCustomPlan: entitlement.isCustomPlan,
       limits: entitlement.limits,
       freeLifetimeUsed,
       freeLifetimeLimit: FREE_LIFETIME_LIMIT,

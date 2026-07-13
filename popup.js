@@ -444,6 +444,16 @@ document.addEventListener("DOMContentLoaded", () => {
     return map[tier] || "free";
   }
 
+  function isActiveCustomPlan(profile) {
+    return Boolean(
+      profile?.subscription_status === "active" &&
+        profile?.custom_limit_expires_at &&
+        new Date(profile.custom_limit_expires_at) > new Date() &&
+        (Number(profile.custom_daily_limit) > 0 ||
+          Number(profile.custom_monthly_limit) > 0),
+    );
+  }
+
   function canUseEmojiSetting(profile) {
     const tier = normalizeTier(profile?.subscription_tier);
     if (profile?.subscription_status !== "active" || tier === "free") {
@@ -736,7 +746,11 @@ document.addEventListener("DOMContentLoaded", () => {
       const hasSubscriptionPlan = tier !== "free";
       const shouldResetUsage = shouldRevealAfterUsage || renderedTier !== tier;
       renderedTier = tier;
-      if (planName) planName.textContent = TIER_DISPLAY_NAMES[tier] || "Free Plan";
+      if (planName) {
+        planName.textContent = isActiveCustomPlan(profile)
+          ? "Custom Plan"
+          : TIER_DISPLAY_NAMES[tier] || "Free Plan";
+      }
 
       if (hasSubscriptionPlan) {
         if (freePlanView) freePlanView.classList.add("hidden");

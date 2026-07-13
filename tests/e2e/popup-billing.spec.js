@@ -30,6 +30,20 @@ function createPaidProfile() {
   };
 }
 
+function createCustomBusinessProfile() {
+  return {
+    subscription_status: "active",
+    subscription_tier: "business",
+    current_period_end: "2026-08-07T23:59:59.000Z",
+    api_calls_this_month: 91,
+    free_lifetime_generations_used: 5,
+    pack_credits: 0,
+    custom_daily_limit: 100,
+    custom_monthly_limit: 1000,
+    custom_limit_expires_at: "2026-08-07T23:59:59.000Z",
+  };
+}
+
 function createFreeProfile() {
   return {
     subscription_status: "free",
@@ -126,16 +140,17 @@ async function installPopupHarness(page, options = {}) {
                     }
                   : { ok: false, reason: "no_session" });
             } else if (message?.type === "GET_USER_USAGE_COUNT") {
-              response = {
-                daily: 0,
-                monthly: 0,
-                tier: storage.userProfile?.subscription_tier || "free",
-                isLegacy: false,
-                limits: { daily: 10, monthly: 75 },
-                freeLifetimeUsed: 0,
-                freeLifetimeLimit: 5,
-                packCredits: storage.userProfile?.pack_credits || 0,
-              };
+              response =
+                storage.userUsageCount || {
+                  daily: 0,
+                  monthly: 0,
+                  tier: storage.userProfile?.subscription_tier || "free",
+                  isLegacy: false,
+                  limits: { daily: 10, monthly: 75 },
+                  freeLifetimeUsed: 0,
+                  freeLifetimeLimit: 5,
+                  packCredits: storage.userProfile?.pack_credits || 0,
+                };
             }
             setTimeout(() => callback?.(response), 0);
           },
@@ -177,6 +192,34 @@ async function installPopupHarness(page, options = {}) {
 }
 
 test.describe("popup billing portal", () => {
+  test("shows active custom business limits in the popup", async ({ page }) => {
+    await page.route("https://autolister.app/api/events/track", (route) =>
+      route.fulfill({ status: 204, body: "" }),
+    );
+
+    await installPopupHarness(page, {
+      initialStorage: {
+        supabaseSession: createSession("fuerallezugang@gmail.com"),
+        userProfile: createCustomBusinessProfile(),
+        userUsageCount: {
+          daily: 12,
+          monthly: 91,
+          tier: "business",
+          isLegacy: false,
+          isCustomPlan: true,
+          limits: { daily: 100, monthly: 1000 },
+          freeLifetimeUsed: 5,
+          freeLifetimeLimit: 5,
+          packCredits: 0,
+        },
+      },
+    });
+
+    await expect(page.locator("#planName")).toHaveText("Custom Plan");
+    await expect(page.locator("#dailyCallsUsed")).toHaveText("12 / 100");
+    await expect(page.locator("#monthlyCallsUsed")).toHaveText("91 / 1000");
+  });
+
   test("opens the billing portal from the stored extension session, not popup Supabase memory", async ({
     page,
   }) => {
