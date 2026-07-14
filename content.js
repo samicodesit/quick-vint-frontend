@@ -3958,6 +3958,10 @@
         box-shadow: 0 4px 10px rgba(16, 185, 129, 0.24);
       }
 
+      #${MODAL_ID} .status-count {
+        font-weight: 900;
+      }
+
       @keyframes pulse {
         0%, 100% { opacity: 1; }
         50% { opacity: 0.4; }
@@ -9756,7 +9760,8 @@
       const hasPhoneUploadPhotos =
         downloadedFiles.size > 0 ||
         phoneUploadPreviewUrls.length > 0 ||
-        getPhoneUploadVisibleAddedCount() > 0;
+        getPhoneUploadVisibleAddedCount() > 0 ||
+        Number(lastPhoneUploadState?.expectedCount || 0) > 0;
       if (!hasPhoneUploadPhotos) {
         showToast("Add photos first.", "info");
         return;
@@ -9984,12 +9989,7 @@
               pendingPhoneFiles.add(getPhoneUploadFileKey(file)),
             );
 
-            if (statusEl) {
-              statusEl.className = "status";
-              statusEl.textContent = `Adding ${newRemoteFiles.length} photo${
-                newRemoteFiles.length !== 1 ? "s" : ""
-              } to your listing...`;
-            }
+            updatePhoneUploadStatus(statusEl, initialImageCount);
 
             try {
               const downloads = await Promise.all(
@@ -10177,20 +10177,21 @@
     const responseFileCount = Array.isArray(data?.files) ? data.files.length : 0;
     const receivedCount = Math.max(
       downloadedFiles.size,
-      responseCount,
       responseFileCount,
     );
     const complete = data?.complete === true;
-    const expectedCount = complete
-      ? Math.max(responseCount, responseFileCount, downloadedFiles.size)
-      : Number(lastPhoneUploadState.expectedCount || 0);
+    const expectedCount = Math.max(
+      Number(lastPhoneUploadState.expectedCount || 0),
+      responseCount,
+      complete ? responseFileCount : 0,
+      complete ? downloadedFiles.size : 0,
+    );
     lastPhoneUploadState.receivedCount = receivedCount;
     lastPhoneUploadState.expectedCount = expectedCount > 0 ? expectedCount : null;
-    lastPhoneUploadState.complete =
-      complete || Number(lastPhoneUploadState.expectedCount || 0) > 0;
+    lastPhoneUploadState.complete = complete;
     lastPhoneUploadState.updatedAt = Date.now();
 
-    if (lastPhoneUploadState.complete) {
+    if (expectedCount > 0) {
       const capturedUpload = getActiveCapturedPromptUpload();
       if (
         capturedUpload?.source === "phone_upload_single" &&
@@ -10302,6 +10303,7 @@
     const visibleAddedCount = getPhoneUploadVisibleAddedCount(state);
     const hasPhotosInFlight =
       (state.receivedCount || 0) > 0 ||
+      Number(state.expectedCount || 0) > 0 ||
       downloadedFiles.size > 0 ||
       pendingPhoneFiles.size > 0 ||
       visibleAddedCount > 0;
@@ -10319,10 +10321,6 @@
     const sentCount = downloadedFiles.size;
     const expectedCount = Number(lastPhoneUploadState?.expectedCount || 0);
     const capturedReadyCount = getPhoneUploadCapturedReadyCount();
-    const visiblePhoneUploadCount = Math.max(
-      0,
-      getVisibleUploadedPhotoCount() - initialImageCount,
-    );
 
     statusEl.className = "status";
     if (capturedReadyCount > 0) {
@@ -10332,18 +10330,12 @@
         capturedReadyCount !== 1 ? "s" : ""
       } ready to generate.`;
     } else if (expectedCount > 0) {
-      statusEl.textContent = `${Math.min(sentCount, expectedCount)}/${expectedCount} received.`;
+      statusEl.innerHTML = `Receiving <span class="status-count">${Math.min(sentCount, expectedCount)}/${expectedCount}</span>`;
     } else if (sentCount === 0) {
       statusEl.className = "status waiting";
       statusEl.textContent = "Waiting for photos from your phone...";
-    } else if (visiblePhoneUploadCount >= sentCount) {
-      statusEl.textContent = `${sentCount} photo${
-        sentCount !== 1 ? "s" : ""
-      } received. Waiting for phone...`;
     } else {
-      statusEl.textContent = `${sentCount} photo${
-        sentCount !== 1 ? "s" : ""
-      } received. Adding to your listing...`;
+      statusEl.textContent = "Receiving...";
     }
   }
 

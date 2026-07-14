@@ -1133,8 +1133,8 @@ test.describe("AutoLister extension smoke flows", () => {
               () => {
                   const pollCount = (window.__phoneReadyPollCount || 0) + 1;
                   window.__phoneReadyPollCount = pollCount;
-                  const confirmed = window.__allowCompletePhoneReady === true;
-                  const fileCount = confirmed ? 10 : 8;
+                  const finalBatch = window.__allowFinalPhoneReady === true;
+                  const fileCount = finalBatch ? 10 : 8;
                   callback?.({
                     ok: true,
                     data: {
@@ -1143,8 +1143,8 @@ test.describe("AutoLister extension smoke flows", () => {
                         path: `phone-${index + 1}.jpg`,
                         url: `https://storage.test/phone-${index + 1}.jpg`,
                       })),
-                      count: fileCount,
-                      complete: confirmed,
+                      count: 10,
+                      complete: finalBatch,
                     },
                   });
                 },
@@ -1187,7 +1187,12 @@ test.describe("AutoLister extension smoke flows", () => {
     await page.locator("#quickvint-phone-btn").click();
     await expect(page.locator("#quickvint-phone-modal .preview-thumb")).toHaveCount(7);
     await expect(page.locator("#quickvint-phone-modal .status")).toHaveText(
-      "8 photos received. Waiting for phone...",
+      "Receiving 8/10",
+    );
+    await expect(
+      page.locator("#quickvint-phone-modal .status .status-count"),
+    ).toHaveText(
+      "8/10",
     );
     await expect(page.locator("#quickvint-phone-modal .status")).not.toHaveClass(
       /ready/,
@@ -1196,7 +1201,7 @@ test.describe("AutoLister extension smoke flows", () => {
     await expect.poll(() => requestBodies.length).toBe(0);
 
     await page.evaluate(() => {
-      window.__allowCompletePhoneReady = true;
+      window.__allowFinalPhoneReady = true;
     });
     await expect(page.locator("#quickvint-phone-modal .status")).toHaveText(
       "10 photos ready to generate.",
@@ -1400,8 +1405,13 @@ test.describe("AutoLister extension smoke flows", () => {
     }, tinyPngDataUrl);
 
     await page.locator("#quickvint-phone-btn").click();
-    await expect(page.locator("#quickvint-phone-modal .status")).toContainText(
-      "Adding",
+    await expect(page.locator("#quickvint-phone-modal .status")).toHaveText(
+      "Receiving 0/2",
+    );
+    await expect(
+      page.locator("#quickvint-phone-modal .status .status-count"),
+    ).toHaveText(
+      "0/2",
     );
     const sessionId = await page
       .locator("#quickvint-phone-modal")
