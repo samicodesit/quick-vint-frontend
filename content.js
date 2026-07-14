@@ -9727,9 +9727,9 @@
         showToast("Still uploading. Wait a moment.", "info");
         return;
       }
+      markPhoneUploadCapturedReadyForGeneration();
       closeModal();
-      // Trigger generate after a brief delay to ensure modal cleanup completes
-      setTimeout(() => onGenerateClick(), 100);
+      onGenerateClick();
     });
 
     // Close when clicking outside modal (on backdrop)
@@ -10164,22 +10164,40 @@
   }
 
   function getPhoneUploadCapturedReadyCount(state = lastPhoneUploadState) {
-    if (!state?.complete) return 0;
-
-    const expectedCount = Number(state.expectedCount || state.receivedCount || 0);
-    if (expectedCount <= 0) return 0;
-
     const capturedUpload = getActiveCapturedPromptUpload();
     if (
-      capturedUpload?.source === "phone_upload_single" &&
-      capturedUpload.serverComplete === true &&
-      capturedUpload.currentSetTrusted !== false &&
-      capturedUpload.files.length >= expectedCount
+      !state ||
+      capturedUpload?.source !== "phone_upload_single" ||
+      capturedUpload.currentSetTrusted === false ||
+      capturedUpload.files.length <= 0
     ) {
-      return expectedCount;
+      return 0;
     }
 
-    return 0;
+    const expectedCount = Number(state.expectedCount || state.receivedCount || 0);
+    if (state.complete) {
+      if (expectedCount > 0 && capturedUpload.files.length >= expectedCount) {
+        return expectedCount;
+      }
+      return 0;
+    }
+
+    if (
+      pendingPhoneFiles.size > 0 ||
+      downloadedFiles.size <= 0 ||
+      capturedUpload.files.length < downloadedFiles.size
+    ) {
+      return 0;
+    }
+    return downloadedFiles.size;
+  }
+
+  function markPhoneUploadCapturedReadyForGeneration() {
+    if (getPhoneUploadCapturedReadyCount() <= 0) return;
+    const capturedUpload = getActiveCapturedPromptUpload();
+    if (capturedUpload?.source === "phone_upload_single") {
+      capturedUpload.serverComplete = true;
+    }
   }
 
   function getIncompletePhoneUploadState() {
@@ -10197,13 +10215,13 @@
       visibleAddedCount > 0;
     if (!hasPhotosInFlight) return null;
 
+    if (getPhoneUploadCapturedReadyCount(state) > 0) return null;
+
     if (!state.complete) {
       return { ...state, visibleAddedCount };
     }
 
     const expectedCount = Number(state.expectedCount || state.receivedCount || 0);
-    if (getPhoneUploadCapturedReadyCount(state) > 0) return null;
-
     if (expectedCount > 0 && visibleAddedCount < expectedCount) {
       return { ...state, expectedCount, visibleAddedCount };
     }
