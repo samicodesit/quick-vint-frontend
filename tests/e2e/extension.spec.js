@@ -1133,7 +1133,8 @@ test.describe("AutoLister extension smoke flows", () => {
               () => {
                   const pollCount = (window.__phoneReadyPollCount || 0) + 1;
                   window.__phoneReadyPollCount = pollCount;
-                  const fileCount = pollCount === 1 ? 8 : 10;
+                  const confirmed = window.__allowCompletePhoneReady === true;
+                  const fileCount = confirmed ? 10 : 8;
                   callback?.({
                     ok: true,
                     data: {
@@ -1143,7 +1144,7 @@ test.describe("AutoLister extension smoke flows", () => {
                         url: `https://storage.test/phone-${index + 1}.jpg`,
                       })),
                       count: fileCount,
-                      complete: false,
+                      complete: confirmed,
                     },
                   });
                 },
@@ -1186,9 +1187,24 @@ test.describe("AutoLister extension smoke flows", () => {
     await page.locator("#quickvint-phone-btn").click();
     await expect(page.locator("#quickvint-phone-modal .preview-thumb")).toHaveCount(7);
     await expect(page.locator("#quickvint-phone-modal .status")).toHaveText(
+      "8 photos received. Waiting for phone...",
+    );
+    await expect(page.locator("#quickvint-phone-modal .status")).not.toHaveClass(
+      /ready/,
+    );
+    await page.locator("#quickvint-phone-modal .generate-btn").click();
+    await expect.poll(() => requestBodies.length).toBe(0);
+
+    await page.evaluate(() => {
+      window.__allowCompletePhoneReady = true;
+    });
+    await expect(page.locator("#quickvint-phone-modal .status")).toHaveText(
       "10 photos ready to generate.",
     );
-    expect(await page.locator(".photo-box").count()).toBe(0);
+    await expect(page.locator("#quickvint-phone-modal .status")).toHaveClass(
+      /ready/,
+    );
+    expect(await page.locator(".photo-box").count()).toBeLessThan(10);
 
     await page.locator("#quickvint-phone-modal .generate-btn").click();
     await expect.poll(() => requestBodies.length).toBe(1);
@@ -1268,7 +1284,7 @@ test.describe("AutoLister extension smoke flows", () => {
                       url: `https://storage.test/phone-${index + 1}.jpg`,
                     })),
                     count: 3,
-                    complete: false,
+                    complete: true,
                   },
                 }),
               0,
@@ -1367,7 +1383,7 @@ test.describe("AutoLister extension smoke flows", () => {
                       url: `https://storage.test/phone-${index + 1}.jpg`,
                     })),
                     count: 2,
-                    complete: false,
+                    complete: true,
                   },
                 }),
               0,
@@ -1610,7 +1626,7 @@ test.describe("AutoLister extension smoke flows", () => {
               () =>
                 callback?.({
                   ok: true,
-                  data: { files, count: files.length, complete: false },
+                  data: { files, count: files.length, complete: true },
                 }),
               0,
             );

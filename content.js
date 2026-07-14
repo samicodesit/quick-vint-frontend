@@ -3934,9 +3934,39 @@
         animation: pulse 1.5s ease-in-out infinite;
       }
 
+      #${MODAL_ID} .status.ready {
+        color: #047857;
+        background: #ecfdf5;
+        border-color: #a7f3d0;
+        box-shadow: 0 6px 18px rgba(16, 185, 129, 0.12);
+        animation: statusReadyPop 0.34s cubic-bezier(0.2, 0.85, 0.25, 1.35);
+      }
+
+      #${MODAL_ID} .status.ready::before {
+        content: '✓';
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 18px;
+        height: 18px;
+        border-radius: 999px;
+        background: #10b981;
+        color: white;
+        font-size: 12px;
+        font-weight: 800;
+        line-height: 1;
+        box-shadow: 0 4px 10px rgba(16, 185, 129, 0.24);
+      }
+
       @keyframes pulse {
         0%, 100% { opacity: 1; }
         50% { opacity: 0.4; }
+      }
+
+      @keyframes statusReadyPop {
+        0% { transform: translateY(2px) scale(0.96); opacity: 0.72; }
+        70% { transform: translateY(-1px) scale(1.025); opacity: 1; }
+        100% { transform: translateY(0) scale(1); opacity: 1; }
       }
 
       #${MODAL_ID} .phone-previews {
@@ -10143,23 +10173,29 @@
       };
     }
 
+    const responseCount = Number(data?.count || 0);
+    const responseFileCount = Array.isArray(data?.files) ? data.files.length : 0;
     const receivedCount = Math.max(
       downloadedFiles.size,
-      Number(data?.count || 0),
-      Array.isArray(data?.files) ? data.files.length : 0,
+      responseCount,
+      responseFileCount,
     );
     const complete = data?.complete === true;
+    const expectedCount = complete
+      ? Math.max(responseCount, responseFileCount, downloadedFiles.size)
+      : Number(lastPhoneUploadState.expectedCount || 0);
     lastPhoneUploadState.receivedCount = receivedCount;
-    lastPhoneUploadState.expectedCount = complete ? receivedCount : null;
-    lastPhoneUploadState.complete = complete;
+    lastPhoneUploadState.expectedCount = expectedCount > 0 ? expectedCount : null;
+    lastPhoneUploadState.complete =
+      complete || Number(lastPhoneUploadState.expectedCount || 0) > 0;
     lastPhoneUploadState.updatedAt = Date.now();
 
-    if (complete) {
+    if (lastPhoneUploadState.complete) {
       const capturedUpload = getActiveCapturedPromptUpload();
       if (
         capturedUpload?.source === "phone_upload_single" &&
         capturedUpload.currentSetTrusted !== false &&
-        capturedUpload.files.length >= receivedCount
+        capturedUpload.files.length >= Number(lastPhoneUploadState.expectedCount || 0)
       ) {
         capturedUpload.serverComplete = true;
       }
@@ -10234,7 +10270,7 @@
       return 0;
     }
 
-    const readyCount = Number(state.expectedCount || state.receivedCount || 0);
+    const readyCount = Number(state.expectedCount || 0);
     if (
       readyCount <= 0 ||
       pendingPhoneFiles.size > 0 ||
@@ -10273,16 +10309,8 @@
 
     if (getPhoneUploadCapturedReadyCount(state) > 0) return null;
 
-    if (!state.complete) {
-      return { ...state, visibleAddedCount };
-    }
-
-    const expectedCount = Number(state.expectedCount || state.receivedCount || 0);
-    if (expectedCount > 0 && visibleAddedCount < expectedCount) {
-      return { ...state, expectedCount, visibleAddedCount };
-    }
-
-    return null;
+    const expectedCount = Number(state.expectedCount || 0);
+    return { ...state, expectedCount, visibleAddedCount };
   }
 
   function updatePhoneUploadStatus(statusEl, initialImageCount) {
@@ -10290,7 +10318,6 @@
 
     const sentCount = downloadedFiles.size;
     const expectedCount = Number(lastPhoneUploadState?.expectedCount || 0);
-    const isComplete = lastPhoneUploadState?.complete === true;
     const capturedReadyCount = getPhoneUploadCapturedReadyCount();
     const visiblePhoneUploadCount = Math.max(
       0,
@@ -10298,22 +10325,21 @@
     );
 
     statusEl.className = "status";
-    if (sentCount === 0) {
-      statusEl.className = "status waiting";
-      statusEl.textContent = "Waiting for photos from your phone...";
-    } else if (capturedReadyCount > 0) {
+    if (capturedReadyCount > 0) {
       trackPhoneUploadReady("status");
+      statusEl.classList.add("ready");
       statusEl.textContent = `${capturedReadyCount} photo${
         capturedReadyCount !== 1 ? "s" : ""
       } ready to generate.`;
-    } else if (isComplete && expectedCount > 0 && visiblePhoneUploadCount >= expectedCount) {
-      statusEl.textContent = `${expectedCount} photo${
-        expectedCount !== 1 ? "s" : ""
-      } added.`;
+    } else if (expectedCount > 0) {
+      statusEl.textContent = `${Math.min(sentCount, expectedCount)}/${expectedCount} received.`;
+    } else if (sentCount === 0) {
+      statusEl.className = "status waiting";
+      statusEl.textContent = "Waiting for photos from your phone...";
     } else if (visiblePhoneUploadCount >= sentCount) {
       statusEl.textContent = `${sentCount} photo${
         sentCount !== 1 ? "s" : ""
-      } added. Waiting for more...`;
+      } received. Waiting for phone...`;
     } else {
       statusEl.textContent = `${sentCount} photo${
         sentCount !== 1 ? "s" : ""
