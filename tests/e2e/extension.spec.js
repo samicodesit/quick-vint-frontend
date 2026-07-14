@@ -306,6 +306,140 @@ test.describe("AutoLister extension smoke flows", () => {
     }
   });
 
+  test("runs phone upload through the loaded MV3 extension when Vinted thumbnails are late", async () => {
+    const { context, serviceWorker } = await loadExtension();
+    const page = await context.newPage();
+    const requestBodies = [];
+    const trackedEvents = [];
+    const sessions = [];
+    try {
+      await serviceWorker.evaluate(() =>
+        chrome.storage.local.set({
+          supabaseSession: {
+            access_token: "test-access-token",
+            refresh_token: "test-refresh-token",
+            expires_at: Math.floor(Date.now() / 1000) + 3600,
+            user: { id: "test-user", email: "seller@example.com" },
+          },
+          userProfile: {
+            subscription_status: "active",
+            subscription_tier: "pro",
+            api_calls_this_month: 0,
+            pack_credits: 0,
+          },
+          selectedLanguage: "en",
+          selectedTitleLanguage: "en",
+          selectedDescriptionLanguage: "en",
+          tone: "standard",
+          useBulletPoints: true,
+          descriptionLength: "long",
+          useHashtags: true,
+        }),
+      );
+
+      await context.route("https://www.vinted.com/items/new", (route) =>
+        route.fulfill({
+          status: 200,
+          contentType: "text/html",
+          body: listingFixture,
+        }),
+      );
+      await context.route("https://autolister.app/api/user/batch-capacity", (route) =>
+        route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify({ allowed: true, available: 10 }),
+        }),
+      );
+      await context.route("https://autolister.app/api/events/track", (route) => {
+        trackedEvents.push(route.request().postDataJSON());
+        return route.fulfill({ status: 204, body: "" });
+      });
+      await context.route("https://autolister.app/api/generate", (route) => {
+        requestBodies.push(route.request().postDataJSON());
+        return route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify({
+            title: "Loaded Extension Upload",
+            description: "Generated through the loaded extension.",
+            measurementAdvice: "",
+          }),
+        });
+      });
+      await context.route("https://autolister.app/api/phone-upload**", (route) => {
+        const url = new URL(route.request().url());
+        if (url.searchParams.get("action") === "cleanup") {
+          return route.fulfill({ status: 204, body: "" });
+        }
+        const sessionId = url.searchParams.get("sessionId");
+        if (!sessions.includes(sessionId)) sessions.push(sessionId);
+        return route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify({
+            files: [
+              {
+                name: "phone-real-1.jpg",
+                path: "phone-real-1.jpg",
+                url: "https://storage.test/phone-real-1.jpg",
+              },
+              {
+                name: "phone-real-2.jpg",
+                path: "phone-real-2.jpg",
+                url: "https://storage.test/phone-real-2.jpg",
+              },
+            ],
+            count: 2,
+            complete: true,
+          }),
+        });
+      });
+      await context.route("https://storage.test/**", (route) =>
+        route.fulfill({
+          status: 200,
+          contentType: "image/png",
+          body: Buffer.from(tinyPngDataUrl.split(",")[1], "base64"),
+        }),
+      );
+
+      await page.goto("https://www.vinted.com/items/new", {
+        waitUntil: "domcontentloaded",
+      });
+      await page.evaluate(() => {
+        document.querySelectorAll(".photo-box").forEach((node) => node.remove());
+        document.querySelector('[data-testid="title--input"]').value = "";
+        document.querySelector('[data-testid="description--input"]').value = "";
+      });
+
+      await expect(page.locator("#quickvint-phone-btn")).toBeVisible();
+      await page.locator("#quickvint-phone-btn").click();
+      await expect(page.locator("#quickvint-phone-modal .preview-thumb")).toHaveCount(2);
+      await expect(page.locator("#quickvint-phone-modal .status")).toHaveText(
+        "2 photos ready.",
+      );
+      await expect(page.locator(".photo-box")).toHaveCount(0);
+
+      await page.locator("#quickvint-phone-modal .generate-btn").click();
+      await expect.poll(() => requestBodies.length).toBe(1);
+
+      expect(requestBodies[0].imageMetadata).toHaveLength(2);
+      expect(requestBodies[0].imageMetadata[0]).toMatchObject({
+        sourceSelection: "captured_upload_file",
+        promptSource: "captured_upload_file",
+        capturedUploadSource: "phone_upload_single",
+        capturedUploadMatchStatus: "vinted_pending_using_captured",
+      });
+      expect(sessions).toHaveLength(1);
+      const eventNames = trackedEvents.flatMap((body) =>
+        (body.events || []).map((event) => event.event),
+      );
+      expect(eventNames).not.toContain("phone_upload_generate_blocked");
+    } finally {
+      await context.close();
+    }
+  });
+
   test("background checkout uses the stored account email when the session is missing", async () => {
     const { context, serviceWorker } = await loadExtension();
     const checkoutRequests = [];
@@ -965,6 +1099,11 @@ test.describe("AutoLister extension smoke flows", () => {
     page,
   }) => {
     let generateRequests = 0;
+    const trackedEvents = [];
+    await page.route("https://autolister.app/api/events/track", (route) => {
+      trackedEvents.push(route.request().postDataJSON());
+      return route.fulfill({ status: 204, body: "" });
+    });
     await page.route("https://autolister.app/api/generate", (route) => {
       generateRequests += 1;
       return route.fulfill({
@@ -1046,6 +1185,35 @@ test.describe("AutoLister extension smoke flows", () => {
     await page.waitForTimeout(500);
     expect(generateRequests).toBe(0);
     await expect(page.locator("#quickvint-phone-modal")).toBeVisible();
+    let blockedEvents = trackedEvents.flatMap((body) =>
+      (body.events || []).filter(
+        (event) => event.event === "phone_upload_generate_blocked",
+      ),
+    );
+    expect(blockedEvents).toHaveLength(0);
+
+    await page.evaluate(() => document.getElementById("quickvint-gen-btn")?.click());
+    await page.evaluate(() => document.getElementById("quickvint-gen-btn")?.click());
+    await expect
+      .poll(() =>
+        trackedEvents.flatMap((body) =>
+          (body.events || []).filter(
+            (event) => event.event === "phone_upload_generate_blocked",
+          ),
+        ).length,
+      )
+      .toBe(1);
+    blockedEvents = trackedEvents.flatMap((body) =>
+      (body.events || []).filter(
+        (event) => event.event === "phone_upload_generate_blocked",
+      ),
+    );
+    expect(blockedEvents[0].context).toMatchObject({
+      mode: "single",
+      sessionId,
+      receivedCount: 6,
+      visibleAddedCount: 6,
+    });
 
     const closePrompts = [];
     page.on("dialog", async (dialog) => {
@@ -1156,6 +1324,9 @@ test.describe("AutoLister extension smoke flows", () => {
     await page.locator("#quickvint-phone-btn").click();
     await expect(page.locator("#quickvint-phone-modal .preview-thumb")).toHaveCount(2);
     await expect(page.locator(".photo-box")).toHaveCount(0);
+    await expect(page.locator("#quickvint-phone-modal .status")).toHaveText(
+      "2 photos ready.",
+    );
 
     await page.locator("#quickvint-phone-modal .generate-btn").click();
 
@@ -1171,6 +1342,120 @@ test.describe("AutoLister extension smoke flows", () => {
       (body.events || []).map((event) => event.event),
     );
     expect(eventNames).not.toContain("phone_upload_generate_blocked");
+  });
+
+  test("keeps completed phone-upload files when users reopen phone upload to add more", async ({
+    page,
+  }) => {
+    const requestBodies = [];
+    const trackedEvents = [];
+    let pollCount = 0;
+
+    await page.route("https://autolister.app/api/events/track", (route) => {
+      trackedEvents.push(route.request().postDataJSON());
+      return route.fulfill({ status: 204, body: "" });
+    });
+    await page.route("https://autolister.app/api/generate", (route) => {
+      requestBodies.push(route.request().postDataJSON());
+      return route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          title: "Reopened Phone Upload",
+          description: "Generated from all phone files.",
+          measurementAdvice: "",
+        }),
+      });
+    });
+
+    await openContentHarness(
+      page,
+      { allowed: true, available: 10 },
+      { emptyListing: true, shortenPhoneUploadPoll: true },
+    );
+
+    await page.evaluate((dataUrl) => {
+      const originalSendMessage = window.chrome.runtime.sendMessage;
+      window.chrome.runtime.sendMessage = (message, callback) => {
+        if (message?.type === "PROXY_FETCH") {
+          const url = String(message.url || "");
+          if (url.includes("/api/phone-upload?sessionId=")) {
+            window.__phonePollCount = (window.__phonePollCount || 0) + 1;
+            const sessionId = new URL(url).searchParams.get("sessionId");
+            window.__phoneSessions ||= [];
+            if (!window.__phoneSessions.includes(sessionId)) {
+              window.__phoneSessions.push(sessionId);
+            }
+            const files =
+              window.__phoneSessions.indexOf(sessionId) === 0
+                ? [
+                    {
+                      name: "phone-1.jpg",
+                      path: "phone-1.jpg",
+                      url: "https://storage.test/phone-1.jpg",
+                    },
+                    {
+                      name: "phone-2.jpg",
+                      path: "phone-2.jpg",
+                      url: "https://storage.test/phone-2.jpg",
+                    },
+                  ]
+                : [
+                    {
+                      name: "phone-3.jpg",
+                      path: "phone-3.jpg",
+                      url: "https://storage.test/phone-3.jpg",
+                    },
+                  ];
+            setTimeout(
+              () =>
+                callback?.({
+                  ok: true,
+                  data: { files, count: files.length, complete: true },
+                }),
+              0,
+            );
+            return;
+          }
+          if (url.startsWith("https://storage.test/")) {
+            setTimeout(() => callback?.({ ok: true, data: dataUrl }), 0);
+            return;
+          }
+        }
+        originalSendMessage(message, callback);
+      };
+    }, tinyPngDataUrl);
+
+    await page.locator("#quickvint-phone-btn").click();
+    await expect(page.locator("#quickvint-phone-modal .preview-thumb")).toHaveCount(2);
+    await expect(page.locator("#quickvint-phone-modal .status")).toHaveText(
+      "2 photos ready.",
+    );
+    await page.locator("#quickvint-phone-modal .close-btn").click();
+    await expect(page.locator("#quickvint-phone-modal")).toHaveCount(0);
+    await expect(page.locator(".photo-box")).toHaveCount(0);
+
+    await page.locator("#quickvint-phone-btn").click();
+    await expect(page.locator("#quickvint-phone-modal .preview-thumb")).toHaveCount(1);
+    await expect(page.locator("#quickvint-phone-modal .status")).toHaveText(
+      "1 photo ready.",
+    );
+    await page.locator("#quickvint-phone-modal .generate-btn").click();
+
+    await expect.poll(() => requestBodies.length).toBe(1);
+    expect(requestBodies[0].imageMetadata).toHaveLength(3);
+    expect(
+      requestBodies[0].imageMetadata.map(
+        (item) => item.capturedUploadFile?.fileName,
+      ),
+    ).toEqual(["phone-1.jpg", "phone-2.jpg", "phone-3.jpg"]);
+
+    const eventNames = trackedEvents.flatMap((body) =>
+      (body.events || []).map((event) => event.event),
+    );
+    expect(eventNames).not.toContain("phone_upload_generate_blocked");
+    pollCount = await page.evaluate(() => window.__phonePollCount || 0);
+    expect(pollCount).toBeGreaterThanOrEqual(2);
   });
 
   test("stops preference sync quietly when Chrome invalidates the extension context", async ({

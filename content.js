@@ -868,6 +868,7 @@
   let isPhoneUploadPollInFlight = false;
   let activePhoneUploadSessionId = null;
   let lastPhoneUploadState = null;
+  let lastPhoneUploadBlockedTrackKey = null;
   let phoneUploadPreviewUrls = [];
   let displayedPhoneUploadPreviewCount = 0;
   let phoneUploadPreviewTimer = null;
@@ -2403,6 +2404,22 @@
     capturedUpload.capturedAt = Date.now();
   }
 
+  function shouldAppendToCapturedPromptUpload() {
+    const capturedUpload = getActiveCapturedPromptUpload();
+    if (!capturedUpload || capturedUpload.currentSetTrusted === false) {
+      return false;
+    }
+
+    const visiblePhotoCount = getVisibleUploadedPhotoCount();
+    if (capturedUpload.files.length === visiblePhotoCount) return true;
+
+    return (
+      capturedUpload.source === "phone_upload_single" &&
+      capturedUpload.serverComplete === true &&
+      capturedUpload.files.length > visiblePhotoCount
+    );
+  }
+
   function getActiveCapturedPromptUpload() {
     if (!capturedPromptUpload) return null;
     const ageMs = Date.now() - capturedPromptUpload.capturedAt;
@@ -2788,20 +2805,11 @@
   }
 
   function bindPromptUploadFileCapture() {
-    const shouldAppendCapturedUploadFiles = () => {
-      const capturedUpload = getActiveCapturedPromptUpload();
-      if (!capturedUpload || capturedUpload.currentSetTrusted === false) {
-        return false;
-      }
-
-      return capturedUpload.files.length === getVisibleUploadedPhotoCount();
-    };
-
     const captureInputFiles = (input) => {
       if (suppressNextFileInputCapture) return;
       if (!input.files?.length) return;
       registerPromptUploadFiles(input.files, "manual_file_input", {
-        append: shouldAppendCapturedUploadFiles(),
+        append: shouldAppendToCapturedPromptUpload(),
       });
     };
 
@@ -9707,8 +9715,16 @@
     modal.querySelector(".close-x").addEventListener("click", requestCloseModal);
     modal.querySelector(".close-btn").addEventListener("click", requestCloseModal);
     modal.querySelector(".generate-btn").addEventListener("click", () => {
+      const hasPhoneUploadPhotos =
+        downloadedFiles.size > 0 ||
+        phoneUploadPreviewUrls.length > 0 ||
+        getPhoneUploadVisibleAddedCount() > 0;
+      if (!hasPhoneUploadPhotos) {
+        showToast("Add photos first.", "info");
+        return;
+      }
       if (getIncompletePhoneUploadState()) {
-        showToast("Photos are still uploading. Wait a moment.", "info");
+        showToast("Still uploading. Wait a moment.", "info");
         return;
       }
       closeModal();
@@ -9770,6 +9786,7 @@
     }
     downloadedFiles.clear();
     pendingPhoneFiles.clear();
+    lastPhoneUploadBlockedTrackKey = null;
     isPhoneUploadPollInFlight = false;
     if (phoneUploadPreviewTimer) {
       clearTimeout(phoneUploadPreviewTimer);
@@ -10078,11 +10095,9 @@
     const fileInput = document.querySelector(SELECTORS.fileInput);
     if (!fileInput || files.length === 0) return false;
 
-    const capturedUpload = getActiveCapturedPromptUpload();
-    const append =
-      capturedUpload?.currentSetTrusted !== false &&
-      capturedUpload?.files?.length === getVisibleUploadedPhotoCount();
-    registerPromptUploadFiles(files, uploadSource, { append });
+    registerPromptUploadFiles(files, uploadSource, {
+      append: shouldAppendToCapturedPromptUpload(),
+    });
 
     const dataTransfer = new DataTransfer();
     files.forEach((file) => dataTransfer.items.add(file));
@@ -10148,6 +10163,25 @@
     return Math.max(0, getVisibleUploadedPhotoCount() - state.initialImageCount);
   }
 
+  function getPhoneUploadCapturedReadyCount(state = lastPhoneUploadState) {
+    if (!state?.complete) return 0;
+
+    const expectedCount = Number(state.expectedCount || state.receivedCount || 0);
+    if (expectedCount <= 0) return 0;
+
+    const capturedUpload = getActiveCapturedPromptUpload();
+    if (
+      capturedUpload?.source === "phone_upload_single" &&
+      capturedUpload.serverComplete === true &&
+      capturedUpload.currentSetTrusted !== false &&
+      capturedUpload.files.length >= expectedCount
+    ) {
+      return expectedCount;
+    }
+
+    return 0;
+  }
+
   function getIncompletePhoneUploadState() {
     const state = lastPhoneUploadState;
     if (!state) return null;
@@ -10168,13 +10202,7 @@
     }
 
     const expectedCount = Number(state.expectedCount || state.receivedCount || 0);
-    const capturedUpload = getActiveCapturedPromptUpload();
-    const capturedReady =
-      capturedUpload?.source === "phone_upload_single" &&
-      capturedUpload.serverComplete === true &&
-      capturedUpload.currentSetTrusted !== false &&
-      capturedUpload.files.length >= expectedCount;
-    if (capturedReady) return null;
+    if (getPhoneUploadCapturedReadyCount(state) > 0) return null;
 
     if (expectedCount > 0 && visibleAddedCount < expectedCount) {
       return { ...state, expectedCount, visibleAddedCount };
@@ -10189,6 +10217,7 @@
     const sentCount = downloadedFiles.size;
     const expectedCount = Number(lastPhoneUploadState?.expectedCount || 0);
     const isComplete = lastPhoneUploadState?.complete === true;
+    const capturedReadyCount = getPhoneUploadCapturedReadyCount();
     const visiblePhoneUploadCount = Math.max(
       0,
       getVisibleUploadedPhotoCount() - initialImageCount,
@@ -10198,6 +10227,10 @@
     if (sentCount === 0) {
       statusEl.className = "status waiting";
       statusEl.textContent = "Waiting for photos from your phone...";
+    } else if (capturedReadyCount > 0) {
+      statusEl.textContent = `${capturedReadyCount} photo${
+        capturedReadyCount !== 1 ? "s" : ""
+      } ready.`;
     } else if (isComplete && expectedCount > 0 && visiblePhoneUploadCount >= expectedCount) {
       statusEl.textContent = `${expectedCount} photo${
         expectedCount !== 1 ? "s" : ""
@@ -12070,15 +12103,24 @@
       ? getIncompletePhoneUploadState()
       : null;
     if (incompletePhoneUpload) {
-      trackGrowthEvent("phone_upload_generate_blocked", {
-        mode: "single",
-        sessionId: incompletePhoneUpload.sessionId,
-        receivedCount: incompletePhoneUpload.receivedCount || 0,
-        expectedCount: incompletePhoneUpload.expectedCount || null,
-        visibleAddedCount: incompletePhoneUpload.visibleAddedCount || 0,
-      });
-      showToast("Photos are still uploading. Wait a moment.", "error");
-      throw new Error("Photos are still uploading.");
+      const blockedTrackKey = [
+        incompletePhoneUpload.sessionId,
+        incompletePhoneUpload.receivedCount || 0,
+        incompletePhoneUpload.expectedCount || 0,
+        incompletePhoneUpload.visibleAddedCount || 0,
+      ].join(":");
+      if (blockedTrackKey !== lastPhoneUploadBlockedTrackKey) {
+        lastPhoneUploadBlockedTrackKey = blockedTrackKey;
+        trackGrowthEvent("phone_upload_generate_blocked", {
+          mode: "single",
+          sessionId: incompletePhoneUpload.sessionId,
+          receivedCount: incompletePhoneUpload.receivedCount || 0,
+          expectedCount: incompletePhoneUpload.expectedCount || null,
+          visibleAddedCount: incompletePhoneUpload.visibleAddedCount || 0,
+        });
+      }
+      showToast("Still uploading. Wait a moment.", "error");
+      throw new Error("Still uploading.");
     }
 
     const imageEntries = getUploadedImageEntries();
