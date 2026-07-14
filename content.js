@@ -10173,7 +10173,7 @@
       };
     }
 
-    const responseCount = Number(data?.count || 0);
+    const responseCount = Number(data?.expectedCount || data?.count || 0);
     const responseFileCount = Array.isArray(data?.files) ? data.files.length : 0;
     const receivedCount = Math.max(
       downloadedFiles.size,

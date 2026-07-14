@@ -1143,7 +1143,8 @@ test.describe("AutoLister extension smoke flows", () => {
                         path: `phone-${index + 1}.jpg`,
                         url: `https://storage.test/phone-${index + 1}.jpg`,
                       })),
-                      count: 10,
+                      count: fileCount,
+                      expectedCount: 10,
                       complete: finalBatch,
                     },
                   });
