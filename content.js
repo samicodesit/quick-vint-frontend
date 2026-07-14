@@ -9757,6 +9757,9 @@
     const modal = document.getElementById(MODAL_ID);
     const sessionId = modal?.dataset?.sessionId || activePhoneUploadSessionId;
     rememberPhoneUploadState(sessionId);
+    if (!cancelUpload) {
+      markPhoneUploadCapturedReadyForGeneration();
+    }
     const keepSessionAlive =
       !cancelUpload && Boolean(getIncompletePhoneUploadState());
     if (modal) {
@@ -10174,22 +10177,17 @@
       return 0;
     }
 
-    const expectedCount = Number(state.expectedCount || state.receivedCount || 0);
-    if (state.complete) {
-      if (expectedCount > 0 && capturedUpload.files.length >= expectedCount) {
-        return expectedCount;
-      }
-      return 0;
-    }
-
+    const readyCount = Number(state.expectedCount || state.receivedCount || 0);
     if (
+      readyCount <= 0 ||
       pendingPhoneFiles.size > 0 ||
-      downloadedFiles.size <= 0 ||
-      capturedUpload.files.length < downloadedFiles.size
+      downloadedFiles.size < readyCount ||
+      capturedUpload.files.length < readyCount
     ) {
       return 0;
     }
-    return downloadedFiles.size;
+
+    return readyCount;
   }
 
   function markPhoneUploadCapturedReadyForGeneration() {
@@ -10248,7 +10246,7 @@
     } else if (capturedReadyCount > 0) {
       statusEl.textContent = `${capturedReadyCount} photo${
         capturedReadyCount !== 1 ? "s" : ""
-      } ready.`;
+      } ready to generate.`;
     } else if (isComplete && expectedCount > 0 && visiblePhoneUploadCount >= expectedCount) {
       statusEl.textContent = `${expectedCount} photo${
         expectedCount !== 1 ? "s" : ""
