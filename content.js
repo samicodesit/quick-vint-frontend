@@ -869,6 +869,7 @@
   let activePhoneUploadSessionId = null;
   let lastPhoneUploadState = null;
   let lastPhoneUploadBlockedTrackKey = null;
+  let lastPhoneUploadReadyTrackKey = null;
   let phoneUploadPreviewUrls = [];
   let displayedPhoneUploadPreviewCount = 0;
   let phoneUploadPreviewTimer = null;
@@ -2404,10 +2405,17 @@
     capturedUpload.capturedAt = Date.now();
   }
 
-  function shouldAppendToCapturedPromptUpload() {
+  function shouldAppendToCapturedPromptUpload(uploadSource = null) {
     const capturedUpload = getActiveCapturedPromptUpload();
     if (!capturedUpload || capturedUpload.currentSetTrusted === false) {
       return false;
+    }
+
+    if (
+      uploadSource === "phone_upload_single" &&
+      capturedUpload.source === "phone_upload_single"
+    ) {
+      return true;
     }
 
     const visiblePhotoCount = getVisibleUploadedPhotoCount();
@@ -9728,6 +9736,11 @@
         return;
       }
       markPhoneUploadCapturedReadyForGeneration();
+      trackGrowthEvent("phone_upload_generate_ready", {
+        mode: "single",
+        source: "modal",
+        ...getPhoneUploadDebugContext(),
+      });
       closeModal();
       onGenerateClick();
     });
@@ -9790,6 +9803,7 @@
     downloadedFiles.clear();
     pendingPhoneFiles.clear();
     lastPhoneUploadBlockedTrackKey = null;
+    lastPhoneUploadReadyTrackKey = null;
     isPhoneUploadPollInFlight = false;
     if (phoneUploadPreviewTimer) {
       clearTimeout(phoneUploadPreviewTimer);
@@ -9980,6 +9994,7 @@
                     mode: "single",
                     receivedCount: filesToInject.length,
                     failedDownloadCount,
+                    ...getPhoneUploadDebugContext(),
                   });
                   downloads.forEach((result) => {
                     if (result.previewUrl) URL.revokeObjectURL(result.previewUrl);
@@ -9989,6 +10004,7 @@
                 trackGrowthEvent("phone_upload_download_error", {
                   mode: "single",
                   failedDownloadCount,
+                  ...getPhoneUploadDebugContext(),
                 });
               }
             } finally {
@@ -10099,7 +10115,7 @@
     if (!fileInput || files.length === 0) return false;
 
     registerPromptUploadFiles(files, uploadSource, {
-      append: shouldAppendToCapturedPromptUpload(),
+      append: shouldAppendToCapturedPromptUpload(uploadSource),
     });
 
     const dataTransfer = new DataTransfer();
@@ -10166,6 +10182,47 @@
     return Math.max(0, getVisibleUploadedPhotoCount() - state.initialImageCount);
   }
 
+  function getPhoneUploadDebugContext(state = lastPhoneUploadState) {
+    const capturedUpload = getActiveCapturedPromptUpload();
+    return {
+      sessionId: state?.sessionId || null,
+      complete: state?.complete === true,
+      receivedCount: Number(state?.receivedCount || 0),
+      expectedCount: state?.expectedCount || null,
+      downloadedCount: downloadedFiles.size,
+      pendingCount: pendingPhoneFiles.size,
+      previewCount: phoneUploadPreviewUrls.length,
+      visibleAddedCount: getPhoneUploadVisibleAddedCount(state),
+      capturedFileCount: capturedUpload?.files?.length || 0,
+      capturedSource: capturedUpload?.source || null,
+      capturedTrusted: capturedUpload
+        ? capturedUpload.currentSetTrusted !== false
+        : null,
+      capturedServerComplete: capturedUpload?.serverComplete === true,
+      readyCount: getPhoneUploadCapturedReadyCount(state),
+    };
+  }
+
+  function trackPhoneUploadReady(reason) {
+    const context = getPhoneUploadDebugContext();
+    if (context.readyCount <= 0) return;
+
+    const readyTrackKey = [
+      context.sessionId,
+      context.readyCount,
+      context.downloadedCount,
+      context.capturedFileCount,
+    ].join(":");
+    if (readyTrackKey === lastPhoneUploadReadyTrackKey) return;
+
+    lastPhoneUploadReadyTrackKey = readyTrackKey;
+    trackGrowthEvent("phone_upload_ready", {
+      mode: "single",
+      reason,
+      ...context,
+    });
+  }
+
   function getPhoneUploadCapturedReadyCount(state = lastPhoneUploadState) {
     const capturedUpload = getActiveCapturedPromptUpload();
     if (
@@ -10196,6 +10253,7 @@
     if (capturedUpload?.source === "phone_upload_single") {
       capturedUpload.serverComplete = true;
     }
+    trackPhoneUploadReady("mark_ready");
   }
 
   function getIncompletePhoneUploadState() {
@@ -10244,6 +10302,7 @@
       statusEl.className = "status waiting";
       statusEl.textContent = "Waiting for photos from your phone...";
     } else if (capturedReadyCount > 0) {
+      trackPhoneUploadReady("status");
       statusEl.textContent = `${capturedReadyCount} photo${
         capturedReadyCount !== 1 ? "s" : ""
       } ready to generate.`;
@@ -12129,10 +12188,7 @@
         lastPhoneUploadBlockedTrackKey = blockedTrackKey;
         trackGrowthEvent("phone_upload_generate_blocked", {
           mode: "single",
-          sessionId: incompletePhoneUpload.sessionId,
-          receivedCount: incompletePhoneUpload.receivedCount || 0,
-          expectedCount: incompletePhoneUpload.expectedCount || null,
-          visibleAddedCount: incompletePhoneUpload.visibleAddedCount || 0,
+          ...getPhoneUploadDebugContext(incompletePhoneUpload),
         });
       }
       showToast("Still uploading. Wait a moment.", "error");

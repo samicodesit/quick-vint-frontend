@@ -1130,19 +1130,23 @@ test.describe("AutoLister extension smoke flows", () => {
           const url = String(message.url || "");
           if (url.includes("/api/phone-upload?sessionId=")) {
             setTimeout(
-              () =>
-                callback?.({
-                  ok: true,
-                  data: {
-                    files: Array.from({ length: 6 }, (_, index) => ({
-                      name: `phone-${index + 1}.jpg`,
-                      path: `phone-${index + 1}.jpg`,
-                      url: `https://storage.test/phone-${index + 1}.jpg`,
-                    })),
-                    count: 6,
-                    complete: false,
-                  },
-                }),
+              () => {
+                  const pollCount = (window.__phoneReadyPollCount || 0) + 1;
+                  window.__phoneReadyPollCount = pollCount;
+                  const fileCount = pollCount === 1 ? 8 : 10;
+                  callback?.({
+                    ok: true,
+                    data: {
+                      files: Array.from({ length: fileCount }, (_, index) => ({
+                        name: `phone-${index + 1}.jpg`,
+                        path: `phone-${index + 1}.jpg`,
+                        url: `https://storage.test/phone-${index + 1}.jpg`,
+                      })),
+                      count: fileCount,
+                      complete: false,
+                    },
+                  });
+                },
               0,
             );
             return;
@@ -1180,23 +1184,48 @@ test.describe("AutoLister extension smoke flows", () => {
     }, tinyPngDataUrl);
 
     await page.locator("#quickvint-phone-btn").click();
-    await expect(page.locator("#quickvint-phone-modal .preview-thumb")).toHaveCount(6);
+    await expect(page.locator("#quickvint-phone-modal .preview-thumb")).toHaveCount(7);
     await expect(page.locator("#quickvint-phone-modal .status")).toHaveText(
-      "6 photos ready to generate.",
+      "10 photos ready to generate.",
     );
     expect(await page.locator(".photo-box").count()).toBe(0);
 
     await page.locator("#quickvint-phone-modal .generate-btn").click();
     await expect.poll(() => requestBodies.length).toBe(1);
-    expect(requestBodies[0].imageMetadata).toHaveLength(6);
+    expect(requestBodies[0].imageMetadata).toHaveLength(10);
     await expect(page.locator("#quickvint-phone-modal")).toHaveCount(0);
-    await expect(page.locator(".photo-box")).toHaveCount(6);
+    await expect(page.locator(".photo-box")).toHaveCount(10);
     let blockedEvents = trackedEvents.flatMap((body) =>
       (body.events || []).filter(
         (event) => event.event === "phone_upload_generate_blocked",
       ),
     );
     expect(blockedEvents).toHaveLength(0);
+    await expect
+      .poll(() =>
+        trackedEvents
+          .flatMap((body) => body.events || [])
+          .map((event) => event.event),
+      )
+      .toEqual(expect.arrayContaining([
+        "phone_upload_ready",
+        "phone_upload_generate_ready",
+      ]));
+    const readyEvent = trackedEvents
+      .flatMap((body) => body.events || [])
+      .find(
+        (event) =>
+          event.event === "phone_upload_ready" &&
+          event.context?.readyCount === 10,
+      );
+    expect(readyEvent).toBeTruthy();
+    expect(readyEvent.context).toMatchObject({
+      readyCount: 10,
+      receivedCount: 10,
+      downloadedCount: 10,
+      capturedFileCount: 10,
+      pendingCount: 0,
+    });
   });
 
   test("keeps ready phone-upload files after Done while Vinted thumbnails are delayed", async ({
