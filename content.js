@@ -9973,8 +9973,9 @@
             ? JSON.parse(response.data)
             : response.data;
         updateLastPhoneUploadState(sessionId, data, initialImageCount);
-        if (data.files && data.files.length > 0) {
-          const newRemoteFiles = data.files.filter((file) => {
+        const remoteFiles = getPhoneUploadPhotoFiles(data?.files);
+        if (remoteFiles.length > 0) {
+          const newRemoteFiles = remoteFiles.filter((file) => {
             const fileKey = getPhoneUploadFileKey(file);
             return (
               fileKey &&
@@ -10006,7 +10007,23 @@
               const filesToInject = downloads
                 .filter((result) => result.file)
                 .map((result) => result.file);
-              const failedDownloadCount = downloads.length - filesToInject.length;
+              const failedDownloads = downloads.filter((result) => !result.file);
+              const failedDownloadCount = failedDownloads.length;
+
+              if (failedDownloadCount > 0) {
+                trackGrowthEvent("phone_upload_download_error", {
+                  mode: "single",
+                  failedDownloadCount,
+                  failedFiles: failedDownloads
+                    .slice(0, 3)
+                    .map((result) => ({
+                      key: result.key,
+                      name: result.name || null,
+                      error: result.error || null,
+                    })),
+                  ...getPhoneUploadDebugContext(),
+                });
+              }
 
               if (filesToInject.length > 0) {
                 if (injectFilesIntoVinted(filesToInject, "phone_upload_single")) {
@@ -10030,12 +10047,6 @@
                     if (result.previewUrl) URL.revokeObjectURL(result.previewUrl);
                   });
                 }
-              } else if (failedDownloadCount > 0) {
-                trackGrowthEvent("phone_upload_download_error", {
-                  mode: "single",
-                  failedDownloadCount,
-                  ...getPhoneUploadDebugContext(),
-                });
               }
             } finally {
               newRemoteFiles.forEach((file) =>
@@ -10109,6 +10120,20 @@
     return [file.name, stableUrl].filter(Boolean).join("|");
   }
 
+  function isPhoneUploadSessionMarkerFile(file) {
+    const rawName = String(file?.name || file?.path || file?.storagePath || "");
+    const name = rawName.split("/").pop();
+    return (
+      name === "_batch-complete.json" ||
+      /^_expected-count-\d+\.json$/.test(name)
+    );
+  }
+
+  function getPhoneUploadPhotoFiles(files) {
+    if (!Array.isArray(files)) return [];
+    return files.filter((file) => !isPhoneUploadSessionMarkerFile(file));
+  }
+
   async function downloadPhoneUploadFile(remoteFile) {
     const key = getPhoneUploadFileKey(remoteFile);
     try {
@@ -10135,8 +10160,19 @@
 
       return { key, file, previewUrl };
     } catch (err) {
-      console.error("Error downloading phone upload image:", err);
-      return { key, file: null, previewUrl: null };
+      const error = err?.message || String(err);
+      console.warn("Phone upload image download failed", {
+        key,
+        name: remoteFile?.name || null,
+        error,
+      });
+      return {
+        key,
+        name: remoteFile?.name || null,
+        file: null,
+        previewUrl: null,
+        error,
+      };
     }
   }
 
@@ -10174,7 +10210,7 @@
     }
 
     const responseCount = Number(data?.expectedCount || data?.count || 0);
-    const responseFileCount = Array.isArray(data?.files) ? data.files.length : 0;
+    const responseFileCount = getPhoneUploadPhotoFiles(data?.files).length;
     const receivedCount = Math.max(
       downloadedFiles.size,
       responseFileCount,

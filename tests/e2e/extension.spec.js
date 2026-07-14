@@ -1135,14 +1135,22 @@ test.describe("AutoLister extension smoke flows", () => {
                   window.__phoneReadyPollCount = pollCount;
                   const finalBatch = window.__allowFinalPhoneReady === true;
                   const fileCount = finalBatch ? 10 : 8;
+                  const files = Array.from({ length: fileCount }, (_, index) => ({
+                    name: `phone-${index + 1}.jpg`,
+                    path: `phone-${index + 1}.jpg`,
+                    url: `https://storage.test/phone-${index + 1}.jpg`,
+                  }));
                   callback?.({
                     ok: true,
                     data: {
-                      files: Array.from({ length: fileCount }, (_, index) => ({
-                        name: `phone-${index + 1}.jpg`,
-                        path: `phone-${index + 1}.jpg`,
-                        url: `https://storage.test/phone-${index + 1}.jpg`,
-                      })),
+                      files: [
+                        {
+                          name: "_expected-count-10.json",
+                          path: "_expected-count-10.json",
+                          url: "https://storage.test/_expected-count-10.json",
+                        },
+                        ...files,
+                      ],
                       count: fileCount,
                       expectedCount: 10,
                       complete: finalBatch,
