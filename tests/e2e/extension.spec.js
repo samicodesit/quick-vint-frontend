@@ -1092,6 +1092,87 @@ test.describe("AutoLister extension smoke flows", () => {
     expect(newSessionId).not.toBe(sessionId);
   });
 
+  test("generates from completed phone-upload files when Vinted thumbnails are late", async ({
+    page,
+  }) => {
+    const requestBodies = [];
+    const trackedEvents = [];
+    await page.route("https://autolister.app/api/events/track", (route) => {
+      trackedEvents.push(route.request().postDataJSON());
+      return route.fulfill({ status: 204, body: "" });
+    });
+    await page.route("https://autolister.app/api/generate", (route) => {
+      requestBodies.push(route.request().postDataJSON());
+      return route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          title: "Completed Phone Upload",
+          description: "Generated from captured phone files.",
+          measurementAdvice: "",
+        }),
+      });
+    });
+
+    await openContentHarness(
+      page,
+      { allowed: true, available: 10 },
+      { emptyListing: true, shortenPhoneUploadPoll: true },
+    );
+
+    await page.evaluate((dataUrl) => {
+      const originalSendMessage = window.chrome.runtime.sendMessage;
+      window.chrome.runtime.sendMessage = (message, callback) => {
+        if (message?.type === "PROXY_FETCH") {
+          const url = String(message.url || "");
+          if (url.includes("/api/phone-upload?sessionId=")) {
+            setTimeout(
+              () =>
+                callback?.({
+                  ok: true,
+                  data: {
+                    files: Array.from({ length: 2 }, (_, index) => ({
+                      name: `phone-${index + 1}.jpg`,
+                      path: `phone-${index + 1}.jpg`,
+                      url: `https://storage.test/phone-${index + 1}.jpg`,
+                    })),
+                    count: 2,
+                    complete: true,
+                  },
+                }),
+              0,
+            );
+            return;
+          }
+          if (url.startsWith("https://storage.test/")) {
+            setTimeout(() => callback?.({ ok: true, data: dataUrl }), 0);
+            return;
+          }
+        }
+        originalSendMessage(message, callback);
+      };
+    }, tinyPngDataUrl);
+
+    await page.locator("#quickvint-phone-btn").click();
+    await expect(page.locator("#quickvint-phone-modal .preview-thumb")).toHaveCount(2);
+    await expect(page.locator(".photo-box")).toHaveCount(0);
+
+    await page.locator("#quickvint-phone-modal .generate-btn").click();
+
+    await expect.poll(() => requestBodies.length).toBe(1);
+    expect(requestBodies[0].imageMetadata).toHaveLength(2);
+    expect(requestBodies[0].imageMetadata[0]).toMatchObject({
+      sourceSelection: "captured_upload_file",
+      promptSource: "captured_upload_file",
+      capturedUploadSource: "phone_upload_single",
+      capturedUploadMatchStatus: "vinted_pending_using_captured",
+    });
+    const eventNames = trackedEvents.flatMap((body) =>
+      (body.events || []).map((event) => event.event),
+    );
+    expect(eventNames).not.toContain("phone_upload_generate_blocked");
+  });
+
   test("stops preference sync quietly when Chrome invalidates the extension context", async ({
     page,
   }) => {

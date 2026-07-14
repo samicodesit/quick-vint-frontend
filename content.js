@@ -2373,6 +2373,9 @@
       capturedAt,
       orderTrusted: existingUpload?.orderTrusted !== false,
       currentSetTrusted: true,
+      serverComplete:
+        source === "phone_upload_single" &&
+        lastPhoneUploadState?.complete === true,
       files: [...existingFiles, ...newFiles],
     };
   }
@@ -2416,7 +2419,9 @@
 
     if (
       capturedUpload.currentSetTrusted !== false &&
-      capturedUpload.source === "phone_upload_batch" &&
+      (capturedUpload.source === "phone_upload_batch" ||
+        (capturedUpload.source === "phone_upload_single" &&
+          capturedUpload.serverComplete === true)) &&
       capturedUpload.files.length > domEntries.length
     ) {
       return capturedUpload.files.map((capturedFile, index) => ({
@@ -10114,6 +10119,17 @@
     lastPhoneUploadState.expectedCount = complete ? receivedCount : null;
     lastPhoneUploadState.complete = complete;
     lastPhoneUploadState.updatedAt = Date.now();
+
+    if (complete) {
+      const capturedUpload = getActiveCapturedPromptUpload();
+      if (
+        capturedUpload?.source === "phone_upload_single" &&
+        capturedUpload.currentSetTrusted !== false &&
+        capturedUpload.files.length >= receivedCount
+      ) {
+        capturedUpload.serverComplete = true;
+      }
+    }
   }
 
   function rememberPhoneUploadState(sessionId) {
@@ -10152,6 +10168,14 @@
     }
 
     const expectedCount = Number(state.expectedCount || state.receivedCount || 0);
+    const capturedUpload = getActiveCapturedPromptUpload();
+    const capturedReady =
+      capturedUpload?.source === "phone_upload_single" &&
+      capturedUpload.serverComplete === true &&
+      capturedUpload.currentSetTrusted !== false &&
+      capturedUpload.files.length >= expectedCount;
+    if (capturedReady) return null;
+
     if (expectedCount > 0 && visibleAddedCount < expectedCount) {
       return { ...state, expectedCount, visibleAddedCount };
     }
