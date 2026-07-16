@@ -42,3 +42,11 @@ If you cannot access Chrome Web Store, do not run `release:mark-uploaded`. Leave
 Release-critical fixes must land on `main`. If work was done on a feature branch that represents the published code line, fast-forward or merge `main` deliberately before finishing.
 
 See `PUBLISH.md` for the full release runbook.
+
+## Production Log Investigations
+
+Before querying production/admin/Vercel logs, read and follow:
+
+- `../quick-vint-api/docs/production-log-runbook.md`
+
+Do not start from memory or list rows only. Use `log-detail` for request bodies, Vercel logs for endpoint-hit proof when admin logs omit successful rows, and network escalation for read-only log queries if the CLI sandbox blocks DNS.

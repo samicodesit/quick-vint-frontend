@@ -64,6 +64,14 @@ Production branch rule:
 - Release/version/process fixes must land on `main`.
 - If working from a feature branch that is already the published code line, fast-forward or merge `main` deliberately; do not leave release-critical fixes only on the feature branch.
 
+## Production Log Investigations
+
+Before querying production/admin/Vercel logs, read and follow:
+
+- `../quick-vint-api/docs/production-log-runbook.md`
+
+Do not start from memory or list rows only. Use `log-detail` for request bodies, Vercel logs for endpoint-hit proof when admin logs omit successful rows, and the required network/approval mode if the CLI sandbox blocks DNS.
+
 ## Development Workflow
 
 This is a Chrome Extension that must be loaded manually for development:

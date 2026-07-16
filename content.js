@@ -59,7 +59,7 @@
     title: 'input[data-testid="title--input"]',
     description: 'textarea[data-testid="description--input"]',
     mediaGrid: '[data-testid="media-upload-grid"], [data-testid="media-select-grid"]',
-    mediaPhotoBox: ".photo-box",
+    mediaPhotoBox: '.photo-box, [class*="__photo-box"]:not([class*="__photo-box__"])',
     mediaImageWrapper: '[data-testid^="image-wrapper-"]',
     mediaImage:
       '[data-testid^="image-wrapper-"] img.web_ui__Image__content, .photo-box__image-container img.web_ui__Image__content, img[alt^="Uploaded photo"]',
@@ -931,6 +931,7 @@
   let capturedPromptUpload = null;
   let suppressNextFileInputCapture = false;
   const boundPromptUploadFileInputs = new WeakSet();
+  const capturedPromptUploadFileSignatures = new WeakMap();
   const boundPromptUploadMediaGrids = new WeakSet();
 
   // --- HELPER FUNCTIONS ---
@@ -3246,8 +3247,14 @@
     return imageSources.reduce(
       (summary, source) => {
         summary.total += 1;
+        if (source.promptSource === "vinted_dom_image") {
+          summary.vintedDomImageFiles += 1;
+        }
         if (source.promptSource === "captured_upload_file") {
           summary.capturedUploadFiles += 1;
+        }
+        if (source.capturedUploadAvailable === false) {
+          summary.noCapturedUploadFiles += 1;
         }
         if (source.capturedUploadSource === "phone_upload_single") {
           summary.phoneUploadSingleFiles += 1;
@@ -3257,12 +3264,19 @@
         }
         if (source.sourceKind === "data_url") summary.dataUrlSources += 1;
         if (source.sourceKind === "blob_url") summary.blobUrlSources += 1;
-        if (source.vintedSourceKind === "remote_url") summary.remoteUrlSources += 1;
+        if (
+          source.sourceKind === "remote_url" ||
+          source.vintedSourceKind === "remote_url"
+        ) {
+          summary.remoteUrlSources += 1;
+        }
         return summary;
       },
       {
         total: 0,
+        vintedDomImageFiles: 0,
         capturedUploadFiles: 0,
+        noCapturedUploadFiles: 0,
         phoneUploadSingleFiles: 0,
         phoneUploadBatchFiles: 0,
         dataUrlSources: 0,
@@ -3270,6 +3284,23 @@
         remoteUrlSources: 0,
       },
     );
+  }
+
+  function getImageSourceTelemetryMode(summary) {
+    if (!summary?.total) return "none";
+    if (
+      summary.vintedDomImageFiles === summary.total &&
+      summary.noCapturedUploadFiles === summary.total
+    ) {
+      return "vinted_dom_without_captured_upload";
+    }
+    if (summary.capturedUploadFiles === summary.total) {
+      return "captured_upload";
+    }
+    if (summary.capturedUploadFiles > 0) {
+      return "mixed_captured_and_vinted";
+    }
+    return "other";
   }
 
   function buildGenerateFailureDiagnostics(err, baseContext = {}) {
@@ -3294,9 +3325,31 @@
   }
 
   function bindPromptUploadFileCapture() {
+    const getFileListSignature = (input) =>
+      Array.from(input.files || [])
+        .map((file) =>
+          [
+            file.name || "",
+            file.type || "",
+            file.size || 0,
+            file.lastModified || 0,
+          ].join(":"),
+        )
+        .join("|");
+
     const captureInputFiles = (input) => {
       if (suppressNextFileInputCapture) return;
       if (!input.files?.length) return;
+      const signature = getFileListSignature(input);
+      if (
+        signature &&
+        capturedPromptUploadFileSignatures.get(input) === signature
+      ) {
+        return;
+      }
+      if (signature) {
+        capturedPromptUploadFileSignatures.set(input, signature);
+      }
       const registration = registerPromptUploadFiles(input.files, "manual_file_input", {
         append: shouldAppendToCapturedPromptUpload(),
       });
@@ -3380,6 +3433,17 @@
 
     bindFileInputsIn(document);
     bindMediaGridsIn(document);
+    document.addEventListener(
+      "change",
+      (event) => {
+        const input = event.target;
+        if (!(input instanceof HTMLInputElement)) return;
+        if (!input.matches?.(SELECTORS.fileInput)) return;
+        captureInputFiles(input);
+      },
+      true,
+    );
+
     const fileInputObserver = new MutationObserver((mutations) => {
       mutations.forEach((mutation) => {
         mutation.addedNodes.forEach((node) => {
@@ -12829,12 +12893,16 @@
     }
 
     if (manageButtonState) {
+      const imageSourceSummary =
+        summarizeImageSourcesForTelemetry(imageSourceTelemetry);
       trackGrowthEvent("generate_click", {
         generationAttemptId,
         mode: "manual",
         descriptionApplyChoice,
         photoCount: imageUrls.length,
         imageSources: imageSourceTelemetry,
+        imageSourceSummary,
+        imageSourceMode: getImageSourceTelemetryMode(imageSourceSummary),
       });
     }
 
@@ -12911,11 +12979,15 @@
       const descriptionLanguageCode =
         languageProfile.descriptionLanguageCode;
       const legacyLanguageCode = descriptionLanguageCode || titleLanguageCode;
+      const imageSourceSummary =
+        summarizeImageSourcesForTelemetry(imageSourceTelemetry);
       trackGrowthEvent("generate_request", {
         generationAttemptId,
         mode,
         photoCount: imageUrls.length,
         imageSources: imageSourceTelemetry,
+        imageSourceSummary,
+        imageSourceMode: getImageSourceTelemetryMode(imageSourceSummary),
         titleLanguageCode,
         descriptionLanguageCode,
         uiLanguageCode: languageProfile.uiLanguageCode,

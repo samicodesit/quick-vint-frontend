@@ -49,7 +49,7 @@ test("manual storage compression retries before original file fallback", () => {
 
 test("phone upload page compression retries before original file fallback", () => {
   const html = fs.readFileSync(
-    path.resolve(__dirname, "../../quick-vint/src/pages/phone-upload.html"),
+    path.resolve(__dirname, "../../quick-vint-api/src/pages/phone-upload.html"),
     "utf8",
   );
 
