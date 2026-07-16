@@ -29,6 +29,8 @@
   const PHONE_API_BASE = "https://autolister.app";
   const PHONE_UPLOAD_PAGE = `${PHONE_API_BASE}/phone-upload`;
   const PHONE_UPLOAD_API = `${PHONE_API_BASE}/api/phone-upload`;
+  const MAX_GENERATE_REQUEST_BODY_BYTES = 3_800_000;
+  const MANUAL_STORAGE_UPLOAD_WAIT_MS = 12000;
   const MAX_PHONE_UPLOAD_PREVIEWS = 7;
   const BATCH_POLL_INTERVAL_MS = 3000;
   const BATCH_UPLOAD_STALE_MS = 15000;
@@ -844,6 +846,9 @@
   const GENERATION_OUTPUT_EDIT_MAX_SUMMARIES = 3;
   const CAPTURED_PROMPT_UPLOAD_TTL_MS = 30 * 60 * 1000;
   const PHONE_UPLOAD_PENDING_GENERATE_BLOCK_MS = 5 * 60 * 1000;
+  const MANUAL_STORAGE_COMPRESSION_RETRY_DELAYS_MS = [250];
+  const MANUAL_STORAGE_UPLOAD_CONCURRENCY = 3;
+  const MANUAL_STORAGE_UPLOAD_RETRY_DELAYS_MS = [700, 1500];
   const PRIMARY_BUTTON_BACKGROUND =
     "linear-gradient(135deg, #5b54f0 0%, #4338ca 100%)";
   const languageDefaults = window.AutoListerLanguageDefaults;
@@ -861,6 +866,7 @@
   let outputShapeToggleBtn = null;
   let signInBtn = null;
   let isBusy = false;
+  let generateBusyLabel = "Generating...";
   let isAuthenticated = null;
   let pollInterval = null;
   let downloadedFiles = new Set();
@@ -870,6 +876,7 @@
   let lastPhoneUploadState = null;
   let lastPhoneUploadBlockedTrackKey = null;
   let lastPhoneUploadReadyTrackKey = null;
+  let isPhoneUploadGenerateInFlight = false;
   let phoneUploadPreviewUrls = [];
   let displayedPhoneUploadPreviewCount = 0;
   let phoneUploadPreviewTimer = null;
@@ -2254,7 +2261,7 @@
    * Compresses and resizes an image to reduce token usage for AI processing.
    * @param {string} imageUrl - The original image URL
    * @param {number} maxDimension - Maximum width or height (default: 1280)
-   * @param {number} quality - JPEG quality 0-1 (default: 0.82)
+   * @param {number} quality - JPEG quality 0-1 (default: 0.8)
    * @returns {Promise<string>} Base64 encoded compressed image
    */
   function getImageUrlKind(url) {
@@ -2320,6 +2327,7 @@
 
   function revokeCapturedPromptUpload(reason = "replace") {
     if (!capturedPromptUpload) return;
+    cleanupCapturedPromptUploadStorage(capturedPromptUpload);
     capturedPromptUpload.files.forEach((entry) => {
       if (entry.objectUrl) {
         URL.revokeObjectURL(entry.objectUrl);
@@ -2329,6 +2337,29 @@
     if (reason !== "replace") {
       console.debug(`AutoLister AI: cleared captured prompt upload (${reason}).`);
     }
+  }
+
+  function cleanupCapturedPromptUploadStorage(upload) {
+    if (
+      !upload ||
+      upload.source !== "manual_file_input" ||
+      !upload.storageSessionId ||
+      upload.storageCleanupRequested
+    ) {
+      return;
+    }
+    upload.storageCleanupRequested = true;
+    fetch(
+      `${PHONE_UPLOAD_API}?action=cleanup&sessionId=${encodeURIComponent(
+        upload.storageSessionId,
+      )}`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({}),
+        keepalive: true,
+      },
+    ).catch(() => {});
   }
 
   function buildCapturedUploadFileMetadata(file, index, source) {
@@ -2344,9 +2375,13 @@
     };
   }
 
-  function registerPromptUploadFiles(files, source, { append = false } = {}) {
+  function registerPromptUploadFiles(
+    files,
+    source,
+    { append = false, generateUrls = [] } = {},
+  ) {
     const fileList = Array.from(files || []).filter(Boolean);
-    if (!fileList.length) return;
+    if (!fileList.length) return null;
 
     const existingUpload = append ? getActiveCapturedPromptUpload() : null;
     const existingFiles =
@@ -2360,6 +2395,10 @@
     const capturedAt = Date.now();
     const newFiles = fileList.map((file, index) => ({
       objectUrl: URL.createObjectURL(file),
+      generateUrl:
+        typeof generateUrls[index] === "string" && generateUrls[index]
+          ? generateUrls[index]
+          : null,
       metadata: buildCapturedUploadFileMetadata(
         file,
         existingFiles.length + index,
@@ -2373,12 +2412,21 @@
           ? "mixed_upload_sources"
           : source,
       capturedAt,
+      storageSessionId: existingUpload?.storageSessionId || null,
+      storageUploadPromise: existingUpload?.storageUploadPromise || null,
+      storageUploadError: existingUpload?.storageUploadError || null,
       orderTrusted: existingUpload?.orderTrusted !== false,
       currentSetTrusted: true,
       serverComplete:
         source === "phone_upload_single" &&
         lastPhoneUploadState?.complete === true,
       files: [...existingFiles, ...newFiles],
+    };
+
+    return {
+      upload: capturedPromptUpload,
+      files: fileList,
+      startIndex: existingFiles.length,
     };
   }
 
@@ -2403,6 +2451,272 @@
       URL.revokeObjectURL(removedFile.objectUrl);
     }
     capturedUpload.capturedAt = Date.now();
+  }
+
+  async function uploadManualFileToTempStorage(sessionId, file, order) {
+    const uploadFile = await compressFileForStorageUpload(file);
+    let lastError = null;
+    let lastStatus = null;
+    let attempts = 0;
+
+    for (
+      let attempt = 0;
+      attempt <= MANUAL_STORAGE_UPLOAD_RETRY_DELAYS_MS.length;
+      attempt += 1
+    ) {
+      attempts = attempt + 1;
+      try {
+        const formData = new FormData();
+        formData.append("sessionId", sessionId);
+        formData.append("uploadOrder", String(order));
+        formData.append(
+          "file",
+          uploadFile,
+          uploadFile.name || `manual-${order + 1}.jpg`,
+        );
+
+        const response = await fetch(
+          `${PHONE_UPLOAD_API}?sessionId=${encodeURIComponent(sessionId)}`,
+          {
+            method: "POST",
+            body: formData,
+          },
+        );
+        const data = await response.json().catch(() => ({}));
+        if (response.ok) {
+          const uploadedFile = getPhoneUploadPhotoFiles(data?.files)[0];
+          return uploadedFile?.url || null;
+        }
+
+        const error = new Error(
+          data?.error || `Manual upload failed (${response.status})`,
+        );
+        error.status = response.status;
+        throw error;
+      } catch (error) {
+        lastError = error;
+        lastStatus = Number.isFinite(Number(error?.status))
+          ? Number(error.status)
+          : null;
+        const delayMs = MANUAL_STORAGE_UPLOAD_RETRY_DELAYS_MS[attempt];
+        const retryable = shouldRetryUploadError(error);
+        if (!delayMs || !retryable) break;
+        trackGrowthEvent("manual_upload_storage_retry", {
+          sessionId,
+          order,
+          attempt: attempt + 1,
+          nextAttempt: attempt + 2,
+          status: lastStatus,
+          retryable,
+          message: error?.message || String(error),
+        });
+        await sleep(delayMs);
+      }
+    }
+
+    if (lastError) {
+      lastError.uploadOrder = order;
+      lastError.uploadAttempts = attempts;
+      lastError.status = lastStatus;
+    }
+    throw lastError || new Error("Manual upload failed");
+  }
+
+  function shouldRetryUploadError(error) {
+    const status = Number(error?.status);
+    if (!Number.isFinite(status)) return true;
+    return status === 408 || status === 409 || status === 425 || status === 429 || status >= 500;
+  }
+
+  function sleep(ms) {
+    return new Promise((resolve) => setTimeout(resolve, ms));
+  }
+
+  async function mapWithConcurrency(items, limit, mapper) {
+    const source = Array.from(items || []);
+    const results = new Array(source.length);
+    let cursor = 0;
+    const workerCount = Math.max(1, Math.min(limit || 1, source.length));
+
+    async function runWorker() {
+      while (cursor < source.length) {
+        const index = cursor;
+        cursor += 1;
+        results[index] = await mapper(source[index], index);
+      }
+    }
+
+    await Promise.all(Array.from({ length: workerCount }, runWorker));
+    return results;
+  }
+
+  function getCompressedUploadFileName(file) {
+    const rawName = String(file?.name || "").trim();
+    const baseName = rawName
+      ? rawName.replace(/\.[^.\\/]+$/, "")
+      : `manual-${Date.now()}`;
+    return `${baseName || "manual-upload"}.jpg`;
+  }
+
+  async function compressFileForStorageUploadOnce(file) {
+    const objectUrl = URL.createObjectURL(file);
+    try {
+      const result = await compressImageWithMetadata(objectUrl, 1280, 0.8);
+      const response = await fetch(result.imageUrl);
+      const blob = await response.blob();
+      return new File([blob], getCompressedUploadFileName(file), {
+        type: "image/jpeg",
+        lastModified: file?.lastModified || Date.now(),
+      });
+    } finally {
+      URL.revokeObjectURL(objectUrl);
+    }
+  }
+
+  async function compressFileForStorageUpload(file) {
+    let lastError = null;
+    for (
+      let attempt = 0;
+      attempt <= MANUAL_STORAGE_COMPRESSION_RETRY_DELAYS_MS.length;
+      attempt += 1
+    ) {
+      try {
+        return await compressFileForStorageUploadOnce(file);
+      } catch (error) {
+        lastError = error;
+        const delayMs = MANUAL_STORAGE_COMPRESSION_RETRY_DELAYS_MS[attempt];
+        if (!delayMs) break;
+        await sleep(delayMs);
+      }
+    }
+    console.warn("AutoLister AI: manual temp upload compression failed", lastError);
+    trackGrowthEvent("manual_upload_compression_fallback", {
+      attempts: MANUAL_STORAGE_COMPRESSION_RETRY_DELAYS_MS.length + 1,
+      fileType: file?.type || null,
+      fileSizeBytes: Number.isFinite(Number(file?.size)) ? Number(file.size) : null,
+      message: lastError?.message || String(lastError || "unknown"),
+    });
+    return file;
+  }
+
+  async function listManualTempStorageUrls(sessionId) {
+    const response = await fetch(
+      `${PHONE_UPLOAD_API}?sessionId=${encodeURIComponent(sessionId)}&t=${Date.now()}`,
+      { method: "GET" },
+    );
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      throw new Error(data?.error || `Manual upload list failed (${response.status})`);
+    }
+    return getPhoneUploadPhotoFiles(data?.files)
+      .slice()
+      .sort((a, b) => {
+        const orderA = Number.isFinite(Number(a.order)) ? Number(a.order) : 0;
+        const orderB = Number.isFinite(Number(b.order)) ? Number(b.order) : 0;
+        return orderA - orderB || String(a.name || "").localeCompare(String(b.name || ""));
+      })
+      .map((file) => file.url || null);
+  }
+
+  function startManualStorageUpload(registration) {
+    if (!registration?.upload || registration.upload.source !== "manual_file_input") {
+      return;
+    }
+
+    const upload = registration.upload;
+    const sessionId = upload.storageSessionId || generateSessionId();
+    upload.storageSessionId = sessionId;
+    upload.storageUploadError = null;
+
+    const currentUploadPromise = (async () => {
+      const uploadedUrls = await mapWithConcurrency(
+        registration.files,
+        MANUAL_STORAGE_UPLOAD_CONCURRENCY,
+        (file, offset) =>
+          uploadManualFileToTempStorage(
+            sessionId,
+            file,
+            registration.startIndex + offset,
+          ),
+      );
+      let urls = uploadedUrls;
+      if (urls.some((url) => !url)) {
+        const listedUrls = await listManualTempStorageUrls(sessionId);
+        urls = registration.files.map(
+          (_file, offset) => listedUrls[registration.startIndex + offset] || null,
+        );
+      }
+
+      urls.forEach((url, offset) => {
+        if (url && upload.files[registration.startIndex + offset]) {
+          upload.files[registration.startIndex + offset].generateUrl = url;
+        }
+      });
+
+      trackGrowthEvent("manual_upload_storage_ready", {
+        sessionId,
+        uploadedCount: urls.filter(Boolean).length,
+        expectedCount: registration.files.length,
+      });
+    })().catch((error) => {
+      upload.storageUploadError = error?.message || String(error);
+      trackGrowthEvent("manual_upload_storage_error", {
+        sessionId,
+        message: upload.storageUploadError,
+        expectedCount: registration.files.length,
+        order: Number.isFinite(Number(error?.uploadOrder))
+          ? Number(error.uploadOrder)
+          : null,
+        attempts: Number.isFinite(Number(error?.uploadAttempts))
+          ? Number(error.uploadAttempts)
+          : null,
+        status: Number.isFinite(Number(error?.status))
+          ? Number(error.status)
+          : null,
+      });
+      throw error;
+    });
+
+    upload.storageUploadPromise = upload.storageUploadPromise
+      ? Promise.allSettled([upload.storageUploadPromise, currentUploadPromise])
+      : currentUploadPromise;
+  }
+
+  function hasManualCapturedFilesMissingStorageUrls(upload = getActiveCapturedPromptUpload()) {
+    return Boolean(
+      upload &&
+        upload.source === "manual_file_input" &&
+        upload.currentSetTrusted !== false &&
+        upload.files?.length > 0 &&
+        upload.files.some((entry) => !entry.generateUrl),
+    );
+  }
+
+  async function waitForManualStorageUrlsForGenerate() {
+    const upload = getActiveCapturedPromptUpload();
+    if (!hasManualCapturedFilesMissingStorageUrls(upload)) return;
+
+    if (upload.storageUploadPromise) {
+      await Promise.race([
+        upload.storageUploadPromise.catch(() => null),
+        new Promise((resolve) =>
+          setTimeout(resolve, MANUAL_STORAGE_UPLOAD_WAIT_MS),
+        ),
+      ]);
+    }
+
+    if (upload.storageUploadError) {
+      throw new Error("Could not prepare photos. Try again.");
+    }
+
+    if (hasManualCapturedFilesMissingStorageUrls(upload)) {
+      throw new Error("Still preparing photos. Try again in a moment.");
+    }
+  }
+
+  function setGenerateBusyLabel(label = "Generating...") {
+    generateBusyLabel = label || "Generating...";
+    if (isBusy) updateButtonUI();
   }
 
   function shouldAppendToCapturedPromptUpload(uploadSource = null) {
@@ -2451,6 +2765,7 @@
     ) {
       return capturedUpload.files.map((capturedFile, index) => ({
         url: capturedFile.objectUrl,
+        generationUrl: capturedFile.generateUrl || null,
         promptSource: "captured_upload_file",
         sourceSelection: "captured_upload_file",
         currentUrl: null,
@@ -2511,6 +2826,7 @@
       return {
         ...entry,
         url: capturedFile.objectUrl,
+        generationUrl: capturedFile.generateUrl || null,
         promptSource: "captured_upload_file",
         sourceSelection: "captured_upload_file",
         capturedUploadAvailable: true,
@@ -2536,7 +2852,7 @@
   async function compressImageWithMetadata(
     imageUrl,
     maxDimension = 1280,
-    quality = 0.82,
+    quality = 0.8,
     sourceMetadata = {},
   ) {
     return new Promise((resolve, reject) => {
@@ -2622,7 +2938,7 @@
     });
   }
 
-  async function compressImage(imageUrl, maxDimension = 1280, quality = 0.82) {
+  async function compressImage(imageUrl, maxDimension = 1280, quality = 0.8) {
     const result = await compressImageWithMetadata(imageUrl, maxDimension, quality);
     return result.imageUrl;
   }
@@ -2653,69 +2969,74 @@
     return compressedImages;
   }
 
-  async function compressImagesWithMetadata(imageEntries) {
+  function buildImageRequestMetadataBase(entry, index) {
+    return {
+      index: index + 1,
+      sourceSelection: entry.sourceSelection,
+      promptSource: entry.promptSource || "vinted_dom_image",
+      domNaturalWidth: entry.domNaturalWidth,
+      domNaturalHeight: entry.domNaturalHeight,
+      renderedWidth: entry.renderedWidth,
+      renderedHeight: entry.renderedHeight,
+      currentSrcUrl: getSafeImageUrlForMetadata(entry.currentUrl),
+      bestSrcsetUrl: getSafeImageUrlForMetadata(entry.bestSrcsetUrl),
+      capturedUploadAvailable: entry.capturedUploadAvailable || false,
+      capturedUploadSource: entry.capturedUploadSource || null,
+      capturedUploadFileCount: entry.capturedUploadFileCount || null,
+      capturedUploadMatchStatus: entry.capturedUploadMatchStatus || null,
+      capturedUploadOrderTrusted: entry.capturedUploadOrderTrusted ?? null,
+      capturedUploadSetTrusted: entry.capturedUploadSetTrusted ?? null,
+      capturedUploadFile: entry.capturedUploadFile || null,
+      vintedSourceSelection: entry.vintedSourceSelection || null,
+      vintedSourceKind: entry.vintedSourceKind || null,
+      vintedSourceUrl: entry.vintedSourceUrl || null,
+      vintedCurrentSrcUrl: entry.vintedCurrentSrcUrl || null,
+      vintedBestSrcsetUrl: entry.vintedBestSrcsetUrl || null,
+      vintedDomNaturalWidth: entry.vintedDomNaturalWidth || null,
+      vintedDomNaturalHeight: entry.vintedDomNaturalHeight || null,
+      vintedRenderedWidth: entry.vintedRenderedWidth || null,
+      vintedRenderedHeight: entry.vintedRenderedHeight || null,
+    };
+  }
+
+  function isPhoneUploadGenerationUrlEntry(entry) {
+    return (
+      /^https?:\/\//i.test(entry?.generationUrl || "") &&
+      (entry.capturedUploadSource === "phone_upload_single" ||
+        entry.capturedUploadSource === "phone_upload_batch" ||
+        entry.capturedUploadSource === "manual_file_input")
+    );
+  }
+
+  async function prepareImagesForGenerate(imageEntries) {
     let failedCount = 0;
-    const compressionPromises = imageEntries.map(async (entry, index) => {
+    const imagePromises = imageEntries.map(async (entry, index) => {
+      const metadataBase = buildImageRequestMetadataBase(entry, index);
+      if (isPhoneUploadGenerationUrlEntry(entry)) {
+        return {
+          imageUrl: entry.generationUrl,
+          metadata: {
+            ...metadataBase,
+            sourceKind: "remote_url",
+            sourceUrl: getSafeImageUrlForMetadata(entry.generationUrl),
+            generationPayloadSource:
+              entry.capturedUploadSource === "manual_file_input"
+                ? "manual_upload_storage_url"
+                : "phone_upload_storage_url",
+          },
+        };
+      }
+
       try {
-        return await compressImageWithMetadata(entry.url, 1280, 0.82, {
-          index: index + 1,
-          sourceSelection: entry.sourceSelection,
-          promptSource: entry.promptSource || "vinted_dom_image",
-          domNaturalWidth: entry.domNaturalWidth,
-          domNaturalHeight: entry.domNaturalHeight,
-          renderedWidth: entry.renderedWidth,
-          renderedHeight: entry.renderedHeight,
-          currentSrcUrl: getSafeImageUrlForMetadata(entry.currentUrl),
-          bestSrcsetUrl: getSafeImageUrlForMetadata(entry.bestSrcsetUrl),
-          capturedUploadAvailable: entry.capturedUploadAvailable || false,
-          capturedUploadSource: entry.capturedUploadSource || null,
-          capturedUploadFileCount: entry.capturedUploadFileCount || null,
-          capturedUploadMatchStatus: entry.capturedUploadMatchStatus || null,
-          capturedUploadOrderTrusted: entry.capturedUploadOrderTrusted ?? null,
-          capturedUploadSetTrusted: entry.capturedUploadSetTrusted ?? null,
-          capturedUploadFile: entry.capturedUploadFile || null,
-          vintedSourceSelection: entry.vintedSourceSelection || null,
-          vintedSourceKind: entry.vintedSourceKind || null,
-          vintedSourceUrl: entry.vintedSourceUrl || null,
-          vintedCurrentSrcUrl: entry.vintedCurrentSrcUrl || null,
-          vintedBestSrcsetUrl: entry.vintedBestSrcsetUrl || null,
-          vintedDomNaturalWidth: entry.vintedDomNaturalWidth || null,
-          vintedDomNaturalHeight: entry.vintedDomNaturalHeight || null,
-          vintedRenderedWidth: entry.vintedRenderedWidth || null,
-          vintedRenderedHeight: entry.vintedRenderedHeight || null,
-        });
+        return await compressImageWithMetadata(entry.url, 1280, 0.8, metadataBase);
       } catch (error) {
         failedCount += 1;
         return {
           imageUrl: entry.url,
           metadata: {
-            index: index + 1,
-            sourceSelection: entry.sourceSelection,
-            promptSource: entry.promptSource || "vinted_dom_image",
+            ...metadataBase,
             sourceKind: getImageUrlKind(entry.url),
             sourceUrl: getSafeImageUrlForMetadata(entry.url),
-            domNaturalWidth: entry.domNaturalWidth,
-            domNaturalHeight: entry.domNaturalHeight,
-            renderedWidth: entry.renderedWidth,
-            renderedHeight: entry.renderedHeight,
-            currentSrcUrl: getSafeImageUrlForMetadata(entry.currentUrl),
-            bestSrcsetUrl: getSafeImageUrlForMetadata(entry.bestSrcsetUrl),
-            capturedUploadAvailable: entry.capturedUploadAvailable || false,
-            capturedUploadSource: entry.capturedUploadSource || null,
-            capturedUploadFileCount: entry.capturedUploadFileCount || null,
-            capturedUploadMatchStatus: entry.capturedUploadMatchStatus || null,
-            capturedUploadOrderTrusted: entry.capturedUploadOrderTrusted ?? null,
-            capturedUploadSetTrusted: entry.capturedUploadSetTrusted ?? null,
-            capturedUploadFile: entry.capturedUploadFile || null,
-            vintedSourceSelection: entry.vintedSourceSelection || null,
-            vintedSourceKind: entry.vintedSourceKind || null,
-            vintedSourceUrl: entry.vintedSourceUrl || null,
-            vintedCurrentSrcUrl: entry.vintedCurrentSrcUrl || null,
-            vintedBestSrcsetUrl: entry.vintedBestSrcsetUrl || null,
-            vintedDomNaturalWidth: entry.vintedDomNaturalWidth || null,
-            vintedDomNaturalHeight: entry.vintedDomNaturalHeight || null,
-            vintedRenderedWidth: entry.vintedRenderedWidth || null,
-            vintedRenderedHeight: entry.vintedRenderedHeight || null,
             compressionFailed: true,
             error: error?.message || "Compression failed",
           },
@@ -2723,7 +3044,7 @@
       }
     });
 
-    const results = await Promise.all(compressionPromises);
+    const results = await Promise.all(imagePromises);
     if (failedCount > 0) {
       console.warn(
         `AutoLister AI: ${failedCount}/${imageEntries.length} image(s) could not be compressed; using original URL fallback.`,
@@ -2733,6 +3054,99 @@
     return {
       imageUrls: results.map((result) => result.imageUrl),
       imageMetadata: results.map((result) => result.metadata),
+    };
+  }
+
+  const compressImagesWithMetadata = prepareImagesForGenerate;
+
+  function getGenerateRequestBodyByteLimit() {
+    const override = window.__AUTOLISTER_MAX_GENERATE_REQUEST_BODY_BYTES;
+    return Number.isFinite(override) && override > 0
+      ? override
+      : MAX_GENERATE_REQUEST_BODY_BYTES;
+  }
+
+  function getRemoteFallbackImageUrl(metadata) {
+    if (!metadata || typeof metadata !== "object") return null;
+    return (
+      metadata.vintedBestSrcsetUrl ||
+      metadata.vintedCurrentSrcUrl ||
+      metadata.vintedSourceUrl ||
+      (metadata.sourceKind === "remote_url" ? metadata.sourceUrl : null) ||
+      null
+    );
+  }
+
+  function maybeUseRemoteImagesForOversizedGeneratePayload(requestBody) {
+    const initialJson = JSON.stringify(requestBody);
+    const byteLimit = getGenerateRequestBodyByteLimit();
+    if (initialJson.length <= byteLimit) {
+      return {
+        requestBody,
+        requestBodyJson: initialJson,
+        payloadFallback: null,
+      };
+    }
+
+    if (
+      Array.isArray(requestBody.imageUrls) &&
+      requestBody.imageUrls.every((url) => /^https?:\/\//i.test(url || ""))
+    ) {
+      return {
+        requestBody,
+        requestBodyJson: initialJson,
+        payloadFallback: {
+          attempted: false,
+          reason: "already_using_remote_urls",
+          initialRequestBodyBytes: initialJson.length,
+          byteLimit,
+        },
+      };
+    }
+
+    const imageMetadata = Array.isArray(requestBody.imageMetadata)
+      ? requestBody.imageMetadata
+      : [];
+    const remoteImageUrls = imageMetadata.map(getRemoteFallbackImageUrl);
+    if (
+      remoteImageUrls.length !== requestBody.imageUrls.length ||
+      remoteImageUrls.some((url) => !url)
+    ) {
+      return {
+        requestBody,
+        requestBodyJson: initialJson,
+        payloadFallback: {
+          attempted: false,
+          reason: "missing_remote_url",
+          initialRequestBodyBytes: initialJson.length,
+          byteLimit,
+        },
+      };
+    }
+
+    const fallbackBody = {
+      ...requestBody,
+      imageUrls: remoteImageUrls,
+      imageMetadata: imageMetadata.map((metadata, index) => ({
+        ...metadata,
+        generationPayloadSource: "vinted_remote_url",
+        generationPayloadFallbackReason: "request_body_too_large",
+        generationPayloadOriginalKind: getImageUrlKind(
+          requestBody.imageUrls[index] || "",
+        ),
+      })),
+    };
+    const fallbackJson = JSON.stringify(fallbackBody);
+    return {
+      requestBody: fallbackBody,
+      requestBodyJson: fallbackJson,
+      payloadFallback: {
+        attempted: true,
+        reason: "request_body_too_large",
+        initialRequestBodyBytes: initialJson.length,
+        fallbackRequestBodyBytes: fallbackJson.length,
+        byteLimit,
+      },
     };
   }
 
@@ -2802,6 +3216,73 @@
     }));
   }
 
+  function createGenerationAttemptId() {
+    return `gen_${Date.now().toString(36)}_${Math.random()
+      .toString(36)
+      .slice(2, 8)}`;
+  }
+
+  function truncateForTelemetry(value, maxLength = 700) {
+    const text = String(value || "");
+    return text.length > maxLength ? `${text.slice(0, maxLength)}...` : text;
+  }
+
+  function estimateDataUrlBytes(value) {
+    const match = String(value || "").match(/^data:[^,]*;base64,(.+)$/i);
+    if (!match) return 0;
+    const base64 = match[1].replace(/\s/g, "");
+    const padding = base64.endsWith("==") ? 2 : base64.endsWith("=") ? 1 : 0;
+    return Math.max(0, Math.floor((base64.length * 3) / 4) - padding);
+  }
+
+  function getCompressedImageBytes(imageUrlsForRequest, imageMetadata = []) {
+    return imageUrlsForRequest.reduce((total, imageUrl, index) => {
+      const outputBytes = Number(imageMetadata[index]?.outputBytes || 0);
+      return total + (outputBytes > 0 ? outputBytes : estimateDataUrlBytes(imageUrl));
+    }, 0);
+  }
+
+  function summarizeImageSourcesForTelemetry(imageSources = []) {
+    return imageSources.reduce(
+      (summary, source) => {
+        summary.total += 1;
+        if (source.promptSource === "captured_upload_file") {
+          summary.capturedUploadFiles += 1;
+        }
+        if (source.capturedUploadSource === "phone_upload_single") {
+          summary.phoneUploadSingleFiles += 1;
+        }
+        if (source.capturedUploadSource === "phone_upload_batch") {
+          summary.phoneUploadBatchFiles += 1;
+        }
+        if (source.sourceKind === "data_url") summary.dataUrlSources += 1;
+        if (source.sourceKind === "blob_url") summary.blobUrlSources += 1;
+        if (source.vintedSourceKind === "remote_url") summary.remoteUrlSources += 1;
+        return summary;
+      },
+      {
+        total: 0,
+        capturedUploadFiles: 0,
+        phoneUploadSingleFiles: 0,
+        phoneUploadBatchFiles: 0,
+        dataUrlSources: 0,
+        blobUrlSources: 0,
+        remoteUrlSources: 0,
+      },
+    );
+  }
+
+  function buildGenerateFailureDiagnostics(err, baseContext = {}) {
+    return {
+      ...baseContext,
+      errorName: truncateForTelemetry(err?.name || "Error", 120),
+      message: truncateForTelemetry(err?.message || String(err) || "unknown", 240),
+      stack: truncateForTelemetry(err?.stack || "", 700),
+      navigatorOnline:
+        typeof navigator !== "undefined" ? navigator.onLine === true : null,
+    };
+  }
+
   function getUploadedImageUrls() {
     return getUploadedImageEntries().map((entry) => entry.url);
   }
@@ -2816,9 +3297,10 @@
     const captureInputFiles = (input) => {
       if (suppressNextFileInputCapture) return;
       if (!input.files?.length) return;
-      registerPromptUploadFiles(input.files, "manual_file_input", {
+      const registration = registerPromptUploadFiles(input.files, "manual_file_input", {
         append: shouldAppendToCapturedPromptUpload(),
       });
+      startManualStorageUpload(registration);
     };
 
     const bindFileInput = (input) => {
@@ -8747,12 +9229,13 @@
       generateBtn.classList.add("is-loading");
       generateBtn.disabled = true;
       icon.style.display = "";
-      label.textContent = "Generating...";
+      label.textContent = generateBusyLabel;
       generateBtn.style.cursor = "progress";
       generateBtn.style.background = PRIMARY_BUTTON_BACKGROUND;
     } else {
       generateBtn.classList.remove("is-loading");
       generateBtn.disabled = false;
+      generateBusyLabel = "Generating...";
       icon.style.display = "";
       label.textContent = "Generate";
       generateBtn.style.background = PRIMARY_BUTTON_BACKGROUND;
@@ -9712,7 +10195,7 @@
           <button class="close-btn">Done</button>
           <button class="generate-btn">
             <span class="icon" style="width: 14px; height: 14px; display: inline-block; margin-right: 6px;">${WAND_ICON_SVG}</span>
-            Done + Generate
+            <span class="label">Done + Generate</span>
           </button>
         </div>
         <div class="disclaimer">
@@ -9756,28 +10239,8 @@
     // Close button handlers
     modal.querySelector(".close-x").addEventListener("click", requestCloseModal);
     modal.querySelector(".close-btn").addEventListener("click", requestCloseModal);
-    modal.querySelector(".generate-btn").addEventListener("click", () => {
-      const hasPhoneUploadPhotos =
-        downloadedFiles.size > 0 ||
-        phoneUploadPreviewUrls.length > 0 ||
-        getPhoneUploadVisibleAddedCount() > 0 ||
-        Number(lastPhoneUploadState?.expectedCount || 0) > 0;
-      if (!hasPhoneUploadPhotos) {
-        showToast("Add photos first.", "info");
-        return;
-      }
-      if (getIncompletePhoneUploadState()) {
-        showToast("Still uploading. Wait a moment.", "info");
-        return;
-      }
-      markPhoneUploadCapturedReadyForGeneration();
-      trackGrowthEvent("phone_upload_generate_ready", {
-        mode: "single",
-        source: "modal",
-        ...getPhoneUploadDebugContext(),
-      });
-      closeModal();
-      onGenerateClick();
+    modal.querySelector(".generate-btn").addEventListener("click", (event) => {
+      handlePhoneUploadModalGenerate(event.currentTarget);
     });
 
     // Close when clicking outside modal (on backdrop)
@@ -9791,6 +10254,10 @@
   }
 
   function requestCloseModal() {
+    if (isPhoneUploadGenerateInFlight) {
+      showToast("Generation is running. Wait a moment.", "info");
+      return false;
+    }
     if (
       getIncompletePhoneUploadState() &&
       !window.confirm("Stop this upload? Added photos will stay.")
@@ -9801,6 +10268,62 @@
     return true;
   }
 
+  async function handlePhoneUploadModalGenerate(button) {
+    if (isPhoneUploadGenerateInFlight) return;
+
+    const hasPhoneUploadPhotos =
+      downloadedFiles.size > 0 ||
+      phoneUploadPreviewUrls.length > 0 ||
+      getPhoneUploadVisibleAddedCount() > 0 ||
+      Number(lastPhoneUploadState?.expectedCount || 0) > 0;
+    if (!hasPhoneUploadPhotos) {
+      showToast("Add photos first.", "info");
+      return;
+    }
+    if (getIncompletePhoneUploadState()) {
+      showToast("Still uploading. Wait a moment.", "info");
+      return;
+    }
+
+    const restoreGenerateButton = setActionButtonLoading(button, "Generating...");
+    isPhoneUploadGenerateInFlight = true;
+
+    try {
+      markPhoneUploadCapturedReadyForGeneration();
+      trackGrowthEvent("phone_upload_generate_ready", {
+        mode: "single",
+        source: "modal",
+        ...getPhoneUploadDebugContext(),
+      });
+
+      const descInputBeforeGenerate = document.querySelector(
+        SELECTORS.description,
+      );
+      const descriptionApplyChoice = descInputBeforeGenerate
+        ? await getDescriptionApplyChoice(descInputBeforeGenerate)
+        : "replace";
+
+      if (descriptionApplyChoice === "cancel") {
+        trackGrowthEvent("generate_cancelled", {
+          reason: "description_apply_choice",
+        });
+        restoreGenerateButton();
+        return;
+      }
+
+      await generateCurrentListing({
+        descriptionApplyChoice,
+        manageButtonState: true,
+        showMeasurementAdvice: true,
+      });
+      closeModal();
+    } catch (err) {
+      restoreGenerateButton();
+    } finally {
+      isPhoneUploadGenerateInFlight = false;
+    }
+  }
+
   function closeModal({ cancelUpload = false } = {}) {
     const modal = document.getElementById(MODAL_ID);
     const sessionId = modal?.dataset?.sessionId || activePhoneUploadSessionId;
@@ -9809,7 +10332,9 @@
       markPhoneUploadCapturedReadyForGeneration();
     }
     const keepSessionAlive =
-      !cancelUpload && Boolean(getIncompletePhoneUploadState());
+      !cancelUpload &&
+      (Boolean(getIncompletePhoneUploadState()) ||
+        hasReadyPhoneUploadCapturedFilesPendingDomAttach(sessionId));
     if (modal) {
       modal.remove();
     }
@@ -9818,6 +10343,20 @@
     }
 
     maybeShowPendingPrompts();
+  }
+
+  function hasReadyPhoneUploadCapturedFilesPendingDomAttach(sessionId) {
+    if (!sessionId || activePhoneUploadSessionId !== sessionId) return false;
+    const capturedUpload = getActiveCapturedPromptUpload();
+    if (
+      !capturedUpload ||
+      capturedUpload.source !== "phone_upload_single" ||
+      capturedUpload.serverComplete !== true ||
+      capturedUpload.currentSetTrusted === false
+    ) {
+      return false;
+    }
+    return capturedUpload.files.length > getVisibleUploadedPhotoCount();
   }
 
   function finishPhoneUploadSession(sessionId) {
@@ -9835,18 +10374,7 @@
       clearTimeout(phoneUploadAutoCloseTimer);
       phoneUploadAutoCloseTimer = null;
     }
-    downloadedFiles.clear();
-    pendingPhoneFiles.clear();
-    lastPhoneUploadBlockedTrackKey = null;
-    lastPhoneUploadReadyTrackKey = null;
-    isPhoneUploadPollInFlight = false;
-    if (phoneUploadPreviewTimer) {
-      clearTimeout(phoneUploadPreviewTimer);
-      phoneUploadPreviewTimer = null;
-    }
-    phoneUploadPreviewUrls.forEach((url) => URL.revokeObjectURL(url));
-    phoneUploadPreviewUrls = [];
-    displayedPhoneUploadPreviewCount = 0;
+    resetPhoneUploadTransientState();
 
     if (sessionId && chrome.runtime?.id) {
       sendMessage({
@@ -9859,6 +10387,21 @@
         },
       }).catch(() => {});
     }
+  }
+
+  function resetPhoneUploadTransientState() {
+    downloadedFiles.clear();
+    pendingPhoneFiles.clear();
+    lastPhoneUploadBlockedTrackKey = null;
+    lastPhoneUploadReadyTrackKey = null;
+    isPhoneUploadPollInFlight = false;
+    if (phoneUploadPreviewTimer) {
+      clearTimeout(phoneUploadPreviewTimer);
+      phoneUploadPreviewTimer = null;
+    }
+    phoneUploadPreviewUrls.forEach((url) => URL.revokeObjectURL(url));
+    phoneUploadPreviewUrls = [];
+    displayedPhoneUploadPreviewCount = 0;
   }
 
   async function onPhoneUploadClick() {
@@ -9933,6 +10476,7 @@
       clearInterval(pollInterval);
       pollInterval = null;
     }
+    resetPhoneUploadTransientState();
 
     const statusEl = document.querySelector(`#${MODAL_ID} .status`);
     const initialImageCount = getVisibleUploadedPhotoCount();
@@ -10004,9 +10548,8 @@
                 return;
               }
 
-              const filesToInject = downloads
-                .filter((result) => result.file)
-                .map((result) => result.file);
+              const successfulDownloads = downloads.filter((result) => result.file);
+              const filesToInject = successfulDownloads.map((result) => result.file);
               const failedDownloads = downloads.filter((result) => !result.file);
               const failedDownloadCount = failedDownloads.length;
 
@@ -10026,7 +10569,13 @@
               }
 
               if (filesToInject.length > 0) {
-                if (injectFilesIntoVinted(filesToInject, "phone_upload_single")) {
+                if (
+                  injectFilesIntoVinted(filesToInject, "phone_upload_single", {
+                    generateUrls: successfulDownloads.map(
+                      (result) => result.generateUrl,
+                    ),
+                  })
+                ) {
                   downloads.forEach((result) => {
                     if (result.file) {
                       downloadedFiles.add(result.key);
@@ -10068,7 +10617,8 @@
         if (
           activePhoneUploadSessionId === sessionId &&
           !document.getElementById(MODAL_ID) &&
-          !getIncompletePhoneUploadState()
+          !getIncompletePhoneUploadState() &&
+          !hasReadyPhoneUploadCapturedFilesPendingDomAttach(sessionId)
         ) {
           finishPhoneUploadSession(sessionId);
         }
@@ -10158,7 +10708,12 @@
       });
       const previewUrl = URL.createObjectURL(blob);
 
-      return { key, file, previewUrl };
+      return {
+        key,
+        file,
+        previewUrl,
+        generateUrl: remoteFile.url || null,
+      };
     } catch (err) {
       const error = err?.message || String(err);
       console.warn("Phone upload image download failed", {
@@ -10176,12 +10731,17 @@
     }
   }
 
-  function injectFilesIntoVinted(files, uploadSource = "autolister_injected_files") {
+  function injectFilesIntoVinted(
+    files,
+    uploadSource = "autolister_injected_files",
+    { generateUrls = [] } = {},
+  ) {
     const fileInput = document.querySelector(SELECTORS.fileInput);
     if (!fileInput || files.length === 0) return false;
 
     registerPromptUploadFiles(files, uploadSource, {
       append: shouldAppendToCapturedPromptUpload(uploadSource),
+      generateUrls,
     });
 
     const dataTransfer = new DataTransfer();
@@ -12169,16 +12729,19 @@
     try {
       showBatchTabStatus(`${listingPrefix}: preparing photos...`);
       downloads = await Promise.all(remoteFiles.map(downloadPhoneUploadFile));
-      const filesToInject = downloads
-        .filter((result) => result.file)
-        .map((result) => result.file);
+      const successfulDownloads = downloads.filter((result) => result.file);
+      const filesToInject = successfulDownloads.map((result) => result.file);
 
       if (filesToInject.length !== remoteFiles.length) {
         throw new Error("Could not download every photo for this item.");
       }
 
       showBatchTabStatus(`${listingPrefix}: adding photos...`);
-      if (!injectFilesIntoVinted(filesToInject, "phone_upload_batch")) {
+      if (
+        !injectFilesIntoVinted(filesToInject, "phone_upload_batch", {
+          generateUrls: successfulDownloads.map((result) => result.generateUrl),
+        })
+      ) {
         throw new Error("Could not add photos to the Vinted listing.");
       }
 
@@ -12249,11 +12812,13 @@
       throw new Error("Still uploading.");
     }
 
-    const imageEntries = getUploadedImageEntries();
-    const imageUrls = imageEntries.map((entry) => entry.url);
-    const imageSourceTelemetry = buildImageSourceTelemetry(imageEntries);
+    let imageEntries = getUploadedImageEntries();
+    let imageUrls = imageEntries.map((entry) => entry.url);
+    let imageSourceTelemetry = buildImageSourceTelemetry(imageEntries);
+    const generationAttemptId = createGenerationAttemptId();
     const mode = manageButtonState ? "manual" : "batch";
     const requestGenerationMode = generationMode || mode;
+    let generateFetchDiagnostics = null;
 
     if (!imageUrls.length) {
       trackGrowthEvent("generate_missing_photo", { mode });
@@ -12265,6 +12830,7 @@
 
     if (manageButtonState) {
       trackGrowthEvent("generate_click", {
+        generationAttemptId,
         mode: "manual",
         descriptionApplyChoice,
         photoCount: imageUrls.length,
@@ -12274,6 +12840,9 @@
 
     if (manageButtonState) {
       isBusy = true;
+      generateBusyLabel = hasManualCapturedFilesMissingStorageUrls()
+        ? "Preparing..."
+        : "Generating...";
     }
     removeDescriptionApplyPrompt();
     if (activeGenerationOutputEditCleanup) {
@@ -12282,6 +12851,14 @@
     updateButtonUI();
 
     try {
+      await waitForManualStorageUrlsForGenerate();
+      if (manageButtonState) {
+        setGenerateBusyLabel("Generating...");
+      }
+      imageEntries = getUploadedImageEntries();
+      imageUrls = imageEntries.map((entry) => entry.url);
+      imageSourceTelemetry = buildImageSourceTelemetry(imageEntries);
+
       const storage = await chrome.storage.local.get([
         "selectedLanguage",
         "selectedTitleLanguage",
@@ -12335,6 +12912,7 @@
         languageProfile.descriptionLanguageCode;
       const legacyLanguageCode = descriptionLanguageCode || titleLanguageCode;
       trackGrowthEvent("generate_request", {
+        generationAttemptId,
         mode,
         photoCount: imageUrls.length,
         imageSources: imageSourceTelemetry,
@@ -12367,12 +12945,11 @@
         );
       }
 
-      // Compress images before sending to API to reduce token usage.
-      const { imageUrls: compressedImages, imageMetadata } =
-        await compressImagesWithMetadata(imageEntries);
+      const { imageUrls: preparedImages, imageMetadata } =
+        await prepareImagesForGenerate(imageEntries);
 
       const requestBody = {
-        imageUrls: compressedImages,
+        imageUrls: preparedImages,
         imageMetadata,
         languageCode: legacyLanguageCode,
         titleLanguageCode,
@@ -12384,11 +12961,43 @@
         useBulletPoints,
         descriptionLength,
         generationMode: requestGenerationMode,
+        generationAttemptId,
       };
 
       if (/\S/.test(effectiveDescriptionFooterText)) {
         requestBody.descriptionFooterText = effectiveDescriptionFooterText;
       }
+
+      const preparedGeneratePayload =
+        maybeUseRemoteImagesForOversizedGeneratePayload(requestBody);
+      const requestBodyJson = preparedGeneratePayload.requestBodyJson;
+      const requestImageUrls = preparedGeneratePayload.requestBody.imageUrls;
+      const requestImageMetadata =
+        preparedGeneratePayload.requestBody.imageMetadata;
+      if (preparedGeneratePayload.payloadFallback) {
+        trackGrowthEvent("generate_payload_remote_fallback", {
+          generationAttemptId,
+          mode,
+          ...preparedGeneratePayload.payloadFallback,
+        });
+      }
+      const fetchStartedAt = Date.now();
+      generateFetchDiagnostics = {
+        generationAttemptId,
+        phase: "fetch",
+        startedAtMs: fetchStartedAt,
+        generationMode: requestGenerationMode,
+        photoCount: imageUrls.length,
+        requestBodyImageCount: requestImageUrls.length,
+        requestBodyBytes: requestBodyJson.length,
+        compressedImageBytes: getCompressedImageBytes(
+          requestImageUrls,
+          requestImageMetadata,
+        ),
+        imageSourceSummary:
+          summarizeImageSourcesForTelemetry(imageSourceTelemetry),
+        payloadFallback: preparedGeneratePayload.payloadFallback,
+      };
 
       const response = await fetch(`${API_BASE}/api/generate`, {
         method: "POST",
@@ -12398,8 +13007,10 @@
           "X-Autolister-Extension-Version":
             chrome.runtime.getManifest().version,
         },
-        body: JSON.stringify(requestBody),
+        body: requestBodyJson,
       });
+      generateFetchDiagnostics.elapsedMs = Date.now() - fetchStartedAt;
+      delete generateFetchDiagnostics.startedAtMs;
 
       if (response.status === 401) {
         trackGrowthEvent("generate_error", { mode, status: 401 });
@@ -12545,10 +13156,18 @@
       return { ok: true, title, description, measurementAdvice, offers };
     } catch (err) {
       console.error("AutoLister AI Error:", err);
-      trackGrowthEvent("generate_error", {
-        mode,
-        message: err.message || "unknown",
-      });
+      if (generateFetchDiagnostics?.startedAtMs) {
+        generateFetchDiagnostics.elapsedMs =
+          Date.now() - generateFetchDiagnostics.startedAtMs;
+        delete generateFetchDiagnostics.startedAtMs;
+      }
+      trackGrowthEvent(
+        "generate_error",
+        buildGenerateFailureDiagnostics(err, {
+          mode,
+          ...(generateFetchDiagnostics || {}),
+        }),
+      );
       if (manageButtonState) {
         showToast(err.message || "An unexpected error occurred.", "error");
         isBusy = false;

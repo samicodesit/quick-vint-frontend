@@ -4,12 +4,11 @@ This runbook is written for AI agents. The human operator should not have to dec
 
 Never infer the next version from memory, previous chat context, old ZIP files, or the public Chrome Web Store listing. Always use the release commands below.
 
-This repo has two packaging scripts:
+Use the Node packaging script:
 
 - `npm run package` -> runs `node build.js`
-- `npm run package:bash` -> runs `./build.sh`
 
-Both scripts include the files needed by the Chrome extension, including `images/`.
+This is the cross-platform release path for Windows and macOS. It preserves Chrome extension folder paths such as `icons/`, `_locales/`, and `lib/`.
 
 ## Version rule
 
@@ -74,7 +73,7 @@ npm run build:prod
 Use the current version from `manifest.json`:
 
 ```bash
-npm run package:bash
+npm run package
 ```
 
 Output ZIP:
@@ -120,6 +119,5 @@ Confirm at least:
 
 ## Notes
 
-- `build.sh` edits `manifest.json` when a version argument is provided.
 - Keep semantic versioning (`major.minor.patch`), for example `1.3.4`.
 - `main` is the production frontend branch. Release-critical changes must be pushed to `main`, not only a feature branch.

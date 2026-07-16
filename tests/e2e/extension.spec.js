@@ -240,6 +240,54 @@ async function openContentHarness(page, capacityResponse = null, options = {}) {
   await expect(page.locator("#quickvint-description-footer-btn")).toBeVisible();
 }
 
+async function routeManualStorageUploads(page) {
+  const uploadedFiles = [];
+  const uploadRequests = [];
+  const uploadBodies = [];
+  const cleanupRequests = [];
+  await page.route("https://autolister.app/api/phone-upload**", (route) => {
+    const request = route.request();
+    const url = new URL(request.url());
+    if (url.searchParams.get("action") === "cleanup") {
+      cleanupRequests.push(request.url());
+      return route.fulfill({ status: 204, body: "" });
+    }
+    if (request.method() === "POST") {
+      uploadRequests.push(request.url());
+      uploadBodies.push(request.postDataBuffer()?.toString("latin1") || "");
+      const index = uploadedFiles.length;
+      const name = `${String(index).padStart(6, "0")}-manual-${index + 1}.png`;
+      const file = {
+        name,
+        path: `manual-session/${name}`,
+        url: `https://storage.test/manual-${index + 1}.png?token=signed-${index + 1}`,
+        order: index,
+      };
+      uploadedFiles.push(file);
+      return route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          success: true,
+          count: 1,
+          expectedCount: 1,
+          files: [file],
+        }),
+      });
+    }
+    return route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        files: uploadedFiles,
+        count: uploadedFiles.length,
+        complete: true,
+      }),
+    });
+  });
+  return { uploadedFiles, uploadRequests, uploadBodies, cleanupRequests };
+}
+
 async function openImageCompressionHarness(page, proxyResponse) {
   await page.setContent(listingFixture, { waitUntil: "domcontentloaded" });
   await installChromeHarness(page);
@@ -312,6 +360,11 @@ test.describe("AutoLister extension smoke flows", () => {
     const requestBodies = [];
     const trackedEvents = [];
     const sessions = [];
+    const cleanupRequests = [];
+    let resolveGenerate;
+    const generateMayFinish = new Promise((resolve) => {
+      resolveGenerate = resolve;
+    });
     try {
       await serviceWorker.evaluate(() =>
         chrome.storage.local.set({
@@ -355,8 +408,9 @@ test.describe("AutoLister extension smoke flows", () => {
         trackedEvents.push(route.request().postDataJSON());
         return route.fulfill({ status: 204, body: "" });
       });
-      await context.route("https://autolister.app/api/generate", (route) => {
+      await context.route("https://autolister.app/api/generate", async (route) => {
         requestBodies.push(route.request().postDataJSON());
+        await generateMayFinish;
         return route.fulfill({
           status: 200,
           contentType: "application/json",
@@ -370,6 +424,7 @@ test.describe("AutoLister extension smoke flows", () => {
       await context.route("https://autolister.app/api/phone-upload**", (route) => {
         const url = new URL(route.request().url());
         if (url.searchParams.get("action") === "cleanup") {
+          cleanupRequests.push(route.request().url());
           return route.fulfill({ status: 204, body: "" });
         }
         const sessionId = url.searchParams.get("sessionId");
@@ -422,13 +477,25 @@ test.describe("AutoLister extension smoke flows", () => {
 
       await page.locator("#quickvint-phone-modal .generate-btn").click();
       await expect.poll(() => requestBodies.length).toBe(1);
+      await expect(page.locator("#quickvint-phone-modal")).toBeVisible();
+      await expect.poll(() => cleanupRequests.length).toBe(0);
+
+      resolveGenerate();
+      await expect(page.locator("#quickvint-phone-modal")).toHaveCount(0);
 
       expect(requestBodies[0].imageMetadata).toHaveLength(2);
+      expect(requestBodies[0].imageUrls).toEqual([
+        "https://storage.test/phone-real-1.jpg",
+        "https://storage.test/phone-real-2.jpg",
+      ]);
       expect(requestBodies[0].imageMetadata[0]).toMatchObject({
         sourceSelection: "captured_upload_file",
         promptSource: "captured_upload_file",
+        sourceKind: "remote_url",
+        sourceUrl: "https://storage.test/phone-real-1.jpg",
         capturedUploadSource: "phone_upload_single",
         capturedUploadMatchStatus: "vinted_pending_using_captured",
+        generationPayloadSource: "phone_upload_storage_url",
       });
       expect(sessions).toHaveLength(1);
       const eventNames = trackedEvents.flatMap((body) =>
@@ -569,6 +636,57 @@ test.describe("AutoLister extension smoke flows", () => {
     }
   });
 
+  test("logs compact diagnostics when the generate fetch fails before response", async ({
+    page,
+  }) => {
+    const eventBatches = [];
+    await page.route("https://autolister.app/api/events/track", (route) => {
+      eventBatches.push(route.request().postDataJSON());
+      return route.fulfill({
+        status: 204,
+        body: "",
+      });
+    });
+    await page.route("https://autolister.app/api/generate", (route) =>
+      route.abort("failed"),
+    );
+
+    await openContentHarness(page);
+    await page.locator("#quickvint-gen-btn").click();
+
+    await expect
+      .poll(
+        () =>
+          eventBatches
+            .flatMap((batch) => batch.events || [])
+            .some((event) => event.event === "generate_error"),
+        { timeout: 5000 },
+      )
+      .toBe(true);
+
+    const events = eventBatches.flatMap((batch) => batch.events || []);
+    const requestEvent = events.find((event) => event.event === "generate_request");
+    const errorEvent = events.find((event) => event.event === "generate_error");
+
+    expect(errorEvent.context).toMatchObject({
+      mode: "manual",
+      phase: "fetch",
+      photoCount: 1,
+      navigatorOnline: true,
+      requestBodyImageCount: 1,
+      generationMode: "manual",
+    });
+    expect(errorEvent.context.generationAttemptId).toBe(
+      requestEvent.context.generationAttemptId,
+    );
+    expect(errorEvent.context.elapsedMs).toEqual(expect.any(Number));
+    expect(errorEvent.context.requestBodyBytes).toEqual(expect.any(Number));
+    expect(errorEvent.context.compressedImageBytes).toEqual(expect.any(Number));
+    expect(errorEvent.context.errorName).toEqual(expect.any(String));
+    expect(errorEvent.context.message).toEqual(expect.any(String));
+    expect(errorEvent.context.stack).toEqual(expect.any(String));
+  });
+
   test("lets sellers switch output shape from the listing tools", async ({
     page,
   }) => {
@@ -609,7 +727,7 @@ test.describe("AutoLister extension smoke flows", () => {
     ).toBe(false);
   });
 
-  test("uses captured batch files when Vinted thumbnails are late", async ({
+  test("uses uploaded storage URLs for batch files when Vinted thumbnails are late", async ({
     page,
   }) => {
     const requestBodies = [];
@@ -674,19 +792,26 @@ test.describe("AutoLister extension smoke flows", () => {
     }, tinyPngDataUrl);
 
     expect(result).toMatchObject({ ok: true });
+    expect(requestBodies[0].imageUrls).toEqual([
+      "https://phone-upload.test/item-a.jpg",
+    ]);
     expect(requestBodies[0].imageMetadata).toHaveLength(1);
     expect(requestBodies[0].imageMetadata[0]).toMatchObject({
       sourceSelection: "captured_upload_file",
       promptSource: "captured_upload_file",
+      sourceKind: "remote_url",
+      sourceUrl: "https://phone-upload.test/item-a.jpg",
       capturedUploadSource: "phone_upload_batch",
+      generationPayloadSource: "phone_upload_storage_url",
     });
   });
 
-  test("uses captured uploaded files for generation when they match Vinted photos", async ({
+  test("uploads manual captured files to temp storage for generation", async ({
     page,
   }) => {
     const requestBodies = [];
     const eventBatches = [];
+    const manualStorage = await routeManualStorageUploads(page);
     await page.route("https://autolister.app/api/events/track", (route) => {
       eventBatches.push(route.request().postDataJSON());
       return route.fulfill({
@@ -720,16 +845,24 @@ test.describe("AutoLister extension smoke flows", () => {
     await expect(page.locator('[data-testid="title--input"]')).toHaveValue(
       "Captured Original Jacket",
     );
+    expect(manualStorage.uploadRequests.length).toBeGreaterThan(0);
+    expect(manualStorage.uploadBodies[0]).toContain(
+      'Content-Type: image/jpeg',
+    );
+    expect(requestBodies[0].imageUrls).toEqual([
+      "https://storage.test/manual-1.png?token=signed-1",
+    ]);
     expect(requestBodies[0].imageMetadata).toHaveLength(1);
     expect(requestBodies[0].imageMetadata[0]).toMatchObject({
       sourceSelection: "captured_upload_file",
       promptSource: "captured_upload_file",
-      sourceKind: "blob_url",
-      sourceUrl: null,
+      sourceKind: "remote_url",
+      sourceUrl: "https://storage.test/manual-1.png",
       capturedUploadAvailable: true,
       capturedUploadSource: "manual_file_input",
       capturedUploadFileCount: 1,
       capturedUploadMatchStatus: "count_match_by_order",
+      generationPayloadSource: "manual_upload_storage_url",
       capturedUploadFile: {
         index: 1,
         captureSource: "manual_file_input",
@@ -762,10 +895,442 @@ test.describe("AutoLister extension smoke flows", () => {
       });
   });
 
+  test("keeps the generate button loading while manual photos are preparing", async ({
+    page,
+  }) => {
+    let releaseUpload;
+    const uploadCanFinish = new Promise((resolve) => {
+      releaseUpload = resolve;
+    });
+    let generateRequests = 0;
+
+    await page.route("https://autolister.app/api/phone-upload**", async (route) => {
+      const request = route.request();
+      const url = new URL(request.url());
+      if (url.searchParams.get("action") === "cleanup") {
+        return route.fulfill({ status: 204, body: "" });
+      }
+      if (request.method() === "POST") {
+        await uploadCanFinish;
+        return route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify({
+            success: true,
+            count: 1,
+            expectedCount: 1,
+            files: [
+              {
+                name: "000000-manual-1.jpg",
+                path: "manual-session/000000-manual-1.jpg",
+                url: "https://storage.test/manual-1.jpg?token=signed-1",
+                order: 0,
+              },
+            ],
+          }),
+        });
+      }
+      return route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ files: [], count: 0, complete: false }),
+      });
+    });
+    await page.route("https://autolister.app/api/generate", (route) => {
+      generateRequests += 1;
+      return route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          title: "Prepared Upload Jacket",
+          description: "Generated after preparation finished.",
+          measurementAdvice: "",
+        }),
+      });
+    });
+
+    await openContentHarness(page);
+
+    const uploadBuffer = Buffer.from(tinyPngDataUrl.split(",")[1], "base64");
+    await page.setInputFiles('[data-testid="add-photos-input"]', {
+      name: "manual-upload.png",
+      mimeType: "image/png",
+      buffer: uploadBuffer,
+    });
+    await page.locator("#quickvint-gen-btn").click();
+
+    await expect(page.locator("#quickvint-gen-btn .label")).toHaveText(
+      "Preparing...",
+    );
+    expect(generateRequests).toBe(0);
+
+    releaseUpload();
+    await expect(page.locator('[data-testid="title--input"]')).toHaveValue(
+      "Prepared Upload Jacket",
+    );
+    expect(generateRequests).toBe(1);
+  });
+
+  test("retries manual temp upload before generating", async ({
+    page,
+  }) => {
+    const requestBodies = [];
+    const eventBatches = [];
+    let uploadAttempts = 0;
+
+    await page.route("https://autolister.app/api/events/track", (route) => {
+      eventBatches.push(route.request().postDataJSON());
+      return route.fulfill({ status: 204, body: "" });
+    });
+    await page.route("https://autolister.app/api/phone-upload**", (route) => {
+      const request = route.request();
+      const url = new URL(request.url());
+      if (url.searchParams.get("action") === "cleanup") {
+        return route.fulfill({ status: 204, body: "" });
+      }
+      if (request.method() === "POST") {
+        uploadAttempts += 1;
+        if (uploadAttempts === 1) {
+          return route.fulfill({
+            status: 500,
+            contentType: "application/json",
+            body: JSON.stringify({ error: "Storage unavailable" }),
+          });
+        }
+        return route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify({
+            success: true,
+            count: 1,
+            expectedCount: 1,
+            files: [
+              {
+                name: "000000-manual-1.jpg",
+                path: "manual-session/000000-manual-1.jpg",
+                url: "https://storage.test/manual-1.jpg?token=signed-1",
+                order: 0,
+              },
+            ],
+          }),
+        });
+      }
+      return route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ files: [], count: 0, complete: false }),
+      });
+    });
+    await page.route("https://autolister.app/api/generate", (route) => {
+      requestBodies.push(route.request().postDataJSON());
+      return route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          title: "Retried Upload Jacket",
+          description: "Generated after upload retry.",
+          measurementAdvice: "",
+        }),
+      });
+    });
+
+    await openContentHarness(page);
+
+    const uploadBuffer = Buffer.from(tinyPngDataUrl.split(",")[1], "base64");
+    await page.setInputFiles('[data-testid="add-photos-input"]', {
+      name: "manual-upload.png",
+      mimeType: "image/png",
+      buffer: uploadBuffer,
+    });
+    await page.locator("#quickvint-gen-btn").click();
+
+    await expect(page.locator('[data-testid="title--input"]')).toHaveValue(
+      "Retried Upload Jacket",
+    );
+    expect(uploadAttempts).toBe(2);
+    expect(requestBodies[0].imageUrls).toEqual([
+      "https://storage.test/manual-1.jpg?token=signed-1",
+    ]);
+    const retryEvent = await expect
+      .poll(
+        () =>
+          eventBatches
+            .flatMap((batch) => batch.events || [])
+            .find((event) => event.event === "manual_upload_storage_retry"),
+        { timeout: 5000 },
+      )
+      .not.toBeUndefined()
+      .then(() =>
+        eventBatches
+          .flatMap((batch) => batch.events || [])
+          .find((event) => event.event === "manual_upload_storage_retry"),
+      );
+    expect(retryEvent.context).toMatchObject({
+      order: 0,
+      attempt: 1,
+      nextAttempt: 2,
+      status: 500,
+      retryable: true,
+    });
+  });
+
+  test("blocks manual generation after temp upload retries are exhausted", async ({
+    page,
+  }) => {
+    const eventBatches = [];
+    let uploadAttempts = 0;
+    let generateRequests = 0;
+
+    await page.route("https://autolister.app/api/events/track", (route) => {
+      eventBatches.push(route.request().postDataJSON());
+      return route.fulfill({ status: 204, body: "" });
+    });
+    await page.route("https://autolister.app/api/phone-upload**", (route) => {
+      const request = route.request();
+      const url = new URL(request.url());
+      if (url.searchParams.get("action") === "cleanup") {
+        return route.fulfill({ status: 204, body: "" });
+      }
+      if (request.method() === "POST") {
+        uploadAttempts += 1;
+        return route.fulfill({
+          status: 500,
+          contentType: "application/json",
+          body: JSON.stringify({ error: "Storage unavailable" }),
+        });
+      }
+      return route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ files: [], count: 0, complete: false }),
+      });
+    });
+    await page.route("https://autolister.app/api/generate", (route) => {
+      generateRequests += 1;
+      return route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          title: "Should Not Generate",
+          description: "",
+          measurementAdvice: "",
+        }),
+      });
+    });
+
+    await openContentHarness(page);
+
+    const uploadBuffer = Buffer.from(tinyPngDataUrl.split(",")[1], "base64");
+    await page.setInputFiles('[data-testid="add-photos-input"]', {
+      name: "manual-upload.png",
+      mimeType: "image/png",
+      buffer: uploadBuffer,
+    });
+    await page.locator("#quickvint-gen-btn").click();
+
+    await expect(page.locator("#quickvint-toast.error")).toContainText(
+      "Could not prepare photos. Try again.",
+    );
+    expect(uploadAttempts).toBe(3);
+    expect(generateRequests).toBe(0);
+    const errorEvent = await expect
+      .poll(
+        () =>
+          eventBatches
+            .flatMap((batch) => batch.events || [])
+            .find((event) => event.event === "manual_upload_storage_error"),
+        { timeout: 5000 },
+      )
+      .not.toBeUndefined()
+      .then(() =>
+        eventBatches
+          .flatMap((batch) => batch.events || [])
+          .find((event) => event.event === "manual_upload_storage_error"),
+      );
+    expect(errorEvent.context).toMatchObject({
+      order: 0,
+      attempts: 3,
+      status: 500,
+      expectedCount: 1,
+    });
+  });
+
+  test("limits manual temp uploads to three concurrent requests", async ({
+    page,
+  }) => {
+    let activeUploads = 0;
+    let maxActiveUploads = 0;
+    let uploadRequests = 0;
+    const pendingRoutes = [];
+
+    await page.route("https://autolister.app/api/phone-upload**", (route) => {
+      const request = route.request();
+      const url = new URL(request.url());
+      if (url.searchParams.get("action") === "cleanup") {
+        return route.fulfill({ status: 204, body: "" });
+      }
+      if (request.method() === "POST") {
+        uploadRequests += 1;
+        activeUploads += 1;
+        maxActiveUploads = Math.max(maxActiveUploads, activeUploads);
+        pendingRoutes.push(route);
+        return;
+      }
+      return route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ files: [], count: 0, complete: false }),
+      });
+    });
+
+    await openContentHarness(page);
+
+    const uploadBuffer = Buffer.from(tinyPngDataUrl.split(",")[1], "base64");
+    await page.setInputFiles(
+      '[data-testid="add-photos-input"]',
+      Array.from({ length: 4 }, (_, index) => ({
+        name: `manual-upload-${index + 1}.png`,
+        mimeType: "image/png",
+        buffer: uploadBuffer,
+      })),
+    );
+
+    await expect.poll(() => uploadRequests).toBe(3);
+    expect(maxActiveUploads).toBe(3);
+
+    const firstRoute = pendingRoutes.shift();
+    activeUploads -= 1;
+    await firstRoute.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        success: true,
+        count: 1,
+        expectedCount: 1,
+        files: [
+          {
+            name: "000000-manual-1.jpg",
+            path: "manual-session/000000-manual-1.jpg",
+            url: "https://storage.test/manual-1.jpg?token=signed-1",
+            order: 0,
+          },
+        ],
+      }),
+    });
+
+    await expect.poll(() => uploadRequests).toBe(4);
+    expect(maxActiveUploads).toBe(3);
+
+    while (pendingRoutes.length) {
+      const route = pendingRoutes.shift();
+      activeUploads -= 1;
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          success: true,
+          count: 1,
+          expectedCount: 1,
+          files: [
+            {
+              name: "manual.jpg",
+              path: "manual-session/manual.jpg",
+              url: "https://storage.test/manual.jpg?token=signed",
+              order: 0,
+            },
+          ],
+        }),
+      });
+    }
+  });
+
+  test("uses manual storage URLs even when the generate payload cap is low", async ({
+    page,
+  }) => {
+    const requestBodies = [];
+    const eventBatches = [];
+    await routeManualStorageUploads(page);
+    await page.route("https://autolister.app/api/events/track", (route) => {
+      eventBatches.push(route.request().postDataJSON());
+      return route.fulfill({ status: 204, body: "" });
+    });
+    await page.route("https://autolister.app/api/generate", (route) => {
+      requestBodies.push(route.request().postDataJSON());
+      return route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          title: "Remote Payload Jacket",
+          description: "Generated from remote Vinted URLs.",
+          measurementAdvice: "",
+        }),
+      });
+    });
+
+    await openContentHarness(page);
+    await page.evaluate(() => {
+      window.__AUTOLISTER_MAX_GENERATE_REQUEST_BODY_BYTES = 100;
+      const grid = document.querySelector('[data-testid="media-upload-grid"]');
+      grid.querySelectorAll(".photo-box").forEach((node) => node.remove());
+      grid.insertAdjacentHTML(
+        "beforeend",
+        Array.from(
+          { length: 3 },
+          (_, index) => `
+          <div class="photo-box">
+            <div class="photo-box__image-container">
+              <img
+                class="web_ui__Image__content"
+                alt="Uploaded remote ${index + 1}"
+                src="https://images1.vinted.net/t/0${index + 1}_remote/f800/${index + 1}.webp"
+              />
+            </div>
+          </div>
+        `,
+        ).join(""),
+      );
+    });
+
+    const uploadBuffer = Buffer.from(tinyPngDataUrl.split(",")[1], "base64");
+    await page.setInputFiles(
+      '[data-testid="add-photos-input"]',
+      Array.from({ length: 3 }, (_, index) => ({
+        name: `phone-original-${index + 1}.png`,
+        mimeType: "image/png",
+        buffer: uploadBuffer,
+      })),
+    );
+    await page.locator("#quickvint-gen-btn").click();
+
+    await expect(page.locator('[data-testid="title--input"]')).toHaveValue(
+      "Remote Payload Jacket",
+    );
+    expect(requestBodies).toHaveLength(1);
+    expect(requestBodies[0].imageUrls).toEqual([
+      "https://storage.test/manual-1.png?token=signed-1",
+      "https://storage.test/manual-2.png?token=signed-2",
+      "https://storage.test/manual-3.png?token=signed-3",
+    ]);
+    expect(requestBodies[0].imageMetadata).toHaveLength(3);
+    expect(requestBodies[0].imageMetadata[0]).toMatchObject({
+      sourceSelection: "captured_upload_file",
+      promptSource: "captured_upload_file",
+      sourceKind: "remote_url",
+      sourceUrl: "https://storage.test/manual-1.png",
+      generationPayloadSource: "manual_upload_storage_url",
+    });
+
+    const eventNames = eventBatches
+      .flatMap((batch) => batch.events || [])
+      .map((event) => event.event);
+    expect(eventNames).not.toContain("generate_payload_remote_fallback");
+  });
+
   test("keeps captured original files through reorder-only changes", async ({
     page,
   }) => {
     const requestBodies = [];
+    await routeManualStorageUploads(page);
     await page.route("https://autolister.app/api/events/track", (route) =>
       route.fulfill({ status: 204, body: "" }),
     );
@@ -828,6 +1393,7 @@ test.describe("AutoLister extension smoke flows", () => {
     page,
   }) => {
     const requestBodies = [];
+    await routeManualStorageUploads(page);
     await page.route("https://autolister.app/api/events/track", (route) =>
       route.fulfill({ status: 204, body: "" }),
     );
@@ -903,6 +1469,7 @@ test.describe("AutoLister extension smoke flows", () => {
     page,
   }) => {
     const requestBodies = [];
+    await routeManualStorageUploads(page);
     await page.route("https://autolister.app/api/events/track", (route) =>
       route.fulfill({ status: 204, body: "" }),
     );

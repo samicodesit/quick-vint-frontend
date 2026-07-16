@@ -18,8 +18,7 @@
     "release:mark-uploaded": "node scripts/release-version.js mark-uploaded",
     "release:mark-published": "node scripts/release-version.js mark-published",
     "release:clear-pending": "node scripts/release-version.js clear-pending",
-    "package": "node build.js",
-    "package:bash": "./build.sh"
+    "package": "node build.js"
   },
   "repository": {
     "type": "git",

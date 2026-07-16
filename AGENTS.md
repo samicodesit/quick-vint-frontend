@@ -25,7 +25,7 @@ Standard agent flow:
 ```bash
 npm run release:status
 npm run build:prod
-npm run package:bash
+npm run package
 ```
 
 After the ZIP is uploaded/submitted to Chrome Web Store, immediately run:
