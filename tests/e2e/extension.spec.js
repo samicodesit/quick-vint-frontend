@@ -316,6 +316,86 @@ async function openImageCompressionHarness(page, proxyResponse) {
 }
 
 test.describe("AutoLister extension smoke flows", () => {
+  async function setupReadyPhoneUploadWithDelayedThumbnails(
+    page,
+    requestBodies,
+    fileCount = 2,
+  ) {
+    await page.route("https://autolister.app/api/generate", (route) => {
+      requestBodies.push(route.request().postDataJSON());
+      return route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          title: "Closed Then Generate",
+          description: "Generated after closing phone upload.",
+          measurementAdvice: "",
+        }),
+      });
+    });
+
+    await openContentHarness(
+      page,
+      { allowed: true, available: 10 },
+      { emptyListing: true, shortenPhoneUploadPoll: true },
+    );
+
+    await page.evaluate(({ dataUrl, fileCount }) => {
+      const originalSendMessage = window.chrome.runtime.sendMessage;
+      window.chrome.runtime.sendMessage = (message, callback) => {
+        if (message?.type === "PROXY_FETCH") {
+          const url = String(message.url || "");
+          if (url.includes("/api/phone-upload?sessionId=")) {
+            setTimeout(
+              () =>
+                callback?.({
+                  ok: true,
+                  data: {
+                    files: Array.from({ length: fileCount }, (_, index) => ({
+                      name: `phone-${index + 1}.jpg`,
+                      path: `phone-${index + 1}.jpg`,
+                      url: `https://storage.test/phone-${index + 1}.jpg`,
+                    })),
+                    count: fileCount,
+                    complete: true,
+                  },
+                }),
+              0,
+            );
+            return;
+          }
+          if (url.startsWith("https://storage.test/")) {
+            setTimeout(() => callback?.({ ok: true, data: dataUrl }), 0);
+            return;
+          }
+        }
+        originalSendMessage(message, callback);
+      };
+
+      const fileInput = document.querySelector('[data-testid="add-photos-input"]');
+      const grid = document.querySelector('[data-testid="media-upload-grid"]');
+      fileInput.addEventListener("change", () => {
+        const files = Array.from(fileInput.files || []);
+        setTimeout(() => {
+          files.forEach((file, index) => {
+            const box = document.createElement("div");
+            box.className = "photo-box";
+            box.innerHTML = `
+              <div class="photo-box__image-container">
+                <img
+                  class="web_ui__Image__content"
+                  alt="Phone upload ${index + 1}"
+                  src="${URL.createObjectURL(file)}"
+                />
+              </div>
+            `;
+            grid.appendChild(box);
+          });
+        }, 1500);
+      });
+    }, { dataUrl: tinyPngDataUrl, fileCount });
+  }
+
   test("hides listing tools and saved-note edit control while signed out", async ({
     page,
   }) => {
@@ -1829,79 +1909,7 @@ test.describe("AutoLister extension smoke flows", () => {
     page,
   }) => {
     const requestBodies = [];
-    await page.route("https://autolister.app/api/generate", (route) => {
-      requestBodies.push(route.request().postDataJSON());
-      return route.fulfill({
-        status: 200,
-        contentType: "application/json",
-        body: JSON.stringify({
-          title: "Done Then Generate",
-          description: "Generated after closing phone upload.",
-          measurementAdvice: "",
-        }),
-      });
-    });
-
-    await openContentHarness(
-      page,
-      { allowed: true, available: 10 },
-      { emptyListing: true, shortenPhoneUploadPoll: true },
-    );
-
-    await page.evaluate((dataUrl) => {
-      const originalSendMessage = window.chrome.runtime.sendMessage;
-      window.chrome.runtime.sendMessage = (message, callback) => {
-        if (message?.type === "PROXY_FETCH") {
-          const url = String(message.url || "");
-          if (url.includes("/api/phone-upload?sessionId=")) {
-            setTimeout(
-              () =>
-                callback?.({
-                  ok: true,
-                  data: {
-                    files: Array.from({ length: 3 }, (_, index) => ({
-                      name: `phone-${index + 1}.jpg`,
-                      path: `phone-${index + 1}.jpg`,
-                      url: `https://storage.test/phone-${index + 1}.jpg`,
-                    })),
-                    count: 3,
-                    complete: true,
-                  },
-                }),
-              0,
-            );
-            return;
-          }
-          if (url.startsWith("https://storage.test/")) {
-            setTimeout(() => callback?.({ ok: true, data: dataUrl }), 0);
-            return;
-          }
-        }
-        originalSendMessage(message, callback);
-      };
-
-      const fileInput = document.querySelector('[data-testid="add-photos-input"]');
-      const grid = document.querySelector('[data-testid="media-upload-grid"]');
-      fileInput.addEventListener("change", () => {
-        const files = Array.from(fileInput.files || []);
-        setTimeout(() => {
-          files.forEach((file, index) => {
-            const box = document.createElement("div");
-            box.className = "photo-box";
-            box.innerHTML = `
-              <div class="photo-box__image-container">
-                <img
-                  class="web_ui__Image__content"
-                  alt="Phone upload ${index + 1}"
-                  src="${URL.createObjectURL(file)}"
-                />
-              </div>
-            `;
-            grid.appendChild(box);
-          });
-        }, 1500);
-      });
-    }, tinyPngDataUrl);
+    await setupReadyPhoneUploadWithDelayedThumbnails(page, requestBodies, 3);
 
     await page.locator("#quickvint-phone-btn").click();
     await expect(page.locator("#quickvint-phone-modal .preview-thumb")).toHaveCount(3);
@@ -1947,6 +1955,69 @@ test.describe("AutoLister extension smoke flows", () => {
       )
       .toBe(true);
     await expect(page.locator(".photo-box")).toHaveCount(3);
+  });
+
+  [
+    {
+      name: "close X",
+      close: (page) => page.locator("#quickvint-phone-modal .close-x").click(),
+    },
+    {
+      name: "outside click",
+      close: (page) =>
+        page.evaluate(() => {
+          const modal = document.getElementById("quickvint-phone-modal");
+          modal?.dispatchEvent(
+            new MouseEvent("click", { bubbles: true, cancelable: true }),
+          );
+        }),
+    },
+  ].forEach(({ name, close }) => {
+    test(`keeps ready phone-upload files after ${name}`, async ({ page }) => {
+      const requestBodies = [];
+      await setupReadyPhoneUploadWithDelayedThumbnails(page, requestBodies);
+
+      await page.locator("#quickvint-phone-btn").click();
+      await expect(page.locator("#quickvint-phone-modal .preview-thumb")).toHaveCount(2);
+      await expect(page.locator("#quickvint-phone-modal .status")).toHaveText(
+        "2 photos ready to generate.",
+      );
+
+      await close(page);
+      await expect(page.locator("#quickvint-phone-modal")).toHaveCount(0);
+      await page.waitForTimeout(3500);
+      expect(
+        await page.evaluate(() =>
+          window.__extensionHarness.runtimeMessages.some(
+            (message) =>
+              message?.type === "PROXY_FETCH" &&
+              String(message.url || "").includes("action=cleanup"),
+          ),
+        ),
+      ).toBe(false);
+
+      await page.locator("#quickvint-gen-btn").click();
+      await expect.poll(() => requestBodies.length).toBe(1);
+      expect(requestBodies[0].imageUrls).toEqual([
+        "https://storage.test/phone-1.jpg",
+        "https://storage.test/phone-2.jpg",
+      ]);
+      expect(requestBodies[0].imageMetadata[0]).toMatchObject({
+        generationPayloadSource: "phone_upload_storage_url",
+        capturedUploadSource: "phone_upload_single",
+      });
+      await expect
+        .poll(() =>
+          page.evaluate(() =>
+            window.__extensionHarness.runtimeMessages.some(
+              (message) =>
+                message?.type === "PROXY_FETCH" &&
+                String(message.url || "").includes("action=cleanup"),
+            ),
+          ),
+        )
+        .toBe(true);
+    });
   });
 
   test("disables generation while phone-upload downloads are still pending", async ({
