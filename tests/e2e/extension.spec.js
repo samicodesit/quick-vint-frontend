@@ -1912,10 +1912,40 @@ test.describe("AutoLister extension smoke flows", () => {
 
     await page.locator("#quickvint-phone-modal .close-btn").click();
     await expect(page.locator("#quickvint-phone-modal")).toHaveCount(0);
+    await page.waitForTimeout(3500);
+    expect(
+      await page.evaluate(() =>
+        window.__extensionHarness.runtimeMessages.some(
+          (message) =>
+            message?.type === "PROXY_FETCH" &&
+            String(message.url || "").includes("action=cleanup"),
+        ),
+      ),
+    ).toBe(false);
     await page.locator("#quickvint-gen-btn").click();
 
     await expect.poll(() => requestBodies.length).toBe(1);
+    expect(requestBodies[0].imageUrls).toEqual([
+      "https://storage.test/phone-1.jpg",
+      "https://storage.test/phone-2.jpg",
+      "https://storage.test/phone-3.jpg",
+    ]);
     expect(requestBodies[0].imageMetadata).toHaveLength(3);
+    expect(requestBodies[0].imageMetadata[0]).toMatchObject({
+      generationPayloadSource: "phone_upload_storage_url",
+      capturedUploadSource: "phone_upload_single",
+    });
+    await expect
+      .poll(() =>
+        page.evaluate(() =>
+          window.__extensionHarness.runtimeMessages.some(
+            (message) =>
+              message?.type === "PROXY_FETCH" &&
+              String(message.url || "").includes("action=cleanup"),
+          ),
+        ),
+      )
+      .toBe(true);
     await expect(page.locator(".photo-box")).toHaveCount(3);
   });
 
@@ -2366,6 +2396,23 @@ test.describe("AutoLister extension smoke flows", () => {
         (item) => item.capturedUploadFile?.fileName,
       ),
     ).toEqual(["phone-1.jpg", "phone-2.jpg", "phone-3.jpg"]);
+    await expect
+      .poll(() =>
+        page.evaluate(() => {
+          const sessions = window.__phoneSessions || [];
+          const cleanupUrls = window.__extensionHarness.runtimeMessages
+            .filter(
+              (message) =>
+                message?.type === "PROXY_FETCH" &&
+                String(message.url || "").includes("action=cleanup"),
+            )
+            .map((message) => String(message.url || ""));
+          return sessions.filter((sessionId) =>
+            cleanupUrls.some((url) => url.includes(`sessionId=${sessionId}`)),
+          ).length;
+        }),
+      )
+      .toBe(2);
 
     const eventNames = trackedEvents.flatMap((body) =>
       (body.events || []).map((event) => event.event),

@@ -2414,6 +2414,18 @@
           : source,
       capturedAt,
       storageSessionId: existingUpload?.storageSessionId || storageSessionId || null,
+      storageSessionIds: [
+        ...new Set(
+          [
+            ...(Array.isArray(existingUpload?.storageSessionIds)
+              ? existingUpload.storageSessionIds
+              : existingUpload?.storageSessionId
+                ? [existingUpload.storageSessionId]
+                : []),
+            storageSessionId,
+          ].filter(Boolean),
+        ),
+      ],
       storageUploadPromise: existingUpload?.storageUploadPromise || null,
       storageUploadError: existingUpload?.storageUploadError || null,
       orderTrusted: existingUpload?.orderTrusted !== false,
@@ -2436,7 +2448,10 @@
     if (
       !capturedUpload ||
       !sessionId ||
-      capturedUpload.storageSessionId !== sessionId ||
+      !(
+        capturedUpload.storageSessionId === sessionId ||
+        capturedUpload.storageSessionIds?.includes(sessionId)
+      ) ||
       capturedUpload.source !== "phone_upload_single"
     ) {
       return;
@@ -2457,6 +2472,22 @@
     });
     capturedUpload.generationUrlsInvalidatedReason = reason || "fallback_to_local";
     return hadGenerationUrls;
+  }
+
+  function finishCapturedPromptUploadPhoneSessions() {
+    const capturedUpload = getActiveCapturedPromptUpload();
+    const sessionIds = [
+      ...new Set(
+        [
+          ...(Array.isArray(capturedUpload?.storageSessionIds)
+            ? capturedUpload.storageSessionIds
+            : []),
+          capturedUpload?.storageSessionId,
+          activePhoneUploadSessionId,
+        ].filter(Boolean),
+      ),
+    ];
+    sessionIds.forEach((sessionId) => finishPhoneUploadSession(sessionId));
   }
 
   function isCapturedStoragePayload(metadata) {
@@ -10432,7 +10463,7 @@
         manageButtonState: true,
         showMeasurementAdvice: true,
       });
-      closeModal();
+      closeModal({ generated: true });
     } catch (err) {
       restoreGenerateButton();
     } finally {
@@ -10440,7 +10471,7 @@
     }
   }
 
-  function closeModal({ cancelUpload = false } = {}) {
+  function closeModal({ cancelUpload = false, generated = false } = {}) {
     const modal = document.getElementById(MODAL_ID);
     const sessionId = modal?.dataset?.sessionId || activePhoneUploadSessionId;
     rememberPhoneUploadState(sessionId);
@@ -10449,7 +10480,9 @@
     }
     const keepSessionAlive =
       !cancelUpload &&
+      !generated &&
       (Boolean(getIncompletePhoneUploadState()) ||
+        hasReadyPhoneUploadCapturedFiles(sessionId) ||
         hasReadyPhoneUploadCapturedFilesPendingDomAttach(sessionId));
     if (modal) {
       modal.remove();
@@ -10461,17 +10494,21 @@
     maybeShowPendingPrompts();
   }
 
-  function hasReadyPhoneUploadCapturedFilesPendingDomAttach(sessionId) {
+  function hasReadyPhoneUploadCapturedFiles(sessionId) {
     if (!sessionId || activePhoneUploadSessionId !== sessionId) return false;
     const capturedUpload = getActiveCapturedPromptUpload();
-    if (
-      !capturedUpload ||
-      capturedUpload.source !== "phone_upload_single" ||
-      capturedUpload.serverComplete !== true ||
-      capturedUpload.currentSetTrusted === false
-    ) {
-      return false;
-    }
+    return Boolean(
+      capturedUpload &&
+        capturedUpload.source === "phone_upload_single" &&
+        capturedUpload.serverComplete === true &&
+        capturedUpload.currentSetTrusted !== false &&
+        capturedUpload.files.length > 0,
+    );
+  }
+
+  function hasReadyPhoneUploadCapturedFilesPendingDomAttach(sessionId) {
+    if (!hasReadyPhoneUploadCapturedFiles(sessionId)) return false;
+    const capturedUpload = getActiveCapturedPromptUpload();
     return capturedUpload.files.length > getVisibleUploadedPhotoCount();
   }
 
@@ -10744,6 +10781,7 @@
           activePhoneUploadSessionId === sessionId &&
           !document.getElementById(MODAL_ID) &&
           !getIncompletePhoneUploadState() &&
+          !hasReadyPhoneUploadCapturedFiles(sessionId) &&
           !hasReadyPhoneUploadCapturedFilesPendingDomAttach(sessionId)
         ) {
           finishPhoneUploadSession(sessionId);
@@ -13288,6 +13326,13 @@
 
       if (requestImageMetadata.some(isCapturedStoragePayload)) {
         clearCapturedPromptUploadGenerationUrls("generate_success");
+      }
+      if (
+        requestImageMetadata.some(
+          (metadata) => metadata?.capturedUploadSource === "phone_upload_single",
+        )
+      ) {
+        finishCapturedPromptUploadPhoneSessions();
       }
 
       const { title, description, measurementAdvice, offers = [] } = await response.json();
