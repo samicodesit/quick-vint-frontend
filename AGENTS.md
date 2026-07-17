@@ -4,12 +4,13 @@ This repo is mostly operated by AI agents. Treat `main` as the production fronte
 
 ## Checks
 
-Before pushing production frontend changes, run the full local gate:
+For production frontend pushes, use:
 
 ```bash
-npm test
-npm run build:prod
+npm run push:production
 ```
+
+That command refuses non-`main`, runs `npm test` and `npm run build:prod`, then pushes only if the gate passes. Do not use raw `git push origin main` for production frontend changes.
 
 `npm test` runs both `test:unit` and `test:e2e`. Do not replace it with only one of those commands when touching generation, upload, auth, billing, popup, or release flow code.
 

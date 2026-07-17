@@ -13,7 +13,10 @@ AutoLister AI is a Chrome browser extension (Manifest V3) that provides AI-gener
 npm install
 
 # Run the full test gate
-npm test
+npm run verify:production
+
+# Run the full gate, then push main if it passes
+npm run push:production
 
 # Unit tests only
 npm run test:unit
@@ -28,7 +31,7 @@ npm run build:prod
 npm run prepare
 ```
 
-Before pushing production frontend changes, run `npm test` and `npm run build:prod`. `npm test` runs both unit tests and Playwright E2E tests. Do not skip either side for generation, upload, auth, billing, popup, or release flow changes.
+For production frontend pushes, use `npm run push:production`. It refuses non-`main`, runs `npm test` and `npm run build:prod`, then pushes only if the gate passes. Do not use raw `git push origin main` for production frontend changes.
 
 For upload/generation incidents, check the relevant E2E tests in `tests/e2e/extension.spec.js`. The expected temp-upload flow is:
 
