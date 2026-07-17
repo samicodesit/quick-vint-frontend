@@ -10407,7 +10407,7 @@
     }
     if (
       getIncompletePhoneUploadState() &&
-      !window.confirm("Stop this upload? Added photos will stay.")
+      !window.confirm("Stop receiving photos? Photos already added will stay.")
     ) {
       return false;
     }

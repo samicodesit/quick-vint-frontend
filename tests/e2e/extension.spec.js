@@ -2041,13 +2041,15 @@ test.describe("AutoLister extension smoke flows", () => {
 
     await page.locator("#quickvint-phone-modal .close-btn").click();
     await expect(page.locator("#quickvint-phone-modal")).toBeVisible();
-    expect(closePrompts).toEqual(["Stop this upload? Added photos will stay."]);
+    expect(closePrompts).toEqual([
+      "Stop receiving photos? Photos already added will stay.",
+    ]);
 
     await page.locator("#quickvint-phone-modal .close-btn").click();
     await expect(page.locator("#quickvint-phone-modal")).toHaveCount(0);
     expect(closePrompts).toEqual([
-      "Stop this upload? Added photos will stay.",
-      "Stop this upload? Added photos will stay.",
+      "Stop receiving photos? Photos already added will stay.",
+      "Stop receiving photos? Photos already added will stay.",
     ]);
     await expect
       .poll(() =>
