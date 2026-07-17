@@ -145,6 +145,59 @@
     ensureAnalyticsClientId().then(send).catch(() => {});
   }
 
+  function getCallbackUrlContext() {
+    const searchParams = new URLSearchParams(window.location.search);
+    const hashParams = new URLSearchParams(
+      window.location.hash.replace(/^#/, ""),
+    );
+    return {
+      hasCode: Boolean(searchParams.get("code")),
+      hasAccessToken: Boolean(hashParams.get("access_token")),
+      hasRefreshToken: Boolean(hashParams.get("refresh_token")),
+      hasError: Boolean(
+        hashParams.get("error_description") ||
+          hashParams.get("error") ||
+          searchParams.get("error_description") ||
+          searchParams.get("error"),
+      ),
+    };
+  }
+
+  function trackCallbackDiagnostic(event, context = {}) {
+    const send = (clientId) => {
+      fetch(`${API_BASE}/api/events/track`, {
+        method: "POST",
+        keepalive: true,
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          event,
+          source: "extension_callback",
+          page: "callback",
+          context: {
+            ...getCallbackUrlContext(),
+            ...context,
+            analyticsClientId: clientId,
+          },
+        }),
+      }).catch(() => {
+        // Analytics must never block login completion.
+      });
+    };
+
+    if (analyticsClientId) {
+      send(analyticsClientId);
+      return;
+    }
+
+    ensureAnalyticsClientId().then(send).catch(() => {});
+  }
+
+  function getErrorMessage(error) {
+    return String(error?.message || error || "unknown").slice(0, 240);
+  }
+
   function trackAuthSuccess(session, eventName) {
     if (authSuccessTracked || !session?.access_token) return;
     authSuccessTracked = true;
@@ -302,6 +355,10 @@
 
     authCompletionStarted = true;
     chrome.storage.local.set({ supabaseSession: session }, () => {
+      trackCallbackEvent("auth_session_stored", {
+        auth_event: eventName,
+        storage_error: chrome.runtime.lastError?.message || null,
+      });
       chrome.runtime.sendMessage({ type: "AUTH_UPDATED" }, () => {
         if (chrome.runtime.lastError) {
           console.debug(
@@ -318,6 +375,9 @@
 
   // ---- IMPORTANT: supports BOTH magic-link + Google OAuth return ----
   async function bootstrapAuthReturn() {
+    trackCallbackDiagnostic("auth_callback_opened", {
+      stage: "bootstrap_start",
+    });
     try {
       const url = window.location.href;
       const searchParams = new URLSearchParams(window.location.search);
@@ -332,6 +392,10 @@
         searchParams.get("error");
 
       if (hashError) {
+        trackCallbackDiagnostic("auth_callback_error", {
+          stage: "url_error",
+          message: String(hashError).slice(0, 240),
+        });
         show("error", hashError);
         return;
       }
@@ -342,6 +406,10 @@
           await supabaseClient.auth.exchangeCodeForSession(url);
         if (error) {
           console.error("exchangeCodeForSession error:", error);
+          trackCallbackDiagnostic("auth_callback_error", {
+            stage: "code_exchange",
+            message: getErrorMessage(error),
+          });
           show("error", error.message);
           return;
         }
@@ -357,6 +425,10 @@
         });
         if (error) {
           console.error("setSession from callback hash error:", error);
+          trackCallbackDiagnostic("auth_callback_error", {
+            stage: "url_hash_set_session",
+            message: getErrorMessage(error),
+          });
           show("error", error.message);
           return;
         }
@@ -368,17 +440,28 @@
       const { data, error } = await supabaseClient.auth.getSession();
       if (error) {
         console.error("getSession error:", error);
+        trackCallbackDiagnostic("auth_callback_error", {
+          stage: "get_session",
+          message: getErrorMessage(error),
+        });
         show("error", error.message);
         return;
       }
       if (completeAuthSession(data.session, "existing_session")) return;
 
+      trackCallbackDiagnostic("auth_callback_error", {
+        stage: "no_session",
+      });
       show(
         "error",
         "Authentication failed. Please try signing in again.",
       );
     } catch (e) {
       console.error("bootstrapAuthReturn failed:", e);
+      trackCallbackDiagnostic("auth_callback_error", {
+        stage: "bootstrap_exception",
+        message: getErrorMessage(e),
+      });
       show(
         "error",
         "Authentication failed. Please try signing in again.",
