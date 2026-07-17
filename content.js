@@ -2379,7 +2379,7 @@
   function registerPromptUploadFiles(
     files,
     source,
-    { append = false, generateUrls = [] } = {},
+    { append = false, generateUrls = [], storageSessionId = null } = {},
   ) {
     const fileList = Array.from(files || []).filter(Boolean);
     if (!fileList.length) return null;
@@ -2413,7 +2413,7 @@
           ? "mixed_upload_sources"
           : source,
       capturedAt,
-      storageSessionId: existingUpload?.storageSessionId || null,
+      storageSessionId: existingUpload?.storageSessionId || storageSessionId || null,
       storageUploadPromise: existingUpload?.storageUploadPromise || null,
       storageUploadError: existingUpload?.storageUploadError || null,
       orderTrusted: existingUpload?.orderTrusted !== false,
@@ -2429,6 +2429,53 @@
       files: fileList,
       startIndex: existingFiles.length,
     };
+  }
+
+  function invalidateCapturedPromptUploadGenerationUrls(sessionId, reason) {
+    const capturedUpload = getActiveCapturedPromptUpload();
+    if (
+      !capturedUpload ||
+      !sessionId ||
+      capturedUpload.storageSessionId !== sessionId ||
+      capturedUpload.source !== "phone_upload_single"
+    ) {
+      return;
+    }
+
+    capturedUpload.files.forEach((entry) => {
+      entry.generateUrl = null;
+    });
+    capturedUpload.generationUrlsInvalidatedReason = reason || "session_finished";
+  }
+
+  function clearCapturedPromptUploadGenerationUrls(reason) {
+    const capturedUpload = getActiveCapturedPromptUpload();
+    if (!capturedUpload?.files?.length) return false;
+    const hadGenerationUrls = capturedUpload.files.some((entry) => entry.generateUrl);
+    capturedUpload.files.forEach((entry) => {
+      entry.generateUrl = null;
+    });
+    capturedUpload.generationUrlsInvalidatedReason = reason || "fallback_to_local";
+    return hadGenerationUrls;
+  }
+
+  function isCapturedStoragePayload(metadata) {
+    return (
+      metadata?.generationPayloadSource === "phone_upload_storage_url" ||
+      metadata?.generationPayloadSource === "manual_upload_storage_url"
+    );
+  }
+
+  function shouldRetryGenerateWithLocalCapturedImages(status, errorMessage, metadata) {
+    if (status !== 400) return false;
+    if (!Array.isArray(metadata) || !metadata.some(isCapturedStoragePayload)) {
+      return false;
+    }
+    return /image|photo|fetch|url|processing/i.test(errorMessage || "");
+  }
+
+  function isGenerateWaitingMessage(message) {
+    return /still (uploading|preparing photos)|wait a moment/i.test(message || "");
   }
 
   function removeCapturedPromptUploadAtIndex(index) {
@@ -3009,11 +3056,14 @@
     );
   }
 
-  async function prepareImagesForGenerate(imageEntries) {
+  async function prepareImagesForGenerate(
+    imageEntries,
+    { ignoreGenerationUrls = false } = {},
+  ) {
     let failedCount = 0;
     const imagePromises = imageEntries.map(async (entry, index) => {
       const metadataBase = buildImageRequestMetadataBase(entry, index);
-      if (isPhoneUploadGenerationUrlEntry(entry)) {
+      if (!ignoreGenerationUrls && isPhoneUploadGenerationUrlEntry(entry)) {
         return {
           imageUrl: entry.generationUrl,
           metadata: {
@@ -10424,6 +10474,11 @@
   }
 
   function finishPhoneUploadSession(sessionId) {
+    invalidateCapturedPromptUploadGenerationUrls(
+      sessionId,
+      "phone_upload_session_finished",
+    );
+
     if (activePhoneUploadSessionId === sessionId) {
       activePhoneUploadSessionId = null;
     }
@@ -10638,6 +10693,7 @@
                     generateUrls: successfulDownloads.map(
                       (result) => result.generateUrl,
                     ),
+                    storageSessionId: sessionId,
                   })
                 ) {
                   downloads.forEach((result) => {
@@ -10798,7 +10854,7 @@
   function injectFilesIntoVinted(
     files,
     uploadSource = "autolister_injected_files",
-    { generateUrls = [] } = {},
+    { generateUrls = [], storageSessionId = null } = {},
   ) {
     const fileInput = document.querySelector(SELECTORS.fileInput);
     if (!fileInput || files.length === 0) return false;
@@ -10806,6 +10862,7 @@
     registerPromptUploadFiles(files, uploadSource, {
       append: shouldAppendToCapturedPromptUpload(uploadSource),
       generateUrls,
+      storageSessionId,
     });
 
     const dataTransfer = new DataTransfer();
@@ -12872,7 +12929,7 @@
           ...getPhoneUploadDebugContext(incompletePhoneUpload),
         });
       }
-      showToast("Still uploading. Wait a moment.", "error");
+      showToast("Still uploading. Wait a moment.", "info");
       throw new Error("Still uploading.");
     }
 
@@ -13017,12 +13074,7 @@
         );
       }
 
-      const { imageUrls: preparedImages, imageMetadata } =
-        await prepareImagesForGenerate(imageEntries);
-
-      const requestBody = {
-        imageUrls: preparedImages,
-        imageMetadata,
+      const baseRequestBody = {
         languageCode: legacyLanguageCode,
         titleLanguageCode,
         descriptionLanguageCode,
@@ -13036,15 +13088,26 @@
         generationAttemptId,
       };
 
-      if (/\S/.test(effectiveDescriptionFooterText)) {
-        requestBody.descriptionFooterText = effectiveDescriptionFooterText;
+      async function buildPreparedGeneratePayload(entries, options = {}) {
+        const { imageUrls: preparedImages, imageMetadata } =
+          await prepareImagesForGenerate(entries, options);
+        const requestBody = {
+          ...baseRequestBody,
+          imageUrls: preparedImages,
+          imageMetadata,
+        };
+
+        if (/\S/.test(effectiveDescriptionFooterText)) {
+          requestBody.descriptionFooterText = effectiveDescriptionFooterText;
+        }
+
+        return maybeUseRemoteImagesForOversizedGeneratePayload(requestBody);
       }
 
-      const preparedGeneratePayload =
-        maybeUseRemoteImagesForOversizedGeneratePayload(requestBody);
-      const requestBodyJson = preparedGeneratePayload.requestBodyJson;
-      const requestImageUrls = preparedGeneratePayload.requestBody.imageUrls;
-      const requestImageMetadata =
+      let preparedGeneratePayload = await buildPreparedGeneratePayload(imageEntries);
+      let requestBodyJson = preparedGeneratePayload.requestBodyJson;
+      let requestImageUrls = preparedGeneratePayload.requestBody.imageUrls;
+      let requestImageMetadata =
         preparedGeneratePayload.requestBody.imageMetadata;
       if (preparedGeneratePayload.payloadFallback) {
         trackGrowthEvent("generate_payload_remote_fallback", {
@@ -13053,36 +13116,43 @@
           ...preparedGeneratePayload.payloadFallback,
         });
       }
-      const fetchStartedAt = Date.now();
-      generateFetchDiagnostics = {
-        generationAttemptId,
-        phase: "fetch",
-        startedAtMs: fetchStartedAt,
-        generationMode: requestGenerationMode,
-        photoCount: imageUrls.length,
-        requestBodyImageCount: requestImageUrls.length,
-        requestBodyBytes: requestBodyJson.length,
-        compressedImageBytes: getCompressedImageBytes(
-          requestImageUrls,
-          requestImageMetadata,
-        ),
-        imageSourceSummary:
-          summarizeImageSourcesForTelemetry(imageSourceTelemetry),
-        payloadFallback: preparedGeneratePayload.payloadFallback,
+
+      const sendGenerateRequest = async (retryReason = null) => {
+        const fetchStartedAt = Date.now();
+        generateFetchDiagnostics = {
+          generationAttemptId,
+          phase: "fetch",
+          startedAtMs: fetchStartedAt,
+          generationMode: requestGenerationMode,
+          photoCount: imageUrls.length,
+          requestBodyImageCount: requestImageUrls.length,
+          requestBodyBytes: requestBodyJson.length,
+          compressedImageBytes: getCompressedImageBytes(
+            requestImageUrls,
+            requestImageMetadata,
+          ),
+          imageSourceSummary:
+            summarizeImageSourcesForTelemetry(imageSourceTelemetry),
+          payloadFallback: preparedGeneratePayload.payloadFallback,
+          retryReason,
+        };
+
+        const generateResponse = await fetch(`${API_BASE}/api/generate`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${access_token}`,
+            "X-Autolister-Extension-Version":
+              chrome.runtime.getManifest().version,
+          },
+          body: requestBodyJson,
+        });
+        generateFetchDiagnostics.elapsedMs = Date.now() - fetchStartedAt;
+        delete generateFetchDiagnostics.startedAtMs;
+        return generateResponse;
       };
 
-      const response = await fetch(`${API_BASE}/api/generate`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${access_token}`,
-          "X-Autolister-Extension-Version":
-            chrome.runtime.getManifest().version,
-        },
-        body: requestBodyJson,
-      });
-      generateFetchDiagnostics.elapsedMs = Date.now() - fetchStartedAt;
-      delete generateFetchDiagnostics.startedAtMs;
+      let response = await sendGenerateRequest();
 
       if (response.status === 401) {
         trackGrowthEvent("generate_error", { mode, status: 401 });
@@ -13163,12 +13233,55 @@
       }
       if (!response.ok) {
         const { error } = await response.json().catch(() => ({}));
-        trackGrowthEvent("generate_error", {
-          mode,
-          status: response.status,
-          message: error || null,
-        });
-        throw new Error(error || `HTTP ${response.status}`);
+        if (
+          shouldRetryGenerateWithLocalCapturedImages(
+            response.status,
+            error,
+            requestImageMetadata,
+          ) &&
+          clearCapturedPromptUploadGenerationUrls("generate_remote_image_failed")
+        ) {
+          trackGrowthEvent("generate_retry_local_captured_images", {
+            mode,
+            status: response.status,
+            message: error || null,
+            generationAttemptId,
+          });
+          imageEntries = getUploadedImageEntries();
+          imageUrls = imageEntries.map((entry) => entry.url);
+          imageSourceTelemetry = buildImageSourceTelemetry(imageEntries);
+          preparedGeneratePayload = await buildPreparedGeneratePayload(imageEntries, {
+            ignoreGenerationUrls: true,
+          });
+          requestBodyJson = preparedGeneratePayload.requestBodyJson;
+          requestImageUrls = preparedGeneratePayload.requestBody.imageUrls;
+          requestImageMetadata =
+            preparedGeneratePayload.requestBody.imageMetadata;
+          response = await sendGenerateRequest("local_captured_images");
+          if (response.ok) {
+            // Continue to normal success handling below.
+          } else {
+            const retryError = await response.json().catch(() => ({}));
+            trackGrowthEvent("generate_error", {
+              mode,
+              status: response.status,
+              message: retryError.error || null,
+              retriedWithLocalCapturedImages: true,
+            });
+            throw new Error(retryError.error || `HTTP ${response.status}`);
+          }
+        } else {
+          trackGrowthEvent("generate_error", {
+            mode,
+            status: response.status,
+            message: error || null,
+          });
+          throw new Error(error || `HTTP ${response.status}`);
+        }
+      }
+
+      if (requestImageMetadata.some(isCapturedStoragePayload)) {
+        clearCapturedPromptUploadGenerationUrls("generate_success");
       }
 
       const { title, description, measurementAdvice, offers = [] } = await response.json();
@@ -13241,7 +13354,11 @@
         }),
       );
       if (manageButtonState) {
-        showToast(err.message || "An unexpected error occurred.", "error");
+        const toastMessage = err.message || "An unexpected error occurred.";
+        showToast(
+          toastMessage,
+          isGenerateWaitingMessage(toastMessage) ? "info" : "error",
+        );
         isBusy = false;
       }
       updateButtonUI();

@@ -2132,6 +2132,10 @@ test.describe("AutoLister extension smoke flows", () => {
     await page.locator("#quickvint-phone-modal .generate-btn").click();
 
     await expect.poll(() => requestBodies.length).toBe(1);
+    expect(requestBodies[0].imageUrls).toEqual([
+      "https://storage.test/phone-1.jpg",
+      "https://storage.test/phone-2.jpg",
+    ]);
     expect(requestBodies[0].imageMetadata).toHaveLength(2);
     expect(requestBodies[0].imageMetadata[0]).toMatchObject({
       sourceSelection: "captured_upload_file",
@@ -2143,6 +2147,133 @@ test.describe("AutoLister extension smoke flows", () => {
       (body.events || []).map((event) => event.event),
     );
     expect(eventNames).not.toContain("phone_upload_generate_blocked");
+
+    await expect(page.locator("#quickvint-phone-modal")).toHaveCount(0);
+    await page.locator("#quickvint-gen-btn").click();
+    await page.locator("#quickvint-description-apply-prompt button", {
+      hasText: "Replace description",
+    }).click();
+    await expect.poll(() => requestBodies.length).toBe(2);
+    expect(requestBodies[1].imageUrls).toHaveLength(2);
+    expect(requestBodies[1].imageUrls.every((url) => url.startsWith("data:image/"))).toBe(
+      true,
+    );
+    expect(
+      requestBodies[1].imageMetadata.every(
+        (metadata) => metadata.generationPayloadSource !== "phone_upload_storage_url",
+      ),
+    ).toBe(true);
+    expect(requestBodies[1].imageMetadata[0]).toMatchObject({
+      sourceSelection: "captured_upload_file",
+      capturedUploadSource: "phone_upload_single",
+      sourceKind: "blob_url",
+    });
+  });
+
+  test("retries stale phone-upload storage URLs with local captured files", async ({
+    page,
+  }) => {
+    const requestBodies = [];
+    const trackedEvents = [];
+    await page.route("https://autolister.app/api/events/track", (route) => {
+      trackedEvents.push(route.request().postDataJSON());
+      return route.fulfill({ status: 204, body: "" });
+    });
+    await page.route("https://autolister.app/api/generate", (route) => {
+      const body = route.request().postDataJSON();
+      requestBodies.push(body);
+      if (
+        requestBodies.length === 1 &&
+        body.imageUrls?.some((url) => String(url).startsWith("https://storage.test/"))
+      ) {
+        return route.fulfill({
+          status: 400,
+          contentType: "application/json",
+          body: JSON.stringify({
+            error: "There was an issue processing your images. Please try different images.",
+          }),
+        });
+      }
+      return route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          title: "Recovered Phone Upload",
+          description: "Generated after local retry.",
+          measurementAdvice: "",
+        }),
+      });
+    });
+
+    await openContentHarness(
+      page,
+      { allowed: true, available: 10 },
+      { emptyListing: true, shortenPhoneUploadPoll: true },
+    );
+
+    await page.evaluate((dataUrl) => {
+      const originalSendMessage = window.chrome.runtime.sendMessage;
+      window.chrome.runtime.sendMessage = (message, callback) => {
+        if (message?.type === "PROXY_FETCH") {
+          const url = String(message.url || "");
+          if (url.includes("/api/phone-upload?sessionId=")) {
+            setTimeout(
+              () =>
+                callback?.({
+                  ok: true,
+                  data: {
+                    files: [
+                      {
+                        name: "phone-1.jpg",
+                        path: "phone-1.jpg",
+                        url: "https://storage.test/phone-1.jpg",
+                      },
+                    ],
+                    count: 1,
+                    complete: true,
+                  },
+                }),
+              0,
+            );
+            return;
+          }
+          if (url.startsWith("https://storage.test/")) {
+            setTimeout(() => callback?.({ ok: true, data: dataUrl }), 0);
+            return;
+          }
+        }
+        originalSendMessage(message, callback);
+      };
+    }, tinyPngDataUrl);
+
+    await page.locator("#quickvint-phone-btn").click();
+    await expect(page.locator("#quickvint-phone-modal .preview-thumb")).toHaveCount(1);
+    await page.locator("#quickvint-phone-modal .generate-btn").click();
+
+    await expect.poll(() => requestBodies.length).toBe(2);
+    expect(requestBodies[0].imageUrls).toEqual(["https://storage.test/phone-1.jpg"]);
+    expect(requestBodies[0].imageMetadata[0]).toMatchObject({
+      generationPayloadSource: "phone_upload_storage_url",
+    });
+    expect(requestBodies[1].imageUrls).toHaveLength(1);
+    expect(requestBodies[1].imageUrls[0].startsWith("data:image/")).toBe(true);
+    expect(requestBodies[1].imageMetadata[0]).toMatchObject({
+      sourceSelection: "captured_upload_file",
+      capturedUploadSource: "phone_upload_single",
+      sourceKind: "blob_url",
+    });
+    expect(requestBodies[1].imageMetadata[0].generationPayloadSource).toBeUndefined();
+    await expect(page.locator('[data-testid="title--input"]')).toHaveValue(
+      "Recovered Phone Upload",
+    );
+
+    await expect
+      .poll(() =>
+        trackedEvents.flatMap((body) =>
+          (body.events || []).map((event) => event.event),
+        ),
+      )
+      .toContain("generate_retry_local_captured_images");
   });
 
   test("keeps ready phone-upload files when users reopen phone upload to add more", async ({
