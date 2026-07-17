@@ -9339,11 +9339,13 @@
 
     if (!label || !icon) return;
 
-    if (isBusy) {
+    const incompletePhoneUpload = getIncompletePhoneUploadState();
+
+    if (isBusy || incompletePhoneUpload) {
       generateBtn.classList.add("is-loading");
       generateBtn.disabled = true;
       icon.style.display = "";
-      label.textContent = generateBusyLabel;
+      label.textContent = incompletePhoneUpload ? "Preparing..." : generateBusyLabel;
       generateBtn.style.cursor = "progress";
       generateBtn.style.background = PRIMARY_BUTTON_BACKGROUND;
     } else {
@@ -10494,6 +10496,7 @@
       phoneUploadAutoCloseTimer = null;
     }
     resetPhoneUploadTransientState();
+    updateButtonUI();
 
     if (sessionId && chrome.runtime?.id) {
       sendMessage({
@@ -10636,6 +10639,7 @@
             ? JSON.parse(response.data)
             : response.data;
         updateLastPhoneUploadState(sessionId, data, initialImageCount);
+        updateButtonUI();
         const remoteFiles = getPhoneUploadPhotoFiles(data?.files);
         if (remoteFiles.length > 0) {
           const newRemoteFiles = remoteFiles.filter((file) => {
@@ -10725,6 +10729,7 @@
           }
 
           updatePhoneUploadStatus(statusEl, initialImageCount);
+          updateButtonUI();
         } else {
           // No files yet, show waiting message
           if (statusEl && downloadedFiles.size === 0) {
@@ -10734,6 +10739,7 @@
             updatePhoneUploadStatus(statusEl, initialImageCount);
           }
         }
+        updateButtonUI();
         if (
           activePhoneUploadSessionId === sessionId &&
           !document.getElementById(MODAL_ID) &&

@@ -1919,7 +1919,7 @@ test.describe("AutoLister extension smoke flows", () => {
     await expect(page.locator(".photo-box")).toHaveCount(3);
   });
 
-  test("dedupes generation tracking while phone-upload downloads are still pending", async ({
+  test("disables generation while phone-upload downloads are still pending", async ({
     page,
   }) => {
     let generateRequests = 0;
@@ -1972,7 +1972,7 @@ test.describe("AutoLister extension smoke flows", () => {
             return;
           }
           if (url.startsWith("https://storage.test/")) {
-            setTimeout(() => callback?.({ ok: true, data: dataUrl }), 10000);
+            setTimeout(() => callback?.({ ok: true, data: dataUrl }), 1000);
             return;
           }
         }
@@ -1993,28 +1993,11 @@ test.describe("AutoLister extension smoke flows", () => {
       .locator("#quickvint-phone-modal")
       .getAttribute("data-session-id");
 
+    const generateButton = page.locator("#quickvint-gen-btn");
+    await expect(generateButton).toBeDisabled();
+    await expect(generateButton.locator(".label")).toHaveText("Preparing...");
     await page.evaluate(() => document.getElementById("quickvint-gen-btn")?.click());
-    await page.evaluate(() => document.getElementById("quickvint-gen-btn")?.click());
-    await expect
-      .poll(() =>
-        trackedEvents.flatMap((body) =>
-          (body.events || []).filter(
-            (event) => event.event === "phone_upload_generate_blocked",
-          ),
-        ).length,
-      )
-      .toBe(1);
-    const blockedEvents = trackedEvents.flatMap((body) =>
-      (body.events || []).filter(
-        (event) => event.event === "phone_upload_generate_blocked",
-      ),
-    );
-    expect(blockedEvents[0].context).toMatchObject({
-      mode: "single",
-      sessionId,
-      receivedCount: 2,
-      visibleAddedCount: 0,
-    });
+    await expect.poll(() => generateRequests).toBe(0);
 
     const closePrompts = [];
     page.on("dialog", async (dialog) => {
@@ -2052,6 +2035,8 @@ test.describe("AutoLister extension smoke flows", () => {
         ),
       )
       .toBe(true);
+    await expect(generateButton).toBeEnabled();
+    await expect(generateButton.locator(".label")).toHaveText("Generate");
 
     await page.locator("#quickvint-phone-btn").click();
     await expect(page.locator("#quickvint-phone-modal")).toBeVisible();
