@@ -4,9 +4,10 @@
   "description": "",
   "main": "content.js",
   "scripts": {
-    "test": "npm run test:e2e",
+    "test": "npm run test:unit && npm run test:e2e",
     "test:unit": "node --test test/*.test.js",
     "test:e2e": "playwright test",
+    "test:ci": "npm run test:unit && npm run test:e2e && npm run build:prod",
     "test:e2e:install": "playwright install chromium",
     "build": "node scripts/set-env.js && terser content.js -o content.min.js --compress --mangle",
     "build:prod": "API_BASE_URL=https://autolister.app node scripts/set-env.js && terser content.js -o content.min.js --compress --mangle",

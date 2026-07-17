@@ -2,6 +2,26 @@
 
 This repo is mostly operated by AI agents. Treat `main` as the production frontend branch.
 
+## Checks
+
+Before pushing production frontend changes, run the full local gate:
+
+```bash
+npm test
+npm run build:prod
+```
+
+`npm test` runs both `test:unit` and `test:e2e`. Do not replace it with only one of those commands when touching generation, upload, auth, billing, popup, or release flow code.
+
+For upload/generation incidents, verify the relevant E2E coverage in `tests/e2e/extension.spec.js` before changing `content.js`. The temp-upload contract is:
+
+- manual file uploads should generate with `generationPayloadSource: "manual_upload_storage_url"` when temp upload succeeds.
+- phone single uploads should generate with `generationPayloadSource: "phone_upload_storage_url"`.
+- batch uploads should generate with `generationPayloadSource: "phone_upload_storage_url"`.
+- visible Vinted image URLs are fallback behavior only when captured originals cannot be trusted.
+
+See `docs/testing-strategy.md` for the frontend test map.
+
 ## Chrome Web Store Releases
 
 Do not guess extension versions from memory, screenshots, old ZIP files, previous chat context, or the public Chrome Web Store listing.

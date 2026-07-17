@@ -12,15 +12,30 @@ AutoLister AI is a Chrome browser extension (Manifest V3) that provides AI-gener
 # Install dependencies
 npm install
 
+# Run the full test gate
+npm test
+
+# Unit tests only
+npm run test:unit
+
+# Playwright extension E2E tests only
+npm run test:e2e
+
 # Build minified content script for production
-npm run build
-# Runs: terser content.js -o content.min.js --compress --mangle
+npm run build:prod
 
 # Prepare (runs build automatically on npm install)
 npm run prepare
 ```
 
-Note: There is no test suite or linting configured in this project.
+Before pushing production frontend changes, run `npm test` and `npm run build:prod`. `npm test` runs both unit tests and Playwright E2E tests. Do not skip either side for generation, upload, auth, billing, popup, or release flow changes.
+
+For upload/generation incidents, check the relevant E2E tests in `tests/e2e/extension.spec.js`. The expected temp-upload flow is:
+
+- manual file upload generation uses `generationPayloadSource: "manual_upload_storage_url"` when temp upload succeeds.
+- phone single upload generation uses `generationPayloadSource: "phone_upload_storage_url"`.
+- batch upload generation uses `generationPayloadSource: "phone_upload_storage_url"`.
+- visible Vinted image URLs are fallback behavior only when captured originals cannot be trusted.
 
 ## Release Agent Rules
 
