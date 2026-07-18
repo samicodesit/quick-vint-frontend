@@ -796,6 +796,21 @@ function isAllowedExternalSender(sender) {
   }
 }
 
+function isAllowedAuthHandoffSender(sender) {
+  try {
+    const url = sender?.url ? new URL(sender.url) : null;
+    if (url) {
+      return (
+        url.origin === "https://autolister.app" &&
+        url.pathname === "/auth/callback"
+      );
+    }
+  } catch (err) {
+    return false;
+  }
+  return false;
+}
+
 function buildPublicUserProfileResponse(supabaseSession, userProfile) {
   const user = supabaseSession?.user || null;
   return {
@@ -815,6 +830,57 @@ function buildPublicUserProfileResponse(supabaseSession, userProfile) {
         }
       : null,
   };
+}
+
+async function trackAuthHandoffSuccess(session) {
+  if (!session?.access_token) return;
+  const analyticsClientId = await getAnalyticsClientId();
+  await fetch(`${API_BASE}/api/events/track`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${session.access_token}`,
+    },
+    body: JSON.stringify({
+      event: "auth_success",
+      source: "extension_external_auth",
+      page: "background",
+      context: {
+        auth_event: "auth_handoff",
+        analyticsClientId,
+      },
+    }),
+  }).catch(() => {});
+}
+
+async function acceptExternalAuthHandoff(rawSession) {
+  const accessToken =
+    typeof rawSession?.access_token === "string" ? rawSession.access_token : "";
+  const refreshToken =
+    typeof rawSession?.refresh_token === "string"
+      ? rawSession.refresh_token
+      : "";
+  if (!accessToken || !refreshToken) {
+    return { ok: false, error: "invalid_session" };
+  }
+
+  const previousSession = await getStoredSession();
+  const { data, error } = await supabaseClient.auth.setSession({
+    access_token: accessToken,
+    refresh_token: refreshToken,
+  });
+  if (error || !data?.session) {
+    if (previousSession) await setStoredSession(previousSession);
+    return {
+      ok: false,
+      error: error?.message || "session_set_failed",
+    };
+  }
+
+  await setStoredSession(data.session);
+  await updateAndStoreUserProfile();
+  await trackAuthHandoffSuccess(data.session);
+  return { ok: true };
 }
 
 async function notifyVintedTabsCheckoutFulfilled() {
@@ -910,6 +976,12 @@ chrome.runtime.onMessageExternal.addListener((message, sender, sendResponse) => 
     message?.type === "OPEN_POPUP"
   ) {
     openActionPopup().then(sendResponse);
+    return true;
+  }
+
+  if (message?.type === "AUTH_HANDOFF") {
+    if (!isAllowedAuthHandoffSender(sender)) return false;
+    acceptExternalAuthHandoff(message.session).then(sendResponse);
     return true;
   }
 
