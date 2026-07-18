@@ -2754,11 +2754,14 @@
           : null,
       });
       throw error;
+    }).finally(() => {
+      updateButtonUI();
     });
 
     upload.storageUploadPromise = upload.storageUploadPromise
       ? Promise.allSettled([upload.storageUploadPromise, currentUploadPromise])
       : currentUploadPromise;
+    updateButtonUI();
   }
 
   function hasManualCapturedFilesMissingStorageUrls(upload = getActiveCapturedPromptUpload()) {
@@ -9371,12 +9374,16 @@
     if (!label || !icon) return;
 
     const incompletePhoneUpload = getIncompletePhoneUploadState();
+    const manualPhotosPreparing = hasManualCapturedFilesMissingStorageUrls();
 
-    if (isBusy || incompletePhoneUpload) {
+    if (isBusy || incompletePhoneUpload || manualPhotosPreparing) {
       generateBtn.classList.add("is-loading");
       generateBtn.disabled = true;
       icon.style.display = "";
-      label.textContent = incompletePhoneUpload ? "Preparing..." : generateBusyLabel;
+      label.textContent =
+        incompletePhoneUpload || manualPhotosPreparing
+          ? "Preparing..."
+          : generateBusyLabel;
       generateBtn.style.cursor = "progress";
       generateBtn.style.background = PRIMARY_BUTTON_BACKGROUND;
     } else {
@@ -13397,19 +13404,19 @@
           Date.now() - generateFetchDiagnostics.startedAtMs;
         delete generateFetchDiagnostics.startedAtMs;
       }
-      trackGrowthEvent(
-        "generate_error",
-        buildGenerateFailureDiagnostics(err, {
-          mode,
-          ...(generateFetchDiagnostics || {}),
-        }),
-      );
-      if (manageButtonState) {
-        const toastMessage = err.message || "An unexpected error occurred.";
-        showToast(
-          toastMessage,
-          isGenerateWaitingMessage(toastMessage) ? "info" : "error",
+      const toastMessage = err.message || "An unexpected error occurred.";
+      const isWaitingMessage = isGenerateWaitingMessage(toastMessage);
+      if (!isWaitingMessage) {
+        trackGrowthEvent(
+          "generate_error",
+          buildGenerateFailureDiagnostics(err, {
+            mode,
+            ...(generateFetchDiagnostics || {}),
+          }),
         );
+      }
+      if (manageButtonState) {
+        showToast(toastMessage, isWaitingMessage ? "info" : "error");
         isBusy = false;
       }
       updateButtonUI();

@@ -975,7 +975,7 @@ test.describe("AutoLister extension smoke flows", () => {
       });
   });
 
-  test("keeps the generate button loading while manual photos are preparing", async ({
+  test("disables the generate button while manual photos are preparing", async ({
     page,
   }) => {
     let releaseUpload;
@@ -1037,14 +1037,16 @@ test.describe("AutoLister extension smoke flows", () => {
       mimeType: "image/png",
       buffer: uploadBuffer,
     });
-    await page.locator("#quickvint-gen-btn").click();
-
+    await expect(page.locator("#quickvint-gen-btn")).toBeDisabled();
     await expect(page.locator("#quickvint-gen-btn .label")).toHaveText(
       "Preparing...",
     );
+    await page.evaluate(() => document.getElementById("quickvint-gen-btn")?.click());
     expect(generateRequests).toBe(0);
 
     releaseUpload();
+    await expect(page.locator("#quickvint-gen-btn")).toBeEnabled();
+    await page.locator("#quickvint-gen-btn").click();
     await expect(page.locator('[data-testid="title--input"]')).toHaveValue(
       "Prepared Upload Jacket",
     );
