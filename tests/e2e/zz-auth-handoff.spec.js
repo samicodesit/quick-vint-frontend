@@ -107,11 +107,13 @@ test.describe("HTTPS auth handoff", () => {
     const accessToken = fakeAccessToken();
 
     const page = await context.newPage();
+    const closePromise = page.waitForEvent("close", { timeout: 6000 });
     await page.goto(
       `https://autolister.app/auth/callback#access_token=${accessToken}&refresh_token=refresh-e2e&expires_in=3600&token_type=bearer`,
     );
 
     await expect(page.locator("#authCallbackStatus")).toHaveText("Signed in.");
+    await expect(page.locator("#authCountdown")).toHaveText("3");
     await expect
       .poll(() => page.evaluate(() => window.location.hash))
       .toBe("");
@@ -141,6 +143,7 @@ test.describe("HTTPS auth handoff", () => {
         "auth_success",
       ]),
     );
+    await closePromise;
 
     await context.close();
   });

@@ -883,6 +883,31 @@ async function acceptExternalAuthHandoff(rawSession) {
   return { ok: true };
 }
 
+function closeAuthHandoffTab(sender, delayMs = 0) {
+  const tabId = sender?.tab?.id;
+  if (typeof tabId !== "number") return;
+  const close = () => {
+    try {
+      chrome.tabs.remove(tabId, () => {
+        if (chrome.runtime.lastError) {
+          console.debug(
+            "Could not close auth callback tab:",
+            chrome.runtime.lastError.message,
+          );
+        }
+      });
+    } catch (error) {
+      console.debug("Could not close auth callback tab:", error);
+    }
+  };
+  const delay = Math.min(Math.max(Number(delayMs) || 0, 0), 5000);
+  if (delay > 0) {
+    setTimeout(close, delay);
+  } else {
+    close();
+  }
+}
+
 async function notifyVintedTabsCheckoutFulfilled() {
   try {
     const tabs = await chrome.tabs.query({
@@ -981,7 +1006,10 @@ chrome.runtime.onMessageExternal.addListener((message, sender, sendResponse) => 
 
   if (message?.type === "AUTH_HANDOFF") {
     if (!isAllowedAuthHandoffSender(sender)) return false;
-    acceptExternalAuthHandoff(message.session).then(sendResponse);
+    acceptExternalAuthHandoff(message.session).then((response) => {
+      sendResponse(response);
+      if (response?.ok) closeAuthHandoffTab(sender, message.closeDelayMs);
+    });
     return true;
   }
 

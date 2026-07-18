@@ -5,10 +5,17 @@ const vm = require("node:vm");
 
 async function runBackgroundHandoff(
   message,
-  sender = { origin: "https://autolister.app", url: "https://autolister.app/auth/callback" },
+  sender = {
+    origin: "https://autolister.app",
+    url: "https://autolister.app/auth/callback",
+    tab: { id: 123 },
+  },
   options = {},
 ) {
   const storageData = { ...(options.initialStorage || {}) };
+  const removedTabs = [];
+  const timers = [];
+  const timerCalls = [];
   let externalListener;
   let setSessionArgs = null;
   const setSessionResult = options.setSessionResult || {
@@ -94,6 +101,9 @@ async function runBackgroundHandoff(
     },
     tabs: {
       create() {},
+      remove(tabId) {
+        removedTabs.push(tabId);
+      },
       query(_query, callback) {
         callback([]);
       },
@@ -106,7 +116,12 @@ async function runBackgroundHandoff(
     console,
     chrome,
     fetch: async () => ({ ok: true, json: async () => ({}) }),
-    setTimeout: () => 1,
+    setTimeout(callback, delay) {
+      const timer = { callback, delay };
+      timers.push(timer);
+      timerCalls.push({ delay });
+      return timers.length;
+    },
     clearTimeout() {},
     URLSearchParams,
     URL,
@@ -132,11 +147,14 @@ async function runBackgroundHandoff(
   );
   await new Promise((resolve) => setImmediate(resolve));
 
-  return { response, storageData, setSessionArgs };
+  timers.splice(0).forEach(({ callback }) => callback());
+  await new Promise((resolve) => setImmediate(resolve));
+
+  return { response, storageData, setSessionArgs, removedTabs, timers: timerCalls };
 }
 
 test("background accepts HTTPS auth handoff and stores the Supabase session", async () => {
-  const { response, storageData, setSessionArgs } = await runBackgroundHandoff({
+  const { response, storageData, setSessionArgs, removedTabs } = await runBackgroundHandoff({
     type: "AUTH_HANDOFF",
     session: {
       access_token: "access-1",
@@ -149,10 +167,26 @@ test("background accepts HTTPS auth handoff and stores the Supabase session", as
   assert.equal(setSessionArgs.refresh_token, "refresh-1");
   assert.equal(storageData.supabaseSession.user.email, "seller@example.com");
   assert.equal(storageData.accountEmail, "seller@example.com");
+  assert.deepEqual(removedTabs, [123]);
+});
+
+test("background delays closing the HTTPS auth callback tab when requested", async () => {
+  const { response, removedTabs, timers } = await runBackgroundHandoff({
+    type: "AUTH_HANDOFF",
+    session: {
+      access_token: "access-1",
+      refresh_token: "refresh-1",
+    },
+    closeDelayMs: 3400,
+  });
+
+  assert.equal(response.ok, true);
+  assert.equal(timers.some((timer) => timer.delay === 3400), true);
+  assert.deepEqual(removedTabs, [123]);
 });
 
 test("background rejects malformed HTTPS auth handoff sessions", async () => {
-  const { response, storageData, setSessionArgs } = await runBackgroundHandoff({
+  const { response, storageData, setSessionArgs, removedTabs } = await runBackgroundHandoff({
     type: "AUTH_HANDOFF",
     session: {
       access_token: "access-1",
@@ -163,6 +197,7 @@ test("background rejects malformed HTTPS auth handoff sessions", async () => {
   assert.equal(response.error, "invalid_session");
   assert.equal(setSessionArgs, null);
   assert.equal(storageData.supabaseSession, undefined);
+  assert.deepEqual(removedTabs, []);
 });
 
 test("background ignores auth handoff messages outside the HTTPS callback page", async () => {
