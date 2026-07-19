@@ -3218,7 +3218,7 @@ test.describe("AutoLister extension smoke flows", () => {
     await expect(offer).toContainText("LISTFASTER20");
   });
 
-  test("shows a localized Pro offer after Starter users close the daily-limit paywall", async ({
+  test("shows a soft Pro upsell after Starter users close the daily-limit paywall", async ({
     page,
   }) => {
     await page.setViewportSize({ width: 1800, height: 900 });
@@ -3261,8 +3261,29 @@ test.describe("AutoLister extension smoke flows", () => {
     const offer = page.locator("#quickvint-limit-followup-modal");
     await expect(offer).toBeVisible();
     await expect(offer).toContainText("Limite quotidienne Starter atteinte");
-    await expect(offer).toContainText("Besoin de plus d'annonces aujourd'hui");
-    await expect(offer).toContainText("LISTFASTER20");
+    await expect(offer).toContainText("Your limit resets tomorrow");
+    await expect(offer).toContainText("Pro gives you 25/day and 250/month");
+    await expect(offer).toContainText("Upgrade to Pro");
+    await expect(offer).not.toContainText("LISTFASTER20");
+    await offer.locator(".quickvint-limit-primary").click();
+
+    await expect
+      .poll(() =>
+        page.evaluate(
+          () =>
+            window.__extensionHarness.runtimeMessages.filter(
+              (message) => message?.type === "CREATE_CHECKOUT",
+            ),
+        ),
+      )
+      .toEqual([
+        {
+          type: "CREATE_CHECKOUT",
+          checkoutType: "subscription",
+          tier: "pro",
+          source: "extension_limit_followup_offer",
+        },
+      ]);
   });
 
   test("does not show the Pro offer for Starter monthly limits", async ({
@@ -3333,7 +3354,8 @@ test.describe("AutoLister extension smoke flows", () => {
     const offer = page.locator("#quickvint-limit-followup-modal");
     await expect(offer).toBeVisible();
     await expect(offer).toContainText("Starter daily limit reached");
-    await expect(offer).toContainText("Need more listings today?");
+    await expect(offer).toContainText("Your limit resets tomorrow");
+    await expect(offer).not.toContainText("LISTFASTER20");
 
     await offer.locator(".quickvint-limit-close").click();
     await expect(offer).toHaveCount(0);
@@ -3342,7 +3364,7 @@ test.describe("AutoLister extension smoke flows", () => {
         page.evaluate(
           () =>
             window.__extensionHarness.storage[
-              "quickvintOfferDismissed:test-user:starter_daily_limit_offer_v1"
+              "quickvintOfferDismissed:test-user:starter_daily_pro_offer_v1"
             ],
         ),
       )

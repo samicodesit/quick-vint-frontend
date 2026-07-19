@@ -45,6 +45,7 @@
   const OFFER_SHOW_COOLDOWN_MS = 7 * 24 * 60 * 60 * 1000;
   const FREE_LIMIT_OFFER_COPY_KEY = "free_limit";
   const STARTER_DAILY_LIMIT_OFFER_COPY_KEY = "starter_daily_limit";
+  const STARTER_DAILY_PRO_CAMPAIGN_KEY = "starter_daily_pro_offer_v1";
   const FREE_LIFETIME_LIMIT = 5;
   const LIMIT_FOLLOWUP_COUPON_CODE = "LISTFASTER20";
   const LIMIT_FOLLOWUP_CLOSE_DELAY_MS = 10 * 1000;
@@ -1276,7 +1277,7 @@
 
   function getOfferCampaignKey(copyKey = FREE_LIMIT_OFFER_COPY_KEY) {
     return copyKey === STARTER_DAILY_LIMIT_OFFER_COPY_KEY
-      ? "starter_daily_limit_offer_v1"
+      ? STARTER_DAILY_PRO_CAMPAIGN_KEY
       : "limit_followup_offer_v1";
   }
 
@@ -1285,13 +1286,22 @@
     copyKey = FREE_LIMIT_OFFER_COPY_KEY,
   ) {
     const campaignKey = getOfferCampaignKey(copyKey);
+    const isStarterDailyOffer = copyKey === STARTER_DAILY_LIMIT_OFFER_COPY_KEY;
     const offer = {
       campaignKey,
       copyKey,
-      couponCode: LIMIT_FOLLOWUP_COUPON_CODE,
-      discountLabel: LIMIT_FOLLOWUP_COPY.en.discount,
+      couponCode: isStarterDailyOffer ? "" : LIMIT_FOLLOWUP_COUPON_CODE,
+      discountLabel: isStarterDailyOffer
+        ? "Pro: 25/day and 250/month"
+        : LIMIT_FOLLOWUP_COPY.en.discount,
       pricingUrl: await getPricingUrl(),
       limitHitAt: new Date().toISOString(),
+      ...(isStarterDailyOffer
+        ? {
+            tier: "pro",
+            checkoutType: "subscription",
+          }
+        : {}),
     };
 
     if (await isOfferLocallyDismissed(offer)) return;
@@ -1630,7 +1640,19 @@
       LIMIT_FOLLOWUP_COPY_OVERRIDES[copyKey]?.[supportedLanguage] ||
       LIMIT_FOLLOWUP_COPY_OVERRIDES[copyKey]?.en ||
       null;
-    return overrideCopy ? { ...baseCopy, ...overrideCopy } : baseCopy;
+    const mergedCopy = overrideCopy ? { ...baseCopy, ...overrideCopy } : baseCopy;
+    if (copyKey !== STARTER_DAILY_LIMIT_OFFER_COPY_KEY) return mergedCopy;
+    return {
+      ...mergedCopy,
+      body:
+        "Your limit resets tomorrow. If you regularly need more listings per day, Pro gives you 25/day and 250/month.",
+      discount: "Pro: 25/day and 250/month",
+      offerSub: "For regular listing days",
+      primary: "Upgrade to Pro",
+      secondary: "Wait until tomorrow",
+      noAccount: "More daily and monthly listings included",
+      stripe: "Secure Stripe checkout. Cancel anytime.",
+    };
   }
 
   function getDescriptionFooterCopy(languageCode) {
@@ -1965,12 +1987,12 @@
     });
   }
 
-  async function createCheckoutForPaywall(option) {
+  async function createCheckoutForPaywall(option, source = "extension_paywall") {
     const response = await sendMessage({
       type: "CREATE_CHECKOUT",
       checkoutType: option.checkoutType,
       tier: option.tier,
-      source: "extension_paywall",
+      source,
     });
     if (!response?.ok || !response.url) {
       const error = new Error(
@@ -9959,7 +9981,7 @@
     document.getElementById(LIMIT_FOLLOWUP_MODAL_ID)?.remove();
     removeDescriptionApplyPrompt();
 
-    const couponCode = offer.couponCode || "LISTFASTER20";
+    const couponCode = offer.couponCode ?? "LISTFASTER20";
     const modalCopy = copy || LIMIT_FOLLOWUP_COPY.en;
     const discountLabel =
       modalCopy.discount || offer.discountLabel || LIMIT_FOLLOWUP_COPY.en.discount;
@@ -9995,7 +10017,11 @@
                 <div class="quickvint-limit-offer-main">${escapeHtml(discountLabel)}</div>
                 <div class="quickvint-limit-offer-sub">${escapeHtml(modalCopy.offerSub)}</div>
               </div>
-              <button type="button" class="quickvint-limit-code" aria-label="${escapeHtml(modalCopy.copyCoupon)} ${escapeHtml(couponCode)}">${escapeHtml(couponCode)}</button>
+              ${
+                couponCode
+                  ? `<button type="button" class="quickvint-limit-code" aria-label="${escapeHtml(modalCopy.copyCoupon)} ${escapeHtml(couponCode)}">${escapeHtml(couponCode)}</button>`
+                  : ""
+              }
             </div>
             <ul class="quickvint-limit-points">
               <li><span class="quickvint-limit-check">✓</span><span>${escapeHtml(modalCopy.noAccount)}</span></li>
@@ -10010,13 +10036,13 @@
         </div>
       `;
 
-      function finish(choice) {
+      function finish(choice, extra = {}) {
         window.removeEventListener("resize", onReposition);
         window.removeEventListener("scroll", onReposition, true);
         modal.remove();
         activeFloatingPromptType = null;
         activeLimitFollowupOfferCleanup = null;
-        resolve(choice);
+        resolve({ choice, ...extra });
       }
 
       const onReposition = () => positionLimitFollowupOfferModal(modal, anchorInput);
@@ -10031,7 +10057,12 @@
         ?.addEventListener("click", () => finish("dismiss"));
       modal
         .querySelector(".quickvint-limit-primary")
-        ?.addEventListener("click", () => finish("open"));
+        ?.addEventListener("click", () => {
+          const checkoutWindow = offer.checkoutType
+            ? window.open("about:blank", "_blank")
+            : null;
+          finish(offer.checkoutType ? "checkout" : "open", { checkoutWindow });
+        });
       modal
         .querySelector(".quickvint-limit-feedback")
         ?.addEventListener("click", () => finish("feedback"));
@@ -10102,11 +10133,12 @@
         languageContext.hasExplicitLanguagePreference,
     });
 
-    const choice = await showLimitFollowupOfferModal(
+    const result = await showLimitFollowupOfferModal(
       offer,
       anchorInput,
       languageContext.copy,
     );
+    const choice = result?.choice || result;
 
     if (choice === "feedback") {
       await dismissOfferLocally(offer);
@@ -10132,6 +10164,49 @@
         limitHitAt: offer.limitHitAt,
       });
       window.open(offer.pricingUrl, "_blank", "noopener,noreferrer");
+    }
+
+    if (choice === "checkout") {
+      await dismissOfferLocally(offer);
+      pendingLimitFollowupOffer = null;
+      trackGrowthEvent("checkout_start", {
+        source: "extension_limit_followup_offer",
+        tier: offer.tier,
+        checkoutType: offer.checkoutType,
+        campaignKey: offer.campaignKey,
+      });
+      try {
+        const checkoutUrl = await createCheckoutForPaywall(
+          offer,
+          "extension_limit_followup_offer",
+        );
+        trackGrowthEvent("checkout_opened", {
+          source: "extension_limit_followup_offer",
+          tier: offer.tier,
+          checkoutType: offer.checkoutType,
+          campaignKey: offer.campaignKey,
+        });
+        if (result?.checkoutWindow) {
+          result.checkoutWindow.location.href = checkoutUrl;
+        } else {
+          window.open(checkoutUrl, "_blank", "noopener,noreferrer");
+        }
+      } catch (error) {
+        result?.checkoutWindow?.close?.();
+        trackGrowthEvent("checkout_failed", {
+          source: "extension_limit_followup_offer",
+          tier: offer.tier,
+          checkoutType: offer.checkoutType,
+          campaignKey: offer.campaignKey,
+          reason: error.reason || null,
+          status: error.status || null,
+          message: error.message || "Unable to open the payment page.",
+        });
+        showToast(
+          error.message || "Unable to open the payment page. Please try again.",
+          "error",
+        );
+      }
     }
 
     if (choice === "dismiss") {
@@ -10216,10 +10291,22 @@
         const offer = {
           campaignKey,
           copyKey,
-          couponCode: LIMIT_FOLLOWUP_COUPON_CODE,
-          discountLabel: LIMIT_FOLLOWUP_COPY.en.discount,
+          couponCode:
+            copyKey === STARTER_DAILY_LIMIT_OFFER_COPY_KEY
+              ? ""
+              : LIMIT_FOLLOWUP_COUPON_CODE,
+          discountLabel:
+            copyKey === STARTER_DAILY_LIMIT_OFFER_COPY_KEY
+              ? "Pro: 25/day and 250/month"
+              : LIMIT_FOLLOWUP_COPY.en.discount,
           pricingUrl: await getPricingUrl(),
           limitHitAt: new Date().toISOString(),
+          ...(copyKey === STARTER_DAILY_LIMIT_OFFER_COPY_KEY
+            ? {
+                tier: "pro",
+                checkoutType: "subscription",
+              }
+            : {}),
         };
 
         if (await isOfferLocallyDismissed(offer)) continue;
