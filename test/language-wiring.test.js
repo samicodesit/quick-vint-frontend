@@ -5,11 +5,12 @@ const test = require("node:test");
 test("shared language defaults load before extension entrypoints", () => {
   const manifest = JSON.parse(readFileSync("manifest.json", "utf8"));
   const contentScripts = manifest.content_scripts?.[0]?.js || [];
+  const manifestLanguageScriptIndex = contentScripts.indexOf("language-defaults.js");
+  const manifestContentScriptIndex = contentScripts.indexOf("content.js");
 
-  assert.deepEqual(contentScripts.slice(0, 2), [
-    "language-defaults.js",
-    "content.js",
-  ]);
+  assert.notEqual(manifestLanguageScriptIndex, -1);
+  assert.notEqual(manifestContentScriptIndex, -1);
+  assert.ok(manifestLanguageScriptIndex < manifestContentScriptIndex);
 
   const popupHtml = readFileSync("popup.html", "utf8");
   const languageScriptIndex = popupHtml.indexOf(

@@ -29,6 +29,8 @@
   const PHONE_API_BASE = "https://autolister.app";
   const PHONE_UPLOAD_PAGE = `${PHONE_API_BASE}/phone-upload`;
   const PHONE_UPLOAD_API = `${PHONE_API_BASE}/api/phone-upload`;
+  const DOM_CANARY_CONFIG = globalThis.QUICKVINT_DOM_CANARY || {};
+  const DOM_CANARY_CHECK = "vinted_listing_field_injection";
   const MAX_GENERATE_REQUEST_BODY_BYTES = 3_800_000;
   const MANUAL_STORAGE_UPLOAD_WAIT_MS = 12000;
   const MAX_PHONE_UPLOAD_PREVIEWS = 7;
@@ -9426,6 +9428,7 @@
       path: window.location.pathname,
       visiblePhotoCount: getVisibleUploadedPhotoCount(),
     });
+    maybePostDomCanaryPass();
     scheduleLimitFollowupReturnCheck();
   }
 
@@ -9436,6 +9439,186 @@
       path: window.location.pathname,
       visiblePhotoCount: getVisibleUploadedPhotoCount(),
     });
+  }
+
+  function isDomCanaryEnabled() {
+    return Boolean(
+      DOM_CANARY_CONFIG?.enabled &&
+        DOM_CANARY_CONFIG?.secret &&
+        location.hostname === "www.vinted.nl",
+    );
+  }
+
+  function getDomCanaryPayload(status, result = {}) {
+    const title = Boolean(document.querySelector(SELECTORS.title));
+    const description = Boolean(document.querySelector(SELECTORS.description));
+    const generateButton = Boolean(document.getElementById(BTN_ID));
+    const signInButton = Boolean(document.getElementById(SIGN_IN_BTN_ID));
+    const tools = Boolean(document.querySelector(".quickvint-tools"));
+    return {
+      check: DOM_CANARY_CHECK,
+      status,
+      occurredAt: new Date().toISOString(),
+      url: location.href,
+      path: location.pathname,
+      extensionVersion: chrome.runtime.getManifest().version || "",
+      result: {
+        ...result,
+        dom: {
+          title,
+          description,
+          generateButton,
+          signInButton,
+          tools,
+          titleText: document.title,
+        },
+      },
+      selectors: {
+        title: SELECTORS.title,
+        description: SELECTORS.description,
+        generateButton: `#${BTN_ID}`,
+        signInButton: `#${SIGN_IN_BTN_ID}`,
+        tools: ".quickvint-tools",
+      },
+    };
+  }
+
+  function postDomCanary(status, result = {}) {
+    if (!isDomCanaryEnabled()) return;
+    fetch(`${API_BASE}/api/dom-canary`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${DOM_CANARY_CONFIG.secret}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(getDomCanaryPayload(status, result)),
+    }).catch(() => {});
+  }
+
+  function maybePostDomCanaryPass() {
+    if (!isDomCanaryEnabled()) return;
+    if (window.__quickvintDomCanaryPassed) return;
+    if (location.pathname !== "/items/new") return;
+    if (!document.querySelector(SELECTORS.title)) return;
+    if (!document.querySelector(SELECTORS.description)) return;
+    if (
+      !document.getElementById(BTN_ID) &&
+      !document.getElementById(SIGN_IN_BTN_ID) &&
+      !document.querySelector(".quickvint-tools")
+    ) {
+      return;
+    }
+    window.__quickvintDomCanaryPassed = true;
+    postDomCanary("passed", { injected: true });
+  }
+
+  function setNativeInputValue(input, value) {
+    const setter = Object.getOwnPropertyDescriptor(
+      HTMLInputElement.prototype,
+      "value",
+    )?.set;
+    setter?.call(input, value);
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+    input.dispatchEvent(new Event("change", { bubbles: true }));
+  }
+
+  function clickCanaryTarget(selector) {
+    const el = document.querySelector(selector);
+    if (!el) return false;
+    el.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
+    return true;
+  }
+
+  function submitDomCanaryAuthForm() {
+    const emailInput = document.querySelector(
+      'input[name="email"], input[name="username"]',
+    );
+    const passwordInput = document.querySelector('input[name="password"]');
+    const loginInput = document.querySelector('input[name="login"]');
+    if (!emailInput || !passwordInput) return false;
+
+    if (loginInput && DOM_CANARY_CONFIG.username) {
+      setNativeInputValue(loginInput, DOM_CANARY_CONFIG.username);
+    }
+    setNativeInputValue(emailInput, DOM_CANARY_CONFIG.email);
+    setNativeInputValue(passwordInput, DOM_CANARY_CONFIG.password);
+
+    const termsInput = document.querySelector('input[name="agreeRules"]');
+    if (termsInput && !termsInput.checked) {
+      clickCanaryTarget('[data-testid="terms-and-conditions-checkbox"]') ||
+        termsInput.click();
+    }
+
+    const submit = [...document.querySelectorAll("button")].find((button) =>
+      /Verder|Inloggen|Log in|Continue|Sign up|Registreren/i.test(
+        button.innerText || "",
+      ),
+    );
+    submit?.dispatchEvent(
+      new MouseEvent("click", { bubbles: true, cancelable: true }),
+    );
+    return Boolean(submit);
+  }
+
+  function maybeRecoverDomCanaryLogin() {
+    if (!isDomCanaryEnabled()) return;
+    if (/session has been blocked|unusual or automated activity/i.test(document.body?.innerText || "")) {
+      postDomCanary("failed", { reason: "vinted_session_blocked" });
+      return;
+    }
+    if (!DOM_CANARY_CONFIG.email || !DOM_CANARY_CONFIG.password) return;
+    if (!/\/member\/signup\/select_type|\/member\/login|\/auth\//.test(location.pathname)) {
+      return;
+    }
+    if (window.__quickvintDomCanaryLoginAttempted) return;
+    window.__quickvintDomCanaryLoginAttempted = true;
+
+    setTimeout(() => {
+      const mode = DOM_CANARY_CONFIG.mode === "signup" ? "signup" : "login";
+      if (mode === "login") {
+        clickCanaryTarget('[data-testid="auth-select-type--register-switch"]');
+        setTimeout(() => {
+          clickCanaryTarget('[data-testid="auth-select-type--login-email"]') ||
+            clickCanaryTarget('[data-testid="auth-select-type--register-email"]');
+          setTimeout(() => {
+            if (!submitDomCanaryAuthForm()) {
+              postDomCanary("failed", { reason: "auth_recovery_form_missing" });
+            } else {
+              setTimeout(() => {
+                if (
+                  /\/member\/signup\/select_type|\/member\/login|\/auth\//.test(
+                    location.pathname,
+                  )
+                ) {
+                  postDomCanary("failed", {
+                    reason: "auth_recovery_still_required",
+                  });
+                }
+              }, 7000);
+            }
+          }, 1200);
+        }, 1200);
+      } else {
+        clickCanaryTarget('[data-testid="auth-select-type--register-email"]');
+        setTimeout(() => {
+          if (!submitDomCanaryAuthForm()) {
+            postDomCanary("failed", { reason: "auth_signup_form_missing" });
+          } else {
+            setTimeout(() => {
+              if (
+                /\/member\/signup\/select_type|\/member\/login|\/auth\//.test(
+                  location.pathname,
+                )
+              ) {
+                postDomCanary("failed", {
+                  reason: "auth_signup_still_required",
+                });
+              }
+            }, 7000);
+          }
+        }, 1200);
+      }
+    }, 1200);
   }
 
   function setButtonSuccessState() {
@@ -13580,6 +13763,7 @@
       syncDescriptionFooterButtonState();
       syncDescriptionLengthToggleState();
       updateButtonUI();
+      maybePostDomCanaryPass();
       return true;
     }
 
@@ -13629,6 +13813,7 @@
       container.parentNode.insertBefore(btnContainer, container.nextSibling);
       injectFieldLanguageControls();
       updateButtonUI();
+      maybePostDomCanaryPass();
       return true;
     }
     return false;
@@ -13657,6 +13842,9 @@
     injectStylesheet();
     bindPromptUploadFileCapture();
     bindLimitFollowupResumeListeners();
+    maybeRecoverDomCanaryLogin();
+    setTimeout(maybeRecoverDomCanaryLogin, 3000);
+    setTimeout(maybeRecoverDomCanaryLogin, 10000);
     initializeAuthState();
     startInjectionObserver();
   }

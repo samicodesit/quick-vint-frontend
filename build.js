@@ -13,6 +13,7 @@ const { execFileSync, execSync } = require('child_process');
 // Configuration
 const INCLUDE_LIST = [
     'manifest.json',
+    'canary-config.js',
     'language-defaults.js',
     'content.js',
     'background.js',
