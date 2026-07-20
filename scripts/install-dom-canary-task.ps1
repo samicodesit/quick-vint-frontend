@@ -93,9 +93,10 @@ if ($preflightExitCode -ne 0 -and -not $AllowFailingPreflight) {
 $action = New-ScheduledTaskAction `
   -Execute "powershell.exe" `
   -Argument "-NoProfile -ExecutionPolicy Bypass -File `"$runnerPath`""
+$firstRun = (Get-Date).AddHours($IntervalHours)
 $trigger = New-ScheduledTaskTrigger `
   -Once `
-  -At (Get-Date).AddMinutes(5) `
+  -At $firstRun `
   -RepetitionInterval (New-TimeSpan -Hours $IntervalHours)
 $settings = New-ScheduledTaskSettingsSet `
   -StartWhenAvailable `
