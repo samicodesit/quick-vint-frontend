@@ -1131,6 +1131,10 @@
       margin-bottom: 24px;
     }
 
+    #signedOutView.magic-link-mode .auth-header {
+      display: none;
+    }
+
     .brand-logo-placeholder {
       width: 40px;
       height: 40px;
@@ -1225,7 +1229,7 @@
     .magic-link-sent-state {
       align-items: center;
       text-align: center;
-      gap: 12px;
+      gap: 10px;
       padding: 4px 0 2px;
     }
 
@@ -1246,7 +1250,7 @@
       font-size: 17px;
       font-weight: 700;
       color: #111827;
-      letter-spacing: -0.02em;
+      letter-spacing: 0;
     }
 
     .magic-link-copy {
@@ -1266,6 +1270,16 @@
       font-size: 12px;
       font-weight: 600;
       overflow-wrap: anywhere;
+    }
+
+    .otp-input {
+      max-width: 180px;
+      margin-bottom: 0;
+      text-align: center;
+      font-size: 22px;
+      font-weight: 700;
+      font-variant-numeric: tabular-nums;
+      letter-spacing: 0;
     }
 
     .magic-link-actions {
@@ -1373,13 +1387,11 @@
             </svg>
           </div>
           <h3 class="magic-link-title">Check your email</h3>
-          <p class="magic-link-copy">We sent a secure sign-in link to:</p>
+          <p class="magic-link-copy">Link and code sent to:</p>
           <div id="magicLinkSentEmail" class="magic-link-email"></div>
-          <p class="magic-link-copy">Open the link on this device to finish signing in.</p>
-          <p class="magic-link-copy">If the link opens in the wrong browser, enter the 6-digit code from the email:</p>
-          <input type="text" id="magicLinkOtpInput" class="form-input" inputmode="numeric" autocomplete="one-time-code"
-            maxlength="6" placeholder="123456" />
-          <button id="verifyMagicLinkCodeBtn" class="btn" type="button">Verify code</button>
+          <input type="text" id="magicLinkOtpInput" class="form-input otp-input" inputmode="numeric"
+            autocomplete="one-time-code" maxlength="6" aria-label="6-digit sign-in code" placeholder="6-digit code" />
+          <button id="verifyMagicLinkCodeBtn" class="btn" type="button">Verify</button>
           <div class="magic-link-actions">
             <button id="resendMagicLinkBtn" class="btn btn-secondary" type="button">Resend</button>
             <button id="editMagicLinkEmailBtn" class="btn btn-secondary" type="button">Change email</button>

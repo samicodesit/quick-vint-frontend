@@ -223,6 +223,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
   // --- DOM ELEMENT REFERENCES ---
   const messagesDiv = document.getElementById("messages");
+  const signedOutView = document.getElementById("signedOutView");
   const authEntryState = document.getElementById("authEntryState");
   const magicLinkSentState = document.getElementById("magicLinkSentState");
   const magicLinkSentEmail = document.getElementById("magicLinkSentEmail");
@@ -597,11 +598,13 @@ document.addEventListener("DOMContentLoaded", () => {
       resendMagicLinkBtn.disabled = false;
       resendMagicLinkBtn.textContent = "Resend";
     }
+    signedOutView?.classList.remove("magic-link-mode");
     authEntryState?.classList.remove("hidden");
     magicLinkSentState?.classList.add("hidden");
   }
 
   function showMagicLinkSent(email, sentAt = Date.now()) {
+    signedOutView?.classList.add("magic-link-mode");
     authEntryState?.classList.add("hidden");
     magicLinkSentState?.classList.remove("hidden");
     if (magicLinkSentEmail) {
@@ -1132,7 +1135,7 @@ document.addEventListener("DOMContentLoaded", () => {
       return;
     }
 
-    setLoading(verifyMagicLinkCodeBtn, true, "Verify code");
+    setLoading(verifyMagicLinkCodeBtn, true, "Verify");
     try {
       const response = await sendRuntimeMessage({
         type: "VERIFY_EMAIL_OTP",
@@ -1160,7 +1163,7 @@ document.addEventListener("DOMContentLoaded", () => {
       });
       showMessage(error.message || "Invalid or expired code.", "error");
     } finally {
-      setLoading(verifyMagicLinkCodeBtn, false, "Verify code");
+      setLoading(verifyMagicLinkCodeBtn, false, "Verify");
     }
   }
 
