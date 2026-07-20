@@ -9545,7 +9545,8 @@
 
     const termsInput = document.querySelector('input[name="agreeRules"]');
     if (termsInput && !termsInput.checked) {
-      clickCanaryTarget('[data-testid="terms-and-conditions-checkbox"]') ||
+      clickCanaryTarget('[data-testid="terms-and-conditions-checkbox--input"]') ||
+        clickCanaryTarget('[data-testid="terms-and-conditions-checkbox"]') ||
         termsInput.click();
     }
 

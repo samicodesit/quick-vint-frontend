@@ -3,7 +3,8 @@ param(
   [string]$RepoPath = "\\wsl.localhost\Ubuntu\home\mests\projects\quick-vint",
   [string]$EnvFile = "\\wsl.localhost\Ubuntu\home\mests\projects\autolister\.env.local",
   [string]$CanaryRoot = "$env:LOCALAPPDATA\AutoListerDomCanary",
-  [string]$ProfileDirectory = "Default",
+  [string]$ProfileDir = "$env:LOCALAPPDATA\Google\Chrome\User Data",
+  [string]$ProfileDirectory = "Profile 4",
   [string]$SeedUserDataDir = "$env:LOCALAPPDATA\Google\Chrome\User Data",
   [string]$SeedProfileDirectory = "Default",
   [switch]$SeedProfile,
@@ -53,7 +54,6 @@ function Get-ChromeForTestingPath {
   return $chromeExe
 }
 
-$profileDir = Join-Path $CanaryRoot "ChromeUserData"
 $extensionPath = Join-Path $CanaryRoot "Extension"
 $runnerPath = Join-Path $CanaryRoot "run-dom-canary.ps1"
 $accountPath = Join-Path $CanaryRoot "vinted-account.json"
@@ -65,7 +65,7 @@ foreach ($path in @($RepoPath, $EnvFile)) {
   }
 }
 
-New-Item -ItemType Directory -Force -Path $CanaryRoot, $profileDir, $extensionPath | Out-Null
+New-Item -ItemType Directory -Force -Path $CanaryRoot, $ProfileDir, $extensionPath | Out-Null
 
 $runner = @"
 param([switch]`$NoPost)
@@ -73,7 +73,7 @@ param([switch]`$NoPost)
 `$ErrorActionPreference = "Stop"
 `$envFile = '$($EnvFile.Replace("'", "''"))'
 `$repoPath = '$($RepoPath.Replace("'", "''"))'
-`$profileDir = '$($profileDir.Replace("'", "''"))'
+`$profileDir = '$($ProfileDir.Replace("'", "''"))'
 `$extensionPath = '$($extensionPath.Replace("'", "''"))'
 `$chromePath = '$($ResolvedChromePath.Replace("'", "''"))'
 `$profileDirectory = '$($ProfileDirectory.Replace("'", "''"))'
