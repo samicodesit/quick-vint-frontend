@@ -17,7 +17,9 @@ async function runBackgroundHandoff(
   const timers = [];
   const timerCalls = [];
   let externalListener;
+  let internalListener;
   let setSessionArgs = null;
+  let verifyOtpArgs = null;
   const setSessionResult = options.setSessionResult || {
     data: {
       session: {
@@ -45,6 +47,22 @@ async function runBackgroundHandoff(
         data: { user: { id: "user-1", email: "seller@example.com" } },
         error: null,
       }),
+      verifyOtp: async (params) => {
+        verifyOtpArgs = params;
+        return (
+          options.verifyOtpResult || {
+            data: {
+              session: {
+                access_token: "otp-access",
+                refresh_token: "otp-refresh",
+                expires_at: 2000000000,
+                user: { id: "user-1", email: params.email },
+              },
+            },
+            error: null,
+          }
+        );
+      },
       refreshSession: async () => ({ data: { session: null }, error: null }),
       onAuthStateChange() {},
     },
@@ -77,7 +95,11 @@ async function runBackgroundHandoff(
           externalListener = listener;
         },
       },
-      onMessage: { addListener() {} },
+      onMessage: {
+        addListener(listener) {
+          internalListener = listener;
+        },
+      },
       onSuspend: { addListener() {} },
     },
     storage: {
@@ -150,7 +172,33 @@ async function runBackgroundHandoff(
   timers.splice(0).forEach(({ callback }) => callback());
   await new Promise((resolve) => setImmediate(resolve));
 
-  return { response, storageData, setSessionArgs, removedTabs, timers: timerCalls };
+  return {
+    response,
+    storageData,
+    setSessionArgs,
+    verifyOtpArgs,
+    getVerifyOtpArgs: () => verifyOtpArgs,
+    removedTabs,
+    timers: timerCalls,
+    internalListener,
+  };
+}
+
+async function runBackgroundMessage(message, options = {}) {
+  const harness = await runBackgroundHandoff(
+    { type: "PING" },
+    {
+      origin: "https://autolister.app",
+      url: "https://autolister.app/auth/callback",
+    },
+    options,
+  );
+  let response;
+  harness.internalListener(message, {}, (value) => {
+    response = value;
+  });
+  await new Promise((resolve) => setImmediate(resolve));
+  return { ...harness, response, verifyOtpArgs: harness.getVerifyOtpArgs() };
 }
 
 test("background accepts HTTPS auth handoff and stores the Supabase session", async () => {
@@ -249,4 +297,22 @@ test("background keeps the existing stored session when a valid-shaped handoff f
   assert.equal(setSessionArgs.access_token, "bad-access");
   assert.deepEqual(storageData.supabaseSession, previousSession);
   assert.equal(storageData.accountEmail, "existing@example.com");
+});
+
+test("background verifies email OTP codes and stores the Supabase session", async () => {
+  const { response, storageData, verifyOtpArgs } = await runBackgroundMessage({
+    type: "VERIFY_EMAIL_OTP",
+    email: "seller@example.com",
+    token: "123456",
+  });
+
+  assert.equal(response.ok, true);
+  assert.deepEqual(JSON.parse(JSON.stringify(verifyOtpArgs)), {
+    email: "seller@example.com",
+    token: "123456",
+    type: "email",
+  });
+  assert.equal(storageData.supabaseSession.access_token, "otp-access");
+  assert.equal(storageData.supabaseSession.user.email, "seller@example.com");
+  assert.equal(storageData.accountEmail, "seller@example.com");
 });

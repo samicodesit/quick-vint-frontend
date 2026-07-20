@@ -832,7 +832,7 @@ function buildPublicUserProfileResponse(supabaseSession, userProfile) {
   };
 }
 
-async function trackAuthHandoffSuccess(session) {
+async function trackAuthHandoffSuccess(session, authEvent = "auth_handoff") {
   if (!session?.access_token) return;
   const analyticsClientId = await getAnalyticsClientId();
   await fetch(`${API_BASE}/api/events/track`, {
@@ -846,7 +846,7 @@ async function trackAuthHandoffSuccess(session) {
       source: "extension_external_auth",
       page: "background",
       context: {
-        auth_event: "auth_handoff",
+        auth_event: authEvent,
         analyticsClientId,
       },
     }),
@@ -881,6 +881,34 @@ async function acceptExternalAuthHandoff(rawSession) {
   await updateAndStoreUserProfile();
   await trackAuthHandoffSuccess(data.session);
   return { ok: true };
+}
+
+async function verifyEmailOtp({ email, token }) {
+  const normalizedEmail = String(email || "").trim().toLowerCase();
+  const normalizedToken = String(token || "").replace(/\D/g, "");
+  if (!normalizedEmail.includes("@") || normalizedToken.length !== 6) {
+    return { ok: false, error: "invalid_otp" };
+  }
+
+  const { data, error } = await supabaseClient.auth.verifyOtp({
+    email: normalizedEmail,
+    token: normalizedToken,
+    type: "email",
+  });
+  if (error || !data?.session) {
+    return {
+      ok: false,
+      error: error?.message || "otp_verification_failed",
+    };
+  }
+
+  await setStoredSession(data.session);
+  await updateAndStoreUserProfile();
+  await trackAuthHandoffSuccess(data.session, "email_otp");
+  return {
+    ok: true,
+    email: data.session.user?.email || normalizedEmail,
+  };
 }
 
 function closeAuthHandoffTab(sender, delayMs = 0) {
@@ -1080,6 +1108,10 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       case "AUTH_UPDATED":
         await updateAndStoreUserProfile();
         sendResponse({ ok: true });
+        break;
+
+      case "VERIFY_EMAIL_OTP":
+        sendResponse(await verifyEmailOtp(message));
         break;
 
       case "SIGN_OUT":

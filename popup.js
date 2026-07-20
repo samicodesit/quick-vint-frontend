@@ -226,7 +226,9 @@ document.addEventListener("DOMContentLoaded", () => {
   const authEntryState = document.getElementById("authEntryState");
   const magicLinkSentState = document.getElementById("magicLinkSentState");
   const magicLinkSentEmail = document.getElementById("magicLinkSentEmail");
+  const magicLinkOtpInput = document.getElementById("magicLinkOtpInput");
   const resendMagicLinkBtn = document.getElementById("resendMagicLinkBtn");
+  const verifyMagicLinkCodeBtn = document.getElementById("verifyMagicLinkCodeBtn");
   const editMagicLinkEmailBtn = document.getElementById("editMagicLinkEmailBtn");
   const emailInput = document.getElementById("emailInput");
   const sendMagicLinkBtn = document.getElementById("sendMagicLinkBtn");
@@ -604,6 +606,9 @@ document.addEventListener("DOMContentLoaded", () => {
     magicLinkSentState?.classList.remove("hidden");
     if (magicLinkSentEmail) {
       magicLinkSentEmail.textContent = email;
+    }
+    if (magicLinkOtpInput) {
+      magicLinkOtpInput.value = "";
     }
     startMagicLinkCooldown(sentAt);
   }
@@ -1110,6 +1115,53 @@ document.addEventListener("DOMContentLoaded", () => {
       "Resend",
       true,
     );
+  }
+
+  async function handleVerifyMagicLinkCode() {
+    const data = await getLocalStorage(MAGIC_LINK_PENDING_KEY);
+    const pending = data[MAGIC_LINK_PENDING_KEY];
+    const email = typeof pending?.email === "string" ? pending.email : "";
+    const token = String(magicLinkOtpInput?.value || "").replace(/\D/g, "");
+
+    if (!email) {
+      showMagicLinkForm();
+      return;
+    }
+    if (token.length !== 6) {
+      showMessage("Enter the 6-digit code from your email.", "error");
+      return;
+    }
+
+    setLoading(verifyMagicLinkCodeBtn, true, "Verify code");
+    try {
+      const response = await sendRuntimeMessage({
+        type: "VERIFY_EMAIL_OTP",
+        email,
+        token,
+      });
+      if (!response?.ok) {
+        throw new Error(response?.error || "Invalid or expired code.");
+      }
+
+      await chrome.storage.local.remove(MAGIC_LINK_PENDING_KEY);
+      await trackGrowthEvent(
+        "magic_link_code_success",
+        {
+          domain: email.split("@")[1]?.toLowerCase() || null,
+        },
+        true,
+      );
+      showMessage("Signed in.", "success");
+      await updateFromStorage();
+      refreshSettingsAccess();
+    } catch (error) {
+      trackGrowthEvent("magic_link_code_error", {
+        message: error.message || "unknown",
+      });
+      showMessage(error.message || "Invalid or expired code.", "error");
+    } finally {
+      setLoading(verifyMagicLinkCodeBtn, false, "Verify code");
+    }
   }
 
   function handleSignOut(event) {
@@ -1695,6 +1747,22 @@ document.addEventListener("DOMContentLoaded", () => {
     }
     if (resendMagicLinkBtn) {
       resendMagicLinkBtn.addEventListener("click", handleResendMagicLink);
+    }
+    if (verifyMagicLinkCodeBtn) {
+      verifyMagicLinkCodeBtn.addEventListener("click", handleVerifyMagicLinkCode);
+    }
+    if (magicLinkOtpInput) {
+      magicLinkOtpInput.addEventListener("input", () => {
+        magicLinkOtpInput.value = magicLinkOtpInput.value
+          .replace(/\D/g, "")
+          .slice(0, 6);
+      });
+      magicLinkOtpInput.addEventListener("keydown", (event) => {
+        if (event.key === "Enter") {
+          event.preventDefault();
+          handleVerifyMagicLinkCode();
+        }
+      });
     }
     if (editMagicLinkEmailBtn) {
       editMagicLinkEmailBtn.addEventListener("click", async () => {
