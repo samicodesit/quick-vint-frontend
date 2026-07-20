@@ -95,3 +95,17 @@ test("DOM canary runner classifies Vinted auth redirects", async () => {
     { reason: "selector_timeout" },
   );
 });
+
+test("DOM canary runner can treat reported failures as process success", async () => {
+  const { getProcessExitCode } = await import("../scripts/run-dom-canary.mjs");
+
+  assert.equal(getProcessExitCode({ status: "passed" }, {}), 0);
+  assert.equal(getProcessExitCode({ status: "failed" }, {}), 1);
+  assert.equal(
+    getProcessExitCode(
+      { status: "failed" },
+      { DOM_CANARY_EXIT_ZERO_ON_REPORTED_FAILURE: "1" },
+    ),
+    0,
+  );
+});

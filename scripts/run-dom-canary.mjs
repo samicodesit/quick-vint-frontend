@@ -83,6 +83,11 @@ export function classifyCanaryFailure(currentUrl = "") {
     : { reason: "selector_timeout" };
 }
 
+export function getProcessExitCode(payload, env = process.env) {
+  if (payload.status === "passed") return 0;
+  return env.DOM_CANARY_EXIT_ZERO_ON_REPORTED_FAILURE === "1" ? 0 : 1;
+}
+
 async function collectDomState(page) {
   return page
     .evaluate((selectors) => {
@@ -227,7 +232,7 @@ if (process.argv[1] && path.resolve(process.argv[1]) === scriptPath) {
   runDomCanary()
     .then((payload) => {
       console.log(`DOM canary ${payload.status}: ${payload.url}`);
-      process.exitCode = payload.status === "passed" ? 0 : 1;
+      process.exitCode = getProcessExitCode(payload);
     })
     .catch((error) => {
       console.error(error?.message || error);

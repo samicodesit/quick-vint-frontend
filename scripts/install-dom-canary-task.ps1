@@ -71,8 +71,10 @@ if (`$LASTEXITCODE -ge 8) {
 
 if (`$NoPost) {
   `$env:DOM_CANARY_NO_POST = "1"
+  Remove-Item Env:\DOM_CANARY_EXIT_ZERO_ON_REPORTED_FAILURE -ErrorAction SilentlyContinue
 } else {
   Remove-Item Env:\DOM_CANARY_NO_POST -ErrorAction SilentlyContinue
+  `$env:DOM_CANARY_EXIT_ZERO_ON_REPORTED_FAILURE = "1"
 }
 
 Set-Location -LiteralPath `$repoPath
