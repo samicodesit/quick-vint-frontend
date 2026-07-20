@@ -227,7 +227,11 @@ document.addEventListener("DOMContentLoaded", () => {
   const authEntryState = document.getElementById("authEntryState");
   const magicLinkSentState = document.getElementById("magicLinkSentState");
   const magicLinkSentEmail = document.getElementById("magicLinkSentEmail");
+  const magicLinkOtpField = document.getElementById("magicLinkOtpField");
   const magicLinkOtpInput = document.getElementById("magicLinkOtpInput");
+  const magicLinkOtpCells = magicLinkOtpField
+    ? [...magicLinkOtpField.querySelectorAll(".otp-cell")]
+    : [];
   const resendMagicLinkBtn = document.getElementById("resendMagicLinkBtn");
   const verifyMagicLinkCodeBtn = document.getElementById("verifyMagicLinkCodeBtn");
   const editMagicLinkEmailBtn = document.getElementById("editMagicLinkEmailBtn");
@@ -612,8 +616,17 @@ document.addEventListener("DOMContentLoaded", () => {
     }
     if (magicLinkOtpInput) {
       magicLinkOtpInput.value = "";
+      renderMagicLinkOtpCells();
     }
     startMagicLinkCooldown(sentAt);
+  }
+
+  function renderMagicLinkOtpCells() {
+    const token = String(magicLinkOtpInput?.value || "").replace(/\D/g, "");
+    magicLinkOtpCells.forEach((cell, index) => {
+      cell.textContent = token[index] || "";
+      cell.classList.toggle("filled", index < token.length);
+    });
   }
 
   async function setPendingMagicLinkEmail(email) {
@@ -1759,12 +1772,18 @@ document.addEventListener("DOMContentLoaded", () => {
         magicLinkOtpInput.value = magicLinkOtpInput.value
           .replace(/\D/g, "")
           .slice(0, 6);
+        renderMagicLinkOtpCells();
       });
       magicLinkOtpInput.addEventListener("keydown", (event) => {
         if (event.key === "Enter") {
           event.preventDefault();
           handleVerifyMagicLinkCode();
         }
+      });
+    }
+    if (magicLinkOtpField) {
+      magicLinkOtpField.addEventListener("click", () => {
+        magicLinkOtpInput?.focus();
       });
     }
     if (editMagicLinkEmailBtn) {
