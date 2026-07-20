@@ -125,6 +125,9 @@ export async function runDomCanary(config = getConfig()) {
       timeout: config.timeoutMs,
     });
     await page.waitForLoadState("networkidle", { timeout: 10000 }).catch(() => {});
+    if (config.keepOpenMs > 0) {
+      await page.waitForTimeout(config.keepOpenMs);
+    }
     const handle = await page.waitForFunction(
       (selectors) => {
         const title = Boolean(document.querySelector(selectors.title));
@@ -165,9 +168,6 @@ export async function runDomCanary(config = getConfig()) {
       selectors,
     });
   } finally {
-    if (config.keepOpenMs > 0) {
-      await page.waitForTimeout(config.keepOpenMs);
-    }
     await context.close();
   }
 
