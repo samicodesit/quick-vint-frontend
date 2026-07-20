@@ -32,6 +32,8 @@ export function getConfig(env = process.env) {
     headless: env.DOM_CANARY_HEADED !== "1",
     channel: env.DOM_CANARY_CHROME_CHANNEL || "chromium",
     timeoutMs: Number(env.DOM_CANARY_TIMEOUT_MS || 45000),
+    postResult: env.DOM_CANARY_NO_POST !== "1",
+    keepOpenMs: Number(env.DOM_CANARY_KEEP_OPEN_MS || 0),
   };
 }
 
@@ -163,10 +165,15 @@ export async function runDomCanary(config = getConfig()) {
       selectors,
     });
   } finally {
+    if (config.keepOpenMs > 0) {
+      await page.waitForTimeout(config.keepOpenMs);
+    }
     await context.close();
   }
 
-  await postPayload(config, payload);
+  if (config.postResult) {
+    await postPayload(config, payload);
+  }
   return payload;
 }
 

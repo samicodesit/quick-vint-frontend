@@ -40,4 +40,20 @@ test("DOM canary runner keeps scheduling config explicit", async () => {
   assert.equal(config.profileDir, "/tmp/autolister-canary-profile");
   assert.equal(config.url, "https://www.vinted.nl/items/new");
   assert.equal(config.apiUrl, "https://example.com/api/dom-canary");
+  assert.equal(config.postResult, true);
+  assert.equal(config.keepOpenMs, 0);
+});
+
+test("DOM canary runner supports setup mode without posting alerts", async () => {
+  const { getConfig } = await import("../scripts/run-dom-canary.mjs");
+
+  const config = getConfig({
+    DOM_CANARY_SECRET: "secret",
+    DOM_CANARY_PROFILE_DIR: "/tmp/autolister-canary-profile",
+    DOM_CANARY_NO_POST: "1",
+    DOM_CANARY_KEEP_OPEN_MS: "600000",
+  });
+
+  assert.equal(config.postResult, false);
+  assert.equal(config.keepOpenMs, 600000);
 });

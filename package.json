@@ -22,6 +22,8 @@
     "release:mark-published": "node scripts/release-version.js mark-published",
     "release:clear-pending": "node scripts/release-version.js clear-pending",
     "canary:dom": "node scripts/run-dom-canary.mjs",
+    "canary:dom:check": "DOM_CANARY_NO_POST=1 node scripts/run-dom-canary.mjs",
+    "canary:dom:setup": "DOM_CANARY_HEADED=1 DOM_CANARY_NO_POST=1 DOM_CANARY_KEEP_OPEN_MS=600000 node scripts/run-dom-canary.mjs",
     "package": "node build.js"
   },
   "repository": {
