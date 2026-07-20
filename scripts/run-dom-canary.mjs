@@ -34,6 +34,9 @@ export function getConfig(env = process.env) {
     timeoutMs: Number(env.DOM_CANARY_TIMEOUT_MS || 45000),
     postResult: env.DOM_CANARY_NO_POST !== "1",
     keepOpenMs: Number(env.DOM_CANARY_KEEP_OPEN_MS || 0),
+    executablePath: env.DOM_CANARY_BROWSER_EXECUTABLE || "",
+    profileDirectory: env.DOM_CANARY_PROFILE_DIRECTORY || "",
+    extensionPath: env.DOM_CANARY_EXTENSION_PATH || extensionPath,
   };
 }
 
@@ -65,6 +68,21 @@ function getExtensionVersion() {
   return manifest.version || "";
 }
 
+function pathnameFromUrl(value) {
+  try {
+    return value ? new URL(value).pathname : "";
+  } catch {
+    return "";
+  }
+}
+
+export function classifyCanaryFailure(currentUrl = "") {
+  const pathname = pathnameFromUrl(currentUrl);
+  return /\/member\/(?:signup|login)|\/auth\//.test(pathname)
+    ? { reason: "auth_required" }
+    : { reason: "selector_timeout" };
+}
+
 async function collectDomState(page) {
   return page
     .evaluate((selectors) => {
@@ -88,6 +106,24 @@ async function collectDomState(page) {
     .catch((error) => ({ error: error?.message || String(error) }));
 }
 
+async function dismissVintedDomainModal(page) {
+  const modal = page.locator('[data-testid="domain-select-modal--overlay"]');
+  if (!(await modal.isVisible().catch(() => false))) return;
+
+  const france = modal.getByText("France", { exact: true });
+  if (await france.isVisible().catch(() => false)) {
+    await france.click().catch(() => {});
+    await page.waitForTimeout(1000);
+    return;
+  }
+
+  await modal
+    .locator('button[aria-label="Fermer"], button[aria-label="Close"]')
+    .first()
+    .click()
+    .catch(() => {});
+}
+
 async function postPayload(config, payload) {
   const response = await fetch(config.apiUrl, {
     method: "POST",
@@ -107,13 +143,20 @@ async function postPayload(config, payload) {
 export async function runDomCanary(config = getConfig()) {
   mkdirSync(config.profileDir, { recursive: true });
   const extensionVersion = getExtensionVersion();
-  const context = await chromium.launchPersistentContext(config.profileDir, {
-    channel: config.channel,
+  const launchOptions = {
+    channel: config.executablePath ? undefined : config.channel,
+    executablePath: config.executablePath || undefined,
     headless: config.headless,
     args: [
-      `--disable-extensions-except=${extensionPath}`,
-      `--load-extension=${extensionPath}`,
+      `--disable-extensions-except=${config.extensionPath}`,
+      `--load-extension=${config.extensionPath}`,
+      ...(config.profileDirectory
+        ? [`--profile-directory=${config.profileDirectory}`]
+        : []),
     ],
+  };
+  const context = await chromium.launchPersistentContext(config.profileDir, {
+    ...launchOptions,
   });
 
   const page = await context.newPage();
@@ -125,8 +168,10 @@ export async function runDomCanary(config = getConfig()) {
       timeout: config.timeoutMs,
     });
     await page.waitForLoadState("networkidle", { timeout: 10000 }).catch(() => {});
+    await dismissVintedDomainModal(page);
     if (config.keepOpenMs > 0) {
       await page.waitForTimeout(config.keepOpenMs);
+      await dismissVintedDomainModal(page);
     }
     const handle = await page.waitForFunction(
       (selectors) => {
@@ -149,7 +194,7 @@ export async function runDomCanary(config = getConfig()) {
     payload = buildCanaryPayload({
       status: "passed",
       url: currentUrl,
-      path: new URL(currentUrl).pathname,
+      path: pathnameFromUrl(currentUrl),
       extensionVersion,
       result,
       selectors,
@@ -159,9 +204,10 @@ export async function runDomCanary(config = getConfig()) {
     payload = buildCanaryPayload({
       status: "failed",
       url: currentUrl,
-      path: currentUrl ? new URL(currentUrl).pathname : "",
+      path: pathnameFromUrl(currentUrl),
       extensionVersion,
       result: {
+        ...classifyCanaryFailure(currentUrl),
         error: error?.message || String(error),
         dom: await collectDomState(page),
       },

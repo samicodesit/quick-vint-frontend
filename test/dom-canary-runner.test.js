@@ -57,3 +57,41 @@ test("DOM canary runner supports setup mode without posting alerts", async () =>
   assert.equal(config.postResult, false);
   assert.equal(config.keepOpenMs, 600000);
 });
+
+test("DOM canary runner supports Windows Chrome profile selection", async () => {
+  const { getConfig } = await import("../scripts/run-dom-canary.mjs");
+
+  const config = getConfig({
+    DOM_CANARY_SECRET: "secret",
+    DOM_CANARY_PROFILE_DIR: "C:\\Users\\Sami\\AppData\\Local\\AutoListerCanary\\Chrome",
+    DOM_CANARY_EXTENSION_PATH: "C:\\Users\\Sami\\AppData\\Local\\AutoListerCanary\\Extension",
+    DOM_CANARY_BROWSER_EXECUTABLE:
+      "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe",
+    DOM_CANARY_PROFILE_DIRECTORY: "Profile 4",
+  });
+
+  assert.equal(
+    config.executablePath,
+    "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe",
+  );
+  assert.equal(config.profileDirectory, "Profile 4");
+  assert.equal(
+    config.extensionPath,
+    "C:\\Users\\Sami\\AppData\\Local\\AutoListerCanary\\Extension",
+  );
+});
+
+test("DOM canary runner classifies Vinted auth redirects", async () => {
+  const { classifyCanaryFailure } = await import("../scripts/run-dom-canary.mjs");
+
+  assert.deepEqual(
+    classifyCanaryFailure(
+      "https://www.vinted.nl/member/signup/select_type?ref_url=%2Fitems%2Fnew",
+    ),
+    { reason: "auth_required" },
+  );
+  assert.deepEqual(
+    classifyCanaryFailure("https://www.vinted.nl/items/new"),
+    { reason: "selector_timeout" },
+  );
+});
