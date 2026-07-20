@@ -6,7 +6,7 @@ param(
   [string]$ProfileDirectory = "Default",
   [string]$SeedUserDataDir = "$env:LOCALAPPDATA\Google\Chrome\User Data",
   [string]$SeedProfileDirectory = "Default",
-  [switch]$SkipProfileSeed,
+  [switch]$SeedProfile,
   [string]$ChromePath = "",
   [string]$ChromeForTestingRoot = "$env:LOCALAPPDATA\AutoListerDomCanary\ChromeForTesting",
   [int]$IntervalHours = 24,
@@ -79,7 +79,7 @@ param([switch]`$NoPost)
 `$profileDirectory = '$($ProfileDirectory.Replace("'", "''"))'
 `$seedUserDataDir = '$($SeedUserDataDir.Replace("'", "''"))'
 `$seedProfileDirectory = '$($SeedProfileDirectory.Replace("'", "''"))'
-`$skipProfileSeed = `$$($SkipProfileSeed.IsPresent.ToString().ToLowerInvariant())
+`$seedProfile = `$$($SeedProfile.IsPresent.ToString().ToLowerInvariant())
 `$accountPath = '$($accountPath.Replace("'", "''"))'
 `$vintedUrl = '$($VintedUrl.Replace("'", "''"))'
 
@@ -101,7 +101,7 @@ Get-CimInstance Win32_Process |
   ForEach-Object { Stop-Process -Id `$_.ProcessId -Force -ErrorAction SilentlyContinue }
 Start-Sleep -Seconds 1
 
-if (-not `$skipProfileSeed -and `$seedUserDataDir -and (Test-Path -LiteralPath `$seedUserDataDir)) {
+if (`$seedProfile -and `$seedUserDataDir -and (Test-Path -LiteralPath `$seedUserDataDir)) {
   `$seedProfilePath = Join-Path `$seedUserDataDir `$seedProfileDirectory
   `$targetProfilePath = Join-Path `$profileDir `$profileDirectory
   if (Test-Path -LiteralPath `$seedProfilePath) {
