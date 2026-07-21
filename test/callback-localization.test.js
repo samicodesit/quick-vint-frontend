@@ -35,3 +35,14 @@ test("callback localization still supports Dutch browser language", () => {
 
   assert.equal(detectCountryAndLocalization(), LOCALIZATION.NL);
 });
+
+test("callback localization sends Australian English users to vinted.com.au", () => {
+  const { detectCountryAndLocalization } = loadLocalization({
+    language: "en-AU",
+    timezone: "Europe/Amsterdam",
+  });
+
+  const localization = detectCountryAndLocalization();
+  assert.equal(localization.domain, "vinted.com.au");
+  assert.equal(localization.texts.vintedButton, "Start Creating on Vinted.com.au");
+});

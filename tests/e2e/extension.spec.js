@@ -425,6 +425,7 @@ test.describe("AutoLister extension smoke flows", () => {
       expect(manifest.manifest_version).toBe(3);
       expect(manifest.background.service_worker).toBe("background.js");
       expect(manifest.content_scripts[0].js).toEqual([
+        "canary-config.js",
         "language-defaults.js",
         "content.js",
       ]);

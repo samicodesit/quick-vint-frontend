@@ -2793,6 +2793,7 @@
       upload &&
         upload.source === "manual_file_input" &&
         upload.currentSetTrusted !== false &&
+        !upload.storageUploadError &&
         upload.files?.length > 0 &&
         upload.files.some((entry) => !entry.generateUrl),
     );
@@ -2800,6 +2801,9 @@
 
   async function waitForManualStorageUrlsForGenerate() {
     const upload = getActiveCapturedPromptUpload();
+    if (upload?.source === "manual_file_input" && upload.storageUploadError) {
+      throw new Error("Could not prepare photos. Try again.");
+    }
     if (!hasManualCapturedFilesMissingStorageUrls(upload)) return;
 
     if (upload.storageUploadPromise) {

@@ -20,6 +20,21 @@ test("domain language is used when no user preference exists", () => {
   assert.equal(result.hasStoredLanguagePreference, false);
 });
 
+test("Australian Vinted domain defaults to English", () => {
+  const result = languageDefaults.resolveListingLanguagePreferences(
+    {},
+    {
+      hostname: "www.vinted.com.au",
+      navigatorLanguages: ["fr-FR"],
+      navigatorLanguage: "fr-FR",
+    },
+  );
+
+  assert.equal(result.titleLanguageCode, "en");
+  assert.equal(result.descriptionLanguageCode, "en");
+  assert.equal(result.defaultSource, "vinted_domain");
+});
+
 test("stored title and description language choices override domain fallback", () => {
   const result = languageDefaults.resolveListingLanguagePreferences(
     {

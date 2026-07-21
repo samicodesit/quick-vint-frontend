@@ -48,6 +48,7 @@
     ["vinted.se", "sv"],
     ["vinted.gr", "el"],
     ["vinted.co.uk", "en"],
+    ["vinted.com.au", "en"],
     ["vinted.ie", "en"],
     ["vinted.com", "en"],
   ];

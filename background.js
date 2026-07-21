@@ -962,6 +962,7 @@ async function notifyVintedTabsCheckoutFulfilled() {
         "*://*.vinted.se/*",
         "*://*.vinted.sk/*",
         "*://*.vinted.co.uk/*",
+        "*://*.vinted.com.au/*",
         "*://*.vinted.com/*",
       ],
     });
