@@ -1053,6 +1053,23 @@
     return `cid_${Date.now()}_${Math.random().toString(36).slice(2)}`;
   }
 
+  function getClientAnalyticsContext() {
+    const userAgent = navigator.userAgent || "";
+    const isIos = /iPhone|iPad|iPod/i.test(userAgent);
+    const isOrion =
+      Boolean(window.KAGI) ||
+      /Orion/i.test(userAgent) ||
+      (isIos && typeof chrome !== "undefined" && Boolean(chrome.runtime?.id));
+    return {
+      clientBrowser: isOrion ? "orion" : "other",
+      clientPlatform: isIos
+        ? "ios"
+        : /Android/i.test(userAgent)
+          ? "android"
+          : "desktop",
+    };
+  }
+
   async function getAnalyticsClientId() {
     const data = await chrome.storage.local.get(ANALYTICS_CLIENT_ID_KEY);
     if (data[ANALYTICS_CLIENT_ID_KEY]) {
@@ -1071,6 +1088,7 @@
       plan: userProfile?.subscription_tier || "free",
       context: {
         ...context,
+        ...getClientAnalyticsContext(),
         analyticsClientId,
       },
       extensionVersion: chrome.runtime.getManifest().version,
@@ -8121,9 +8139,181 @@
       #quickvint-toast.success .toast-icon { text-shadow: 0 0 10px rgba(5, 150, 105, 0.5); }
       #quickvint-toast.info .toast-icon { text-shadow: 0 0 10px rgba(8, 145, 178, 0.5); }
 
+      @media (max-width: 680px) {
+        .quickvint-tools {
+          width: 100%;
+          align-items: stretch;
+        }
+
+        .quickvint-primary-tools {
+          display: grid;
+          grid-template-columns: repeat(3, minmax(0, 1fr)) 44px;
+          width: 100%;
+          gap: 6px;
+        }
+
+        #${BTN_ID},
+        #${PHONE_BTN_ID},
+        #${BATCH_BTN_ID} {
+          width: 100%;
+          min-width: 0;
+          min-height: 44px;
+          padding: 10px 6px;
+        }
+
+        #${REPORT_BTN_ID} {
+          width: 44px;
+          height: 44px;
+          min-width: 44px;
+        }
+
+        .quickvint-tool-options {
+          justify-content: flex-start;
+          gap: 6px;
+        }
+
+        #${DESCRIPTION_LENGTH_TOGGLE_ID},
+        #${OUTPUT_SHAPE_TOGGLE_ID} {
+          height: 50px;
+          min-height: 50px;
+        }
+
+        #${DESCRIPTION_LENGTH_TOGGLE_ID} .quickvint-length-option,
+        #${OUTPUT_SHAPE_TOGGLE_ID} .quickvint-format-option {
+          height: 44px;
+        }
+
+        .quickvint-binary-toggle {
+          height: 44px;
+          min-height: 44px;
+        }
+
+        .quickvint-note-control {
+          height: 46px;
+          min-height: 46px;
+        }
+
+        .quickvint-note-control .quickvint-binary-toggle,
+        .quickvint-note-edit {
+          height: 44px;
+          min-height: 44px;
+        }
+
+        .quickvint-lang-trigger,
+        .quickvint-lang-option {
+          min-height: 44px;
+        }
+
+        .quickvint-lang-trigger {
+          min-width: 44px;
+          justify-content: center;
+        }
+
+        .quickvint-lang-menu {
+          max-width: calc(100vw - 16px);
+          max-height: min(240px, calc(100dvh - 16px));
+        }
+
+        #${REPORT_MODAL_ID},
+        #${DESCRIPTION_FOOTER_MODAL_ID},
+        #${MODAL_ID},
+        #${BATCH_MODAL_ID} {
+          box-sizing: border-box;
+          top: max(12px, env(safe-area-inset-top));
+          bottom: 0;
+          height: auto;
+          align-items: flex-end;
+          padding: 0;
+        }
+
+        #${REPORT_MODAL_ID} .quickvint-report-card,
+        #${DESCRIPTION_FOOTER_MODAL_ID} .quickvint-footer-card,
+        #${MODAL_ID} .modal-content,
+        #${BATCH_MODAL_ID} .batch-content {
+          box-sizing: border-box;
+          width: 100%;
+          max-width: none;
+          max-height: 100%;
+          margin: 0;
+          border-radius: 18px 18px 0 0;
+        }
+
+        #${REPORT_MODAL_ID} .quickvint-report-card,
+        #${DESCRIPTION_FOOTER_MODAL_ID} .quickvint-footer-card,
+        #${MODAL_ID} .modal-content {
+          overflow-y: auto;
+          padding: 20px 18px max(18px, env(safe-area-inset-bottom));
+        }
+
+        #${REPORT_MODAL_ID} .quickvint-report-close,
+        #${DESCRIPTION_FOOTER_MODAL_ID} .quickvint-footer-close,
+        #${MODAL_ID} .close-x,
+        #${BATCH_MODAL_ID} .batch-close {
+          width: 44px;
+          height: 44px;
+          min-width: 44px;
+        }
+
+        #${REPORT_MODAL_ID} .quickvint-report-select {
+          height: 44px;
+        }
+
+        #${REPORT_MODAL_ID} .quickvint-report-secondary,
+        #${REPORT_MODAL_ID} .quickvint-report-submit,
+        #${DESCRIPTION_FOOTER_MODAL_ID} .quickvint-footer-secondary,
+        #${DESCRIPTION_FOOTER_MODAL_ID} .quickvint-footer-clear,
+        #${DESCRIPTION_FOOTER_MODAL_ID} .quickvint-footer-save,
+        #${MODAL_ID} .close-btn,
+        #${MODAL_ID} .generate-btn,
+        #${BATCH_MODAL_ID} .batch-actions button,
+        #${BATCH_MODAL_ID} .batch-inline-actions button {
+          min-height: 44px;
+          height: auto;
+        }
+
+        #${REPORT_MODAL_ID} .quickvint-report-actions,
+        #${DESCRIPTION_FOOTER_MODAL_ID} .quickvint-footer-actions,
+        #${MODAL_ID} .modal-buttons {
+          position: sticky;
+          bottom: 0;
+          z-index: 2;
+          padding-top: 12px;
+          background: #ffffff;
+        }
+
+        #${MODAL_ID} .modal-content {
+          text-align: center;
+        }
+
+        #${MODAL_ID} .subtitle {
+          margin-bottom: 20px;
+        }
+
+        #${MODAL_ID} .qr-container {
+          margin-bottom: 16px;
+        }
+
+        #${MODAL_ID} #qr-code {
+          width: min(180px, 48vw);
+          height: min(180px, 48vw);
+        }
+
+        #${MODAL_ID} .modal-buttons {
+          margin-top: 20px;
+        }
+
+        #${BATCH_MODAL_ID} .batch-content {
+          border-radius: 18px 18px 0 0;
+        }
+
+        #${BATCH_MODAL_ID} .batch-actions {
+          padding-bottom: max(12px, env(safe-area-inset-bottom));
+        }
+      }
+
       @media (max-width: 520px) {
         #quickvint-toast {
-          top: 16px;
+          top: max(16px, env(safe-area-inset-top));
           right: 12px;
           left: 12px;
           min-width: 0;
@@ -9225,9 +9415,27 @@
 
   function positionInlineLanguageMenu(trigger, menu) {
     const rect = trigger.getBoundingClientRect();
-    menu.style.left = `${Math.round(rect.left)}px`;
-    menu.style.top = `${Math.round(rect.bottom + 4)}px`;
     menu.style.minWidth = `${Math.round(rect.width)}px`;
+    if (!window.matchMedia("(max-width: 680px)").matches) {
+      menu.style.left = `${Math.round(rect.left)}px`;
+      menu.style.top = `${Math.round(rect.bottom + 4)}px`;
+      return;
+    }
+
+    const margin = 8;
+    const menuWidth = menu.offsetWidth || rect.width;
+    const menuHeight = menu.offsetHeight;
+    const left = Math.max(
+      margin,
+      Math.min(rect.left, window.innerWidth - menuWidth - margin),
+    );
+    const below = rect.bottom + 4;
+    const top =
+      below + menuHeight <= window.innerHeight - margin
+        ? below
+        : Math.max(margin, rect.top - menuHeight - 4);
+    menu.style.left = `${Math.round(left)}px`;
+    menu.style.top = `${Math.round(top)}px`;
   }
 
   function updateInlineLanguageControl(trigger, languageCode) {

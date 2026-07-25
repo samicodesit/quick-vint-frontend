@@ -301,13 +301,19 @@ async function expectNoHorizontalOverflow(page) {
 }
 
 async function expectInsideViewport(page, selector) {
-  const box = await page.locator(selector).boundingBox();
   const viewport = page.viewportSize();
-  expect(box).not.toBeNull();
-  expect(box.x).toBeGreaterThanOrEqual(-1);
-  expect(box.y).toBeGreaterThanOrEqual(-1);
-  expect(box.x + box.width).toBeLessThanOrEqual(viewport.width + 1);
-  expect(box.y + box.height).toBeLessThanOrEqual(viewport.height + 1);
+  await expect
+    .poll(async () => {
+      const box = await page.locator(selector).boundingBox();
+      return Boolean(
+        box &&
+          box.x >= -1 &&
+          box.y >= -1 &&
+          box.x + box.width <= viewport.width + 1 &&
+          box.y + box.height <= viewport.height + 1,
+      );
+    })
+    .toBe(true);
 }
 
 async function routeManualStorageUploads(page) {
@@ -738,7 +744,19 @@ test.describe("AutoLister extension smoke flows", () => {
       viewport: { width: 390, height: 844 },
     });
     const page = await context.newPage();
+    const authEvents = [];
     try {
+      await context.addInitScript(() => {
+        window.KAGI = {};
+      });
+      await page.addInitScript(() => {
+        window.KAGI = {};
+      });
+      await context.route("https://autolister.app/api/events/track", (route) => {
+        const body = route.request().postDataJSON();
+        authEvents.push(...(body.events || [body]));
+        route.fulfill({ status: 204 });
+      });
       await serviceWorker.evaluate(() =>
         chrome.storage.local.set({ supabaseSession: null, userProfile: null }),
       );
@@ -768,6 +786,22 @@ test.describe("AutoLister extension smoke flows", () => {
       );
       await expect(signInPage.locator("body")).toHaveClass(/auth-tab-mode/);
       await expect(signInPage.locator("#emailInput")).toBeVisible();
+      await expectNoHorizontalOverflow(signInPage);
+      await expectInsideViewport(signInPage, ".popup-container");
+      const signInButton = await signInPage
+        .locator("#googleSignIn")
+        .boundingBox();
+      expect(signInButton.height).toBeGreaterThanOrEqual(44);
+      await expect
+        .poll(() =>
+          authEvents.find((event) => event.event === "signin_auth_tab_opened"),
+        )
+        .toMatchObject({
+          context: {
+            clientBrowser: "orion",
+            clientPlatform: "ios",
+          },
+        });
     } finally {
       await context.close();
     }

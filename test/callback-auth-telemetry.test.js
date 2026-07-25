@@ -42,7 +42,11 @@ async function runCallback({ href, session = null }) {
       getItem: () => null,
       setItem() {},
     },
-    navigator: { language: "en-US" },
+    navigator: {
+      language: "en-US",
+      userAgent:
+        "Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15",
+    },
     setTimeout(callback) {
       callback();
       return 1;
@@ -67,6 +71,7 @@ async function runCallback({ href, session = null }) {
     chrome: {
       runtime: {
         id: "test-extension",
+        getManifest: () => ({ version: "1.3.64" }),
         sendMessage(_message, callback) {
           callback?.();
         },
@@ -114,5 +119,8 @@ test("callback logs opened and no-session failure before auth exists", async () 
   );
   assert.equal(events[0].context.hasCode, false);
   assert.equal(events[0].context.hasAccessToken, false);
+  assert.equal(events[0].context.clientBrowser, "orion");
+  assert.equal(events[0].context.clientPlatform, "ios");
+  assert.equal(events[0].extensionVersion, "1.3.64");
   assert.equal(events[1].context.stage, "no_session");
 });

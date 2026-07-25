@@ -94,6 +94,23 @@
     return `cid_${Date.now()}_${Math.random().toString(36).slice(2)}`;
   }
 
+  function getClientAnalyticsContext() {
+    const userAgent = navigator.userAgent || "";
+    const isIos = /iPhone|iPad|iPod/i.test(userAgent);
+    const isOrion =
+      Boolean(window.KAGI) ||
+      /Orion/i.test(userAgent) ||
+      (isIos && typeof chrome !== "undefined" && Boolean(chrome.runtime?.id));
+    return {
+      clientBrowser: isOrion ? "orion" : "other",
+      clientPlatform: isIos
+        ? "ios"
+        : /Android/i.test(userAgent)
+          ? "android"
+          : "desktop",
+    };
+  }
+
   function ensureAnalyticsClientId() {
     return new Promise((resolve) => {
       chrome.storage.local.get(ANALYTICS_CLIENT_ID_KEY, (data) => {
@@ -129,8 +146,10 @@
           page: "callback",
           context: {
             ...context,
+            ...getClientAnalyticsContext(),
             analyticsClientId: clientId,
           },
+          extensionVersion: chrome.runtime.getManifest().version,
         }),
       }).catch(() => {
         // Analytics must never block login completion.
@@ -178,8 +197,10 @@
           context: {
             ...getCallbackUrlContext(),
             ...context,
+            ...getClientAnalyticsContext(),
             analyticsClientId: clientId,
           },
+          extensionVersion: chrome.runtime.getManifest().version,
         }),
       }).catch(() => {
         // Analytics must never block login completion.

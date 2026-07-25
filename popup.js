@@ -331,6 +331,23 @@ document.addEventListener("DOMContentLoaded", () => {
     return `cid_${Date.now()}_${Math.random().toString(36).slice(2)}`;
   }
 
+  function getClientAnalyticsContext() {
+    const userAgent = navigator.userAgent || "";
+    const isIos = /iPhone|iPad|iPod/i.test(userAgent);
+    const isOrion =
+      Boolean(window.KAGI) ||
+      /Orion/i.test(userAgent) ||
+      (isIos && typeof chrome !== "undefined" && Boolean(chrome.runtime?.id));
+    return {
+      clientBrowser: isOrion ? "orion" : "other",
+      clientPlatform: isIos
+        ? "ios"
+        : /Android/i.test(userAgent)
+          ? "android"
+          : "desktop",
+    };
+  }
+
   async function getAnalyticsClientId() {
     const data = await chrome.storage.local.get(ANALYTICS_CLIENT_ID_KEY);
     if (data[ANALYTICS_CLIENT_ID_KEY]) {
@@ -348,6 +365,7 @@ document.addEventListener("DOMContentLoaded", () => {
       page: "extension_popup",
       context: {
         ...context,
+        ...getClientAnalyticsContext(),
         analyticsClientId,
       },
       extensionVersion: chrome.runtime.getManifest().version,
