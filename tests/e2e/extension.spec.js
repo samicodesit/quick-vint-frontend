@@ -465,6 +465,28 @@ test.describe("AutoLister extension smoke flows", () => {
       .toEqual(["OPEN_AUTH_TAB"]);
   });
 
+  test("keeps the popup sign-in flow on desktop", async ({ page }) => {
+    await openContentHarness(page, null, {
+      expectAuthenticated: false,
+      initialStorage: {
+        supabaseSession: null,
+        userProfile: null,
+      },
+    });
+
+    await page.locator("#quickvint-signin-btn").click();
+
+    await expect
+      .poll(() =>
+        page.evaluate(() =>
+          window.__extensionHarness.runtimeMessages
+            .filter((message) => ["OPEN_POPUP", "OPEN_AUTH_TAB"].includes(message.type))
+            .map((message) => message.type),
+        ),
+      )
+      .toEqual(["OPEN_POPUP"]);
+  });
+
   test("loads the MV3 extension service worker and manifest", async () => {
     const { context, serviceWorker } = await loadExtension();
     try {
