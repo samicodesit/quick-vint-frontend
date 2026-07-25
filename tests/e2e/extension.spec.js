@@ -209,6 +209,24 @@ async function openContentHarness(page, capacityResponse = null, options = {}) {
       document.querySelector('[data-testid="description--input"]').value = "";
     });
   }
+  if (options.fieldTitleNodes) {
+    await page.evaluate(() => {
+      for (const [selector, testId] of [
+        ['[data-testid="title--input"]', "title--title"],
+        ['[data-testid="description--input"]', "description--title"],
+      ]) {
+        const label = document.querySelector(selector)?.closest("label");
+        const textNode = Array.from(label?.childNodes || []).find(
+          (node) => node.nodeType === Node.TEXT_NODE && node.textContent.trim(),
+        );
+        if (!textNode) continue;
+        const title = document.createElement("span");
+        title.dataset.testid = testId;
+        title.textContent = textNode.textContent.trim();
+        textNode.replaceWith(title);
+      }
+    });
+  }
   await installChromeHarness(page, capacityResponse, options.initialStorage || {});
   if (options.shortenOfferTimers) {
     await page.evaluate(() => {
@@ -272,6 +290,24 @@ async function openContentHarness(page, capacityResponse = null, options = {}) {
   await expect(page.locator("#quickvint-output-shape-toggle")).toBeVisible();
   await expect(page.locator("#quickvint-hashtags-toggle")).toBeVisible();
   await expect(page.locator("#quickvint-description-footer-btn")).toBeVisible();
+}
+
+async function expectNoHorizontalOverflow(page) {
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth <= window.innerWidth,
+    ),
+  ).toBe(true);
+}
+
+async function expectInsideViewport(page, selector) {
+  const box = await page.locator(selector).boundingBox();
+  const viewport = page.viewportSize();
+  expect(box).not.toBeNull();
+  expect(box.x).toBeGreaterThanOrEqual(-1);
+  expect(box.y).toBeGreaterThanOrEqual(-1);
+  expect(box.x + box.width).toBeLessThanOrEqual(viewport.width + 1);
+  expect(box.y + box.height).toBeLessThanOrEqual(viewport.height + 1);
 }
 
 async function routeManualStorageUploads(page) {
@@ -519,6 +555,161 @@ test.describe("AutoLister extension smoke flows", () => {
         ),
       )
       .toEqual(["OPEN_POPUP"]);
+  });
+
+  test("fits listing tools and report dialog on an Orion phone viewport", async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await openContentHarness(page, { allowed: true, available: 10 }, {
+      orionTouchDevice: true,
+    });
+
+    const primaryBox = await page.locator(".quickvint-primary-tools").boundingBox();
+    const actionBoxes = await Promise.all(
+      [
+        "#quickvint-gen-btn",
+        "#quickvint-phone-btn",
+        "#quickvint-batch-btn",
+        "#quickvint-report-btn",
+      ].map((selector) => page.locator(selector).boundingBox()),
+    );
+
+    expect(primaryBox).not.toBeNull();
+    expect(actionBoxes.every((box) => box && box.height >= 44)).toBe(true);
+    expect(Math.max(...actionBoxes.map((box) => box.x + box.width))).toBeLessThanOrEqual(
+      primaryBox.x + primaryBox.width + 1,
+    );
+    await expectNoHorizontalOverflow(page);
+
+    await page.locator("#quickvint-report-btn").click();
+    await expect(page.locator("#quickvint-report-modal")).toBeVisible();
+    await expectInsideViewport(page, "#quickvint-report-modal .quickvint-report-card");
+    expect(
+      await page
+        .locator("#quickvint-report-modal .quickvint-report-submit")
+        .evaluate((button) => button.getBoundingClientRect().height),
+    ).toBeGreaterThanOrEqual(44);
+  });
+
+  test("fits saved-note and phone dialogs on an Orion phone viewport", async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await openContentHarness(page, { allowed: true, available: 10 }, {
+      orionTouchDevice: true,
+      emptyListing: true,
+    });
+
+    await page.locator("#quickvint-description-footer-edit-btn").click();
+    await expect(page.locator("#quickvint-description-footer-modal")).toBeVisible();
+    await expectInsideViewport(
+      page,
+      "#quickvint-description-footer-modal .quickvint-footer-card",
+    );
+    expect(
+      await page
+        .locator("#quickvint-description-footer-modal .quickvint-footer-save")
+        .evaluate((button) => button.getBoundingClientRect().height),
+    ).toBeGreaterThanOrEqual(44);
+    await page
+      .locator("#quickvint-description-footer-modal .quickvint-footer-close")
+      .click();
+
+    await page.locator("#quickvint-phone-btn").click();
+    await expect(page.locator("#quickvint-phone-modal")).toBeVisible();
+    await expectInsideViewport(page, "#quickvint-phone-modal .modal-content");
+    for (const selector of [
+      "#quickvint-phone-modal .close-btn",
+      "#quickvint-phone-modal .generate-btn",
+    ]) {
+      expect(
+        await page
+          .locator(selector)
+          .evaluate((button) => button.getBoundingClientRect().height),
+      ).toBeGreaterThanOrEqual(44);
+    }
+    await expectNoHorizontalOverflow(page);
+  });
+
+  test("fits batch upload actions on an Orion phone viewport", async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await openContentHarness(page, { allowed: true, available: 10 }, {
+      orionTouchDevice: true,
+      emptyListing: true,
+    });
+
+    await page.locator("#quickvint-batch-btn").click();
+    await expect(page.locator("#quickvint-batch-modal")).toBeVisible();
+    await expectInsideViewport(page, "#quickvint-batch-modal .batch-content");
+    for (const selector of [
+      "#quickvint-batch-modal .batch-close",
+      "#quickvint-batch-modal .batch-cancel",
+    ]) {
+      expect(
+        await page
+          .locator(selector)
+          .evaluate((button) => button.getBoundingClientRect().height),
+      ).toBeGreaterThanOrEqual(44);
+    }
+    await expectNoHorizontalOverflow(page);
+  });
+
+  test("keeps language menus inside an Orion phone viewport", async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await openContentHarness(page, null, {
+      orionTouchDevice: true,
+      fieldTitleNodes: true,
+    });
+    await page.locator("#quickvint-title-language-select").evaluate((trigger) => {
+      const field = trigger.closest(".quickvint-lang-field");
+      Object.assign(field.style, {
+        display: "flex",
+        position: "fixed",
+        top: "120px",
+        right: "0",
+        zIndex: "2147483647",
+      });
+    });
+
+    await page.locator("#quickvint-title-language-select").click();
+    const menuBox = await page
+      .locator("#quickvint-title-language-select + .quickvint-lang-menu")
+      .boundingBox();
+
+    expect(menuBox.x).toBeGreaterThanOrEqual(8);
+    expect(menuBox.x + menuBox.width).toBeLessThanOrEqual(382);
+  });
+
+  test("preserves desktop listing tool geometry", async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 900 });
+    await openContentHarness(page);
+
+    const primary = page.locator(".quickvint-primary-tools");
+    const generateBox = await page.locator("#quickvint-gen-btn").boundingBox();
+    const actionBoxes = await Promise.all(
+      [
+        "#quickvint-gen-btn",
+        "#quickvint-phone-btn",
+        "#quickvint-batch-btn",
+        "#quickvint-report-btn",
+      ].map((selector) => page.locator(selector).boundingBox()),
+    );
+
+    expect(await primary.evaluate((element) => getComputedStyle(element).display)).toBe(
+      "flex",
+    );
+    expect(generateBox.height).toBe(38);
+    expect(
+      Math.max(...actionBoxes.map((box) => box.y)) -
+        Math.min(...actionBoxes.map((box) => box.y)),
+    ).toBeLessThan(1);
+
+    await page.locator("#quickvint-report-btn").click();
+    const modalBox = await page
+      .locator("#quickvint-report-modal .quickvint-report-card")
+      .boundingBox();
+    expect(Math.abs(modalBox.y + modalBox.height / 2 - 450)).toBeLessThan(2);
   });
 
   test("loads the MV3 extension service worker and manifest", async () => {
