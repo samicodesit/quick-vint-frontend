@@ -2143,7 +2143,10 @@
   }
 
   function shouldOpenSignInInTab() {
-    return /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+    return (
+      /Android|iPhone|iPad|iPod/i.test(navigator.userAgent) ||
+      (window.KAGI && navigator.maxTouchPoints > 0)
+    );
   }
 
   async function openSignInPopup(source, context = {}) {

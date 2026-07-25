@@ -193,6 +193,15 @@ async function openContentHarness(page, capacityResponse = null, options = {}) {
       });
     }, options.userAgent);
   }
+  if (options.orionTouchDevice) {
+    await page.evaluate(() => {
+      window.KAGI = {};
+      Object.defineProperty(navigator, "maxTouchPoints", {
+        configurable: true,
+        value: 5,
+      });
+    });
+  }
   if (options.emptyListing) {
     await page.evaluate(() => {
       document.querySelectorAll(".photo-box").forEach((node) => node.remove());
@@ -450,6 +459,31 @@ test.describe("AutoLister extension smoke flows", () => {
       },
       userAgent:
         "Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15",
+    });
+
+    await page.locator("#quickvint-signin-btn").click();
+
+    await expect
+      .poll(() =>
+        page.evaluate(() =>
+          window.__extensionHarness.runtimeMessages
+            .filter((message) => ["OPEN_POPUP", "OPEN_AUTH_TAB"].includes(message.type))
+            .map((message) => message.type),
+        ),
+      )
+      .toEqual(["OPEN_AUTH_TAB"]);
+  });
+
+  test("opens the full sign-in tab in Orion when it requests desktop sites", async ({
+    page,
+  }) => {
+    await openContentHarness(page, null, {
+      expectAuthenticated: false,
+      initialStorage: {
+        supabaseSession: null,
+        userProfile: null,
+      },
+      orionTouchDevice: true,
     });
 
     await page.locator("#quickvint-signin-btn").click();
