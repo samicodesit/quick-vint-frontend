@@ -37,6 +37,9 @@
   const BATCH_POLL_INTERVAL_MS = 3000;
   const BATCH_UPLOAD_STALE_MS = 15000;
   const BATCH_UPLOAD_IDLE_TIMEOUT_MS = 5 * 60 * 1000;
+  const BATCH_SIGNED_URL_TTL_MS = 60 * 60 * 1000;
+  const BATCH_SIGNED_URL_REFRESH_SAFETY_MS = 15 * 60 * 1000;
+  const BATCH_ESTIMATED_ITEM_DURATION_MS = 2 * 60 * 1000;
   const BATCH_UPLOAD_WAIT_TIMEOUT_MS = 60000;
   const EMOJI_RETRY_PROMPT_HANDLED_KEY = "quickvintEmojiRetryPromptHandled";
   const INLINE_LANGUAGE_HINT_DONE_KEY = "quickvintInlineLanguageHintDone";
@@ -901,6 +904,7 @@
   let batchNextGroupId = 1;
   let batchLastFileCount = 0;
   let batchLastFileChangeAt = 0;
+  let batchSignedUrlsListedAt = 0;
   let batchProgressGroups = [];
   let batchProgressStatus = null;
   let batchGenerationCapacity = null;
@@ -2138,12 +2142,20 @@
     });
   }
 
+  function shouldOpenSignInInTab() {
+    return /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+  }
+
   async function openSignInPopup(source, context = {}) {
     const eventContext = {
       source,
       path: window.location.pathname,
       ...context,
     };
+
+    if (shouldOpenSignInInTab()) {
+      return openSignInTabFallback(eventContext);
+    }
 
     try {
       const response = await new Promise((resolve) => {
@@ -11472,6 +11484,7 @@
     batchNextGroupId = 1;
     batchLastFileCount = 0;
     batchLastFileChangeAt = 0;
+    batchSignedUrlsListedAt = 0;
     batchProgressGroups = [];
     batchProgressStatus = null;
     batchGenerationCapacity = null;
@@ -11492,6 +11505,22 @@
 
   function isBatchProgressFinished() {
     return Boolean(batchProgressStatus && !isBatchProgressActive(batchProgressStatus));
+  }
+
+  function removeClonedBatchUiForWorkTab() {
+    if (!document.getElementById(BATCH_MODAL_ID)) return;
+
+    document.getElementById(BATCH_MODAL_ID)?.remove();
+    setBatchModalScrollLock(false);
+    if (batchPollInterval) {
+      clearInterval(batchPollInterval);
+      batchPollInterval = null;
+    }
+    if (batchAutoCloseTimer) {
+      clearTimeout(batchAutoCloseTimer);
+      batchAutoCloseTimer = null;
+    }
+    resetBatchState();
   }
 
   function shouldWarnBeforeClosingBatch() {
@@ -11559,14 +11588,27 @@
     maybeShowPendingPrompts();
   }
 
+  function shouldKeepBatchUploadSessionOpen() {
+    return (
+      batchRemoteFiles.length > 0 ||
+      batchSelectedPhotoKeys.size > 0 ||
+      batchMarkedGroups.length > 0
+    );
+  }
+
   function scheduleBatchAutoClose(sessionId) {
     if (batchAutoCloseTimer) {
       clearTimeout(batchAutoCloseTimer);
       batchAutoCloseTimer = null;
     }
 
+    if (shouldKeepBatchUploadSessionOpen()) return;
+
     batchAutoCloseTimer = setTimeout(() => {
-      if (batchUploadSessionId === sessionId) {
+      if (
+        batchUploadSessionId === sessionId &&
+        !shouldKeepBatchUploadSessionOpen()
+      ) {
         closeBatchModal({ cleanup: true });
       }
     }, BATCH_UPLOAD_IDLE_TIMEOUT_MS);
@@ -12622,6 +12664,58 @@
       });
   }
 
+  async function refreshBatchRemoteFilesForGeneration(sessionId) {
+    const response = await sendMessage({
+      type: "PROXY_FETCH",
+      url: `${PHONE_UPLOAD_API}?sessionId=${sessionId}&t=${Date.now()}`,
+      options: { method: "GET" },
+    });
+    if (!response?.ok) {
+      throw new Error("Could not refresh uploaded photos.");
+    }
+
+    const data =
+      typeof response.data === "string"
+        ? JSON.parse(response.data)
+        : response.data;
+    const files = Array.isArray(data?.files)
+      ? normalizeBatchRemoteFiles(data.files).filter(
+          (file) => !isPhoneUploadSessionMarkerFile(file),
+        )
+      : [];
+    const refreshedKeys = new Set(files.map(getPhoneUploadFileKey).filter(Boolean));
+    const missingGroupedFile = batchMarkedGroups.some((group) =>
+      group.keys.some((key) => !refreshedKeys.has(key)),
+    );
+
+    if (!files.length || missingGroupedFile) {
+      throw new Error("Uploaded photos are no longer available.");
+    }
+
+    batchRemoteFiles = files;
+    batchRemoteFileKeys = refreshedKeys;
+    batchIsComplete = data?.complete === true;
+    batchSignedUrlsListedAt = Date.now();
+  }
+
+  function getBatchSignedUrlRefreshAfterMs() {
+    const estimatedBatchDurationMs =
+      Math.max(1, batchMarkedGroups.length) * BATCH_ESTIMATED_ITEM_DURATION_MS;
+    return Math.max(
+      0,
+      BATCH_SIGNED_URL_TTL_MS -
+        BATCH_SIGNED_URL_REFRESH_SAFETY_MS -
+        estimatedBatchDurationMs,
+    );
+  }
+
+  function shouldRefreshBatchSignedUrlsForGeneration() {
+    return (
+      !batchSignedUrlsListedAt ||
+      Date.now() - batchSignedUrlsListedAt >= getBatchSignedUrlRefreshAfterMs()
+    );
+  }
+
   function startBatchPolling(sessionId) {
     if (batchPollInterval) {
       clearInterval(batchPollInterval);
@@ -12648,6 +12742,9 @@
         const files = Array.isArray(data.files)
           ? normalizeBatchRemoteFiles(data.files)
           : [];
+        if (files.length) {
+          batchSignedUrlsListedAt = Date.now();
+        }
         const wasComplete = batchIsComplete;
         batchIsComplete = data.complete === true;
         let added = false;
@@ -12708,6 +12805,15 @@
     if (!batchIsComplete) {
       showToast("Phone upload is still running.", "info");
       return;
+    }
+
+    if (shouldRefreshBatchSignedUrlsForGeneration()) {
+      try {
+        await refreshBatchRemoteFilesForGeneration(batchUploadSessionId);
+      } catch (err) {
+        showToast(err.message || "Could not refresh uploaded photos.", "error");
+        return;
+      }
     }
 
     let groupsWithKeys = getBatchGroupsWithKeys();
@@ -13148,6 +13254,8 @@
   }
 
   async function runBatchItem(message) {
+    removeClonedBatchUiForWorkTab();
+
     const remoteFiles = Array.isArray(message.files) ? message.files : [];
     const itemIndex = Math.max(1, Number(message.itemIndex || 1));
     const totalItems = Math.max(itemIndex, Number(message.totalItems || itemIndex));

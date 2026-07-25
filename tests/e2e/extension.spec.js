@@ -11,10 +11,14 @@ const listingFixture = fs.readFileSync(
   path.resolve(__dirname, "../fixtures/vinted-listing.html"),
   "utf8",
 );
+const emptyListingFixture = listingFixture.replace(
+  /\n        <div class="photo-box">[\s\S]*?\n        <\/div>(?=\n      <\/section>)/,
+  "",
+);
 const freeLimitPaywallSeenStorageKey =
   "quickvintLimitPaywallSeen:test-user:limit_followup_offer_v1";
 
-async function loadExtension() {
+async function loadExtension(options = {}) {
   const userDataDir = fs.mkdtempSync(
     path.join(require("node:os").tmpdir(), "quick-vint-e2e-"),
   );
@@ -25,6 +29,7 @@ async function loadExtension() {
       `--disable-extensions-except=${extensionPath}`,
       `--load-extension=${extensionPath}`,
     ],
+    ...options,
   });
 
   let [serviceWorker] = context.serviceWorkers();
@@ -180,6 +185,14 @@ async function openContentHarness(page, capacityResponse = null, options = {}) {
     if (message.type() === "error") consoleErrors.push(message.text());
   });
   await page.setContent(listingFixture, { waitUntil: "domcontentloaded" });
+  if (options.userAgent) {
+    await page.evaluate((userAgent) => {
+      Object.defineProperty(navigator, "userAgent", {
+        configurable: true,
+        value: userAgent,
+      });
+    }, options.userAgent);
+  }
   if (options.emptyListing) {
     await page.evaluate(() => {
       document.querySelectorAll(".photo-box").forEach((node) => node.remove());
@@ -205,6 +218,18 @@ async function openContentHarness(page, capacityResponse = null, options = {}) {
         return originalSetInterval(
           callback,
           delay === 3000 ? 25 : delay,
+          ...args,
+        );
+      };
+    });
+  }
+  if (options.shortenUploadIdleTimers) {
+    await page.evaluate(() => {
+      const originalSetTimeout = window.setTimeout.bind(window);
+      window.setTimeout = (callback, delay, ...args) => {
+        return originalSetTimeout(
+          callback,
+          delay === 5 * 60 * 1000 ? 25 : delay,
           ...args,
         );
       };
@@ -416,6 +441,30 @@ test.describe("AutoLister extension smoke flows", () => {
     ).not.toBeVisible();
   });
 
+  test("opens the full sign-in tab from an iPhone", async ({ page }) => {
+    await openContentHarness(page, null, {
+      expectAuthenticated: false,
+      initialStorage: {
+        supabaseSession: null,
+        userProfile: null,
+      },
+      userAgent:
+        "Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15",
+    });
+
+    await page.locator("#quickvint-signin-btn").click();
+
+    await expect
+      .poll(() =>
+        page.evaluate(() =>
+          window.__extensionHarness.runtimeMessages
+            .filter((message) => ["OPEN_POPUP", "OPEN_AUTH_TAB"].includes(message.type))
+            .map((message) => message.type),
+        ),
+      )
+      .toEqual(["OPEN_AUTH_TAB"]);
+  });
+
   test("loads the MV3 extension service worker and manifest", async () => {
     const { context, serviceWorker } = await loadExtension();
     try {
@@ -430,6 +479,48 @@ test.describe("AutoLister extension smoke flows", () => {
         "content.js",
       ]);
       expect(manifest.host_permissions).toContain("https://autolister.app/*");
+    } finally {
+      await context.close();
+    }
+  });
+
+  test("opens the responsive sign-in page from a simulated iPhone", async () => {
+    const { context, serviceWorker } = await loadExtension({
+      userAgent:
+        "Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15",
+      viewport: { width: 390, height: 844 },
+    });
+    const page = await context.newPage();
+    try {
+      await serviceWorker.evaluate(() =>
+        chrome.storage.local.set({ supabaseSession: null, userProfile: null }),
+      );
+      await context.route("https://www.vinted.com/**", (route) =>
+        route.fulfill({
+          status: 200,
+          contentType: "text/html",
+          body: listingFixture,
+        }),
+      );
+
+      await page.goto("https://www.vinted.com/items/new", {
+        waitUntil: "domcontentloaded",
+      });
+      await expect(page.locator("#quickvint-signin-btn")).toBeVisible();
+
+      const signInPagePromise = context.waitForEvent("page", {
+        predicate: (newPage) =>
+          newPage.url().includes("popup.html?source=vinted_signin_fallback"),
+      });
+      await page.locator("#quickvint-signin-btn").click();
+      const signInPage = await signInPagePromise;
+      await signInPage.waitForLoadState("domcontentloaded");
+
+      await expect(signInPage).toHaveURL(
+        /popup\.html\?source=vinted_signin_fallback/,
+      );
+      await expect(signInPage.locator("body")).toHaveClass(/auth-tab-mode/);
+      await expect(signInPage.locator("#emailInput")).toBeVisible();
     } finally {
       await context.close();
     }
@@ -471,7 +562,7 @@ test.describe("AutoLister extension smoke flows", () => {
         }),
       );
 
-      await context.route("https://www.vinted.com/items/new", (route) =>
+      await context.route("https://www.vinted.com/**", (route) =>
         route.fulfill({
           status: 200,
           contentType: "text/html",
@@ -583,6 +674,146 @@ test.describe("AutoLister extension smoke flows", () => {
         (body.events || []).map((event) => event.event),
       );
       expect(eventNames).not.toContain("phone_upload_generate_blocked");
+    } finally {
+      await context.close();
+    }
+  });
+
+  test("runs batch upload through the loaded MV3 extension", async () => {
+    const { context, serviceWorker } = await loadExtension();
+    const page = await context.newPage();
+    const requestBodies = [];
+    const cleanupRequests = [];
+    let listRequests = 0;
+    try {
+      await serviceWorker.evaluate(() =>
+        chrome.storage.local.set({
+          supabaseSession: {
+            access_token: "test-access-token",
+            refresh_token: "test-refresh-token",
+            expires_at: Math.floor(Date.now() / 1000) + 3600,
+            user: { id: "test-user", email: "seller@example.com" },
+          },
+          userProfile: {
+            subscription_status: "active",
+            subscription_tier: "pro",
+            api_calls_this_month: 0,
+            pack_credits: 0,
+          },
+          selectedLanguage: "en",
+          selectedTitleLanguage: "en",
+          selectedDescriptionLanguage: "en",
+          tone: "standard",
+          useBulletPoints: true,
+          descriptionLength: "long",
+          useHashtags: true,
+        }),
+      );
+
+      await context.route("https://www.vinted.com/**", (route) =>
+        route.fulfill({
+          status: 200,
+          contentType: "text/html",
+          body: emptyListingFixture,
+        }),
+      );
+      await context.route("https://autolister.app/api/user/batch-capacity", (route) =>
+        route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify({ allowed: true, available: 10 }),
+        }),
+      );
+      await context.route("https://autolister.app/api/events/track", (route) =>
+        route.fulfill({ status: 204, body: "" }),
+      );
+      await context.route("https://autolister.app/api/generate", (route) => {
+        requestBodies.push(route.request().postDataJSON());
+        return route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify({
+            title: "Loaded Batch Item",
+            description: "Generated through loaded batch flow.",
+            measurementAdvice: "",
+          }),
+        });
+      });
+      await context.route("https://autolister.app/api/phone-upload**", (route) => {
+        const url = new URL(route.request().url());
+        if (url.searchParams.get("action") === "cleanup") {
+          cleanupRequests.push(route.request().url());
+          return route.fulfill({ status: 204, body: "" });
+        }
+        listRequests += 1;
+        return route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify({
+            files: [
+              {
+                name: "batch-real-1.jpg",
+                path: "session/batch-real-1.jpg",
+                order: 0,
+                url: "https://storage.test/batch-real-1.jpg",
+              },
+              {
+                name: "batch-real-2.jpg",
+                path: "session/batch-real-2.jpg",
+                order: 1,
+                url: "https://storage.test/batch-real-2.jpg",
+              },
+            ],
+            count: 2,
+            complete: true,
+          }),
+        });
+      });
+      await context.route("https://storage.test/**", (route) =>
+        route.fulfill({
+          status: 200,
+          contentType: "image/png",
+          body: Buffer.from(tinyPngDataUrl.split(",")[1], "base64"),
+        }),
+      );
+
+      await page.goto("https://www.vinted.com/items/new", {
+        waitUntil: "domcontentloaded",
+      });
+      await page.evaluate(() => {
+        document.querySelectorAll(".photo-box").forEach((node) => node.remove());
+        document.querySelector('[data-testid="title--input"]').value = "";
+        document.querySelector('[data-testid="description--input"]').value = "";
+      });
+
+      await expect(page.locator("#quickvint-batch-btn")).toBeVisible();
+      await page.locator("#quickvint-batch-btn").click();
+      await expect(
+        page.locator("#quickvint-batch-modal .batch-gallery .batch-photo"),
+      ).toHaveCount(2);
+      await page
+        .locator("#quickvint-batch-modal .batch-gallery .batch-photo")
+        .nth(0)
+        .click();
+      await page
+        .locator("#quickvint-batch-modal .batch-gallery .batch-photo")
+        .nth(1)
+        .click();
+      await page.locator("#quickvint-batch-modal .batch-mark-group").click();
+      await expect(page.locator("#quickvint-batch-modal .batch-start")).toBeEnabled();
+      await page.locator("#quickvint-batch-modal .batch-start").click();
+
+      await expect.poll(() => requestBodies.length).toBe(1);
+      expect(requestBodies[0].imageUrls).toEqual([
+        "https://storage.test/batch-real-1.jpg",
+        "https://storage.test/batch-real-2.jpg",
+      ]);
+      expect(requestBodies[0].imageMetadata[0]).toMatchObject({
+        capturedUploadSource: "phone_upload_batch",
+        generationPayloadSource: "phone_upload_storage_url",
+      });
+      await expect.poll(() => cleanupRequests.length).toBe(1);
+      expect(listRequests).toBe(1);
     } finally {
       await context.close();
     }
@@ -885,6 +1116,223 @@ test.describe("AutoLister extension smoke flows", () => {
       capturedUploadSource: "phone_upload_batch",
       generationPayloadSource: "phone_upload_storage_url",
     });
+  });
+
+  test("keeps batch grouping open after upload idle without refreshing fresh signed URLs", async ({
+    page,
+  }) => {
+    await page.route("https://autolister.app/api/events/track", (route) =>
+      route.fulfill({ status: 204, body: "" }),
+    );
+
+    await openContentHarness(
+      page,
+      { allowed: true, available: 10 },
+      {
+        emptyListing: true,
+        shortenPhoneUploadPoll: true,
+        shortenUploadIdleTimers: true,
+      },
+    );
+
+    await page.evaluate(() => {
+      const originalSendMessage = window.chrome.runtime.sendMessage;
+      window.__batchListRequests = 0;
+      window.chrome.runtime.sendMessage = (message, callback) => {
+        if (message?.type === "PROXY_FETCH") {
+          const url = String(message.url || "");
+          if (url.includes("/api/phone-upload?sessionId=")) {
+            if (url.includes("action=cleanup")) {
+              setTimeout(() => callback?.({ ok: true, data: {} }), 0);
+              return;
+            }
+            window.__batchListRequests += 1;
+            const suffix = window.__batchListRequests === 1 ? "old" : "fresh";
+            setTimeout(
+              () =>
+                callback?.({
+                  ok: true,
+                  data: {
+                    files: [
+                      {
+                        name: "phone-1.jpg",
+                        path: "session/phone-1.jpg",
+                        url: `https://storage.test/${suffix}-phone-1.jpg`,
+                      },
+                      {
+                        name: "phone-2.jpg",
+                        path: "session/phone-2.jpg",
+                        url: `https://storage.test/${suffix}-phone-2.jpg`,
+                      },
+                    ],
+                    count: 2,
+                    complete: true,
+                  },
+                }),
+              0,
+            );
+            return;
+          }
+        }
+        originalSendMessage(message, callback);
+      };
+    });
+
+    await page.locator("#quickvint-batch-btn").click();
+    await expect(
+      page.locator("#quickvint-batch-modal .batch-gallery .batch-photo"),
+    ).toHaveCount(2);
+
+    await page.waitForTimeout(100);
+    await expect(page.locator("#quickvint-batch-modal")).toBeVisible();
+    expect(
+      await page.evaluate(() =>
+        window.__extensionHarness.runtimeMessages.some(
+          (message) =>
+            message?.type === "PROXY_FETCH" &&
+            String(message.url || "").includes("action=cleanup"),
+        ),
+      ),
+    ).toBe(false);
+
+    await page
+      .locator("#quickvint-batch-modal .batch-gallery .batch-photo")
+      .nth(0)
+      .click();
+    await page
+      .locator("#quickvint-batch-modal .batch-gallery .batch-photo")
+      .nth(1)
+      .click();
+    await page.locator("#quickvint-batch-modal .batch-mark-group").click();
+    await expect(page.locator("#quickvint-batch-modal .batch-start")).toBeEnabled();
+    await page.locator("#quickvint-batch-modal .batch-start").click();
+
+    await expect
+      .poll(() =>
+        page.evaluate(() =>
+          Boolean(
+            window.__extensionHarness.runtimeMessages.find(
+              (message) => message?.type === "START_BATCH_GENERATION",
+            ),
+          ),
+        ),
+      )
+      .toBe(true);
+    const batchStart = await page.evaluate(() =>
+      window.__extensionHarness.runtimeMessages.find(
+        (message) => message?.type === "START_BATCH_GENERATION",
+      ),
+    );
+    expect(batchStart.groups[0].map((file) => file.url)).toEqual([
+      "https://storage.test/old-phone-1.jpg",
+      "https://storage.test/old-phone-2.jpg",
+    ]);
+    expect(await page.evaluate(() => window.__batchListRequests)).toBe(1);
+  });
+
+  test("refreshes stale batch signed URLs before start", async ({ page }) => {
+    await page.route("https://autolister.app/api/events/track", (route) =>
+      route.fulfill({ status: 204, body: "" }),
+    );
+
+    await openContentHarness(
+      page,
+      { allowed: true, available: 10 },
+      {
+        emptyListing: true,
+        shortenPhoneUploadPoll: true,
+        shortenUploadIdleTimers: true,
+      },
+    );
+
+    await page.evaluate(() => {
+      const originalSendMessage = window.chrome.runtime.sendMessage;
+      const originalNow = Date.now.bind(Date);
+      window.__batchFakeNow = originalNow();
+      Date.now = () => window.__batchFakeNow;
+      window.__batchListRequests = 0;
+      window.chrome.runtime.sendMessage = (message, callback) => {
+        if (message?.type === "PROXY_FETCH") {
+          const url = String(message.url || "");
+          if (url.includes("/api/phone-upload?sessionId=")) {
+            if (url.includes("action=cleanup")) {
+              setTimeout(() => callback?.({ ok: true, data: {} }), 0);
+              return;
+            }
+            window.__batchListRequests += 1;
+            const suffix = window.__batchListRequests === 1 ? "old" : "fresh";
+            setTimeout(
+              () =>
+                callback?.({
+                  ok: true,
+                  data: {
+                    files: [
+                      {
+                        name: "phone-1.jpg",
+                        path: "session/phone-1.jpg",
+                        url: `https://storage.test/${suffix}-phone-1.jpg`,
+                      },
+                      {
+                        name: "phone-2.jpg",
+                        path: "session/phone-2.jpg",
+                        url: `https://storage.test/${suffix}-phone-2.jpg`,
+                      },
+                    ],
+                    count: 2,
+                    complete: true,
+                  },
+                }),
+              0,
+            );
+            return;
+          }
+        }
+        originalSendMessage(message, callback);
+      };
+    });
+
+    await page.locator("#quickvint-batch-btn").click();
+    await expect(
+      page.locator("#quickvint-batch-modal .batch-gallery .batch-photo"),
+    ).toHaveCount(2);
+    await page.waitForTimeout(100);
+    await expect(page.locator("#quickvint-batch-modal")).toBeVisible();
+
+    await page
+      .locator("#quickvint-batch-modal .batch-gallery .batch-photo")
+      .nth(0)
+      .click();
+    await page
+      .locator("#quickvint-batch-modal .batch-gallery .batch-photo")
+      .nth(1)
+      .click();
+    await page.locator("#quickvint-batch-modal .batch-mark-group").click();
+    await page.evaluate(() => {
+      window.__batchFakeNow += 46 * 60 * 1000;
+    });
+    await page.locator("#quickvint-batch-modal .batch-start").click();
+
+    await expect
+      .poll(() =>
+        page.evaluate(() =>
+          Boolean(
+            window.__extensionHarness.runtimeMessages.find(
+              (message) => message?.type === "START_BATCH_GENERATION",
+            ),
+          ),
+        ),
+      )
+      .toBe(true);
+    const batchStart = await page.evaluate(() =>
+      window.__extensionHarness.runtimeMessages.find(
+        (message) => message?.type === "START_BATCH_GENERATION",
+      ),
+    );
+    expect(batchStart.groups[0].map((file) => file.url)).toEqual([
+      "https://storage.test/fresh-phone-1.jpg",
+      "https://storage.test/fresh-phone-2.jpg",
+    ]);
+    expect(await page.evaluate(() => window.__batchListRequests)).toBe(2);
   });
 
   test("uploads manual captured files to temp storage for generation", async ({
