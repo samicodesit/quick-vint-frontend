@@ -2744,6 +2744,7 @@ test.describe("AutoLister extension smoke flows", () => {
     expect(eventNames).not.toContain("phone_upload_generate_blocked");
 
     await expect(page.locator("#quickvint-phone-modal")).toHaveCount(0);
+    await expect(page.locator("#quickvint-gen-btn")).toBeEnabled();
     await page.locator("#quickvint-gen-btn").click();
     await page.locator("#quickvint-description-apply-prompt button", {
       hasText: "Replace description",
