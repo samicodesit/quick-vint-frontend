@@ -66,17 +66,19 @@ async function installPopupHarness(page, options = {}) {
       const storage = { ...storageSeed };
       const eventLogs = [];
       const openedUrls = [];
+      const popupOpenedUrls = [];
       let supabaseGetSessionCalls = 0;
 
       window.__popupHarness = {
         storage,
         eventLogs,
         openedUrls,
+        popupOpenedUrls,
         getSupabaseGetSessionCalls: () => supabaseGetSessionCalls,
       };
 
       window.open = (url) => {
-        openedUrls.push(url);
+        popupOpenedUrls.push(url);
         return { closed: false, focus: () => {} };
       };
 
@@ -156,6 +158,10 @@ async function installPopupHarness(page, options = {}) {
           },
         },
         tabs: {
+          create: async ({ url }) => {
+            openedUrls.push(url);
+            return { id: openedUrls.length, url };
+          },
           query: async () => [{ url: "https://www.vinted.com/items/new" }],
         },
         storage: {
