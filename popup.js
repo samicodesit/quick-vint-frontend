@@ -1242,7 +1242,7 @@ document.addEventListener("DOMContentLoaded", () => {
           tier: "starter",
           checkoutType: "subscription",
         });
-        window.open(url, "_blank");
+        await chrome.tabs.create({ url });
       } else {
         showMessage("Unable to open the payment page.", "error");
       }
@@ -1298,7 +1298,7 @@ document.addEventListener("DOMContentLoaded", () => {
       const { url } = await res.json();
       if (res.ok && url) {
         trackGrowthEvent("billing_portal_opened", { source: "extension_popup" });
-        window.open(url, "_blank");
+        await chrome.tabs.create({ url });
       } else {
         showMessage("Unable to open the subscription page.", "error");
       }
@@ -1346,7 +1346,7 @@ document.addEventListener("DOMContentLoaded", () => {
           tier: "credit_pack",
           checkoutType: "credit_pack",
         });
-        window.open(url, "_blank");
+        await chrome.tabs.create({ url });
       } else {
         showMessage(error || "Unable to open the payment page.", "error");
       }
@@ -1373,7 +1373,7 @@ document.addEventListener("DOMContentLoaded", () => {
       const token = encodeUserData(userData);
       if (token) {
         const url = `${API_BASE}/pricing?token=${token}`;
-        window.open(url, "_blank");
+        chrome.tabs.create({ url });
       }
     });
   }
