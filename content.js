@@ -5891,18 +5891,32 @@
         border-bottom-color: #e2e8f0;
       }
 
-      #${BATCH_MODAL_ID}.organizing .batch-gallery.is-final-row {
+      #${BATCH_MODAL_ID}.organizing .batch-gallery.is-sticky-row {
         position: sticky;
         top: 0;
         z-index: 2;
         grid-template-columns: none;
         grid-auto-flow: column;
-        grid-auto-columns: minmax(72px, 84px);
+        grid-auto-columns: calc((100% - 27px) / 4);
         justify-content: start;
-        padding: 10px 0 12px;
+        overflow-x: auto;
+        overflow-y: hidden;
+        overscroll-behavior-x: contain;
+        padding: 10px 0 8px;
         background: #f8fafc;
         border-bottom-color: #cbd5e1;
         box-shadow: 0 10px 18px -18px rgba(15, 23, 42, 0.65);
+        scrollbar-color: #cbd5e1 transparent;
+        scrollbar-width: thin;
+      }
+
+      #${BATCH_MODAL_ID}.organizing .batch-gallery.is-sticky-row::-webkit-scrollbar {
+        height: 6px;
+      }
+
+      #${BATCH_MODAL_ID}.organizing .batch-gallery.is-sticky-row::-webkit-scrollbar-thumb {
+        border-radius: 999px;
+        background: #cbd5e1;
       }
 
       #${BATCH_MODAL_ID}.organizing .batch-gallery .batch-photo {
@@ -6754,6 +6768,11 @@
         #${BATCH_MODAL_ID}.organizing .batch-gallery {
           grid-template-columns: repeat(3, minmax(0, 1fr));
           gap: 8px;
+        }
+
+        #${BATCH_MODAL_ID}.organizing .batch-gallery.is-sticky-row {
+          grid-template-columns: none;
+          grid-auto-columns: calc((100% - 16px) / 3);
         }
 
         #${BATCH_MODAL_ID}.organizing .batch-actions {
@@ -12610,10 +12629,9 @@
       organizeTip.setAttribute("aria-hidden", remainingCount === 0 ? "true" : "false");
     }
     if (gallery) {
-      const finalRowLimit = window.matchMedia("(max-width: 560px)").matches ? 3 : 4;
       gallery.classList.toggle(
-        "is-final-row",
-        remainingCount > 0 && remainingCount <= finalRowLimit,
+        "is-sticky-row",
+        remainingCount > 0,
       );
       gallery.classList.toggle("is-settling", remainingCount === 0 && visibleGalleryCount > 0);
       gallery.classList.toggle("is-empty", remainingCount === 0 && visibleGalleryCount === 0);

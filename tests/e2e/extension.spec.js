@@ -446,6 +446,7 @@ test.describe("AutoLister extension smoke flows", () => {
                       name: `phone-${index + 1}.jpg`,
                       path: `phone-${index + 1}.jpg`,
                       url: `https://storage.test/phone-${index + 1}.jpg`,
+                      order: index,
                     })),
                     count: fileCount,
                     complete: true,
@@ -1370,7 +1371,9 @@ test.describe("AutoLister extension smoke flows", () => {
     await expect(pingBatchTab()).resolves.toEqual({ ok: false });
   });
 
-  test("keeps the final unsorted row visible", async ({ page }) => {
+  test("keeps the unsorted row visible while grouped items scroll", async ({
+    page,
+  }) => {
     await page.route("https://storage.test/**", (route) => {
       const photoNumber =
         Number(route.request().url().match(/phone-(\d+)/)?.[1] || 1);
@@ -1381,31 +1384,45 @@ test.describe("AutoLister extension smoke flows", () => {
         body: `<svg xmlns="http://www.w3.org/2000/svg" width="160" height="160"><rect width="160" height="160" fill="${colors[(photoNumber - 1) % colors.length]}"/><text x="80" y="92" text-anchor="middle" font-family="Arial" font-size="44" fill="#334155">${photoNumber}</text></svg>`,
       });
     });
-    await setupReadyPhoneUploadWithDelayedThumbnails(page, [], 9);
+    await setupReadyPhoneUploadWithDelayedThumbnails(page, [], 15);
 
     await page.locator("#quickvint-batch-btn").click();
     const modal = page.locator("#quickvint-batch-modal");
     const gallery = modal.locator(".batch-gallery");
     const galleryPhotos = gallery.locator(".batch-photo");
-    await expect(galleryPhotos).toHaveCount(9);
-    await expect(gallery).not.toHaveClass(/is-final-row/);
+    await expect(galleryPhotos).toHaveCount(15);
+    await expect(gallery).toHaveClass(/is-sticky-row/);
 
     for (let groupIndex = 0; groupIndex < 3; groupIndex += 1) {
-      const visiblePhotos = gallery.locator(
-        ".batch-photo-wrap:not([hidden]):not(.is-grouped) .batch-photo",
-      );
-      await visiblePhotos.nth(0).click();
-      await visiblePhotos.nth(1).click();
+      await gallery
+        .locator(
+          `.batch-photo[data-photo-key="phone-${groupIndex * 2 + 1}.jpg"]`,
+        )
+        .click();
+      await gallery
+        .locator(
+          `.batch-photo[data-photo-key="phone-${groupIndex * 2 + 2}.jpg"]`,
+        )
+        .click();
       await modal.locator(".batch-mark-group").click();
     }
 
-    await expect(gallery).toHaveClass(/is-final-row/);
-    await expect(gallery.locator(".batch-photo-wrap:not([hidden])")).toHaveCount(3);
+    await expect(gallery).toHaveClass(/is-sticky-row/);
+    await expect(gallery.locator(".batch-photo-wrap:not([hidden])")).toHaveCount(9);
+    expect(
+      await gallery
+        .locator(".batch-photo-wrap:not([hidden]) .batch-photo")
+        .evaluateAll((photos) => photos.slice(0, 4).map((photo) => photo.dataset.photoKey)),
+    ).toEqual(["phone-7.jpg", "phone-8.jpg", "phone-9.jpg", "phone-10.jpg"]);
+    expect(
+      await gallery.evaluate((node) => node.scrollWidth > node.clientWidth),
+    ).toBe(true);
     await expect(modal.locator(".batch-review")).not.toHaveClass(/is-reflowing/);
     await expect(modal.locator(".batch-item-card")).toHaveCount(3);
     await expect(modal.locator(".batch-item-card").last()).not.toHaveClass(
       /is-entering/,
     );
+    expect(await gallery.evaluate((node) => node.scrollLeft)).toBe(0);
     const review = modal.locator(".batch-review");
     await review.evaluate((node) => {
       node.scrollTop = node.scrollHeight;
@@ -1442,7 +1459,7 @@ test.describe("AutoLister extension smoke flows", () => {
       }),
     ).toBe(true);
     await expect(modal).toHaveScreenshot(
-      "batch-final-unsorted-row-desktop.png",
+      "batch-sticky-unsorted-row-desktop.png",
       { animations: "disabled", maxDiffPixelRatio: 0.01 },
     );
 
@@ -1459,9 +1476,9 @@ test.describe("AutoLister extension smoke flows", () => {
     await expect(stalePhoto).toBeVisible();
 
     await page.setViewportSize({ width: 390, height: 844 });
-    await expect(gallery).toHaveClass(/is-final-row/);
+    await expect(gallery).toHaveClass(/is-sticky-row/);
     await expect(modal).toHaveScreenshot(
-      "batch-final-unsorted-row-mobile.png",
+      "batch-sticky-unsorted-row-mobile.png",
       { animations: "disabled", maxDiffPixelRatio: 0.01 },
     );
 
@@ -1475,7 +1492,7 @@ test.describe("AutoLister extension smoke flows", () => {
       }
     }
     await modal.locator(".batch-mark-group").click();
-    await expect(gallery).not.toHaveClass(/is-final-row/);
+    await expect(gallery).not.toHaveClass(/is-sticky-row/);
     await expect(modal.locator(".organize-unsorted-badge")).toHaveText("All sorted");
   });
 
