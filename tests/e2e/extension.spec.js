@@ -1370,6 +1370,115 @@ test.describe("AutoLister extension smoke flows", () => {
     await expect(pingBatchTab()).resolves.toEqual({ ok: false });
   });
 
+  test("keeps the final unsorted row visible", async ({ page }) => {
+    await page.route("https://storage.test/**", (route) => {
+      const photoNumber =
+        Number(route.request().url().match(/phone-(\d+)/)?.[1] || 1);
+      const colors = ["#dbeafe", "#fce7f3", "#dcfce7", "#fef3c7", "#ede9fe"];
+      return route.fulfill({
+        status: 200,
+        contentType: "image/svg+xml",
+        body: `<svg xmlns="http://www.w3.org/2000/svg" width="160" height="160"><rect width="160" height="160" fill="${colors[(photoNumber - 1) % colors.length]}"/><text x="80" y="92" text-anchor="middle" font-family="Arial" font-size="44" fill="#334155">${photoNumber}</text></svg>`,
+      });
+    });
+    await setupReadyPhoneUploadWithDelayedThumbnails(page, [], 9);
+
+    await page.locator("#quickvint-batch-btn").click();
+    const modal = page.locator("#quickvint-batch-modal");
+    const gallery = modal.locator(".batch-gallery");
+    const galleryPhotos = gallery.locator(".batch-photo");
+    await expect(galleryPhotos).toHaveCount(9);
+    await expect(gallery).not.toHaveClass(/is-final-row/);
+
+    for (let groupIndex = 0; groupIndex < 3; groupIndex += 1) {
+      const visiblePhotos = gallery.locator(
+        ".batch-photo-wrap:not([hidden]):not(.is-grouped) .batch-photo",
+      );
+      await visiblePhotos.nth(0).click();
+      await visiblePhotos.nth(1).click();
+      await modal.locator(".batch-mark-group").click();
+    }
+
+    await expect(gallery).toHaveClass(/is-final-row/);
+    await expect(gallery.locator(".batch-photo-wrap:not([hidden])")).toHaveCount(3);
+    await expect(modal.locator(".batch-review")).not.toHaveClass(/is-reflowing/);
+    await expect(modal.locator(".batch-item-card")).toHaveCount(3);
+    await expect(modal.locator(".batch-item-card").last()).not.toHaveClass(
+      /is-entering/,
+    );
+    const review = modal.locator(".batch-review");
+    await review.evaluate((node) => {
+      node.scrollTop = node.scrollHeight;
+    });
+    await expect
+      .poll(async () => {
+        const [galleryBox, reviewBox] = await Promise.all([
+          gallery.boundingBox(),
+          review.boundingBox(),
+        ]);
+        return Math.abs(galleryBox.y - reviewBox.y);
+      })
+      .toBeLessThanOrEqual(1);
+    expect(
+      await review.evaluate((node) => node.scrollLeft),
+    ).toBe(0);
+    expect(
+      await review.evaluate((node) => node.offsetWidth - node.clientWidth),
+    ).toBe(0);
+    expect(
+      await modal.locator(".batch-body").evaluate((body) => body.scrollLeft),
+    ).toBe(0);
+    expect(
+      await modal.evaluate((root) => {
+        const body = root.querySelector(".batch-body");
+        const bodyRect = body.getBoundingClientRect();
+        if (getComputedStyle(body).overflowX === "visible") return true;
+        return [".batch-summary-title", ".batch-selection-count"].every(
+          (selector) => {
+            const rect = root.querySelector(selector).getBoundingClientRect();
+            return rect.left >= bodyRect.left && rect.right <= bodyRect.right;
+          },
+        );
+      }),
+    ).toBe(true);
+    await expect(modal).toHaveScreenshot(
+      "batch-final-unsorted-row-desktop.png",
+      { animations: "disabled", maxDiffPixelRatio: 0.01 },
+    );
+
+    const stalePhoto = gallery.locator(".batch-photo-wrap:not([hidden])").first();
+    await stalePhoto.evaluate((wrapper) => {
+      wrapper.hidden = true;
+      wrapper.classList.add("is-grouped");
+      wrapper.setAttribute("aria-hidden", "true");
+    });
+    await gallery
+      .locator(".batch-photo-wrap:not([hidden]) .batch-photo")
+      .first()
+      .click();
+    await expect(stalePhoto).toBeVisible();
+
+    await page.setViewportSize({ width: 390, height: 844 });
+    await expect(gallery).toHaveClass(/is-final-row/);
+    await expect(modal).toHaveScreenshot(
+      "batch-final-unsorted-row-mobile.png",
+      { animations: "disabled", maxDiffPixelRatio: 0.01 },
+    );
+
+    const remainingPhotos = gallery.locator(
+      ".batch-photo-wrap:not([hidden]) .batch-photo",
+    );
+    for (let index = 0; index < (await remainingPhotos.count()); index += 1) {
+      const photo = remainingPhotos.nth(index);
+      if (!(await photo.evaluate((node) => node.classList.contains("selected")))) {
+        await photo.click();
+      }
+    }
+    await modal.locator(".batch-mark-group").click();
+    await expect(gallery).not.toHaveClass(/is-final-row/);
+    await expect(modal.locator(".organize-unsorted-badge")).toHaveText("All sorted");
+  });
+
   test("uses uploaded storage URLs for batch files when Vinted thumbnails are late", async ({
     page,
   }) => {

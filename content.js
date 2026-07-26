@@ -5733,7 +5733,7 @@
       #${BATCH_MODAL_ID}.organizing .batch-body {
         flex: 0 1 auto;
         max-height: none;
-        overflow: hidden;
+        overflow: clip;
       }
 
       #${BATCH_MODAL_ID}.organizing .batch-review {
@@ -5889,6 +5889,20 @@
       #${BATCH_MODAL_ID}.organizing .batch-gallery.is-settling {
         padding-bottom: 22px;
         border-bottom-color: #e2e8f0;
+      }
+
+      #${BATCH_MODAL_ID}.organizing .batch-gallery.is-final-row {
+        position: sticky;
+        top: 0;
+        z-index: 2;
+        grid-template-columns: none;
+        grid-auto-flow: column;
+        grid-auto-columns: minmax(72px, 84px);
+        justify-content: start;
+        padding: 10px 0 12px;
+        background: #f8fafc;
+        border-bottom-color: #cbd5e1;
+        box-shadow: 0 10px 18px -18px rgba(15, 23, 42, 0.65);
       }
 
       #${BATCH_MODAL_ID}.organizing .batch-gallery .batch-photo {
@@ -12531,6 +12545,18 @@
     const markedKeys = getMarkedBatchPhotoKeys();
     const selectedCount = batchSelectedPhotoKeys.size;
     const remainingCount = batchRemoteFiles.length - markedKeys.size;
+    batchPhotoTileByKey.forEach((photo, key) => {
+      if (markedKeys.has(key)) return;
+      const wrapper = photo.closest(".batch-photo-wrap");
+      if (!wrapper) return;
+      if (wrapper.__quickvintHiddenTimer) {
+        clearTimeout(wrapper.__quickvintHiddenTimer);
+        wrapper.__quickvintHiddenTimer = null;
+      }
+      wrapper.hidden = false;
+      wrapper.classList.remove("is-grouped");
+      wrapper.setAttribute("aria-hidden", "false");
+    });
     const visibleGalleryCount = gallery
       ? gallery.querySelectorAll(".batch-photo-wrap:not([hidden])").length
       : remainingCount;
@@ -12584,6 +12610,11 @@
       organizeTip.setAttribute("aria-hidden", remainingCount === 0 ? "true" : "false");
     }
     if (gallery) {
+      const finalRowLimit = window.matchMedia("(max-width: 560px)").matches ? 3 : 4;
+      gallery.classList.toggle(
+        "is-final-row",
+        remainingCount > 0 && remainingCount <= finalRowLimit,
+      );
       gallery.classList.toggle("is-settling", remainingCount === 0 && visibleGalleryCount > 0);
       gallery.classList.toggle("is-empty", remainingCount === 0 && visibleGalleryCount === 0);
     }
