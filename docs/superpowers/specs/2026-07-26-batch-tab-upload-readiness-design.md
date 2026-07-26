@@ -51,15 +51,17 @@ Add one browser test that removes the fixture's Vinted file input, invokes
 `BATCH_PING`, and verifies that the response reports the tab as not ready. Restore
 the input and verify that the same message reports readiness.
 
-Run the complete unit suite, E2E suite, production build, and extension package
-workflow.
+The existing daily Windows `AutoLister DOM Canary` must also require and report
+the same Vinted file input before posting a pass. This makes the real
+Vinted.nl page check detect future selector or rendering regressions. Trigger
+the scheduled task manually after implementation and verify its full production
+log detail.
+
+Run the complete unit suite, E2E suite, production build, scheduled canary, and
+extension package workflow.
 
 ## Release
 
-Resolve the existing pending 1.3.64 package before changing release metadata:
-
-- If 1.3.64 was not uploaded, rebuild 1.3.64 with this fix.
-- If 1.3.64 was uploaded, mark that state and bump this fix to 1.3.65.
-
-Do not overwrite or falsely mark an externally uploaded Chrome Web Store
-package.
+Chrome Web Store production is still 1.3.63. Clear the unpublished pending
+1.3.64 marker, keep `manifest.json` at 1.3.64, and replace the unpublished
+1.3.64 artifact with a freshly verified package containing this fix.
