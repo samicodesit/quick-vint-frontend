@@ -2,7 +2,9 @@ const fs = require("node:fs");
 const path = require("node:path");
 const { test, expect, chromium } = require("@playwright/test");
 
-const extensionPath = path.resolve(__dirname, "../..");
+const extensionPath = process.env.AUTOLISTER_EXTENSION_PATH
+  ? path.resolve(process.env.AUTOLISTER_EXTENSION_PATH)
+  : path.resolve(__dirname, "../..");
 const languageDefaultsPath = path.join(extensionPath, "language-defaults.js");
 const contentScriptPath = path.join(extensionPath, "content.js");
 const tinyPngDataUrl =
