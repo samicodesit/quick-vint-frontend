@@ -9,6 +9,8 @@ const extensionPath = path.resolve(path.dirname(scriptPath), "..");
 const selectors = {
   title: 'input[data-testid="title--input"]',
   description: 'textarea[data-testid="description--input"]',
+  fileInput:
+    '[data-testid="media-upload"] input[data-testid="add-photos-input"][type="file"], input[data-testid="add-photos-input"][type="file"], input[type="file"][name="photos"]',
   generateButton: "#quickvint-gen-btn",
   signInButton: "#quickvint-signin-btn",
   tools: ".quickvint-tools",
@@ -93,6 +95,7 @@ async function collectDomState(page) {
     .evaluate((selectors) => {
       const title = Boolean(document.querySelector(selectors.title));
       const description = Boolean(document.querySelector(selectors.description));
+      const fileInput = Boolean(document.querySelector(selectors.fileInput));
       const generateButton = Boolean(
         document.querySelector(selectors.generateButton),
       );
@@ -101,6 +104,7 @@ async function collectDomState(page) {
       return {
         title,
         description,
+        fileInput,
         generateButton,
         signInButton,
         tools,
@@ -182,13 +186,14 @@ export async function runDomCanary(config = getConfig()) {
       (selectors) => {
         const title = Boolean(document.querySelector(selectors.title));
         const description = Boolean(document.querySelector(selectors.description));
+        const fileInput = Boolean(document.querySelector(selectors.fileInput));
         const quickvint = Boolean(
           document.querySelector(selectors.generateButton) ||
             document.querySelector(selectors.signInButton) ||
             document.querySelector(selectors.tools),
         );
-        return title && description && quickvint
-          ? { title, description, quickvint }
+        return title && description && fileInput && quickvint
+          ? { title, description, fileInput, quickvint }
           : false;
       },
       selectors,

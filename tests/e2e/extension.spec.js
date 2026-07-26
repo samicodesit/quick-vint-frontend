@@ -15,6 +15,19 @@ const emptyListingFixture = listingFixture.replace(
   /\n        <div class="photo-box">[\s\S]*?\n        <\/div>(?=\n      <\/section>)/,
   "",
 );
+const delayedFileInputListingFixture = emptyListingFixture.replace(
+  /<input\s+data-testid="add-photos-input"[\s\S]*?\/>/,
+  `<script>
+    setTimeout(() => {
+      const input = document.createElement("input");
+      input.dataset.testid = "add-photos-input";
+      input.name = "photos";
+      input.type = "file";
+      input.multiple = true;
+      document.querySelector('[data-testid="media-upload-grid"]').prepend(input);
+    }, 1000);
+  </script>`,
+);
 const freeLimitPaywallSeenStorageKey =
   "quickvintLimitPaywallSeen:test-user:limit_followup_offer_v1";
 
@@ -960,11 +973,12 @@ test.describe("AutoLister extension smoke flows", () => {
     }
   });
 
-  test("runs batch upload through the loaded MV3 extension", async () => {
+  test("waits for Vinted photo input in the loaded MV3 batch flow", async () => {
     const { context, serviceWorker } = await loadExtension();
     const page = await context.newPage();
     const requestBodies = [];
     const cleanupRequests = [];
+    let listingLoads = 0;
     let listRequests = 0;
     try {
       await serviceWorker.evaluate(() =>
@@ -991,13 +1005,17 @@ test.describe("AutoLister extension smoke flows", () => {
         }),
       );
 
-      await context.route("https://www.vinted.com/**", (route) =>
-        route.fulfill({
+      await context.route("https://www.vinted.com/**", (route) => {
+        listingLoads += 1;
+        return route.fulfill({
           status: 200,
           contentType: "text/html",
-          body: emptyListingFixture,
-        }),
-      );
+          body:
+            listingLoads === 1
+              ? emptyListingFixture
+              : delayedFileInputListingFixture,
+        });
+      });
       await context.route("https://autolister.app/api/user/batch-capacity", (route) =>
         route.fulfill({
           status: 200,
@@ -1085,6 +1103,13 @@ test.describe("AutoLister extension smoke flows", () => {
       await page.locator("#quickvint-batch-modal .batch-start").click();
 
       await expect.poll(() => requestBodies.length).toBe(1);
+      expect(listingLoads).toBeGreaterThanOrEqual(2);
+      const workPage = context
+        .pages()
+        .find((candidate) => candidate !== page && candidate.url().includes("/items/new"));
+      await expect(
+        workPage.locator('[data-testid="add-photos-input"]'),
+      ).toHaveCount(1);
       expect(requestBodies[0].imageUrls).toEqual([
         "https://storage.test/batch-real-1.jpg",
         "https://storage.test/batch-real-2.jpg",
@@ -1318,6 +1343,29 @@ test.describe("AutoLister extension smoke flows", () => {
     expect(
       await page.evaluate(() => window.__extensionHarness.storage.useBulletPoints),
     ).toBe(false);
+  });
+
+  test("reports batch work tab ready only when Vinted photo input exists", async ({
+    page,
+  }) => {
+    await openContentHarness(page);
+
+    const pingBatchTab = () =>
+      page.evaluate(
+        () =>
+          new Promise((resolve) => {
+            const listener = window.__extensionHarness.runtimeListeners.find(
+              (candidate) => typeof candidate === "function",
+            );
+            listener({ type: "BATCH_PING" }, {}, resolve);
+          }),
+      );
+
+    await expect(pingBatchTab()).resolves.toEqual({ ok: true });
+    await page
+      .locator('[data-testid="add-photos-input"]')
+      .evaluate((input) => input.remove());
+    await expect(pingBatchTab()).resolves.toEqual({ ok: false });
   });
 
   test("uses uploaded storage URLs for batch files when Vinted thumbnails are late", async ({

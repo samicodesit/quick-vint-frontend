@@ -3667,7 +3667,7 @@
 
   chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     if (message?.type === "BATCH_PING") {
-      sendResponse({ ok: true });
+      sendResponse({ ok: Boolean(document.querySelector(SELECTORS.fileInput)) });
       return false;
     }
 
@@ -9679,6 +9679,7 @@
   function getDomCanaryPayload(status, result = {}) {
     const title = Boolean(document.querySelector(SELECTORS.title));
     const description = Boolean(document.querySelector(SELECTORS.description));
+    const fileInput = Boolean(document.querySelector(SELECTORS.fileInput));
     const generateButton = Boolean(document.getElementById(BTN_ID));
     const signInButton = Boolean(document.getElementById(SIGN_IN_BTN_ID));
     const tools = Boolean(document.querySelector(".quickvint-tools"));
@@ -9694,6 +9695,7 @@
         dom: {
           title,
           description,
+          fileInput,
           generateButton,
           signInButton,
           tools,
@@ -9703,6 +9705,7 @@
       selectors: {
         title: SELECTORS.title,
         description: SELECTORS.description,
+        fileInput: SELECTORS.fileInput,
         generateButton: `#${BTN_ID}`,
         signInButton: `#${SIGN_IN_BTN_ID}`,
         tools: ".quickvint-tools",
@@ -9728,6 +9731,7 @@
     if (location.pathname !== "/items/new") return;
     if (!document.querySelector(SELECTORS.title)) return;
     if (!document.querySelector(SELECTORS.description)) return;
+    if (!document.querySelector(SELECTORS.fileInput)) return;
     if (
       !document.getElementById(BTN_ID) &&
       !document.getElementById(SIGN_IN_BTN_ID) &&
