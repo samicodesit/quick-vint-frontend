@@ -132,7 +132,7 @@ If the user only says "upload", use `mode=upload`.
 For local API uploads, build a package first, then run:
 
 ```bash
-CHROME_WEB_STORE_SERVICE_ACCOUNT_FILE=~/Downloads/auto-lister-ai-d9382c78ce44.json \
+CHROME_WEB_STORE_SERVICE_ACCOUNT_FILE=~/Downloads/chrome-web-store-service-account.json \
 npm run release:chrome-web-store -- --zip dist/autolister-ai-v<version>.zip --mode upload
 ```
 
