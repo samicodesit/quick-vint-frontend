@@ -1,6 +1,8 @@
 node_modules/
 .vscode/
 .env
+*service-account*.json
+auto-lister-ai-*.json
 dist/
 content.min.js
 test-results/

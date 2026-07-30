@@ -47,3 +47,35 @@ test("design-system preview loads shared language defaults before content script
   assert.notEqual(contentScriptIndex, -1);
   assert.ok(languageScriptIndex < contentScriptIndex);
 });
+
+test("design-system preview includes phone upload chooser scenarios", () => {
+  const reviewScript = readFileSync(
+    "design-system/content-runtime-review.js",
+    "utf8",
+  );
+
+  for (const scenarioId of [
+    "phone-choice-new-listing",
+    "phone-choice-current-listing",
+    "phone-choice-localized",
+    "phone-choice-mobile-current-listing",
+  ]) {
+    assert.match(reviewScript, new RegExp(`id: "${scenarioId}"`));
+  }
+
+  assert.match(reviewScript, /action: "open-phone-choice"/);
+  assert.match(reviewScript, /action: "open-phone-choice-mobile"/);
+  assert.match(reviewScript, /quickvint-upload-choice-modal/);
+  assert.match(reviewScript, /quickvint-upload-choice-art/);
+  assert.match(reviewScript, /How many items do you want to sell/);
+  assert.match(reviewScript, /Hoeveel items wil je verkopen/);
+  assert.match(reviewScript, /Create new listings/);
+  assert.match(reviewScript, /This listing will not change/);
+  assert.match(reviewScript, /Nieuwe advertenties maken/);
+  assert.match(reviewScript, /Deze advertentie verandert niet/);
+
+  const contentScript = readFileSync("content.js", "utf8");
+  assert.match(contentScript, /images\/quickvint-upload-single\.png/);
+  assert.match(contentScript, /images\/quickvint-upload-multiple\.png/);
+  assert.match(contentScript, /quickvint-phone-new-badge/);
+});

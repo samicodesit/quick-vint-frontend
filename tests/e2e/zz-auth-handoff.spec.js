@@ -4,7 +4,21 @@ const path = require("node:path");
 const { test, expect, chromium } = require("@playwright/test");
 
 const extensionPath = path.resolve(__dirname, "../..");
-const apiPath = path.resolve(extensionPath, "../quick-vint-api");
+const apiPathCandidates = [
+  process.env.AUTOLISTER_API_PATH
+    ? path.resolve(process.env.AUTOLISTER_API_PATH)
+    : null,
+  path.resolve(extensionPath, "../quick-vint-api"),
+  path.resolve(extensionPath, "../quick-vint"),
+].filter(Boolean);
+const apiPath = apiPathCandidates.find((candidate) =>
+  fs.existsSync(path.join(candidate, "src/pages/auth/callback.html")),
+);
+
+if (!apiPath) {
+  throw new Error(`API checkout not found. Checked: ${apiPathCandidates.join(", ")}`);
+}
+
 const callbackHtml = fs.readFileSync(
   path.join(apiPath, "src/pages/auth/callback.html"),
   "utf8",

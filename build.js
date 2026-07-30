@@ -23,6 +23,7 @@ const INCLUDE_LIST = [
     'callback.js',
     'lib',
     'icons',
+    'images',
     '_locales',
 ];
 

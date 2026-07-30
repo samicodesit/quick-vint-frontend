@@ -100,7 +100,9 @@
     {
       "resources": [
         "callback.html",
-        "icons/icon48.png"
+        "icons/icon48.png",
+        "images/quickvint-upload-multiple.png",
+        "images/quickvint-upload-single.png"
       ],
       "matches": [
         "<all_urls>"

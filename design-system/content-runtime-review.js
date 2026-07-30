@@ -255,6 +255,118 @@
       },
     },
     {
+      id: "phone-choice-new-listing",
+      title: "Phone chooser: empty new listing",
+      note: "One Phone button opens the real chooser. Batch copy stays short when the listing is empty.",
+      height: 620,
+      auth: true,
+      action: "open-phone-choice",
+      hasImages: false,
+      verify(doc) {
+        const modal = doc.getElementById("quickvint-upload-choice-modal");
+        const text = modal?.textContent || "";
+        const card = modal?.querySelector(".quickvint-upload-choice-card");
+        const images = modal?.querySelectorAll(".quickvint-upload-choice-art img") || [];
+        const art = modal?.querySelector(".quickvint-upload-choice-art");
+        const cardRect = card?.getBoundingClientRect();
+        const artRect = art?.getBoundingClientRect();
+        return (
+          isVisible(doc, doc.getElementById("quickvint-phone-btn")) &&
+          /NEW/.test(doc.getElementById("quickvint-phone-btn")?.textContent || "") &&
+          !doc.getElementById("quickvint-batch-btn") &&
+          isVisible(doc, modal) &&
+          cardRect &&
+          cardRect.width >= 700 &&
+          artRect &&
+          Math.abs(artRect.width - artRect.height) <= 2 &&
+          images.length === 2 &&
+          Array.from(images).every((image) => image.naturalWidth > 0) &&
+          /How many items do you want to sell\?/.test(text) &&
+          /1 item/.test(text) &&
+          /Add photos to this page/.test(text) &&
+          /Multiple items/.test(text) &&
+          /Create new listings/.test(text) &&
+          !/This listing will not change/.test(text) &&
+          !!modal?.querySelector(".quickvint-upload-choice-single") &&
+          !!modal?.querySelector(".quickvint-upload-choice-multiple")
+        );
+      },
+    },
+    {
+      id: "phone-choice-current-listing",
+      title: "Phone chooser: current listing has photos",
+      note: "Multiple items stays available, with clear copy that this listing will not change.",
+      height: 620,
+      auth: true,
+      action: "open-phone-choice",
+      hasImages: true,
+      verify(doc) {
+        const modal = doc.getElementById("quickvint-upload-choice-modal");
+        const text = modal?.textContent || "";
+        const images = modal?.querySelectorAll(".quickvint-upload-choice-art img") || [];
+        return (
+          isVisible(doc, modal) &&
+          images.length === 2 &&
+          /How many items do you want to sell\?/.test(text) &&
+          /Add photos to this page/.test(text) &&
+          /Create new listings\. This listing will not change\./.test(text)
+        );
+      },
+    },
+    {
+      id: "phone-choice-localized",
+      title: "Phone chooser: Dutch",
+      note: "The chooser follows the extension UI language, not title/description output language.",
+      height: 620,
+      auth: true,
+      action: "open-phone-choice",
+      hasImages: true,
+      selectedLanguage: "nl",
+      selectedTitleLanguage: "en",
+      selectedDescriptionLanguage: "en",
+      verify(doc) {
+        const modal = doc.getElementById("quickvint-upload-choice-modal");
+        const text = modal?.textContent || "";
+        return (
+          isVisible(doc, modal) &&
+          /Hoeveel items wil je verkopen\?/.test(text) &&
+          /Voeg foto's toe aan deze pagina/.test(text) &&
+          /Nieuwe advertenties maken\. Deze advertentie verandert niet\./.test(text)
+        );
+      },
+    },
+    {
+      id: "phone-choice-mobile-current-listing",
+      title: "Phone chooser: mobile width",
+      note: "Same current-listing chooser in a 390px iframe for tap target and wrapping checks.",
+      height: 760,
+      frameWidth: 390,
+      auth: true,
+      action: "open-phone-choice-mobile",
+      hasImages: true,
+      verify(doc) {
+        const modal = doc.getElementById("quickvint-upload-choice-modal");
+        const card = modal?.querySelector(".quickvint-upload-choice-card");
+        const options = modal?.querySelectorAll(".quickvint-upload-choice-option") || [];
+        const images = modal?.querySelectorAll(".quickvint-upload-choice-art img") || [];
+        const art = modal?.querySelector(".quickvint-upload-choice-art");
+        const text = modal?.textContent || "";
+        const cardRect = card?.getBoundingClientRect();
+        const artRect = art?.getBoundingClientRect();
+        return (
+          isVisible(doc, modal) &&
+          cardRect &&
+          cardRect.width <= 358 &&
+          artRect &&
+          Math.abs(artRect.width - artRect.height) <= 2 &&
+          images.length === 2 &&
+          Array.from(images).every((image) => image.naturalWidth > 0) &&
+          Array.from(options).every((option) => option.getBoundingClientRect().height >= 44) &&
+          /Create new listings\. This listing will not change\./.test(text)
+        );
+      },
+    },
+    {
       id: "success",
       title: "Successful generation",
       note: "Clicks Generate against a mocked successful /api/generate response.",
@@ -589,6 +701,12 @@
     return Math.max(scenario.height || 0, 1180);
   }
 
+  function getScenarioFrameStyle(scenario) {
+    const height = getScenarioFrameHeight(scenario);
+    if (!scenario.frameWidth) return `height: ${height}px`;
+    return `height: ${height}px; width: ${scenario.frameWidth}px; min-width: ${scenario.frameWidth}px`;
+  }
+
   function renderPanels() {
     const grid = document.getElementById("previewGrid");
     grid.innerHTML = scenarios
@@ -610,7 +728,7 @@
                 class="ds-frame"
                 title="${escapeAttr(scenario.title)}"
                 data-scenario-id="${escapeAttr(scenario.id)}"
-                style="height: ${getScenarioFrameHeight(scenario)}px"
+                style="${getScenarioFrameStyle(scenario)}"
               ></iframe>
             </div>
           </article>
@@ -1137,6 +1255,13 @@
         const generate = document.getElementById("quickvint-gen-btn");
         if (scenario.action === "open-title-language") {
           document.getElementById("quickvint-title-language-select")?.click();
+          return;
+        }
+        if (
+          scenario.action === "open-phone-choice" ||
+          scenario.action === "open-phone-choice-mobile"
+        ) {
+          document.getElementById("quickvint-phone-btn")?.click();
           return;
         }
         if (

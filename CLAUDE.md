@@ -65,7 +65,33 @@ npm run build:prod
 npm run package
 ```
 
-After the ZIP is uploaded/submitted to Chrome Web Store, the agent must immediately run:
+When the user asks an agent in this workspace to upload or publish through the prepared pipeline, use the GitHub Actions workflow unless the user explicitly asks for a local API upload:
+
+- Treat short requests like "release the latest extension", "publish the latest extension to store", "upload the extension", or "release/publish to Chrome Web Store" as instructions to run this pipeline end to end.
+- If the user says "publish", "submit", or "release to store", use `mode=upload-and-submit`.
+- If the user only says "upload", use `mode=upload`.
+- Workflow: `.github/workflows/chrome-web-store-release.yml`
+- `package-only`: build the ZIP artifact only.
+- `upload`: upload the ZIP to Chrome Web Store without submitting for review.
+- `upload-and-submit`: upload the ZIP and submit it for review.
+
+The workflow uses the repository secret `CHROME_WEB_STORE_SERVICE_ACCOUNT_JSON` and the configured publisher/item IDs from the workflow file. Do not ask the user for Chrome Web Store OAuth tokens.
+
+To trigger it from the CLI after committing and pushing release-ready source:
+
+```bash
+gh workflow run chrome-web-store-release.yml --ref main -f mode=upload -f bump_patch=true
+```
+
+For the common request "release/publish the latest extension to store", use:
+
+```bash
+gh workflow run chrome-web-store-release.yml --ref main -f mode=upload-and-submit -f bump_patch=true
+```
+
+Use `mode=upload-and-submit` when the user clearly asks to submit/publish/release to the store.
+
+For local/manual uploads only, after the ZIP is uploaded/submitted to Chrome Web Store, the agent must immediately run:
 
 ```bash
 npm run release:mark-uploaded
@@ -74,7 +100,7 @@ git commit -m "Mark Chrome Store upload <version>"
 git push origin main
 ```
 
-If an agent cannot access Chrome Web Store to upload the ZIP, it must not mark the version uploaded. It should leave the pending-release lock in place and tell the operator the exact ZIP path and version.
+The GitHub Actions workflow marks the version uploaded and commits the release state automatically after a successful API upload. If an agent cannot access Chrome Web Store to upload the ZIP, it must not mark the version uploaded. It should leave the pending-release lock in place and tell the operator the exact ZIP path and version.
 
 Production branch rule:
 

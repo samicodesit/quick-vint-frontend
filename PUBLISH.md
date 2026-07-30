@@ -92,6 +92,52 @@ git push origin main
 
 If the agent does not have Chrome Web Store access, do not run `release:mark-uploaded`. Leave the pending lock created by packaging and report the exact ZIP path and version to upload.
 
+## GitHub Actions upload pipeline
+
+Use `.github/workflows/chrome-web-store-release.yml` when the release should be packaged or uploaded from GitHub Actions.
+
+One repository secret is required:
+
+```bash
+CHROME_WEB_STORE_SERVICE_ACCOUNT_JSON
+```
+
+Set it to the full JSON contents of the Google Cloud service account key. The workflow already knows:
+
+```bash
+CHROME_WEB_STORE_PUBLISHER_ID=616efd8f-d3cc-4a95-9b45-d48a0f4ad3e7
+CHROME_WEB_STORE_EXTENSION_ID=mommklhpammnlojjobejddmidmdcalcl
+```
+
+Run it from GitHub:
+
+1. Open the repository on GitHub
+2. Go to Actions
+3. Choose `Chrome Web Store Release`
+4. Click `Run workflow`
+5. Choose a mode:
+
+- `package-only` builds and stores the ZIP as a workflow artifact.
+- `upload` uploads the ZIP to Chrome Web Store but does not submit it for review.
+- `upload-and-submit` uploads the ZIP and submits it for review.
+
+When the user tells an agent "release the latest extension", "publish the latest extension to store", or "release/publish to Chrome Web Store", treat it as this command:
+
+```bash
+gh workflow run chrome-web-store-release.yml --ref main -f mode=upload-and-submit -f bump_patch=true
+```
+
+If the user only says "upload", use `mode=upload`.
+
+For local API uploads, build a package first, then run:
+
+```bash
+CHROME_WEB_STORE_SERVICE_ACCOUNT_FILE=~/Downloads/auto-lister-ai-d9382c78ce44.json \
+npm run release:chrome-web-store -- --zip dist/autolister-ai-v<version>.zip --mode upload
+```
+
+Use `--mode upload-and-submit` only when the package should also be submitted for review.
+
 ## Quick verification before upload
 
 Check the archive includes key files:

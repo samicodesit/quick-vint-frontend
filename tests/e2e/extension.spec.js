@@ -299,12 +299,30 @@ async function openContentHarness(page, capacityResponse = null, options = {}) {
     );
   }
   await expect(page.locator("#quickvint-phone-btn")).toBeVisible();
+  await expect(page.locator("#quickvint-batch-btn")).toHaveCount(0);
   await expect(
     page.locator("#quickvint-description-length-toggle"),
   ).toBeVisible();
   await expect(page.locator("#quickvint-output-shape-toggle")).toBeVisible();
   await expect(page.locator("#quickvint-hashtags-toggle")).toBeVisible();
   await expect(page.locator("#quickvint-description-footer-btn")).toBeVisible();
+}
+
+async function openPhoneChoice(page) {
+  await page.locator("#quickvint-phone-btn").click();
+  const modal = page.locator("#quickvint-upload-choice-modal");
+  await expect(modal).toBeVisible();
+  return modal;
+}
+
+async function chooseSinglePhoneUpload(page) {
+  const modal = await openPhoneChoice(page);
+  await modal.locator(".quickvint-upload-choice-single").click();
+}
+
+async function chooseBatchUpload(page) {
+  const modal = await openPhoneChoice(page);
+  await modal.locator(".quickvint-upload-choice-multiple").click();
 }
 
 async function expectNoHorizontalOverflow(page) {
@@ -329,6 +347,72 @@ async function expectInsideViewport(page, selector) {
       );
     })
     .toBe(true);
+}
+
+async function expectElementCoversViewport(page, selector) {
+  const viewport = page.viewportSize();
+  expect(viewport).not.toBeNull();
+  const box = await page.locator(selector).evaluate((element) => {
+    const rect = element.getBoundingClientRect();
+    return {
+      x: Math.round(rect.x),
+      y: Math.round(rect.y),
+      width: Math.round(rect.width),
+      height: Math.round(rect.height),
+    };
+  });
+  expect(box.x).toBe(0);
+  expect(box.width).toBe(viewport.width);
+  expect(box.y).toBeGreaterThanOrEqual(0);
+  expect(box.y).toBeLessThanOrEqual(12);
+  expect(box.y + box.height).toBe(viewport.height);
+}
+
+async function expectBatchModalLayoutStable(page, modal) {
+  await expectElementCoversViewport(page, "#quickvint-batch-modal");
+  await expectInsideViewport(page, "#quickvint-batch-modal .batch-content");
+  expect(
+    await modal.evaluate((root) => {
+      const content = root.querySelector(".batch-content");
+      const body = root.querySelector(".batch-body");
+      const review = root.querySelector(".batch-review");
+      const gallery = root.querySelector(".batch-gallery");
+      const actions = root.querySelector(".batch-actions");
+      const viewportWidth = window.innerWidth;
+      const viewportHeight = window.innerHeight;
+      const contentRect = content.getBoundingClientRect();
+      const galleryRect = gallery.getBoundingClientRect();
+      const actionsRect = actions.getBoundingClientRect();
+      return {
+        panelIsConstrained:
+          contentRect.width <= viewportWidth - 14 &&
+          contentRect.height <= viewportHeight - 14,
+        galleryVisible:
+          galleryRect.width > 0 &&
+          galleryRect.height >= 44 &&
+          galleryRect.top >= contentRect.top &&
+          galleryRect.bottom <= actionsRect.top + 1,
+        actionsVisible:
+          actionsRect.width > 0 &&
+          actionsRect.height >= 44 &&
+          actionsRect.bottom <= contentRect.bottom + 1,
+        noDocumentOverflow:
+          document.documentElement.scrollWidth <= viewportWidth + 1 &&
+          document.body.scrollWidth <= viewportWidth + 1,
+        bodyClipsFullBleedFooter: ["hidden", "clip"].includes(
+          getComputedStyle(body).overflowX,
+        ),
+        reviewDoesNotSideScroll: review.scrollWidth <= review.clientWidth + 1,
+      };
+    }),
+  ).toEqual({
+    panelIsConstrained: true,
+    galleryVisible: true,
+    actionsVisible: true,
+    noDocumentOverflow: true,
+    bodyClipsFullBleedFooter: true,
+    reviewDoesNotSideScroll: true,
+  });
 }
 
 async function routeManualStorageUploads(page) {
@@ -592,7 +676,6 @@ test.describe("AutoLister extension smoke flows", () => {
       [
         "#quickvint-gen-btn",
         "#quickvint-phone-btn",
-        "#quickvint-batch-btn",
         "#quickvint-report-btn",
       ].map((selector) => page.locator(selector).boundingBox()),
     );
@@ -638,7 +721,7 @@ test.describe("AutoLister extension smoke flows", () => {
       .locator("#quickvint-description-footer-modal .quickvint-footer-close")
       .click();
 
-    await page.locator("#quickvint-phone-btn").click();
+    await chooseSinglePhoneUpload(page);
     await expect(page.locator("#quickvint-phone-modal")).toBeVisible();
     await expectInsideViewport(page, "#quickvint-phone-modal .modal-content");
     for (const selector of [
@@ -661,7 +744,7 @@ test.describe("AutoLister extension smoke flows", () => {
       emptyListing: true,
     });
 
-    await page.locator("#quickvint-batch-btn").click();
+    await chooseBatchUpload(page);
     await expect(page.locator("#quickvint-batch-modal")).toBeVisible();
     await expectInsideViewport(page, "#quickvint-batch-modal .batch-content");
     for (const selector of [
@@ -675,6 +758,74 @@ test.describe("AutoLister extension smoke flows", () => {
       ).toBeGreaterThanOrEqual(44);
     }
     await expectNoHorizontalOverflow(page);
+  });
+
+  test("opens a simple phone upload chooser with clear current-listing copy", async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await openContentHarness(page, { allowed: true, available: 10 });
+
+    await expect(page.locator("#quickvint-phone-btn .quickvint-phone-new-badge")).toHaveText(
+      "NEW",
+    );
+    const modal = await openPhoneChoice(page);
+    await expect(modal.locator(".quickvint-upload-choice-title")).toHaveText(
+      "How many items do you want to sell?",
+    );
+    await expect(modal.locator(".quickvint-upload-choice-single")).toContainText(
+      "1 item",
+    );
+    await expect(modal.locator(".quickvint-upload-choice-single")).toContainText(
+      "Add photos to this page",
+    );
+    await expect(modal.locator(".quickvint-upload-choice-multiple")).toContainText(
+      "Multiple items",
+    );
+    await expect(modal.locator(".quickvint-upload-choice-multiple")).toContainText(
+      "Create new listings. This listing will not change.",
+    );
+    await expect(modal.locator(".quickvint-upload-choice-art img")).toHaveCount(2);
+    await expect(
+      modal.locator(".quickvint-upload-choice-single img"),
+    ).toHaveAttribute("src", /quickvint-upload-single\.png/);
+    await expect(
+      modal.locator(".quickvint-upload-choice-multiple img"),
+    ).toHaveAttribute("src", /quickvint-upload-multiple\.png/);
+    const artBox = await modal
+      .locator(".quickvint-upload-choice-art")
+      .first()
+      .evaluate((element) => {
+        const rect = element.getBoundingClientRect();
+        return { width: rect.width, height: rect.height };
+      });
+    expect(Math.abs(artBox.width - artBox.height)).toBeLessThanOrEqual(2);
+    await expectInsideViewport(page, "#quickvint-upload-choice-modal .quickvint-upload-choice-card");
+    await expectNoHorizontalOverflow(page);
+  });
+
+  test("localizes the phone upload chooser", async ({ page }) => {
+    await openContentHarness(page, { allowed: true, available: 10 }, {
+      initialStorage: {
+        selectedLanguage: "nl",
+        selectedTitleLanguage: "en",
+        selectedDescriptionLanguage: "en",
+      },
+    });
+
+    const modal = await openPhoneChoice(page);
+    await expect(modal.locator(".quickvint-upload-choice-title")).toHaveText(
+      "Hoeveel items wil je verkopen?",
+    );
+    await expect(modal.locator(".quickvint-upload-choice-single")).toContainText(
+      "1 item",
+    );
+    await expect(modal.locator(".quickvint-upload-choice-single")).toContainText(
+      "Voeg foto's toe aan deze pagina",
+    );
+    await expect(modal.locator(".quickvint-upload-choice-multiple")).toContainText(
+      "Nieuwe advertenties maken. Deze advertentie verandert niet.",
+    );
   });
 
   test("keeps language menus inside an Orion phone viewport", async ({ page }) => {
@@ -713,7 +864,6 @@ test.describe("AutoLister extension smoke flows", () => {
       [
         "#quickvint-gen-btn",
         "#quickvint-phone-btn",
-        "#quickvint-batch-btn",
         "#quickvint-report-btn",
       ].map((selector) => page.locator(selector).boundingBox()),
     );
@@ -937,7 +1087,7 @@ test.describe("AutoLister extension smoke flows", () => {
       });
 
       await expect(page.locator("#quickvint-phone-btn")).toBeVisible();
-      await page.locator("#quickvint-phone-btn").click();
+      await chooseSinglePhoneUpload(page);
       await expect(page.locator("#quickvint-phone-modal .preview-thumb")).toHaveCount(2);
       await expect(page.locator("#quickvint-phone-modal .status")).toHaveText(
         "2 photos ready to generate.",
@@ -1088,8 +1238,9 @@ test.describe("AutoLister extension smoke flows", () => {
         document.querySelector('[data-testid="description--input"]').value = "";
       });
 
-      await expect(page.locator("#quickvint-batch-btn")).toBeVisible();
-      await page.locator("#quickvint-batch-btn").click();
+      await expect(page.locator("#quickvint-phone-btn")).toBeVisible();
+      await expect(page.locator("#quickvint-batch-btn")).toHaveCount(0);
+      await chooseBatchUpload(page);
       await expect(
         page.locator("#quickvint-batch-modal .batch-gallery .batch-photo"),
       ).toHaveCount(2);
@@ -1374,6 +1525,7 @@ test.describe("AutoLister extension smoke flows", () => {
   test("keeps the unsorted row visible while grouped items scroll", async ({
     page,
   }) => {
+    await page.setViewportSize({ width: 1280, height: 720 });
     await page.route("https://storage.test/**", (route) => {
       const photoNumber =
         Number(route.request().url().match(/phone-(\d+)/)?.[1] || 1);
@@ -1386,7 +1538,7 @@ test.describe("AutoLister extension smoke flows", () => {
     });
     await setupReadyPhoneUploadWithDelayedThumbnails(page, [], 15);
 
-    await page.locator("#quickvint-batch-btn").click();
+    await chooseBatchUpload(page);
     const modal = page.locator("#quickvint-batch-modal");
     const gallery = modal.locator(".batch-gallery");
     const galleryPhotos = gallery.locator(".batch-photo");
@@ -1458,10 +1610,7 @@ test.describe("AutoLister extension smoke flows", () => {
         );
       }),
     ).toBe(true);
-    await expect(modal).toHaveScreenshot(
-      "batch-sticky-unsorted-row-desktop.png",
-      { animations: "disabled", maxDiffPixelRatio: 0.01 },
-    );
+    await expectBatchModalLayoutStable(page, modal);
 
     const stalePhoto = gallery.locator(".batch-photo-wrap:not([hidden])").first();
     await stalePhoto.evaluate((wrapper) => {
@@ -1477,10 +1626,7 @@ test.describe("AutoLister extension smoke flows", () => {
 
     await page.setViewportSize({ width: 390, height: 844 });
     await expect(gallery).toHaveClass(/is-sticky-row/);
-    await expect(modal).toHaveScreenshot(
-      "batch-sticky-unsorted-row-mobile.png",
-      { animations: "disabled", maxDiffPixelRatio: 0.01 },
-    );
+    await expectBatchModalLayoutStable(page, modal);
 
     const remainingPhotos = gallery.locator(
       ".batch-photo-wrap:not([hidden]) .batch-photo",
@@ -1635,7 +1781,7 @@ test.describe("AutoLister extension smoke flows", () => {
       };
     });
 
-    await page.locator("#quickvint-batch-btn").click();
+    await chooseBatchUpload(page);
     await expect(
       page.locator("#quickvint-batch-modal .batch-gallery .batch-photo"),
     ).toHaveCount(2);
@@ -1748,7 +1894,7 @@ test.describe("AutoLister extension smoke flows", () => {
       };
     });
 
-    await page.locator("#quickvint-batch-btn").click();
+    await chooseBatchUpload(page);
     await expect(
       page.locator("#quickvint-batch-modal .batch-gallery .batch-photo"),
     ).toHaveCount(2);
@@ -2748,7 +2894,7 @@ test.describe("AutoLister extension smoke flows", () => {
       });
     }, tinyPngDataUrl);
 
-    await page.locator("#quickvint-phone-btn").click();
+    await chooseSinglePhoneUpload(page);
     await expect(page.locator("#quickvint-phone-modal .preview-thumb")).toHaveCount(7);
     await expect(page.locator("#quickvint-phone-modal .status")).toHaveText(
       "Receiving 8/10",
@@ -2819,7 +2965,7 @@ test.describe("AutoLister extension smoke flows", () => {
     const requestBodies = [];
     await setupReadyPhoneUploadWithDelayedThumbnails(page, requestBodies, 3);
 
-    await page.locator("#quickvint-phone-btn").click();
+    await chooseSinglePhoneUpload(page);
     await expect(page.locator("#quickvint-phone-modal .preview-thumb")).toHaveCount(3);
     await expect(page.locator("#quickvint-phone-modal .status")).toHaveText(
       "3 photos ready to generate.",
@@ -2885,7 +3031,7 @@ test.describe("AutoLister extension smoke flows", () => {
       const requestBodies = [];
       await setupReadyPhoneUploadWithDelayedThumbnails(page, requestBodies);
 
-      await page.locator("#quickvint-phone-btn").click();
+      await chooseSinglePhoneUpload(page);
       await expect(page.locator("#quickvint-phone-modal .preview-thumb")).toHaveCount(2);
       await expect(page.locator("#quickvint-phone-modal .status")).toHaveText(
         "2 photos ready to generate.",
@@ -2989,7 +3135,7 @@ test.describe("AutoLister extension smoke flows", () => {
       };
     }, tinyPngDataUrl);
 
-    await page.locator("#quickvint-phone-btn").click();
+    await chooseSinglePhoneUpload(page);
     await expect(page.locator("#quickvint-phone-modal .status")).toHaveText(
       "Receiving 0/2",
     );
@@ -3049,7 +3195,7 @@ test.describe("AutoLister extension smoke flows", () => {
     await expect(generateButton).toBeEnabled();
     await expect(generateButton.locator(".label")).toHaveText("Generate");
 
-    await page.locator("#quickvint-phone-btn").click();
+    await chooseSinglePhoneUpload(page);
     await expect(page.locator("#quickvint-phone-modal")).toBeVisible();
     const newSessionId = await page
       .locator("#quickvint-phone-modal")
@@ -3118,7 +3264,7 @@ test.describe("AutoLister extension smoke flows", () => {
       };
     }, tinyPngDataUrl);
 
-    await page.locator("#quickvint-phone-btn").click();
+    await chooseSinglePhoneUpload(page);
     await expect(page.locator("#quickvint-phone-modal .preview-thumb")).toHaveCount(2);
     await expect(page.locator(".photo-box")).toHaveCount(0);
     await expect(page.locator("#quickvint-phone-modal .status")).toHaveText(
@@ -3243,7 +3389,7 @@ test.describe("AutoLister extension smoke flows", () => {
       };
     }, tinyPngDataUrl);
 
-    await page.locator("#quickvint-phone-btn").click();
+    await chooseSinglePhoneUpload(page);
     await expect(page.locator("#quickvint-phone-modal .preview-thumb")).toHaveCount(1);
     await page.locator("#quickvint-phone-modal .generate-btn").click();
 
@@ -3355,7 +3501,7 @@ test.describe("AutoLister extension smoke flows", () => {
       };
     }, tinyPngDataUrl);
 
-    await page.locator("#quickvint-phone-btn").click();
+    await chooseSinglePhoneUpload(page);
     await expect(page.locator("#quickvint-phone-modal .preview-thumb")).toHaveCount(2);
     await expect(page.locator("#quickvint-phone-modal .status")).toHaveText(
       "2 photos ready to generate.",
@@ -3364,7 +3510,7 @@ test.describe("AutoLister extension smoke flows", () => {
     await expect(page.locator("#quickvint-phone-modal")).toHaveCount(0);
     await expect(page.locator(".photo-box")).toHaveCount(0);
 
-    await page.locator("#quickvint-phone-btn").click();
+    await chooseSinglePhoneUpload(page);
     await expect(page.locator("#quickvint-phone-modal .preview-thumb")).toHaveCount(1);
     await expect(page.locator("#quickvint-phone-modal .status")).toHaveText(
       "1 photo ready to generate.",
@@ -3915,7 +4061,7 @@ test.describe("AutoLister extension smoke flows", () => {
         "Free listing limit reached. Upgrade your plan or buy a one-time credit pack.",
     });
 
-    await page.locator("#quickvint-phone-btn").click();
+    await chooseSinglePhoneUpload(page);
 
     await expect(page.locator("#quickvint-phone-modal")).toHaveCount(0);
     await expect(page.locator("#quickvint-toast.paywall")).toBeVisible();

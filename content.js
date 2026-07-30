@@ -3,6 +3,7 @@
   const BTN_ID = "quickvint-gen-btn";
   const PHONE_BTN_ID = "quickvint-phone-btn";
   const BATCH_BTN_ID = "quickvint-batch-btn";
+  const UPLOAD_CHOICE_MODAL_ID = "quickvint-upload-choice-modal";
   const REPORT_BTN_ID = "quickvint-report-btn";
   const REPORT_MODAL_ID = "quickvint-report-modal";
   const DESCRIPTION_FOOTER_MODAL_ID = "quickvint-description-footer-modal";
@@ -824,6 +825,170 @@
       cancel: "Avbryt",
       save: "Spara",
       close: "Stäng sparad notis",
+    },
+  };
+  const UPLOAD_CHOICE_COPY = {
+    en: {
+      title: "How many items do you want to sell?",
+      singleLabel: "1 item",
+      singleNote: "Add photos to this page",
+      multipleLabel: "Multiple items",
+      multipleNote: "Create new listings",
+      multipleCurrentListingNote: "Create new listings. This listing will not change.",
+      close: "Close upload choices",
+    },
+    fr: {
+      title: "Combien d'articles voulez-vous vendre ?",
+      singleLabel: "1 article",
+      singleNote: "Ajouter des photos à cette page",
+      multipleLabel: "Plusieurs articles",
+      multipleNote: "Créer de nouvelles annonces",
+      multipleCurrentListingNote: "Créer de nouvelles annonces. Cette annonce ne changera pas.",
+      close: "Fermer les choix d'import",
+    },
+    cz: {
+      title: "Kolik položek chcete prodat?",
+      singleLabel: "1 položka",
+      singleNote: "Přidat fotky na tuto stránku",
+      multipleLabel: "Více položek",
+      multipleNote: "Vytvořit nové inzeráty",
+      multipleCurrentListingNote: "Vytvořit nové inzeráty. Tento inzerát se nezmění.",
+      close: "Zavřít výběr nahrání",
+    },
+    da: {
+      title: "Hvor mange varer vil du sælge?",
+      singleLabel: "1 vare",
+      singleNote: "Føj fotos til denne side",
+      multipleLabel: "Flere varer",
+      multipleNote: "Opret nye annoncer",
+      multipleCurrentListingNote: "Opret nye annoncer. Denne annonce ændres ikke.",
+      close: "Luk uploadvalg",
+    },
+    nl: {
+      title: "Hoeveel items wil je verkopen?",
+      singleLabel: "1 item",
+      singleNote: "Voeg foto's toe aan deze pagina",
+      multipleLabel: "Meerdere items",
+      multipleNote: "Nieuwe advertenties maken",
+      multipleCurrentListingNote: "Nieuwe advertenties maken. Deze advertentie verandert niet.",
+      close: "Uploadkeuzes sluiten",
+    },
+    de: {
+      title: "Wie viele Artikel möchtest du verkaufen?",
+      singleLabel: "1 Artikel",
+      singleNote: "Fotos zu dieser Seite hinzufügen",
+      multipleLabel: "Mehrere Artikel",
+      multipleNote: "Neue Angebote erstellen",
+      multipleCurrentListingNote: "Neue Angebote erstellen. Dieses Angebot bleibt unverändert.",
+      close: "Upload-Auswahl schließen",
+    },
+    el: {
+      title: "Πόσα προϊόντα θέλετε να πουλήσετε;",
+      singleLabel: "1 προϊόν",
+      singleNote: "Προσθήκη φωτογραφιών σε αυτή τη σελίδα",
+      multipleLabel: "Πολλά προϊόντα",
+      multipleNote: "Δημιουργία νέων αγγελιών",
+      multipleCurrentListingNote: "Δημιουργία νέων αγγελιών. Αυτή η αγγελία δεν θα αλλάξει.",
+      close: "Κλείσιμο επιλογών ανεβάσματος",
+    },
+    hr: {
+      title: "Koliko predmeta želite prodati?",
+      singleLabel: "1 predmet",
+      singleNote: "Dodaj fotografije na ovu stranicu",
+      multipleLabel: "Više predmeta",
+      multipleNote: "Izradi nove objave",
+      multipleCurrentListingNote: "Izradi nove objave. Ova objava se neće promijeniti.",
+      close: "Zatvori odabir učitavanja",
+    },
+    fi: {
+      title: "Kuinka monta tuotetta haluat myydä?",
+      singleLabel: "1 tuote",
+      singleNote: "Lisää kuvia tälle sivulle",
+      multipleLabel: "Useita tuotteita",
+      multipleNote: "Luo uusia ilmoituksia",
+      multipleCurrentListingNote: "Luo uusia ilmoituksia. Tämä ilmoitus ei muutu.",
+      close: "Sulje latausvalinnat",
+    },
+    hu: {
+      title: "Hány terméket szeretnél eladni?",
+      singleLabel: "1 termék",
+      singleNote: "Fotók hozzáadása ehhez az oldalhoz",
+      multipleLabel: "Több termék",
+      multipleNote: "Új hirdetések létrehozása",
+      multipleCurrentListingNote: "Új hirdetések létrehozása. Ez a hirdetés nem változik.",
+      close: "Feltöltési lehetőségek bezárása",
+    },
+    it: {
+      title: "Quanti articoli vuoi vendere?",
+      singleLabel: "1 articolo",
+      singleNote: "Aggiungi foto a questa pagina",
+      multipleLabel: "Più articoli",
+      multipleNote: "Crea nuovi annunci",
+      multipleCurrentListingNote: "Crea nuovi annunci. Questo annuncio non cambierà.",
+      close: "Chiudi scelte di caricamento",
+    },
+    lt: {
+      title: "Kiek prekių norite parduoti?",
+      singleLabel: "1 prekė",
+      singleNote: "Pridėti nuotraukas į šį puslapį",
+      multipleLabel: "Kelios prekės",
+      multipleNote: "Kurti naujus skelbimus",
+      multipleCurrentListingNote: "Kurti naujus skelbimus. Šis skelbimas nepasikeis.",
+      close: "Uždaryti įkėlimo pasirinkimus",
+    },
+    pl: {
+      title: "Ile rzeczy chcesz sprzedać?",
+      singleLabel: "1 rzecz",
+      singleNote: "Dodaj zdjęcia do tej strony",
+      multipleLabel: "Wiele rzeczy",
+      multipleNote: "Utwórz nowe oferty",
+      multipleCurrentListingNote: "Utwórz nowe oferty. Ta oferta się nie zmieni.",
+      close: "Zamknij wybór przesyłania",
+    },
+    pt: {
+      title: "Quantos artigos quer vender?",
+      singleLabel: "1 artigo",
+      singleNote: "Adicionar fotos a esta página",
+      multipleLabel: "Vários artigos",
+      multipleNote: "Criar novos anúncios",
+      multipleCurrentListingNote: "Criar novos anúncios. Este anúncio não muda.",
+      close: "Fechar opções de carregamento",
+    },
+    ro: {
+      title: "Câte articole vrei să vinzi?",
+      singleLabel: "1 articol",
+      singleNote: "Adaugă poze pe această pagină",
+      multipleLabel: "Mai multe articole",
+      multipleNote: "Creează anunțuri noi",
+      multipleCurrentListingNote: "Creează anunțuri noi. Acest anunț nu se schimbă.",
+      close: "Închide opțiunile de încărcare",
+    },
+    es: {
+      title: "¿Cuántos artículos quieres vender?",
+      singleLabel: "1 artículo",
+      singleNote: "Añadir fotos a esta página",
+      multipleLabel: "Varios artículos",
+      multipleNote: "Crear nuevos anuncios",
+      multipleCurrentListingNote: "Crear nuevos anuncios. Este anuncio no cambiará.",
+      close: "Cerrar opciones de subida",
+    },
+    sk: {
+      title: "Koľko položiek chcete predať?",
+      singleLabel: "1 položka",
+      singleNote: "Pridať fotky na túto stránku",
+      multipleLabel: "Viac položiek",
+      multipleNote: "Vytvoriť nové inzeráty",
+      multipleCurrentListingNote: "Vytvoriť nové inzeráty. Tento inzerát sa nezmení.",
+      close: "Zavrieť výber nahrávania",
+    },
+    sv: {
+      title: "Hur många varor vill du sälja?",
+      singleLabel: "1 vara",
+      singleNote: "Lägg till foton på denna sida",
+      multipleLabel: "Flera varor",
+      multipleNote: "Skapa nya annonser",
+      multipleCurrentListingNote: "Skapa nya annonser. Denna annons ändras inte.",
+      close: "Stäng uppladdningsval",
     },
   };
   const WAND_ICON_SVG = `<svg fill="#ffffff" viewBox="0 0 512 512" version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink"> <path d="M454.321,219.727l-38.766-51.947l20.815-61.385c2.046-6.032,0.489-12.704-4.015-17.208 c-4.504-4.504-11.175-6.061-17.208-4.015l-61.384,20.815l-51.951-38.766c-5.103-3.809-11.929-4.392-17.605-1.499 c-5.676,2.893-9.217,8.755-9.136,15.125l0.829,64.815l-52.923,37.426c-5.201,3.678-7.863,9.989-6.867,16.282 c0.996,6.291,5.479,11.471,11.561,13.363l43.844,13.63L14.443,483.432c-6.535,6.534-6.535,17.131,0,23.666s17.131,6.535,23.666,0 l257.073-257.072l13.629,43.843c2.172,6.986,8.638,11.768,15.984,11.768c5.375,0,10.494-2.595,13.66-7.072l37.426-52.923 l64.815,0.828c6.322,0.051,12.233-3.462,15.125-9.136S458.131,224.833,454.321,219.727z"></path> <polygon points="173.373,67.274 160.014,42.848 146.656,67.274 122.23,80.632 146.656,93.992 160.014,118.417 173.373,93.992 197.799,80.632 "></polygon> <polygon points="362.946,384.489 352.14,364.731 341.335,384.489 321.577,395.294 341.335,406.1 352.14,425.856 362.946,406.1 382.703,395.294 "></polygon> <polygon points="378.142,19.757 367.337,0 356.531,19.757 336.774,30.563 356.531,41.369 367.337,61.126 378.142,41.369 397.9,30.563 "></polygon> <polygon points="490.635,142.513 484.167,130.689 477.701,142.513 465.876,148.979 477.701,155.446 484.167,167.27 490.635,155.446 502.458,148.979 "></polygon> <polygon points="492.626,294.117 465.876,301.951 439.128,294.117 446.962,320.865 439.128,347.615 465.876,339.781 492.626,347.615 484.791,320.865 "></polygon> </svg>`;
@@ -1683,6 +1848,32 @@
     const supportedLanguage =
       languageDefaults.getSupportedLanguageCode(languageCode) || "en";
     return DESCRIPTION_FOOTER_COPY[supportedLanguage] || DESCRIPTION_FOOTER_COPY.en;
+  }
+
+  function getUploadChoiceCopy(languageCode) {
+    const supportedLanguage =
+      languageDefaults.getSupportedLanguageCode(languageCode) || "en";
+    return UPLOAD_CHOICE_COPY[supportedLanguage] || UPLOAD_CHOICE_COPY.en;
+  }
+
+  async function resolveUploadChoiceCopy() {
+    try {
+      const storage = await chrome.storage.local.get([
+        "selectedLanguage",
+        "selectedTitleLanguage",
+        "selectedDescriptionLanguage",
+        LANGUAGE_PREFERENCE_TOUCHED_KEY,
+      ]);
+      const selectedUiLanguage =
+        languageDefaults.getSupportedLanguageCode(storage.selectedLanguage);
+      if (selectedUiLanguage) {
+        return getUploadChoiceCopy(selectedUiLanguage);
+      }
+      const languageProfile = resolveLanguageProfile(storage);
+      return getUploadChoiceCopy(languageProfile.uiLanguageCode);
+    } catch (error) {
+      return getUploadChoiceCopy("en");
+    }
   }
 
   async function resolvePreferredUiLanguageContext(
@@ -3708,7 +3899,7 @@
   function injectStylesheet() {
     const style = document.createElement("style");
     style.textContent = `
-      #${BTN_ID}, #${PHONE_BTN_ID}, #${BATCH_BTN_ID} {
+      #${BTN_ID}, #${PHONE_BTN_ID} {
         display: none;
         align-items: center;
         justify-content: center;
@@ -3728,6 +3919,30 @@
         box-shadow: 0 7px 16px rgba(79, 70, 229, 0.22);
         text-align: center;
         white-space: nowrap;
+        position: relative;
+      }
+
+      #${PHONE_BTN_ID} .quickvint-phone-new-badge {
+        position: absolute;
+        top: -10px;
+        right: -8px;
+        min-width: 30px;
+        height: 17px;
+        padding: 0 6px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        border: 1px solid rgba(255, 255, 255, 0.82);
+        border-radius: 999px;
+        background: linear-gradient(135deg, #fef3c7 0%, #fbbf24 100%);
+        color: #713f12;
+        box-shadow: 0 0 0 2px rgba(251, 191, 36, 0.16), 0 0 18px rgba(251, 191, 36, 0.46);
+        font-size: 9px;
+        font-weight: 850;
+        line-height: 1;
+        letter-spacing: 0;
+        pointer-events: none;
+        transform: translateZ(0);
       }
 
       #${SIGN_IN_BTN_ID} {
@@ -3806,7 +4021,7 @@
         fill: currentColor;
       }
 
-      #${BTN_ID}:disabled, #${PHONE_BTN_ID}:disabled, #${BATCH_BTN_ID}:disabled {
+      #${BTN_ID}:disabled, #${PHONE_BTN_ID}:disabled {
         box-shadow: 0 3px 8px rgba(17, 24, 39, 0.1);
         opacity: 0.82;
       }
@@ -3861,8 +4076,7 @@
       }
 
       #${BTN_ID}.is-loading::before,
-      #${PHONE_BTN_ID}.is-loading::before,
-      #${BATCH_BTN_ID}.is-loading::before {
+      #${PHONE_BTN_ID}.is-loading::before {
         content: "";
         width: 14px;
         height: 14px;
@@ -3873,8 +4087,7 @@
       }
 
       #${BTN_ID}.is-loading .icon,
-      #${PHONE_BTN_ID}.is-loading .icon,
-      #${BATCH_BTN_ID}.is-loading .icon {
+      #${PHONE_BTN_ID}.is-loading .icon {
         display: none !important;
       }
 
@@ -4098,19 +4311,19 @@
         box-shadow: 0 0 0 1px rgba(17, 24, 39, 0.08);
       }
 
-      #${BTN_ID}:not(:disabled):hover, #${PHONE_BTN_ID}:not(:disabled):hover, #${BATCH_BTN_ID}:not(:disabled):hover {
+      #${BTN_ID}:not(:disabled):hover, #${PHONE_BTN_ID}:not(:disabled):hover {
         box-shadow: 0 10px 22px rgba(79, 70, 229, 0.3);
         filter: brightness(1.05);
         transform: translateY(-1px);
       }
 
-      #${BTN_ID}:not(:disabled):active, #${PHONE_BTN_ID}:not(:disabled):active, #${BATCH_BTN_ID}:not(:disabled):active {
+      #${BTN_ID}:not(:disabled):active, #${PHONE_BTN_ID}:not(:disabled):active {
         box-shadow: 0 5px 12px rgba(79, 70, 229, 0.24);
         filter: brightness(0.98);
         transform: translateY(0);
       }
 
-      #${BTN_ID} .icon, #${PHONE_BTN_ID} .icon, #${BATCH_BTN_ID} .icon {
+      #${BTN_ID} .icon, #${PHONE_BTN_ID} .icon {
         display: inline-flex;
         align-items: center;
         justify-content: center;
@@ -4119,7 +4332,7 @@
         flex: 0 0 17px;
       }
 
-      #${BTN_ID} .icon svg, #${PHONE_BTN_ID} .icon svg, #${BATCH_BTN_ID} .icon svg {
+      #${BTN_ID} .icon svg, #${PHONE_BTN_ID} .icon svg {
         display: block;
         width: 100%;
         height: 100%;
@@ -4431,6 +4644,203 @@
       #${DESCRIPTION_FOOTER_MODAL_ID} .quickvint-footer-clear:disabled {
         cursor: not-allowed;
         opacity: 0.55;
+      }
+
+      #${UPLOAD_CHOICE_MODAL_ID} {
+        position: fixed;
+        inset: 0;
+        width: 100vw;
+        height: 100vh;
+        z-index: 2147483647;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 24px;
+        background: rgba(15, 23, 42, 0.52);
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        animation: fadeIn 0.16s ease-out;
+      }
+
+      #${UPLOAD_CHOICE_MODAL_ID},
+      #${UPLOAD_CHOICE_MODAL_ID} * {
+        box-sizing: border-box;
+      }
+
+      #${UPLOAD_CHOICE_MODAL_ID} .quickvint-upload-choice-card {
+        width: min(760px, calc(100vw - 40px));
+        background: #ffffff;
+        color: #111827;
+        border-radius: 8px;
+        box-shadow: 0 28px 72px rgba(15, 23, 42, 0.26);
+        padding: 28px 24px 24px;
+        animation: slideUp 0.18s ease-out;
+        position: relative;
+      }
+
+      #${UPLOAD_CHOICE_MODAL_ID} .quickvint-upload-choice-head {
+        display: block;
+        margin: 0 auto 22px;
+        max-width: 560px;
+        text-align: center;
+      }
+
+      #${UPLOAD_CHOICE_MODAL_ID} .quickvint-upload-choice-title {
+        margin: 0;
+        font-size: 24px;
+        font-weight: 820;
+        letter-spacing: 0;
+        line-height: 1.2;
+      }
+
+      #${UPLOAD_CHOICE_MODAL_ID} .quickvint-upload-choice-close {
+        position: absolute;
+        top: 16px;
+        right: 16px;
+        width: 34px;
+        height: 34px;
+        border: 0;
+        border-radius: 8px;
+        background: #f8fafc;
+        color: #64748b;
+        cursor: pointer;
+        font-size: 22px;
+        line-height: 1;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+      }
+
+      #${UPLOAD_CHOICE_MODAL_ID} .quickvint-upload-choice-close:hover {
+        background: #eef2f7;
+        color: #111827;
+      }
+
+      #${UPLOAD_CHOICE_MODAL_ID} .quickvint-upload-choice-options {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 16px;
+      }
+
+      #${UPLOAD_CHOICE_MODAL_ID} .quickvint-upload-choice-option {
+        width: 100%;
+        border: 1px solid #e5e7eb;
+        border-radius: 8px;
+        background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
+        color: #111827;
+        cursor: pointer;
+        display: grid;
+        grid-template-rows: auto auto;
+        gap: 14px;
+        padding: 14px 14px 18px;
+        text-align: center;
+        box-shadow: 0 2px 8px rgba(15, 23, 42, 0.04);
+        transition: border-color 120ms ease, box-shadow 120ms ease, transform 120ms ease, background 120ms ease;
+      }
+
+      #${UPLOAD_CHOICE_MODAL_ID} .quickvint-upload-choice-option:hover {
+        border-color: #c7d2fe;
+        background: #ffffff;
+        box-shadow: 0 14px 30px rgba(79, 70, 229, 0.14);
+        transform: translateY(-1px);
+      }
+
+      #${UPLOAD_CHOICE_MODAL_ID} .quickvint-upload-choice-option:active {
+        transform: translateY(0);
+        box-shadow: 0 3px 10px rgba(15, 23, 42, 0.08);
+      }
+
+      #${UPLOAD_CHOICE_MODAL_ID} .quickvint-upload-choice-art {
+        min-width: 0;
+        aspect-ratio: 1 / 1;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 8px;
+        background: #f8fafc;
+        overflow: hidden;
+      }
+
+      #${UPLOAD_CHOICE_MODAL_ID} .quickvint-upload-choice-art img {
+        display: block;
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+      }
+
+      #${UPLOAD_CHOICE_MODAL_ID} .quickvint-upload-choice-copy {
+        min-width: 0;
+        display: grid;
+        gap: 5px;
+        justify-items: center;
+      }
+
+      #${UPLOAD_CHOICE_MODAL_ID} .quickvint-upload-choice-label {
+        display: block;
+        font-size: 16px;
+        font-weight: 780;
+        line-height: 1.2;
+      }
+
+      #${UPLOAD_CHOICE_MODAL_ID} .quickvint-upload-choice-note {
+        display: block;
+        color: #64748b;
+        font-size: 13px;
+        font-weight: 620;
+        line-height: 1.35;
+      }
+
+      #${UPLOAD_CHOICE_MODAL_ID} .quickvint-upload-choice-arrow {
+        color: #94a3b8;
+        font-size: 18px;
+        line-height: 1;
+        display: none;
+      }
+
+      @media (max-width: 560px) {
+        #${UPLOAD_CHOICE_MODAL_ID} {
+          padding: 18px;
+        }
+
+        #${UPLOAD_CHOICE_MODAL_ID} .quickvint-upload-choice-card {
+          width: min(430px, calc(100vw - 32px));
+          max-height: calc(100vh - 36px);
+          overflow: auto;
+          padding: 20px 16px 16px;
+        }
+
+        #${UPLOAD_CHOICE_MODAL_ID} .quickvint-upload-choice-head {
+          max-width: none;
+          margin-bottom: 18px;
+          padding: 0 42px;
+        }
+
+        #${UPLOAD_CHOICE_MODAL_ID} .quickvint-upload-choice-title {
+          font-size: 18px;
+        }
+
+        #${UPLOAD_CHOICE_MODAL_ID} .quickvint-upload-choice-options {
+          grid-template-columns: 1fr;
+          gap: 10px;
+        }
+
+        #${UPLOAD_CHOICE_MODAL_ID} .quickvint-upload-choice-option {
+          grid-template-columns: 112px minmax(0, 1fr);
+          grid-template-rows: none;
+          align-items: center;
+          min-height: 136px;
+          gap: 12px;
+          padding: 12px;
+          text-align: left;
+        }
+
+        #${UPLOAD_CHOICE_MODAL_ID} .quickvint-upload-choice-art {
+          width: 112px;
+          height: auto;
+        }
+
+        #${UPLOAD_CHOICE_MODAL_ID} .quickvint-upload-choice-copy {
+          justify-items: start;
+        }
       }
 
       /* Modal Styles */
@@ -4795,6 +5205,8 @@
       #${BATCH_MODAL_ID} {
         position: fixed;
         inset: 0;
+        width: 100vw;
+        height: 100vh;
         background: rgba(17, 24, 39, 0.46);
         display: flex;
         align-items: center;
@@ -8180,14 +8592,13 @@
 
         .quickvint-primary-tools {
           display: grid;
-          grid-template-columns: repeat(3, minmax(0, 1fr)) 44px;
+          grid-template-columns: repeat(2, minmax(0, 1fr)) 44px;
           width: 100%;
           gap: 6px;
         }
 
         #${BTN_ID},
-        #${PHONE_BTN_ID},
-        #${BATCH_BTN_ID} {
+        #${PHONE_BTN_ID} {
           width: 100%;
           min-width: 0;
           min-height: 44px;
@@ -8383,6 +8794,111 @@
     return btn;
   }
 
+  function isListingEditPage() {
+    return /\/items\/[^/]+\/edit\/?$/i.test(window.location.pathname || "");
+  }
+
+  function shouldUseCurrentListingBatchNote() {
+    return isListingEditPage() || getVisibleUploadedPhotoCount() > 0;
+  }
+
+  function closeUploadChoiceModal() {
+    const modal = document.getElementById(UPLOAD_CHOICE_MODAL_ID);
+    if (!modal) return;
+    if (modal.__quickvintHandleKeyDown) {
+      document.removeEventListener("keydown", modal.__quickvintHandleKeyDown);
+    }
+    modal.remove();
+  }
+
+  async function openUploadChoiceModal() {
+    if (!isAuthenticated) {
+      showToast("Please sign in via the extension popup first.", "error");
+      return;
+    }
+
+    closeUploadChoiceModal();
+    const copy = await resolveUploadChoiceCopy();
+    const usesCurrentListingNote = shouldUseCurrentListingBatchNote();
+    const multipleNote = usesCurrentListingNote
+      ? copy.multipleCurrentListingNote
+      : copy.multipleNote;
+    const singleAssetUrl = chrome.runtime.getURL("images/quickvint-upload-single.png");
+    const multipleAssetUrl = chrome.runtime.getURL("images/quickvint-upload-multiple.png");
+    const modal = document.createElement("div");
+    modal.id = UPLOAD_CHOICE_MODAL_ID;
+    modal.setAttribute("role", "dialog");
+    modal.setAttribute("aria-modal", "true");
+    modal.setAttribute("aria-labelledby", "quickvint-upload-choice-title");
+    modal.innerHTML = `
+      <div class="quickvint-upload-choice-card">
+        <div class="quickvint-upload-choice-head">
+          <h2 id="quickvint-upload-choice-title" class="quickvint-upload-choice-title">${escapeHtml(copy.title)}</h2>
+          <button type="button" class="quickvint-upload-choice-close" aria-label="${escapeHtml(copy.close)}">&times;</button>
+        </div>
+        <div class="quickvint-upload-choice-options">
+          <button type="button" class="quickvint-upload-choice-option quickvint-upload-choice-single">
+            <span class="quickvint-upload-choice-art" aria-hidden="true">
+              <img src="${escapeHtml(singleAssetUrl)}" alt="" />
+            </span>
+            <span class="quickvint-upload-choice-copy">
+              <span class="quickvint-upload-choice-label">${escapeHtml(copy.singleLabel)}</span>
+              <span class="quickvint-upload-choice-note">${escapeHtml(copy.singleNote)}</span>
+            </span>
+            <span class="quickvint-upload-choice-arrow" aria-hidden="true">&rsaquo;</span>
+          </button>
+          <button type="button" class="quickvint-upload-choice-option quickvint-upload-choice-multiple">
+            <span class="quickvint-upload-choice-art" aria-hidden="true">
+              <img src="${escapeHtml(multipleAssetUrl)}" alt="" />
+            </span>
+            <span class="quickvint-upload-choice-copy">
+              <span class="quickvint-upload-choice-label">${escapeHtml(copy.multipleLabel)}</span>
+              <span class="quickvint-upload-choice-note">${escapeHtml(multipleNote)}</span>
+            </span>
+            <span class="quickvint-upload-choice-arrow" aria-hidden="true">&rsaquo;</span>
+          </button>
+        </div>
+      </div>
+    `;
+
+    const handleKeyDown = (event) => {
+      if (event.key === "Escape") closeUploadChoiceModal();
+    };
+    modal.__quickvintHandleKeyDown = handleKeyDown;
+    document.addEventListener("keydown", handleKeyDown);
+
+    modal.addEventListener("click", (event) => {
+      if (event.target === modal) closeUploadChoiceModal();
+    });
+    modal
+      .querySelector(".quickvint-upload-choice-close")
+      ?.addEventListener("click", closeUploadChoiceModal);
+    modal
+      .querySelector(".quickvint-upload-choice-single")
+      ?.addEventListener("click", async () => {
+        closeUploadChoiceModal();
+        trackGrowthEvent("phone_upload_choice_select", {
+          mode: "single",
+          listingHasPhotos: getVisibleUploadedPhotoCount() > 0,
+          isEditPage: isListingEditPage(),
+        });
+        await onPhoneUploadClick();
+      });
+    modal
+      .querySelector(".quickvint-upload-choice-multiple")
+      ?.addEventListener("click", async () => {
+        closeUploadChoiceModal();
+        trackGrowthEvent("phone_upload_choice_select", {
+          mode: "batch",
+          listingHasPhotos: getVisibleUploadedPhotoCount() > 0,
+          isEditPage: isListingEditPage(),
+        });
+        await onBatchUploadClick();
+      });
+
+    document.body.appendChild(modal);
+  }
+
   function createPhoneButton() {
     const btn = document.createElement("button");
     btn.id = PHONE_BTN_ID;
@@ -8390,20 +8906,9 @@
     btn.innerHTML = `
         <span class="icon">${PHONE_ICON_SVG}</span>
         <span class="label">Phone</span>
+        <span class="quickvint-phone-new-badge" aria-hidden="true">NEW</span>
     `;
-    btn.addEventListener("click", onPhoneUploadClick);
-    return btn;
-  }
-
-  function createBatchButton() {
-    const btn = document.createElement("button");
-    btn.id = BATCH_BTN_ID;
-    btn.disabled = true;
-    btn.innerHTML = `
-        <span class="icon">${BATCH_ICON_SVG}</span>
-        <span class="label">Batch</span>
-    `;
-    btn.addEventListener("click", onBatchUploadClick);
+    btn.addEventListener("click", openUploadChoiceModal);
     return btn;
   }
 
@@ -11211,6 +11716,10 @@
           options: { method: "GET" },
         });
 
+        if (!isPhoneUploadSessionActive(sessionId)) {
+          return;
+        }
+
         if (!response || !response.ok) return;
 
         const data =
@@ -11869,19 +12378,13 @@
       return;
     }
 
-    if (getVisibleUploadedPhotoCount() > 0) {
-      trackGrowthEvent("phone_upload_blocked", { reason: "listing_not_empty" });
-      showToast("Start batch upload from an empty Vinted listing tab.", "error");
-      return;
-    }
-
     if (document.getElementById(BATCH_MODAL_ID)) {
       const closed = requestCloseBatchModal({ cleanup: true });
       if (!closed) return;
     }
 
     resetBatchState();
-    const restoreBatchButton = setActionButtonLoading(batchBtn, "Checking...");
+    const restoreBatchButton = setActionButtonLoading(phoneBtn, "Checking...");
     batchCapacityLoading = true;
 
     try {
@@ -13098,12 +13601,6 @@
       return;
     }
 
-    if (getVisibleUploadedPhotoCount() > 0) {
-      trackGrowthEvent("batch_start_blocked", { reason: "listing_not_empty" });
-      showToast("Start batch generation from an empty Vinted listing tab.", "error");
-      return;
-    }
-
     const restoreStartButton = setActionButtonLoading(startButton, "Starting...");
 
     let capacity;
@@ -14107,6 +14604,10 @@
       generateBtn = existingBtn;
       phoneBtn = document.getElementById(PHONE_BTN_ID);
       batchBtn = document.getElementById(BATCH_BTN_ID);
+      if (batchBtn) {
+        batchBtn.remove();
+        batchBtn = null;
+      }
       reportBtn = document.getElementById(REPORT_BTN_ID);
       if (!reportBtn) {
         reportBtn = createReportButton();
@@ -14163,7 +14664,7 @@
 
       generateBtn = createButton();
       phoneBtn = createPhoneButton();
-      batchBtn = createBatchButton();
+      batchBtn = null;
       reportBtn = createReportButton();
       descriptionLengthToggle = createDescriptionLengthToggle();
       outputShapeToggleBtn = createOutputShapeToggleButton();
@@ -14174,7 +14675,6 @@
 
       primaryTools.appendChild(generateBtn);
       primaryTools.appendChild(phoneBtn);
-      primaryTools.appendChild(batchBtn);
       primaryTools.appendChild(reportBtn);
       toolOptions.appendChild(descriptionLengthToggle);
       toolOptions.appendChild(outputShapeToggleBtn);

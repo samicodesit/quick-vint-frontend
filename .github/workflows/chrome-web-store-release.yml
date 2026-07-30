@@ -1,0 +1,100 @@
+name: Chrome Web Store Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "What should this run do?"
+        type: choice
+        required: true
+        default: upload
+        options:
+          - package-only
+          - upload
+          - upload-and-submit
+      bump_patch:
+        description: "Bump manifest patch version before packaging"
+        type: boolean
+        required: true
+        default: true
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+
+    env:
+      CHROME_WEB_STORE_PUBLISHER_ID: 616efd8f-d3cc-4a95-9b45-d48a0f4ad3e7
+      CHROME_WEB_STORE_EXTENSION_ID: mommklhpammnlojjobejddmidmdcalcl
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Playwright Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Run unit tests
+        run: npm run test:unit
+
+      - name: Run extension E2E tests
+        run: npm run test:e2e
+
+      - name: Show release status
+        run: npm run release:status
+
+      - name: Bump patch version
+        if: ${{ inputs.bump_patch }}
+        run: npm run release:bump
+
+      - name: Build production extension
+        run: npm run build:prod
+
+      - name: Build Chrome Web Store package
+        run: npm run package
+
+      - name: Read package metadata
+        id: package
+        run: |
+          VERSION=$(node -p "require('./manifest.json').version")
+          ZIP_PATH="dist/autolister-ai-v${VERSION}.zip"
+          test -f "$ZIP_PATH"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "zip_path=$ZIP_PATH" >> "$GITHUB_OUTPUT"
+
+      - name: Upload package artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: autolister-ai-v${{ steps.package.outputs.version }}
+          path: ${{ steps.package.outputs.zip_path }}
+          if-no-files-found: error
+
+      - name: Upload to Chrome Web Store
+        if: ${{ inputs.mode == 'upload' || inputs.mode == 'upload-and-submit' }}
+        env:
+          CHROME_WEB_STORE_SERVICE_ACCOUNT_JSON: ${{ secrets.CHROME_WEB_STORE_SERVICE_ACCOUNT_JSON }}
+        run: npm run release:chrome-web-store -- --zip "${{ steps.package.outputs.zip_path }}" --mode "${{ inputs.mode }}"
+
+      - name: Mark uploaded
+        if: ${{ inputs.mode == 'upload' || inputs.mode == 'upload-and-submit' }}
+        run: npm run release:mark-uploaded -- "${{ steps.package.outputs.version }}"
+
+      - name: Commit release state
+        if: ${{ inputs.mode == 'upload' || inputs.mode == 'upload-and-submit' }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add manifest.json CHROME_WEB_STORE_VERSION
+          git diff --cached --quiet || git commit -m "Mark Chrome Store upload ${{ steps.package.outputs.version }}"
+          git push
