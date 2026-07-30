@@ -14,6 +14,7 @@ function usage() {
   console.error(`
 Usage:
   node scripts/chrome-web-store-release.js --zip dist/autolister-ai-vX.Y.Z.zip [--mode upload|upload-and-submit]
+  node scripts/chrome-web-store-release.js --mode cancel-submission
 
 Required credentials:
   CHROME_WEB_STORE_SERVICE_ACCOUNT_JSON=<raw JSON or base64 JSON>
@@ -50,12 +51,12 @@ function parseArgs(argv) {
     }
   }
 
-  if (!args.zipPath) {
-    throw new Error("--zip is required");
+  if (!["upload", "upload-and-submit", "cancel-submission"].includes(args.mode)) {
+    throw new Error('--mode must be "upload", "upload-and-submit", or "cancel-submission"');
   }
 
-  if (!["upload", "upload-and-submit"].includes(args.mode)) {
-    throw new Error('--mode must be "upload" or "upload-and-submit"');
+  if (!args.zipPath && args.mode !== "cancel-submission") {
+    throw new Error("--zip is required");
   }
 
   return args;
@@ -194,9 +195,9 @@ function formatBytes(bytes) {
 }
 
 function resolveConfig(args) {
-  const zipPath = path.resolve(args.zipPath);
+  const zipPath = args.zipPath ? path.resolve(args.zipPath) : null;
 
-  if (!fs.existsSync(zipPath)) {
+  if (zipPath && !fs.existsSync(zipPath)) {
     throw new Error(`ZIP not found: ${zipPath}`);
   }
 
@@ -212,15 +213,26 @@ async function main() {
   const args = parseArgs(process.argv.slice(2));
   const config = resolveConfig(args);
   const credentials = loadServiceAccount();
-  const zip = fs.readFileSync(config.zipPath);
   const itemName = `publishers/${config.publisherId}/items/${config.extensionId}`;
 
   console.log(`Chrome Web Store item: ${itemName}`);
-  console.log(`Package: ${config.zipPath} (${formatBytes(zip.length)})`);
   console.log(`Mode: ${config.mode}`);
   console.log(`Service account: ${credentials.client_email}`);
 
   const token = await fetchAccessToken(credentials);
+
+  if (config.mode === "cancel-submission") {
+    const cancelUrl = `${API_ROOT}/v2/${itemName}:cancelSubmission`;
+    await chromeWebStoreFetch(cancelUrl, {
+      method: "POST",
+      token,
+    });
+    console.log("Submission cancelled.");
+    return;
+  }
+
+  const zip = fs.readFileSync(config.zipPath);
+  console.log(`Package: ${config.zipPath} (${formatBytes(zip.length)})`);
 
   const uploadUrl = `${API_ROOT}/upload/v2/${itemName}:upload`;
   const uploadResult = await chromeWebStoreFetch(uploadUrl, {

@@ -138,6 +138,13 @@ npm run release:chrome-web-store -- --zip dist/autolister-ai-v<version>.zip --mo
 
 Use `--mode upload-and-submit` only when the package should also be submitted for review.
 
+To replace a package that is already pending review, cancel the active submission first:
+
+```bash
+CHROME_WEB_STORE_SERVICE_ACCOUNT_FILE=~/Downloads/chrome-web-store-service-account.json \
+npm run release:chrome-web-store -- --mode cancel-submission
+```
+
 ## Quick verification before upload
 
 Check the archive includes key files:

@@ -8823,8 +8823,8 @@
     const multipleNote = usesCurrentListingNote
       ? copy.multipleCurrentListingNote
       : copy.multipleNote;
-    const singleAssetUrl = chrome.runtime.getURL("images/quickvint-upload-single.png");
-    const multipleAssetUrl = chrome.runtime.getURL("images/quickvint-upload-multiple.png");
+    const singleAssetUrl = chrome.runtime.getURL("images/quickvint-upload-single.jpg");
+    const multipleAssetUrl = chrome.runtime.getURL("images/quickvint-upload-multiple.jpg");
     const modal = document.createElement("div");
     modal.id = UPLOAD_CHOICE_MODAL_ID;
     modal.setAttribute("role", "dialog");

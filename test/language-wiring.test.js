@@ -75,7 +75,7 @@ test("design-system preview includes phone upload chooser scenarios", () => {
   assert.match(reviewScript, /Deze advertentie verandert niet/);
 
   const contentScript = readFileSync("content.js", "utf8");
-  assert.match(contentScript, /images\/quickvint-upload-single\.png/);
-  assert.match(contentScript, /images\/quickvint-upload-multiple\.png/);
+  assert.match(contentScript, /images\/quickvint-upload-single\.jpg/);
+  assert.match(contentScript, /images\/quickvint-upload-multiple\.jpg/);
   assert.match(contentScript, /quickvint-phone-new-badge/);
 });

@@ -788,10 +788,10 @@ test.describe("AutoLister extension smoke flows", () => {
     await expect(modal.locator(".quickvint-upload-choice-art img")).toHaveCount(2);
     await expect(
       modal.locator(".quickvint-upload-choice-single img"),
-    ).toHaveAttribute("src", /quickvint-upload-single\.png/);
+    ).toHaveAttribute("src", /quickvint-upload-single\.jpg/);
     await expect(
       modal.locator(".quickvint-upload-choice-multiple img"),
-    ).toHaveAttribute("src", /quickvint-upload-multiple\.png/);
+    ).toHaveAttribute("src", /quickvint-upload-multiple\.jpg/);
     const artBox = await modal
       .locator(".quickvint-upload-choice-art")
       .first()
