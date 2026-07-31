@@ -5299,27 +5299,11 @@
       }
 
       #${BATCH_MODAL_ID} .batch-availability {
-        display: inline-flex;
-        align-items: center;
-        gap: 6px;
-        min-height: 24px;
-        padding: 4px 8px;
-        border: 1px solid #ddd6fe;
-        border-radius: 999px;
-        background: #f5f3ff;
-        color: #5145cd;
-        font-size: 11px;
-        font-weight: 800;
-        line-height: 1;
+        color: #64748b;
+        font-size: 12px;
+        font-weight: 650;
+        line-height: 1.2;
         white-space: nowrap;
-      }
-
-      #${BATCH_MODAL_ID} .batch-availability::before {
-        content: "";
-        width: 6px;
-        height: 6px;
-        border-radius: 999px;
-        background: currentColor;
       }
 
       #${BATCH_MODAL_ID} .batch-subtitle {

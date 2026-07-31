@@ -1654,6 +1654,22 @@ test.describe("AutoLister extension smoke flows", () => {
     const batch = page.locator("#quickvint-batch-modal");
 
     await expect(batch.locator(".batch-availability")).toHaveText("12 available");
+    expect(
+      await batch.locator(".batch-availability").evaluate((element) => {
+        const style = getComputedStyle(element);
+        return {
+          backgroundColor: style.backgroundColor,
+          borderStyle: style.borderStyle,
+          borderRadius: style.borderRadius,
+          paddingLeft: style.paddingLeft,
+        };
+      }),
+    ).toEqual({
+      backgroundColor: "rgba(0, 0, 0, 0)",
+      borderStyle: "none",
+      borderRadius: "0px",
+      paddingLeft: "0px",
+    });
     expect(await getCapacityRequestCount(page)).toBe(1);
     await expect(batch).not.toContainText(/daily|monthly|extra credit/i);
   });
