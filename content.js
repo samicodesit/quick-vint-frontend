@@ -4715,6 +4715,26 @@
         line-height: 1.2;
       }
 
+      #${UPLOAD_CHOICE_MODAL_ID} .quickvint-upload-choice-capacity {
+        display: inline-flex;
+        align-items: center;
+        gap: 7px;
+        margin: 10px 0 0;
+        color: #64748b;
+        font-size: 13px;
+        font-weight: 650;
+        line-height: 1.3;
+      }
+
+      #${UPLOAD_CHOICE_MODAL_ID} .quickvint-upload-choice-capacity::before {
+        content: "";
+        width: 7px;
+        height: 7px;
+        border-radius: 999px;
+        background: #7c6cf2;
+        box-shadow: 0 0 0 4px rgba(124, 108, 242, 0.12);
+      }
+
       #${UPLOAD_CHOICE_MODAL_ID} .quickvint-upload-choice-close {
         position: absolute;
         top: 16px;
@@ -5265,6 +5285,41 @@
         font-size: 20px;
         font-weight: 800;
         letter-spacing: 0;
+      }
+
+      #${BATCH_MODAL_ID} .batch-title-row {
+        display: flex;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: 8px;
+      }
+
+      #${BATCH_MODAL_ID} .batch-title-row .batch-title {
+        margin: 0;
+      }
+
+      #${BATCH_MODAL_ID} .batch-availability {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        min-height: 24px;
+        padding: 4px 8px;
+        border: 1px solid #ddd6fe;
+        border-radius: 999px;
+        background: #f5f3ff;
+        color: #5145cd;
+        font-size: 11px;
+        font-weight: 800;
+        line-height: 1;
+        white-space: nowrap;
+      }
+
+      #${BATCH_MODAL_ID} .batch-availability::before {
+        content: "";
+        width: 6px;
+        height: 6px;
+        border-radius: 999px;
+        background: currentColor;
       }
 
       #${BATCH_MODAL_ID} .batch-subtitle {
@@ -9202,6 +9257,7 @@
       <div class="quickvint-upload-choice-card">
         <div class="quickvint-upload-choice-head">
           <h2 id="quickvint-upload-choice-title" class="quickvint-upload-choice-title">${escapeHtml(copy.title)}</h2>
+          <p class="quickvint-upload-choice-capacity">${available} listing${available === 1 ? "" : "s"} available now</p>
           <button type="button" class="quickvint-upload-choice-close" aria-label="${escapeHtml(copy.close)}">&times;</button>
         </div>
         <div class="quickvint-upload-choice-options">
@@ -12764,6 +12820,10 @@
   }
 
   function createBatchModal(sessionId) {
+    const available = Math.max(
+      0,
+      Math.floor(Number(batchGenerationCapacity?.available || 0)),
+    );
     const modal = document.createElement("div");
     modal.id = BATCH_MODAL_ID;
     modal.dataset.sessionId = sessionId;
@@ -12776,7 +12836,10 @@
       <div class="batch-content">
         <div class="batch-topbar">
           <div class="batch-heading">
-            <h3 id="quickvint-batch-title" class="batch-title">Batch upload</h3>
+            <div class="batch-title-row">
+              <h3 id="quickvint-batch-title" class="batch-title">Batch upload</h3>
+              <span class="batch-availability" aria-live="polite">${available} available</span>
+            </div>
             <p class="batch-subtitle">Create several listings at once.</p>
           </div>
           <button class="batch-close" type="button" aria-label="Close">&times;</button>
@@ -13761,6 +13824,7 @@
     const summaryCount = document.querySelector(`#${BATCH_MODAL_ID} .batch-summary-count`);
     const emptyState = document.querySelector(`#${BATCH_MODAL_ID} .batch-empty-state`);
     const capacityNote = document.querySelector(`#${BATCH_MODAL_ID} .batch-capacity-note`);
+    const availability = document.querySelector(`#${BATCH_MODAL_ID} .batch-availability`);
     const progressDone = document.querySelector(`#${BATCH_MODAL_ID} .organize-progress-done`);
     const progressActive = document.querySelector(`#${BATCH_MODAL_ID} .organize-progress-active`);
     const unsortedBadge = document.querySelector(`#${BATCH_MODAL_ID} .organize-unsorted-badge`);
@@ -13862,8 +13926,9 @@
         capacityNote.classList.add("is-hidden");
         capacityNote.setAttribute("aria-hidden", "true");
       } else if (batchCapacityLoading) {
-        capacityNote.classList.add("is-hidden");
-        capacityNote.setAttribute("aria-hidden", "true");
+        capacityNote.classList.remove("is-hidden");
+        capacityNote.setAttribute("aria-hidden", "false");
+        capacityNote.textContent = "Checking availability...";
       } else if (!batchGenerationCapacity) {
         capacityNote.classList.add("is-hidden");
         capacityNote.setAttribute("aria-hidden", "true");
@@ -13883,11 +13948,25 @@
           capacityNote.classList.remove("is-hidden");
           capacityNote.classList.add("warning");
           capacityNote.setAttribute("aria-hidden", "false");
-          capacityNote.textContent = `Your balance allows ${available} of ${groups.length} listings. The first ${available} will be generated.`;
+          capacityNote.textContent = `You can generate ${available} of ${groups.length} listings right now. The first ${available} will be generated.`;
         } else {
-          capacityNote.classList.add("is-hidden");
-          capacityNote.setAttribute("aria-hidden", "true");
+          capacityNote.classList.remove("is-hidden");
+          capacityNote.setAttribute("aria-hidden", "false");
+          capacityNote.textContent = `Using ${groups.length} of ${available} available`;
         }
+      }
+    }
+    if (availability) {
+      const available = batchGenerationCapacity
+        ? Math.max(0, Math.floor(Number(batchGenerationCapacity.available || 0)))
+        : 0;
+      const showAvailability =
+        !batchCapacityLoading &&
+        Boolean(batchGenerationCapacity?.allowed) &&
+        available > 0;
+      availability.hidden = !showAvailability;
+      if (showAvailability) {
+        availability.textContent = `${available} available`;
       }
     }
     if (clearButton) {

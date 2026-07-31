@@ -57,6 +57,8 @@ async function loadExtension(options = {}) {
 
 function installChromeHarness(page, capacityResponse = null, initialStorage = {}) {
   return page.evaluate(({ capacity, initialStorage }) => {
+    const capacityQueue = Array.isArray(capacity) ? [...capacity] : [capacity];
+    let currentCapacity = capacityQueue[0] || null;
     const storage = {
       supabaseSession: {
         access_token: "test-access-token",
@@ -121,7 +123,8 @@ function installChromeHarness(page, capacityResponse = null, initialStorage = {}
               expires_at: storage.supabaseSession?.expires_at,
             };
           } else if (message?.type === "GET_BATCH_CAPACITY") {
-            response = { ok: true, capacity };
+            if (capacityQueue.length) currentCapacity = capacityQueue.shift();
+            response = { ok: true, capacity: currentCapacity };
           } else if (message?.type === "GET_USER_PROFILE") {
             response = {
               user: storage.supabaseSession?.user || null,
@@ -569,6 +572,7 @@ test.describe("AutoLister extension smoke flows", () => {
     page,
     requestBodies,
     fileCount = 2,
+    capacityResponse = { allowed: true, available: 10 },
   ) {
     await page.route("https://autolister.app/api/generate", (route) => {
       requestBodies.push(route.request().postDataJSON());
@@ -585,7 +589,7 @@ test.describe("AutoLister extension smoke flows", () => {
 
     await openContentHarness(
       page,
-      { allowed: true, available: 10 },
+      capacityResponse,
       { emptyListing: true, shortenPhoneUploadPoll: true },
     );
 
@@ -1590,11 +1594,11 @@ test.describe("AutoLister extension smoke flows", () => {
     storage.releaseUploads();
   });
 
-  test("opens a simple phone upload chooser with clear current-listing copy", async ({
+  test("opens a simple phone upload chooser with clear copy and available listings", async ({
     page,
   }) => {
     await page.setViewportSize({ width: 390, height: 844 });
-    await openContentHarness(page, { allowed: true, available: 10 });
+    await openContentHarness(page, { allowed: true, available: 12 });
 
     await expect(page.locator("#quickvint-phone-btn .quickvint-phone-new-badge")).toHaveText(
       "NEW",
@@ -1603,6 +1607,10 @@ test.describe("AutoLister extension smoke flows", () => {
     await expect(modal.locator(".quickvint-upload-choice-title")).toHaveText(
       "How many items do you want to sell?",
     );
+    await expect(modal.locator(".quickvint-upload-choice-capacity")).toHaveText(
+      "12 listings available now",
+    );
+    await expect(modal).not.toContainText(/daily|monthly|extra credit/i);
     await expect(modal.locator(".quickvint-upload-choice-single")).toContainText(
       "1 item",
     );
@@ -1632,6 +1640,73 @@ test.describe("AutoLister extension smoke flows", () => {
     expect(Math.abs(artBox.width - artBox.height)).toBeLessThanOrEqual(2);
     await expectInsideViewport(page, "#quickvint-upload-choice-modal .quickvint-upload-choice-card");
     await expectNoHorizontalOverflow(page);
+  });
+
+  test("shows availability through the chooser and batch source screen", async ({
+    page,
+  }) => {
+    await openContentHarness(page, { allowed: true, available: 12 }, {
+      emptyListing: true,
+    });
+
+    const chooser = await openPhoneChoice(page);
+    await chooser.locator(".quickvint-upload-choice-multiple").click();
+    const batch = page.locator("#quickvint-batch-modal");
+
+    await expect(batch.locator(".batch-availability")).toHaveText("12 available");
+    expect(await getCapacityRequestCount(page)).toBe(1);
+    await expect(batch).not.toContainText(/daily|monthly|extra credit/i);
+  });
+
+  test("shows available listings while organizing a batch", async ({ page }) => {
+    await setupReadyPhoneUploadWithDelayedThumbnails(
+      page,
+      [],
+      4,
+      { allowed: true, available: 12 },
+    );
+
+    await chooseBatchUpload(page);
+    const batch = page.locator("#quickvint-batch-modal");
+    const gallery = batch.locator(".batch-gallery");
+    await expect(gallery.locator(".batch-photo")).toHaveCount(4);
+
+    for (const key of ["phone-1.jpg", "phone-2.jpg"]) {
+      await gallery.locator(`.batch-photo[data-photo-key="${key}"]`).click();
+      await batch.locator(".batch-mark-group").click();
+    }
+
+    await expect(batch.locator(".batch-availability")).toHaveText("12 available");
+    await expect(batch.locator(".batch-capacity-note")).toHaveText(
+      "Using 2 of 12 available",
+    );
+  });
+
+  test("shows refreshed batch availability before limited generation", async ({
+    page,
+  }) => {
+    await setupReadyPhoneUploadWithDelayedThumbnails(page, [], 3, [
+      { allowed: true, available: 12 },
+      { allowed: true, available: 2 },
+    ]);
+
+    await chooseBatchUpload(page);
+    const batch = page.locator("#quickvint-batch-modal");
+    const gallery = batch.locator(".batch-gallery");
+    await expect(gallery.locator(".batch-photo")).toHaveCount(3);
+    await expect(batch.locator(".batch-availability")).toHaveText("2 available");
+
+    for (const key of ["phone-1.jpg", "phone-2.jpg", "phone-3.jpg"]) {
+      await gallery.locator(`.batch-photo[data-photo-key="${key}"]`).click();
+      await batch.locator(".batch-mark-group").click();
+    }
+
+    await expect(batch.locator(".batch-capacity-note")).toContainText(
+      "You can generate 2 of 3 listings right now",
+    );
+    await expect(batch.locator(".batch-start")).toHaveText(
+      "Generate first 2 of 3",
+    );
   });
 
   for (const [mode, selector, destination] of [
