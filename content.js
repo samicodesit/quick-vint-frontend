@@ -9166,6 +9166,26 @@
     }
 
     closeUploadChoiceModal();
+    const restorePhoneButton = setActionButtonLoading(phoneBtn, "Checking...");
+    let capacity;
+    try {
+      capacity = await fetchBatchGenerationCapacity();
+    } catch (err) {
+      capacity = {
+        allowed: false,
+        available: 0,
+        message: "Could not check how many listings are available.",
+      };
+    } finally {
+      restorePhoneButton();
+    }
+
+    const available = Math.max(0, Math.floor(Number(capacity.available || 0)));
+    if (!capacity.allowed || available <= 0) {
+      await showBatchCapacityBlocked(capacity);
+      return;
+    }
+
     const copy = await resolveUploadChoiceCopy();
     const usesCurrentListingNote = shouldUseCurrentListingBatchNote();
     const multipleNote = usesCurrentListingNote
@@ -9230,7 +9250,7 @@
           listingHasPhotos: getVisibleUploadedPhotoCount() > 0,
           isEditPage: isListingEditPage(),
         });
-        await onPhoneUploadClick();
+        await onPhoneUploadClick(capacity);
       });
     modal
       .querySelector(".quickvint-upload-choice-multiple")
@@ -9241,7 +9261,7 @@
           listingHasPhotos: getVisibleUploadedPhotoCount() > 0,
           isEditPage: isListingEditPage(),
         });
-        await onBatchUploadClick();
+        await onBatchUploadClick(capacity);
       });
 
     document.body.appendChild(modal);
@@ -11958,30 +11978,13 @@
     displayedPhoneUploadPreviewCount = 0;
   }
 
-  async function onPhoneUploadClick() {
+  async function onPhoneUploadClick(capacity) {
     if (!isAuthenticated) {
       showToast("Please sign in via the extension popup first.", "error");
       return;
     }
 
-    const restorePhoneButton = setActionButtonLoading(phoneBtn, "Checking...");
-    let capacity;
-    try {
-      capacity = await fetchBatchGenerationCapacity();
-    } catch (err) {
-      capacity = {
-        allowed: false,
-        available: 0,
-        message: "Could not check how many listings are available.",
-      };
-    }
-
     const available = Math.max(0, Math.floor(Number(capacity.available || 0)));
-    if (!capacity.allowed || available <= 0) {
-      restorePhoneButton();
-      await showBatchCapacityBlocked(capacity);
-      return;
-    }
 
     if (document.getElementById(MODAL_ID)) {
       closeModal();
@@ -11992,35 +11995,27 @@
       incompletePhoneUpload?.sessionId &&
       activePhoneUploadSessionId === incompletePhoneUpload.sessionId
     ) {
-      try {
-        trackGrowthEvent("phone_upload_resume", {
-          mode: "single",
-          sessionId: incompletePhoneUpload.sessionId,
-        });
-        await createModal(incompletePhoneUpload.sessionId);
-        updatePhoneUploadStatus(
-          document.querySelector(`#${MODAL_ID} .status`),
-          incompletePhoneUpload.initialImageCount,
-        );
-        renderPhoneUploadPreviews();
-      } finally {
-        restorePhoneButton();
-      }
+      trackGrowthEvent("phone_upload_resume", {
+        mode: "single",
+        sessionId: incompletePhoneUpload.sessionId,
+      });
+      await createModal(incompletePhoneUpload.sessionId);
+      updatePhoneUploadStatus(
+        document.querySelector(`#${MODAL_ID} .status`),
+        incompletePhoneUpload.initialImageCount,
+      );
+      renderPhoneUploadPreviews();
       return;
     }
 
     const sessionId = generateSessionId();
-    try {
-      trackGrowthEvent("phone_upload_start", {
-        mode: "single",
-        available,
-        sessionId,
-      });
-      await createModal(sessionId);
-      startPolling(sessionId);
-    } finally {
-      restorePhoneButton();
-    }
+    trackGrowthEvent("phone_upload_start", {
+      mode: "single",
+      available,
+      sessionId,
+    });
+    await createModal(sessionId);
+    startPolling(sessionId);
   }
 
   function startPolling(sessionId) {
@@ -12735,7 +12730,7 @@
     }, BATCH_UPLOAD_IDLE_TIMEOUT_MS);
   }
 
-  async function onBatchUploadClick() {
+  async function onBatchUploadClick(capacity) {
     if (!isAuthenticated) {
       trackGrowthEvent("phone_upload_blocked", { reason: "signed_out" });
       showToast("Please sign in via the extension popup first.", "error");
@@ -12748,21 +12743,7 @@
     }
 
     resetBatchState();
-    const restoreBatchButton = setActionButtonLoading(phoneBtn, "Checking...");
-    batchCapacityLoading = true;
-
-    try {
-      batchGenerationCapacity = await fetchBatchGenerationCapacity();
-    } catch (err) {
-      batchGenerationCapacity = {
-        allowed: false,
-        available: 0,
-        message: "Could not check how many listings are available.",
-      };
-    } finally {
-      batchCapacityLoading = false;
-      restoreBatchButton();
-    }
+    batchGenerationCapacity = capacity;
 
     const available = Math.max(
       0,

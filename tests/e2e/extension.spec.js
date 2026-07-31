@@ -315,6 +315,15 @@ async function openPhoneChoice(page) {
   return modal;
 }
 
+function getCapacityRequestCount(page) {
+  return page.evaluate(
+    () =>
+      window.__extensionHarness.runtimeMessages.filter(
+        (message) => message?.type === "GET_BATCH_CAPACITY",
+      ).length,
+  );
+}
+
 async function chooseSinglePhoneUpload(page) {
   const modal = await openPhoneChoice(page);
   await modal.locator(".quickvint-upload-choice-single").click();
@@ -1624,6 +1633,24 @@ test.describe("AutoLister extension smoke flows", () => {
     await expectInsideViewport(page, "#quickvint-upload-choice-modal .quickvint-upload-choice-card");
     await expectNoHorizontalOverflow(page);
   });
+
+  for (const [mode, selector, destination] of [
+    ["single", ".quickvint-upload-choice-single", "#quickvint-phone-modal"],
+    ["batch", ".quickvint-upload-choice-multiple", "#quickvint-batch-modal"],
+  ]) {
+    test(`checks capacity on the first Phone click before ${mode} upload choice`, async ({
+      page,
+    }) => {
+      await openContentHarness(page, { allowed: true, available: 10 });
+
+      const modal = await openPhoneChoice(page);
+      expect(await getCapacityRequestCount(page)).toBe(1);
+
+      await modal.locator(selector).click();
+      await expect(page.locator(destination)).toBeVisible();
+      expect(await getCapacityRequestCount(page)).toBe(1);
+    });
+  }
 
   test("localizes the phone upload chooser", async ({ page }) => {
     await openContentHarness(page, { allowed: true, available: 10 }, {
@@ -4882,8 +4909,9 @@ test.describe("AutoLister extension smoke flows", () => {
         "Free listing limit reached. Upgrade your plan or buy a one-time credit pack.",
     });
 
-    await chooseSinglePhoneUpload(page);
+    await page.locator("#quickvint-phone-btn").click();
 
+    await expect(page.locator("#quickvint-upload-choice-modal")).toHaveCount(0);
     await expect(page.locator("#quickvint-phone-modal")).toHaveCount(0);
     await expect(page.locator("#quickvint-toast.paywall")).toBeVisible();
     await expect(page.locator("#quickvint-toast.paywall")).toContainText(
