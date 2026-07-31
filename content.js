@@ -1074,6 +1074,8 @@
   let batchProgressStatus = null;
   let batchGenerationCapacity = null;
   let batchCapacityLoading = false;
+  let batchInputSource = null;
+  let batchComputerUploadPromise = null;
   let listingToolsReadyTracked = false;
   let signedOutToolsReadyTracked = false;
   let eventQueue = [];
@@ -2926,23 +2928,20 @@
     return file;
   }
 
-  async function listManualTempStorageUrls(sessionId) {
+  async function listTempStorageFiles(sessionId) {
     const response = await fetch(
       `${PHONE_UPLOAD_API}?sessionId=${encodeURIComponent(sessionId)}&t=${Date.now()}`,
       { method: "GET" },
     );
     const data = await response.json().catch(() => ({}));
     if (!response.ok) {
-      throw new Error(data?.error || `Manual upload list failed (${response.status})`);
+      throw new Error(data?.error || `Upload list failed (${response.status})`);
     }
-    return getPhoneUploadPhotoFiles(data?.files)
-      .slice()
-      .sort((a, b) => {
-        const orderA = Number.isFinite(Number(a.order)) ? Number(a.order) : 0;
-        const orderB = Number.isFinite(Number(b.order)) ? Number(b.order) : 0;
-        return orderA - orderB || String(a.name || "").localeCompare(String(b.name || ""));
-      })
-      .map((file) => file.url || null);
+    return normalizeBatchRemoteFiles(getPhoneUploadPhotoFiles(data?.files));
+  }
+
+  async function listManualTempStorageUrls(sessionId) {
+    return (await listTempStorageFiles(sessionId)).map((file) => file.url || null);
   }
 
   function startManualStorageUpload(registration) {
@@ -8653,6 +8652,15 @@
         font-size: 10.5px;
       }
 
+      #${BATCH_MODAL_ID} .batch-source-phone.is-computer-locked .batch-qr {
+        opacity: 0.22;
+        filter: grayscale(1);
+      }
+
+      #${BATCH_MODAL_ID} .batch-source-phone.is-computer-locked .batch-qr-note {
+        visibility: hidden;
+      }
+
       #${BATCH_MODAL_ID} .batch-computer-dropzone {
         display: flex;
         min-height: 168px;
@@ -8670,10 +8678,17 @@
       }
 
       #${BATCH_MODAL_ID} .batch-computer-dropzone:hover,
-      #${BATCH_MODAL_ID} .batch-computer-dropzone:focus-within {
+      #${BATCH_MODAL_ID} .batch-computer-dropzone:focus-within,
+      #${BATCH_MODAL_ID} .batch-computer-dropzone.is-dragging {
         border-color: #818cf8;
         background: #f5f7ff;
         box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
+      }
+
+      #${BATCH_MODAL_ID} .batch-source-computer.is-phone-locked .batch-computer-dropzone {
+        border-style: solid;
+        background: #f8fafc;
+        cursor: default;
       }
 
       #${BATCH_MODAL_ID} .batch-computer-files-input {
@@ -8747,11 +8762,98 @@
         border-color: #818cf8;
       }
 
+      #${BATCH_MODAL_ID} .batch-computer-actions button:disabled {
+        border-color: #e2e8f0;
+        background: #f1f5f9;
+        color: #94a3b8;
+        box-shadow: none;
+        cursor: not-allowed;
+      }
+
       #${BATCH_MODAL_ID} .batch-computer-actions button:focus-visible,
       #${BATCH_MODAL_ID} .batch-close:focus-visible,
       #${BATCH_MODAL_ID} .batch-actions button:focus-visible {
         outline: 3px solid rgba(99, 102, 241, 0.26);
         outline-offset: 2px;
+      }
+
+      #${BATCH_MODAL_ID} .batch-source-computer.is-uploading .batch-computer-dropzone,
+      #${BATCH_MODAL_ID} .batch-source-computer.is-uploading .batch-computer-actions {
+        display: none;
+      }
+
+      #${BATCH_MODAL_ID} .batch-computer-progress {
+        display: flex;
+        min-height: 216px;
+        padding: 20px;
+        border: 1px solid #e0e7ff;
+        border-radius: 12px;
+        background: linear-gradient(145deg, #fafaff 0%, #f3f4ff 100%);
+        color: #64748b;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        text-align: center;
+        font-size: 11.5px;
+      }
+
+      #${BATCH_MODAL_ID} .batch-computer-progress-icon {
+        display: inline-flex;
+        width: 42px;
+        height: 42px;
+        margin-bottom: 11px;
+        border-radius: 13px;
+        background: ${PRIMARY_BUTTON_BACKGROUND};
+        align-items: center;
+        justify-content: center;
+        box-shadow: 0 9px 20px rgba(79, 70, 229, 0.22);
+      }
+
+      #${BATCH_MODAL_ID} .batch-computer-progress-icon svg {
+        width: 22px;
+        height: 22px;
+      }
+
+      #${BATCH_MODAL_ID} .batch-computer-progress strong {
+        margin-bottom: 3px;
+        color: #0f172a;
+        font-size: 14px;
+        font-weight: 850;
+      }
+
+      #${BATCH_MODAL_ID} .batch-computer-progress-track {
+        display: block;
+        width: min(180px, 100%);
+        height: 6px;
+        margin-top: 14px;
+        border-radius: 999px;
+        background: #dfe3f6;
+        overflow: hidden;
+      }
+
+      #${BATCH_MODAL_ID} .batch-computer-progress-track > span {
+        display: block;
+        height: 100%;
+        border-radius: inherit;
+        background: ${PRIMARY_BUTTON_BACKGROUND};
+        transition: width 180ms ease;
+      }
+
+      #${BATCH_MODAL_ID} .batch-computer-error {
+        margin: 0 0 10px;
+        padding: 9px 10px;
+        border: 1px solid #fecaca;
+        border-radius: 9px;
+        background: #fef2f2;
+        color: #b91c1c;
+        font-size: 11.5px;
+        font-weight: 750;
+        line-height: 1.35;
+        text-align: center;
+      }
+
+      #${BATCH_MODAL_ID} .batch-computer-error + .batch-source-kicker {
+        margin-top: 2px;
       }
 
       @media (max-width: 680px) {
@@ -8970,6 +9072,10 @@
 
         #${BATCH_MODAL_ID} .batch-computer-actions button {
           min-height: 44px;
+        }
+
+        #${BATCH_MODAL_ID} .batch-computer-progress {
+          min-height: 184px;
         }
       }
 
@@ -12464,6 +12570,8 @@
     batchProgressStatus = null;
     batchGenerationCapacity = null;
     batchCapacityLoading = false;
+    batchInputSource = null;
+    batchComputerUploadPromise = null;
     isBatchPollInFlight = false;
     batchImagePreloadUrls = new Set();
     batchImagePreloadCache = new Map();
@@ -12503,6 +12611,7 @@
 
     return (
       isBatchGenerationActive() ||
+      Boolean(batchComputerUploadPromise) ||
       batchRemoteFiles.length > 0 ||
       batchSelectedPhotoKeys.size > 0 ||
       batchMarkedGroups.length > 0
@@ -12512,6 +12621,10 @@
   function getBatchCloseWarningMessage() {
     if (isBatchGenerationActive()) {
       return "Batch generation is still running. Closing this panel will hide progress, but opened listing tabs may continue. Close anyway?";
+    }
+
+    if (batchComputerUploadPromise) {
+      return "Photos are still uploading. Closing now will discard this batch upload. Close anyway?";
     }
 
     if (!batchIsComplete && batchRemoteFiles.length > 0) {
@@ -12534,7 +12647,7 @@
 
   function closeBatchModal({ cleanup = true } = {}) {
     const sessionId = batchUploadSessionId;
-    const wasComplete = batchIsComplete;
+    const computerUpload = batchComputerUploadPromise;
     document.getElementById(BATCH_MODAL_ID)?.remove();
     setBatchModalScrollLock(false);
 
@@ -12547,7 +12660,7 @@
       batchAutoCloseTimer = null;
     }
 
-    if (cleanup && sessionId && chrome.runtime?.id) {
+    const cleanupSession = () =>
       sendMessage({
         type: "PROXY_FETCH",
         url: `${PHONE_UPLOAD_API}?action=cleanup&sessionId=${sessionId}`,
@@ -12557,6 +12670,12 @@
           body: JSON.stringify({}),
         },
       }).catch(() => {});
+    if (cleanup && sessionId && chrome.runtime?.id) {
+      if (computerUpload) {
+        computerUpload.then(cleanupSession, cleanupSession);
+      } else {
+        cleanupSession();
+      }
     }
 
     resetBatchState();
@@ -12754,7 +12873,285 @@
     body.querySelector(".batch-choose-folder")?.addEventListener("click", () => {
       body.querySelector(".batch-computer-folder-input")?.click();
     });
+    body
+      .querySelectorAll(".batch-computer-files-input, .batch-computer-folder-input")
+      .forEach((input) => {
+        input.addEventListener("change", () => {
+          queueBatchComputerUpload(input.files);
+          input.value = "";
+        });
+      });
+    const dropzone = body.querySelector(".batch-computer-dropzone");
+    dropzone?.addEventListener("dragover", (event) => {
+      event.preventDefault();
+      dropzone.classList.add("is-dragging");
+    });
+    dropzone?.addEventListener("dragleave", () => {
+      dropzone.classList.remove("is-dragging");
+    });
+    dropzone?.addEventListener("drop", async (event) => {
+      event.preventDefault();
+      dropzone.classList.remove("is-dragging");
+      queueBatchComputerUpload(await getDroppedBatchFiles(event.dataTransfer));
+    });
     renderBatchUploadStrip();
+  }
+
+  function isBatchImageFile(file) {
+    return (
+      file instanceof File &&
+      (String(file.type || "").startsWith("image/") ||
+        /\.(avif|gif|heic|heif|jpe?g|png|webp)$/i.test(file.name || ""))
+    );
+  }
+
+  function sortBatchComputerFiles(fileList) {
+    const files = Array.from(fileList || []).filter(isBatchImageFile);
+    if (
+      !files.some(
+        (file) => file.webkitRelativePath || file.__quickvintRelativePath,
+      )
+    ) {
+      return files;
+    }
+    return files.sort((a, b) =>
+      String(
+        a.webkitRelativePath || a.__quickvintRelativePath || a.name || "",
+      ).localeCompare(
+        String(
+          b.webkitRelativePath || b.__quickvintRelativePath || b.name || "",
+        ),
+        undefined,
+        { numeric: true, sensitivity: "base" },
+      ),
+    );
+  }
+
+  function readDroppedBatchEntry(entry) {
+    if (entry?.isFile) {
+      return new Promise((resolve, reject) => {
+        entry.file((file) => {
+          Object.defineProperty(file, "__quickvintRelativePath", {
+            configurable: true,
+            value: String(entry.fullPath || file.name || "").replace(/^\//, ""),
+          });
+          resolve([file]);
+        }, reject);
+      });
+    }
+    if (!entry?.isDirectory) return Promise.resolve([]);
+
+    const reader = entry.createReader();
+    return new Promise((resolve, reject) => {
+      const entries = [];
+      const readNext = () => {
+        reader.readEntries((batch) => {
+          if (batch.length) {
+            entries.push(...batch);
+            readNext();
+            return;
+          }
+          Promise.all(entries.map(readDroppedBatchEntry))
+            .then((groups) => resolve(groups.flat()))
+            .catch(reject);
+        }, reject);
+      };
+      readNext();
+    });
+  }
+
+  async function getDroppedBatchFiles(dataTransfer) {
+    const entries = Array.from(dataTransfer?.items || [])
+      .map((item) => item.webkitGetAsEntry?.())
+      .filter(Boolean);
+    if (!entries.length) return Array.from(dataTransfer?.files || []);
+    return (await Promise.all(entries.map(readDroppedBatchEntry))).flat();
+  }
+
+  function queueBatchComputerUpload(files) {
+    const upload = startBatchComputerUpload(files);
+    batchComputerUploadPromise = upload;
+    upload
+      .catch((error) => {
+        console.error("Batch computer upload error:", error);
+      })
+      .finally(() => {
+        if (batchComputerUploadPromise === upload) {
+          batchComputerUploadPromise = null;
+        }
+      });
+  }
+
+  function renderBatchComputerUploadProgress(uploaded, total) {
+    const panel = document.querySelector(
+      `#${BATCH_MODAL_ID} .batch-source-computer`,
+    );
+    if (!panel) return;
+    panel.classList.add("is-uploading");
+    panel
+      .querySelectorAll(".batch-choose-files, .batch-choose-folder")
+      .forEach((button) => {
+        button.disabled = true;
+      });
+
+    let progress = panel.querySelector(".batch-computer-progress");
+    if (!progress) {
+      progress = document.createElement("div");
+      progress.className = "batch-computer-progress";
+      progress.setAttribute("role", "status");
+      progress.setAttribute("aria-live", "polite");
+      panel.appendChild(progress);
+    }
+    const percent = total ? Math.round((uploaded / total) * 100) : 0;
+    progress.innerHTML = `
+      <span class="batch-computer-progress-icon" aria-hidden="true">${BATCH_ICON_SVG}</span>
+      <strong>Uploading ${total} photo${total === 1 ? "" : "s"}</strong>
+      <span>${uploaded} of ${total} uploaded</span>
+      <span class="batch-computer-progress-track" aria-hidden="true">
+        <span style="width: ${percent}%"></span>
+      </span>
+    `;
+  }
+
+  function lockBatchComputerControlsForPhone() {
+    const panel = document.querySelector(
+      `#${BATCH_MODAL_ID} .batch-source-computer`,
+    );
+    if (!panel) return;
+    batchInputSource = "phone";
+    panel.classList.add("is-phone-locked");
+    panel
+      .querySelectorAll(
+        ".batch-choose-files, .batch-choose-folder, .batch-computer-files-input, .batch-computer-folder-input",
+      )
+      .forEach((control) => {
+        control.disabled = true;
+      });
+    const dropzone = panel.querySelector(".batch-computer-dropzone");
+    dropzone?.setAttribute("aria-disabled", "true");
+    const title = dropzone?.querySelector("strong");
+    const copy = dropzone?.querySelector(":scope > span:last-child");
+    if (title) title.textContent = "Receiving from phone";
+    if (copy) copy.textContent = "Finish there to continue";
+  }
+
+  function lockBatchPhoneControlsForComputer() {
+    const panel = document.querySelector(
+      `#${BATCH_MODAL_ID} .batch-source-phone`,
+    );
+    if (!panel) return;
+    panel.classList.add("is-computer-locked");
+    panel.setAttribute("aria-disabled", "true");
+    const title = panel.querySelector(".batch-wait-title");
+    const copy = panel.querySelector(".batch-wait-copy");
+    if (title) title.textContent = "Using this computer";
+    if (copy) copy.textContent = "Your selected photos are uploading.";
+  }
+
+  async function startBatchComputerUpload(fileList) {
+    if (batchInputSource === "phone") return;
+    const files = sortBatchComputerFiles(fileList);
+    if (!files.length) {
+      showToast("Add image files to continue.", "info");
+      return;
+    }
+
+    const qrSessionId = batchUploadSessionId;
+    const sessionId = generateSessionId();
+    const modal = document.getElementById(BATCH_MODAL_ID);
+    batchInputSource = "computer";
+    batchUploadSessionId = sessionId;
+    if (modal) modal.dataset.sessionId = sessionId;
+    lockBatchPhoneControlsForComputer();
+    if (batchPollInterval) {
+      clearInterval(batchPollInterval);
+      batchPollInterval = null;
+    }
+    if (qrSessionId) {
+      sendMessage({
+        type: "PROXY_FETCH",
+        url: `${PHONE_UPLOAD_API}?action=cleanup&sessionId=${qrSessionId}`,
+        options: {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({}),
+        },
+      });
+    }
+
+    try {
+      let uploadedCount = 0;
+      renderBatchComputerUploadProgress(uploadedCount, files.length);
+      await mapWithConcurrency(
+        files,
+        MANUAL_STORAGE_UPLOAD_CONCURRENCY,
+        async (file, order) => {
+          const result = await uploadManualFileToTempStorage(sessionId, file, order);
+          uploadedCount += 1;
+          renderBatchComputerUploadProgress(uploadedCount, files.length);
+          return result;
+        },
+      );
+      const remoteFiles = await listTempStorageFiles(sessionId);
+      if (remoteFiles.length !== files.length) {
+        throw new Error("Could not upload every photo.");
+      }
+      if (
+        batchUploadSessionId !== sessionId ||
+        !document.getElementById(BATCH_MODAL_ID)
+      ) {
+        return;
+      }
+
+      batchRemoteFiles = remoteFiles;
+      batchRemoteFileKeys = new Set(
+        remoteFiles.map(getPhoneUploadFileKey).filter(Boolean),
+      );
+      batchLastFileCount = remoteFiles.length;
+      batchLastFileChangeAt = Date.now();
+      batchSignedUrlsListedAt = Date.now();
+      batchIsComplete = true;
+      preloadBatchImages(remoteFiles);
+      renderBatchGroupingPhase();
+    } catch (error) {
+      if (
+        batchUploadSessionId !== sessionId ||
+        !document.getElementById(BATCH_MODAL_ID)
+      ) {
+        return;
+      }
+
+      sendMessage({
+        type: "PROXY_FETCH",
+        url: `${PHONE_UPLOAD_API}?action=cleanup&sessionId=${sessionId}`,
+        options: {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({}),
+        },
+      });
+      batchInputSource = null;
+      batchRemoteFiles = [];
+      batchRemoteFileKeys = new Set();
+      batchIsComplete = false;
+      const retrySessionId = generateSessionId();
+      batchUploadSessionId = retrySessionId;
+      const currentModal = document.getElementById(BATCH_MODAL_ID);
+      if (currentModal) currentModal.dataset.sessionId = retrySessionId;
+      renderBatchUploadPhase(retrySessionId);
+      const panel = document.querySelector(
+        `#${BATCH_MODAL_ID} .batch-source-computer`,
+      );
+      panel?.insertAdjacentHTML(
+        "afterbegin",
+        '<div class="batch-computer-error" role="alert">Could not upload every photo. Try again.</div>',
+      );
+      startBatchPolling(retrySessionId);
+      trackGrowthEvent("batch_computer_upload_error", {
+        message: error?.message || String(error),
+        fileCount: files.length,
+      });
+    }
   }
 
   function renderBatchUploadStrip() {
@@ -13754,6 +14151,7 @@
           : [];
         if (files.length) {
           batchSignedUrlsListedAt = Date.now();
+          if (!batchInputSource) lockBatchComputerControlsForPhone();
         }
         const wasComplete = batchIsComplete;
         batchIsComplete = data.complete === true;

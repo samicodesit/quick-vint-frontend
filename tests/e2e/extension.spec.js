@@ -463,6 +463,71 @@ async function routeManualStorageUploads(page) {
   return { uploadedFiles, uploadRequests, uploadBodies, cleanupRequests };
 }
 
+async function routeBatchComputerStorageUploads(
+  page,
+  { holdUploads = false, failUploads = false } = {},
+) {
+  const uploadedFiles = [];
+  const uploadRequests = [];
+  const cleanupRequests = [];
+  let releaseUploads;
+  const uploadsReleased = holdUploads
+    ? new Promise((resolve) => {
+        releaseUploads = resolve;
+      })
+    : Promise.resolve();
+  await page.route("https://autolister.app/api/phone-upload**", async (route) => {
+    const request = route.request();
+    const url = new URL(request.url());
+    if (url.searchParams.get("action") === "cleanup") {
+      cleanupRequests.push(request.url());
+      return route.fulfill({ status: 204, body: "" });
+    }
+    if (request.method() === "POST") {
+      const body = request.postDataBuffer()?.toString("latin1") || "";
+      const order = Number(body.match(/name="uploadOrder"\r\n\r\n(\d+)/)?.[1] || 0);
+      const fileName = body.match(/filename="([^"]+)"/)?.[1] || `photo-${order}.jpg`;
+      uploadRequests.push({ order, fileName });
+      if (failUploads) {
+        return route.fulfill({
+          status: 500,
+          contentType: "application/json",
+          body: JSON.stringify({ error: "Storage unavailable" }),
+        });
+      }
+      await uploadsReleased;
+      uploadedFiles[order] = {
+        name: `${String(order).padStart(6, "0")}-${fileName}`,
+        path: `batch-session/${String(order).padStart(6, "0")}-${fileName}`,
+        url: `https://storage.test/${encodeURIComponent(fileName)}?token=signed-${order}`,
+        order,
+      };
+      return route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          success: true,
+          count: 1,
+          expectedCount: 1,
+          files: [uploadedFiles[order]],
+        }),
+      });
+    }
+    const files = uploadedFiles.filter(Boolean);
+    return route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ files, count: files.length, complete: true }),
+    });
+  });
+  return {
+    uploadedFiles,
+    uploadRequests,
+    cleanupRequests,
+    releaseUploads: () => releaseUploads?.(),
+  };
+}
+
 async function openImageCompressionHarness(page, proxyResponse) {
   await page.setContent(listingFixture, { waitUntil: "domcontentloaded" });
   await installChromeHarness(page);
@@ -789,6 +854,426 @@ test.describe("AutoLister extension smoke flows", () => {
     await expectInsideViewport(page, "#quickvint-batch-modal .batch-source-phone");
     await expectInsideViewport(page, "#quickvint-batch-modal .batch-source-computer");
     await expectNoHorizontalOverflow(page);
+  });
+
+  test("computer batch upload sends loose files to the manual organizer", async ({
+    page,
+  }) => {
+    const storage = await routeBatchComputerStorageUploads(page);
+    await openContentHarness(page, { allowed: true, available: 10 }, {
+      emptyListing: true,
+    });
+    await chooseBatchUpload(page);
+
+    const uploadBuffer = Buffer.from(tinyPngDataUrl.split(",")[1], "base64");
+    await page.setInputFiles(
+      "#quickvint-batch-modal .batch-computer-files-input",
+      [
+        { name: "jacket-front.png", mimeType: "image/png", buffer: uploadBuffer },
+        { name: "jacket-back.png", mimeType: "image/png", buffer: uploadBuffer },
+      ],
+    );
+
+    const modal = page.locator("#quickvint-batch-modal");
+    await expect(modal.locator(".batch-title")).toHaveText("Organize items");
+    await expect(modal.locator(".batch-gallery .batch-photo")).toHaveCount(2);
+    await expect(modal.locator(".batch-item-card")).toHaveCount(0);
+    expect(storage.uploadRequests).toHaveLength(2);
+    await expect(modal.locator(".batch-gallery img").first()).toHaveAttribute(
+      "src",
+      /jacket-front\.jpg/,
+    );
+  });
+
+  test("computer batch generation keeps temporary storage URLs", async ({
+    page,
+  }) => {
+    await routeBatchComputerStorageUploads(page);
+    await openContentHarness(page, { allowed: true, available: 10 }, {
+      emptyListing: true,
+    });
+    await chooseBatchUpload(page);
+
+    const uploadBuffer = Buffer.from(tinyPngDataUrl.split(",")[1], "base64");
+    await page.setInputFiles(
+      "#quickvint-batch-modal .batch-computer-files-input",
+      [
+        { name: "jacket-front.png", mimeType: "image/png", buffer: uploadBuffer },
+        { name: "jacket-back.png", mimeType: "image/png", buffer: uploadBuffer },
+      ],
+    );
+
+    const modal = page.locator("#quickvint-batch-modal");
+    await expect(modal.locator(".batch-gallery .batch-photo")).toHaveCount(2);
+    await modal.locator(".batch-gallery .batch-photo").nth(0).click();
+    await modal.locator(".batch-gallery .batch-photo").nth(1).click();
+    await modal.locator(".batch-mark-group").click();
+    await modal.locator(".batch-start").click();
+
+    await expect
+      .poll(() =>
+        page.evaluate(() =>
+          window.__extensionHarness.runtimeMessages.find(
+            (message) => message?.type === "START_BATCH_GENERATION",
+          ),
+        ),
+      )
+      .toMatchObject({
+        groups: [
+          [
+            { url: /jacket-front\.jpg\?token=signed-0/ },
+            { url: /jacket-back\.jpg\?token=signed-1/ },
+          ],
+        ],
+      });
+  });
+
+  test("computer batch upload sends folder files to the same manual organizer", async ({
+    page,
+  }) => {
+    const storage = await routeBatchComputerStorageUploads(page);
+    await openContentHarness(page, { allowed: true, available: 10 }, {
+      emptyListing: true,
+    });
+    await chooseBatchUpload(page);
+    await expect(
+      page.locator("#quickvint-batch-modal .batch-computer-folder-input"),
+    ).toHaveCount(1);
+
+    await page.evaluate((dataUrl) => {
+      const bytes = Uint8Array.from(atob(dataUrl.split(",")[1]), (char) =>
+        char.charCodeAt(0),
+      );
+      const transfer = new DataTransfer();
+      for (const [name, relativePath] of [
+        ["item-10.png", "batch/item-10.png"],
+        ["item-2.png", "batch/item-2.png"],
+      ]) {
+        const file = new File([bytes], name, { type: "image/png" });
+        Object.defineProperty(file, "webkitRelativePath", {
+          value: relativePath,
+        });
+        transfer.items.add(file);
+      }
+      const input = document.querySelector(
+        "#quickvint-batch-modal .batch-computer-folder-input",
+      );
+      input.files = transfer.files;
+      input.dispatchEvent(new Event("change", { bubbles: true }));
+    }, tinyPngDataUrl);
+
+    const modal = page.locator("#quickvint-batch-modal");
+    await expect(modal.locator(".batch-title")).toHaveText("Organize items");
+    await expect(modal.locator(".batch-gallery .batch-photo")).toHaveCount(2);
+    await expect(modal.locator(".batch-item-card")).toHaveCount(0);
+    expect(storage.uploadRequests).toHaveLength(2);
+    await expect(modal.locator(".batch-gallery img").first()).toHaveAttribute(
+      "src",
+      /item-2\.jpg/,
+    );
+  });
+
+  test("computer batch upload flattens a dropped folder without grouping", async ({
+    page,
+  }) => {
+    await routeBatchComputerStorageUploads(page);
+    await openContentHarness(page, { allowed: true, available: 10 }, {
+      emptyListing: true,
+    });
+    await chooseBatchUpload(page);
+    await expect(
+      page.locator("#quickvint-batch-modal .batch-computer-dropzone"),
+    ).toBeVisible();
+
+    await page.evaluate((dataUrl) => {
+      const bytes = Uint8Array.from(atob(dataUrl.split(",")[1]), (char) =>
+        char.charCodeAt(0),
+      );
+      const fileEntries = [
+        ["shoe-10.png", new File([bytes], "shoe-10.png", { type: "image/png" })],
+        ["shoe-2.png", new File([bytes], "shoe-2.png", { type: "image/png" })],
+      ].map(([name, file]) => ({
+        isFile: true,
+        isDirectory: false,
+        fullPath: `/batch/${name}`,
+        file: (resolve) => resolve(file),
+      }));
+      let readCount = 0;
+      const directoryEntry = {
+        isFile: false,
+        isDirectory: true,
+        fullPath: "/batch",
+        createReader: () => ({
+          readEntries: (resolve) => {
+            const entries = readCount === 0 ? fileEntries : [];
+            readCount += 1;
+            resolve(entries);
+          },
+        }),
+      };
+      const event = new Event("drop", { bubbles: true, cancelable: true });
+      Object.defineProperty(event, "dataTransfer", {
+        value: {
+          files: [],
+          items: [{ webkitGetAsEntry: () => directoryEntry }],
+        },
+      });
+      document
+        .querySelector("#quickvint-batch-modal .batch-computer-dropzone")
+        .dispatchEvent(event);
+    }, tinyPngDataUrl);
+
+    const modal = page.locator("#quickvint-batch-modal");
+    await expect(modal.locator(".batch-title")).toHaveText("Organize items");
+    await expect(modal.locator(".batch-gallery .batch-photo")).toHaveCount(2);
+    await expect(modal.locator(".batch-item-card")).toHaveCount(0);
+    await expect(modal.locator(".batch-gallery img").first()).toHaveAttribute(
+      "src",
+      /shoe-2\.jpg/,
+    );
+  });
+
+  test("computer batch upload shows progress before opening the organizer", async ({
+    page,
+  }) => {
+    const storage = await routeBatchComputerStorageUploads(page, {
+      holdUploads: true,
+    });
+    await openContentHarness(page, { allowed: true, available: 10 }, {
+      emptyListing: true,
+    });
+    await chooseBatchUpload(page);
+
+    const uploadBuffer = Buffer.from(tinyPngDataUrl.split(",")[1], "base64");
+    await page.setInputFiles(
+      "#quickvint-batch-modal .batch-computer-files-input",
+      [
+        { name: "front.png", mimeType: "image/png", buffer: uploadBuffer },
+        { name: "back.png", mimeType: "image/png", buffer: uploadBuffer },
+      ],
+    );
+
+    const modal = page.locator("#quickvint-batch-modal");
+    await expect(modal.locator(".batch-computer-progress")).toContainText(
+      "Uploading 2 photos",
+    );
+    await expect(modal.locator(".batch-computer-progress")).toContainText(
+      "0 of 2 uploaded",
+    );
+    await expect(modal.locator(".batch-choose-files")).toBeDisabled();
+    await expect(modal.locator(".batch-choose-folder")).toBeDisabled();
+    await expect(modal.locator(".batch-source-phone")).toHaveAttribute(
+      "aria-disabled",
+      "true",
+    );
+    await expect(modal.locator(".batch-source-phone")).toContainText(
+      "Using this computer",
+    );
+
+    storage.releaseUploads();
+    await expect(modal.locator(".batch-title")).toHaveText("Organize items");
+    await expect(modal.locator(".batch-gallery .batch-photo")).toHaveCount(2);
+  });
+
+  test("computer batch upload rejects selections without images", async ({
+    page,
+  }) => {
+    const storage = await routeBatchComputerStorageUploads(page);
+    await openContentHarness(page, { allowed: true, available: 10 }, {
+      emptyListing: true,
+    });
+    await chooseBatchUpload(page);
+
+    await page.setInputFiles(
+      "#quickvint-batch-modal .batch-computer-files-input",
+      {
+        name: "inventory.csv",
+        mimeType: "text/csv",
+        buffer: Buffer.from("sku,name\n1,jacket"),
+      },
+    );
+
+    await expect(page.locator("#quickvint-toast.info")).toContainText(
+      "Add image files to continue.",
+    );
+    await expect(
+      page.locator("#quickvint-batch-modal .batch-source-computer"),
+    ).toBeVisible();
+    await expect(page.locator("#quickvint-batch-modal .batch-gallery")).toHaveCount(0);
+    expect(storage.uploadRequests).toHaveLength(0);
+  });
+
+  test("computer batch upload failure stays recoverable", async ({ page }) => {
+    const storage = await routeBatchComputerStorageUploads(page, {
+      failUploads: true,
+    });
+    await openContentHarness(page, { allowed: true, available: 10 }, {
+      emptyListing: true,
+    });
+    await chooseBatchUpload(page);
+
+    await page.setInputFiles(
+      "#quickvint-batch-modal .batch-computer-files-input",
+      {
+        name: "jacket.png",
+        mimeType: "image/png",
+        buffer: Buffer.from(tinyPngDataUrl.split(",")[1], "base64"),
+      },
+    );
+
+    const modal = page.locator("#quickvint-batch-modal");
+    await expect(modal.locator(".batch-computer-error")).toContainText(
+      "Could not upload every photo. Try again.",
+      { timeout: 10000 },
+    );
+    await expect(modal.locator(".batch-choose-files")).toBeEnabled();
+    await expect(modal.locator(".batch-choose-folder")).toBeEnabled();
+    await expect(modal.locator(".batch-gallery")).toHaveCount(0);
+    expect(storage.uploadRequests).toHaveLength(3);
+  });
+
+  test("locks batch computer controls after phone photos begin arriving", async ({
+    page,
+  }) => {
+    await openContentHarness(
+      page,
+      { allowed: true, available: 10 },
+      { emptyListing: true, shortenPhoneUploadPoll: true },
+    );
+    await page.evaluate(() => {
+      const originalSendMessage = window.chrome.runtime.sendMessage;
+      window.chrome.runtime.sendMessage = (message, callback) => {
+        const url = String(message?.url || "");
+        if (
+          message?.type === "PROXY_FETCH" &&
+          url.includes("/api/phone-upload?sessionId=")
+        ) {
+          setTimeout(
+            () =>
+              callback?.({
+                ok: true,
+                data: {
+                  files: [
+                    {
+                      name: "phone-1.jpg",
+                      path: "session/phone-1.jpg",
+                      url: "https://storage.test/phone-1.jpg",
+                      order: 0,
+                    },
+                  ],
+                  count: 1,
+                  complete: false,
+                },
+              }),
+            0,
+          );
+          return;
+        }
+        originalSendMessage(message, callback);
+      };
+    });
+
+    await chooseBatchUpload(page);
+    const modal = page.locator("#quickvint-batch-modal");
+    await expect(modal.locator(".batch-wait-title")).toContainText(
+      "Receiving 1 photo",
+    );
+    await expect(modal.locator(".batch-choose-files")).toBeDisabled();
+    await expect(modal.locator(".batch-choose-folder")).toBeDisabled();
+    await expect(modal.locator(".batch-computer-dropzone")).toContainText(
+      "Receiving from phone",
+    );
+  });
+
+  test("warns before closing while computer photos are uploading", async ({
+    page,
+  }) => {
+    const storage = await routeBatchComputerStorageUploads(page, {
+      holdUploads: true,
+    });
+    await openContentHarness(page, { allowed: true, available: 10 }, {
+      emptyListing: true,
+    });
+    await page.evaluate(() => {
+      window.__batchCloseMessages = [];
+      window.confirm = (message) => {
+        window.__batchCloseMessages.push(message);
+        return false;
+      };
+    });
+    await chooseBatchUpload(page);
+
+    await page.setInputFiles(
+      "#quickvint-batch-modal .batch-computer-files-input",
+      {
+        name: "jacket.png",
+        mimeType: "image/png",
+        buffer: Buffer.from(tinyPngDataUrl.split(",")[1], "base64"),
+      },
+    );
+    const modal = page.locator("#quickvint-batch-modal");
+    await expect(modal.locator(".batch-computer-progress")).toBeVisible();
+    await modal.locator(".batch-close").click();
+
+    await expect(modal).toBeVisible();
+    expect(await page.evaluate(() => window.__batchCloseMessages)).toEqual([
+      "Photos are still uploading. Closing now will discard this batch upload. Close anyway?",
+    ]);
+
+    storage.releaseUploads();
+    await expect(modal.locator(".batch-title")).toHaveText("Organize items");
+  });
+
+  test("defers computer session cleanup until an accepted close settles uploads", async ({
+    page,
+  }) => {
+    const storage = await routeBatchComputerStorageUploads(page, {
+      holdUploads: true,
+    });
+    await openContentHarness(page, { allowed: true, available: 10 }, {
+      emptyListing: true,
+    });
+    await page.evaluate(() => {
+      window.confirm = () => true;
+    });
+    await chooseBatchUpload(page);
+    await page.setInputFiles(
+      "#quickvint-batch-modal .batch-computer-files-input",
+      {
+        name: "jacket.png",
+        mimeType: "image/png",
+        buffer: Buffer.from(tinyPngDataUrl.split(",")[1], "base64"),
+      },
+    );
+
+    const modal = page.locator("#quickvint-batch-modal");
+    await expect(modal.locator(".batch-computer-progress")).toBeVisible();
+    const computerSessionId = await modal.getAttribute("data-session-id");
+    await modal.locator(".batch-close").click();
+    await expect(modal).toHaveCount(0);
+
+    expect(
+      await page.evaluate((sessionId) =>
+        window.__extensionHarness.runtimeMessages.some(
+          (message) =>
+            String(message?.url || "").includes("action=cleanup") &&
+            String(message?.url || "").includes(sessionId),
+        ),
+      computerSessionId),
+    ).toBe(false);
+
+    storage.releaseUploads();
+    await expect
+      .poll(() =>
+        page.evaluate((sessionId) =>
+          window.__extensionHarness.runtimeMessages.some(
+            (message) =>
+              String(message?.url || "").includes("action=cleanup") &&
+              String(message?.url || "").includes(sessionId),
+          ),
+        computerSessionId),
+      )
+      .toBe(true);
   });
 
   test("opens a simple phone upload chooser with clear current-listing copy", async ({
