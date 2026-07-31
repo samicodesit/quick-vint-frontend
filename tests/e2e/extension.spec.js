@@ -760,6 +760,37 @@ test.describe("AutoLister extension smoke flows", () => {
     await expectNoHorizontalOverflow(page);
   });
 
+  test("shows phone and computer batch sources without another chooser", async ({
+    page,
+  }) => {
+    await openContentHarness(page, { allowed: true, available: 10 }, {
+      emptyListing: true,
+    });
+
+    await chooseBatchUpload(page);
+    const modal = page.locator("#quickvint-batch-modal");
+
+    await expect(modal.locator(".batch-source-phone")).toBeVisible();
+    await expect(modal.locator(".batch-computer-dropzone")).toContainText(
+      "Drop photos or a folder",
+    );
+    await expect(modal.locator(".batch-computer-files-input")).toHaveAttribute(
+      "multiple",
+      "",
+    );
+    await expect(modal.locator(".batch-computer-folder-input")).toHaveAttribute(
+      "webkitdirectory",
+      "",
+    );
+    await expect(modal.locator(".batch-source-choice")).toHaveCount(0);
+
+    await page.setViewportSize({ width: 390, height: 844 });
+    await expectInsideViewport(page, "#quickvint-batch-modal .batch-content");
+    await expectInsideViewport(page, "#quickvint-batch-modal .batch-source-phone");
+    await expectInsideViewport(page, "#quickvint-batch-modal .batch-source-computer");
+    await expectNoHorizontalOverflow(page);
+  });
+
   test("opens a simple phone upload chooser with clear current-listing copy", async ({
     page,
   }) => {

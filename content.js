@@ -8584,6 +8584,176 @@
       #quickvint-toast.success .toast-icon { text-shadow: 0 0 10px rgba(5, 150, 105, 0.5); }
       #quickvint-toast.info .toast-icon { text-shadow: 0 0 10px rgba(8, 145, 178, 0.5); }
 
+      #${BATCH_MODAL_ID} .batch-source-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 12px;
+      }
+
+      #${BATCH_MODAL_ID} .batch-source-panel {
+        min-width: 0;
+        min-height: 278px;
+        padding: 16px;
+        border: 1px solid #e2e8f0;
+        border-radius: 14px;
+        background: #ffffff;
+        box-shadow: 0 7px 20px rgba(15, 23, 42, 0.045);
+      }
+
+      #${BATCH_MODAL_ID} .batch-source-kicker {
+        margin-bottom: 13px;
+        color: #64748b;
+        font-size: 11px;
+        font-weight: 850;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+      }
+
+      #${BATCH_MODAL_ID} .batch-source-phone-content {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        text-align: center;
+      }
+
+      #${BATCH_MODAL_ID} .batch-source-phone.batch-wait-panel {
+        display: block;
+        min-height: 278px;
+        padding: 16px;
+      }
+
+      #${BATCH_MODAL_ID} .batch-source-phone .batch-qr {
+        display: flex;
+        justify-content: center;
+        padding: 0;
+        border: 0;
+        background: transparent;
+      }
+
+      #${BATCH_MODAL_ID} .batch-source-phone .batch-qr img,
+      #${BATCH_MODAL_ID} .batch-source-phone .batch-qr-placeholder {
+        width: 138px;
+        height: 138px;
+      }
+
+      #${BATCH_MODAL_ID} .batch-source-phone .batch-wait-title {
+        margin-top: 11px;
+        min-height: 0;
+        font-size: 15px;
+      }
+
+      #${BATCH_MODAL_ID} .batch-source-phone .batch-wait-copy {
+        min-height: 0;
+        margin-top: 4px;
+        font-size: 11.5px;
+      }
+
+      #${BATCH_MODAL_ID} .batch-source-phone .batch-qr-note {
+        margin: 6px 0 0;
+        font-size: 10.5px;
+      }
+
+      #${BATCH_MODAL_ID} .batch-computer-dropzone {
+        display: flex;
+        min-height: 168px;
+        padding: 18px 14px;
+        border: 1.5px dashed #cbd5e1;
+        border-radius: 12px;
+        background: #f8fafc;
+        color: #64748b;
+        cursor: pointer;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        text-align: center;
+        transition: border-color 150ms ease, background 150ms ease, box-shadow 150ms ease;
+      }
+
+      #${BATCH_MODAL_ID} .batch-computer-dropzone:hover,
+      #${BATCH_MODAL_ID} .batch-computer-dropzone:focus-within {
+        border-color: #818cf8;
+        background: #f5f7ff;
+        box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
+      }
+
+      #${BATCH_MODAL_ID} .batch-computer-files-input {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        margin: -1px;
+        padding: 0;
+        overflow: hidden;
+        clip: rect(0, 0, 0, 0);
+        white-space: nowrap;
+        border: 0;
+      }
+
+      #${BATCH_MODAL_ID} .batch-computer-icon {
+        display: inline-flex;
+        width: 40px;
+        height: 40px;
+        margin-bottom: 10px;
+        border-radius: 12px;
+        background: ${PRIMARY_BUTTON_BACKGROUND};
+        align-items: center;
+        justify-content: center;
+        box-shadow: 0 8px 18px rgba(79, 70, 229, 0.2);
+      }
+
+      #${BATCH_MODAL_ID} .batch-computer-icon svg {
+        width: 21px;
+        height: 21px;
+      }
+
+      #${BATCH_MODAL_ID} .batch-computer-dropzone strong {
+        color: #0f172a;
+        font-size: 14px;
+        font-weight: 850;
+      }
+
+      #${BATCH_MODAL_ID} .batch-computer-dropzone > span:last-child {
+        margin-top: 3px;
+        font-size: 11px;
+      }
+
+      #${BATCH_MODAL_ID} .batch-computer-actions {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        gap: 8px;
+        margin-top: 10px;
+      }
+
+      #${BATCH_MODAL_ID} .batch-computer-actions button {
+        min-height: 38px;
+        padding: 0 13px;
+        border: 1px solid #d7dce5;
+        border-radius: 9px;
+        background: #ffffff;
+        color: #334155;
+        cursor: pointer;
+        font: inherit;
+        font-size: 12px;
+        font-weight: 800;
+      }
+
+      #${BATCH_MODAL_ID} .batch-computer-actions .primary {
+        border-color: #4f46e5;
+        background: ${PRIMARY_BUTTON_BACKGROUND};
+        color: #ffffff;
+        box-shadow: 0 7px 16px rgba(79, 70, 229, 0.18);
+      }
+
+      #${BATCH_MODAL_ID} .batch-computer-actions button:hover {
+        border-color: #818cf8;
+      }
+
+      #${BATCH_MODAL_ID} .batch-computer-actions button:focus-visible,
+      #${BATCH_MODAL_ID} .batch-close:focus-visible,
+      #${BATCH_MODAL_ID} .batch-actions button:focus-visible {
+        outline: 3px solid rgba(99, 102, 241, 0.26);
+        outline-offset: 2px;
+      }
+
       @media (max-width: 680px) {
         .quickvint-tools {
           width: 100%;
@@ -8752,6 +8922,54 @@
 
         #${BATCH_MODAL_ID} .batch-actions {
           padding-bottom: max(12px, env(safe-area-inset-bottom));
+        }
+
+        #${BATCH_MODAL_ID} .batch-source-grid {
+          grid-template-columns: 1fr;
+          gap: 9px;
+          overflow-y: auto;
+        }
+
+        #${BATCH_MODAL_ID} .batch-source-panel,
+        #${BATCH_MODAL_ID} .batch-source-phone.batch-wait-panel {
+          min-height: 0;
+          padding: 12px;
+        }
+
+        #${BATCH_MODAL_ID} .batch-source-kicker {
+          margin-bottom: 9px;
+        }
+
+        #${BATCH_MODAL_ID} .batch-source-phone-content {
+          flex-direction: row;
+          gap: 14px;
+          text-align: left;
+        }
+
+        #${BATCH_MODAL_ID} .batch-source-phone .batch-qr img,
+        #${BATCH_MODAL_ID} .batch-source-phone .batch-qr-placeholder {
+          width: 104px;
+          height: 104px;
+        }
+
+        #${BATCH_MODAL_ID} .batch-source-phone .batch-wait-title {
+          margin-top: 0;
+        }
+
+        #${BATCH_MODAL_ID} .batch-computer-dropzone {
+          min-height: 116px;
+          padding: 12px;
+        }
+
+        #${BATCH_MODAL_ID} .batch-computer-icon {
+          width: 34px;
+          height: 34px;
+          margin-bottom: 7px;
+          border-radius: 10px;
+        }
+
+        #${BATCH_MODAL_ID} .batch-computer-actions button {
+          min-height: 44px;
         }
       }
 
@@ -12473,17 +12691,36 @@
 
     const uploadUrl = getBatchUploadUrl(sessionId);
     body.innerHTML = `
-      <div class="batch-layout">
-        <div class="batch-qr">
-          <div class="batch-qr-placeholder" data-qr-src="https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(
-            uploadUrl,
-          )}"></div>
-          <p class="batch-qr-note">Keep the phone page open.</p>
-        </div>
-        <div class="batch-wait-panel">
-          <div class="batch-wait-title">Waiting for photos<span class="waiting-dots" aria-hidden="true"><span>.</span><span>.</span><span>.</span></span></div>
-          <div class="batch-wait-copy">Choose photos on your phone. They will appear here.</div>
-        </div>
+      <div class="batch-source-grid">
+        <section class="batch-source-panel batch-source-phone batch-wait-panel">
+          <div class="batch-source-kicker">From your phone</div>
+          <div class="batch-source-phone-content">
+            <div class="batch-qr">
+              <div class="batch-qr-placeholder" data-qr-src="https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(
+                uploadUrl,
+              )}"></div>
+            </div>
+            <div class="batch-source-copy">
+              <div class="batch-wait-title">Scan QR code</div>
+              <div class="batch-wait-copy">Choose photos on your phone. They will appear here.</div>
+              <p class="batch-qr-note">Keep the phone page open.</p>
+            </div>
+          </div>
+        </section>
+        <section class="batch-source-panel batch-source-computer">
+          <div class="batch-source-kicker">From this computer</div>
+          <label class="batch-computer-dropzone">
+            <input class="batch-computer-files-input" type="file" accept="image/*" multiple />
+            <span class="batch-computer-icon" aria-hidden="true">${BATCH_ICON_SVG}</span>
+            <strong>Drop photos or a folder</strong>
+            <span>or choose them from this computer</span>
+          </label>
+          <div class="batch-computer-actions">
+            <button type="button" class="primary batch-choose-files">Choose photos</button>
+            <button type="button" class="batch-choose-folder">Choose folder</button>
+            <input class="batch-computer-folder-input" type="file" accept="image/*" webkitdirectory multiple hidden />
+          </div>
+        </section>
       </div>
       <div class="batch-actions">
         <button type="button" class="batch-cancel">Cancel</button>
@@ -12510,6 +12747,12 @@
     });
     body.querySelector(".batch-group")?.addEventListener("click", () => {
       renderBatchGroupingPhase();
+    });
+    body.querySelector(".batch-choose-files")?.addEventListener("click", () => {
+      body.querySelector(".batch-computer-files-input")?.click();
+    });
+    body.querySelector(".batch-choose-folder")?.addEventListener("click", () => {
+      body.querySelector(".batch-computer-folder-input")?.click();
     });
     renderBatchUploadStrip();
   }
