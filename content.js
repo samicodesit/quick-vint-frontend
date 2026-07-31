@@ -4717,17 +4717,10 @@
 
       #${UPLOAD_CHOICE_MODAL_ID} .quickvint-upload-choice-capacity {
         margin: 10px 0 0;
-        color: #475569;
+        color: #334155;
         font-size: 14px;
-        font-weight: 600;
+        font-weight: 700;
         line-height: 1.4;
-      }
-
-      #${UPLOAD_CHOICE_MODAL_ID} .quickvint-upload-choice-capacity strong {
-        color: #4f46e5;
-        font-size: 16px;
-        font-weight: 800;
-        font-variant-numeric: tabular-nums;
       }
 
       #${UPLOAD_CHOICE_MODAL_ID} .quickvint-upload-choice-close {
@@ -5284,9 +5277,9 @@
 
       #${BATCH_MODAL_ID} .batch-title-row {
         display: flex;
-        align-items: center;
-        flex-wrap: wrap;
-        gap: 8px;
+        align-items: flex-start;
+        flex-direction: column;
+        gap: 3px;
       }
 
       #${BATCH_MODAL_ID} .batch-title-row .batch-title {
@@ -5294,21 +5287,11 @@
       }
 
       #${BATCH_MODAL_ID} .batch-availability {
-        display: inline-flex;
-        align-items: baseline;
-        gap: 4px;
-        color: #475569;
-        font-size: 13px;
-        font-weight: 600;
-        line-height: 1.3;
+        color: #334155;
+        font-size: 14px;
+        font-weight: 700;
+        line-height: 1.4;
         white-space: nowrap;
-      }
-
-      #${BATCH_MODAL_ID} .batch-availability strong {
-        color: #4f46e5;
-        font-size: 15px;
-        font-weight: 800;
-        font-variant-numeric: tabular-nums;
       }
 
       #${BATCH_MODAL_ID} .batch-subtitle {
@@ -9220,7 +9203,7 @@
       <div class="quickvint-upload-choice-card">
         <div class="quickvint-upload-choice-head">
           <h2 id="quickvint-upload-choice-title" class="quickvint-upload-choice-title">${escapeHtml(copy.title)}</h2>
-          <p class="quickvint-upload-choice-capacity"><strong>${available}</strong> listing${available === 1 ? "" : "s"} available</p>
+          <p class="quickvint-upload-choice-capacity">${available} listing${available === 1 ? "" : "s"} available</p>
           <button type="button" class="quickvint-upload-choice-close" aria-label="${escapeHtml(copy.close)}">&times;</button>
         </div>
         <div class="quickvint-upload-choice-options">
@@ -12801,7 +12784,7 @@
           <div class="batch-heading">
             <div class="batch-title-row">
               <h3 id="quickvint-batch-title" class="batch-title">Batch upload</h3>
-              <span class="batch-availability" aria-live="polite"><strong>${available}</strong> listing${available === 1 ? "" : "s"} available</span>
+              <span class="batch-availability" aria-live="polite">${available} listing${available === 1 ? "" : "s"} available</span>
             </div>
             <p class="batch-subtitle" hidden></p>
           </div>
@@ -13925,7 +13908,7 @@
         available > 0;
       availability.hidden = !showAvailability;
       if (showAvailability) {
-        availability.innerHTML = `<strong>${available}</strong> listing${available === 1 ? "" : "s"} available`;
+        availability.textContent = `${available} listing${available === 1 ? "" : "s"} available`;
       }
     }
     if (clearButton) {

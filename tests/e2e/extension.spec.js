@@ -1622,27 +1622,19 @@ test.describe("AutoLister extension smoke flows", () => {
     await expect(modal.locator(".quickvint-upload-choice-capacity")).toHaveText(
       "12 listings available",
     );
-    await expect(
-      modal.locator(".quickvint-upload-choice-capacity strong"),
-    ).toHaveText("12");
     expect(
       await modal.locator(".quickvint-upload-choice-capacity").evaluate((element) => {
         const style = getComputedStyle(element);
-        const valueStyle = getComputedStyle(element.querySelector("strong"));
         return {
           color: style.color,
           fontSize: style.fontSize,
-          valueColor: valueStyle.color,
-          valueFontSize: valueStyle.fontSize,
-          valueFontWeight: valueStyle.fontWeight,
+          fontWeight: style.fontWeight,
         };
       }),
     ).toEqual({
-      color: "rgb(71, 85, 105)",
+      color: "rgb(51, 65, 85)",
       fontSize: "14px",
-      valueColor: "rgb(79, 70, 229)",
-      valueFontSize: "16px",
-      valueFontWeight: "800",
+      fontWeight: "700",
     });
     await expect(modal).not.toContainText(/daily|monthly|extra credit/i);
     await expect(modal.locator(".quickvint-upload-choice-single")).toContainText(
@@ -1700,9 +1692,7 @@ test.describe("AutoLister extension smoke flows", () => {
           paddingLeft: style.paddingLeft,
           color: style.color,
           fontSize: style.fontSize,
-          valueColor: getComputedStyle(element.querySelector("strong")).color,
-          valueFontSize: getComputedStyle(element.querySelector("strong")).fontSize,
-          valueFontWeight: getComputedStyle(element.querySelector("strong")).fontWeight,
+          fontWeight: style.fontWeight,
         };
       }),
     ).toEqual({
@@ -1710,12 +1700,15 @@ test.describe("AutoLister extension smoke flows", () => {
       borderStyle: "none",
       borderRadius: "0px",
       paddingLeft: "0px",
-      color: "rgb(71, 85, 105)",
-      fontSize: "13px",
-      valueColor: "rgb(79, 70, 229)",
-      valueFontSize: "15px",
-      valueFontWeight: "800",
+      color: "rgb(51, 65, 85)",
+      fontSize: "14px",
+      fontWeight: "700",
     });
+    const [titleBox, availabilityBox] = await Promise.all([
+      batch.locator(".batch-title").boundingBox(),
+      batch.locator(".batch-availability").boundingBox(),
+    ]);
+    expect(availabilityBox.y).toBeGreaterThanOrEqual(titleBox.y + titleBox.height);
     expect(await getCapacityRequestCount(page)).toBe(1);
     await expect(batch).not.toContainText(/daily|monthly|extra credit/i);
   });
