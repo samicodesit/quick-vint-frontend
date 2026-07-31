@@ -465,7 +465,7 @@ async function routeManualStorageUploads(page) {
 
 async function routeBatchComputerStorageUploads(
   page,
-  { holdUploads = false, failUploads = false } = {},
+  { holdUploads = false, failUploads = false, failUploadOrders = [] } = {},
 ) {
   const uploadedFiles = [];
   const uploadRequests = [];
@@ -488,7 +488,7 @@ async function routeBatchComputerStorageUploads(
       const order = Number(body.match(/name="uploadOrder"\r\n\r\n(\d+)/)?.[1] || 0);
       const fileName = body.match(/filename="([^"]+)"/)?.[1] || `photo-${order}.jpg`;
       uploadRequests.push({ order, fileName });
-      if (failUploads) {
+      if (failUploads || failUploadOrders.includes(order)) {
         return route.fulfill({
           status: 500,
           contentType: "application/json",
@@ -835,6 +835,12 @@ test.describe("AutoLister extension smoke flows", () => {
     await chooseBatchUpload(page);
     const modal = page.locator("#quickvint-batch-modal");
 
+    await expect(modal).toHaveAttribute("role", "dialog");
+    await expect(modal).toHaveAttribute("aria-modal", "true");
+    await expect(modal).toHaveAttribute(
+      "aria-labelledby",
+      "quickvint-batch-title",
+    );
     await expect(modal.locator(".batch-source-phone")).toBeVisible();
     await expect(modal.locator(".batch-source-phone .batch-wait-title")).toHaveText(
       "Scan QR code",
@@ -851,7 +857,14 @@ test.describe("AutoLister extension smoke flows", () => {
       "",
     );
     await expect(modal.locator(".batch-source-choice")).toHaveCount(0);
-
+    await expect(modal.locator(".batch-qr img")).toBeVisible();
+    for (const selector of [".batch-choose-files", ".batch-choose-folder"]) {
+      expect(
+        await modal
+          .locator(selector)
+          .evaluate((button) => button.getBoundingClientRect().height),
+      ).toBeGreaterThanOrEqual(44);
+    }
     await page.setViewportSize({ width: 390, height: 844 });
     await expectInsideViewport(page, "#quickvint-batch-modal .batch-content");
     await expectInsideViewport(page, "#quickvint-batch-modal .batch-source-phone");
@@ -1036,6 +1049,49 @@ test.describe("AutoLister extension smoke flows", () => {
     );
   });
 
+  test("computer batch upload preserves loose drop order", async ({ page }) => {
+    await routeBatchComputerStorageUploads(page);
+    await openContentHarness(page, { allowed: true, available: 10 }, {
+      emptyListing: true,
+    });
+    await chooseBatchUpload(page);
+    await expect(
+      page.locator("#quickvint-batch-modal .batch-computer-dropzone"),
+    ).toBeVisible();
+
+    await page.evaluate((dataUrl) => {
+      const bytes = Uint8Array.from(atob(dataUrl.split(",")[1]), (char) =>
+        char.charCodeAt(0),
+      );
+      const entries = ["z-front.png", "a-back.png"].map((name) => ({
+        isFile: true,
+        isDirectory: false,
+        fullPath: `/${name}`,
+        file: (resolve) =>
+          resolve(new File([bytes], name, { type: "image/png" })),
+      }));
+      const event = new Event("drop", { bubbles: true, cancelable: true });
+      Object.defineProperty(event, "dataTransfer", {
+        value: {
+          files: [],
+          items: entries.map((entry) => ({
+            webkitGetAsEntry: () => entry,
+          })),
+        },
+      });
+      document
+        .querySelector("#quickvint-batch-modal .batch-computer-dropzone")
+        .dispatchEvent(event);
+    }, tinyPngDataUrl);
+
+    const modal = page.locator("#quickvint-batch-modal");
+    await expect(modal.locator(".batch-title")).toHaveText("Organize items");
+    await expect(modal.locator(".batch-gallery img").first()).toHaveAttribute(
+      "src",
+      /z-front\.jpg/,
+    );
+  });
+
   test("computer batch upload reports unreadable dropped folders", async ({
     page,
   }) => {
@@ -1073,6 +1129,88 @@ test.describe("AutoLister extension smoke flows", () => {
     await expect(
       page.locator("#quickvint-batch-modal .batch-source-computer"),
     ).toBeVisible();
+  });
+
+  test("closing during dropped-folder reading does not start an upload", async ({
+    page,
+  }) => {
+    const storage = await routeBatchComputerStorageUploads(page);
+    await openContentHarness(page, { allowed: true, available: 10 }, {
+      emptyListing: true,
+    });
+    await page.evaluate(() => {
+      window.__batchCloseMessages = [];
+      window.confirm = (message) => {
+        window.__batchCloseMessages.push(message);
+        return true;
+      };
+    });
+    await chooseBatchUpload(page);
+    const modal = page.locator("#quickvint-batch-modal");
+    const sessionId = await modal.getAttribute("data-session-id");
+
+    await page.evaluate((dataUrl) => {
+      const bytes = Uint8Array.from(atob(dataUrl.split(",")[1]), (char) =>
+        char.charCodeAt(0),
+      );
+      const fileEntry = {
+        isFile: true,
+        isDirectory: false,
+        fullPath: "/batch/jacket.png",
+        file: (resolve) =>
+          resolve(new File([bytes], "jacket.png", { type: "image/png" })),
+      };
+      let readCount = 0;
+      const directoryEntry = {
+        isFile: false,
+        isDirectory: true,
+        createReader: () => ({
+          readEntries: (resolve) => {
+            if (readCount > 0) {
+              resolve([]);
+              return;
+            }
+            readCount += 1;
+            window.__releaseBatchDirectoryRead = () => resolve([fileEntry]);
+          },
+        }),
+      };
+      const event = new Event("drop", { bubbles: true, cancelable: true });
+      Object.defineProperty(event, "dataTransfer", {
+        value: {
+          files: [],
+          items: [{ webkitGetAsEntry: () => directoryEntry }],
+        },
+      });
+      document
+        .querySelector("#quickvint-batch-modal .batch-computer-dropzone")
+        .dispatchEvent(event);
+    }, tinyPngDataUrl);
+
+    await expect
+      .poll(() =>
+        page.evaluate(() => typeof window.__releaseBatchDirectoryRead),
+      )
+      .toBe("function");
+    await modal.locator(".batch-close").click();
+    await expect(modal).toHaveCount(0);
+    expect(await page.evaluate(() => window.__batchCloseMessages)).toEqual([
+      "Photos are still uploading. Closing now will discard this batch upload. Close anyway?",
+    ]);
+
+    await page.evaluate(() => window.__releaseBatchDirectoryRead());
+    await expect
+      .poll(() =>
+        page.evaluate((currentSessionId) =>
+          window.__extensionHarness.runtimeMessages.some(
+            (message) =>
+              String(message?.url || "").includes("action=cleanup") &&
+              String(message?.url || "").includes(currentSessionId),
+          ),
+        sessionId),
+      )
+      .toBe(true);
+    expect(storage.uploadRequests).toHaveLength(0);
   });
 
   test("computer batch upload shows progress before opening the organizer", async ({
@@ -1178,6 +1316,66 @@ test.describe("AutoLister extension smoke flows", () => {
     expect(storage.uploadRequests).toHaveLength(3);
   });
 
+  test("computer batch upload settles sibling requests before cleanup", async ({
+    page,
+  }) => {
+    const storage = await routeBatchComputerStorageUploads(page, {
+      holdUploads: true,
+      failUploadOrders: [0],
+    });
+    await openContentHarness(page, { allowed: true, available: 10 }, {
+      emptyListing: true,
+    });
+    await chooseBatchUpload(page);
+
+    const uploadBuffer = Buffer.from(tinyPngDataUrl.split(",")[1], "base64");
+    await page.setInputFiles(
+      "#quickvint-batch-modal .batch-computer-files-input",
+      [
+        { name: "front.png", mimeType: "image/png", buffer: uploadBuffer },
+        { name: "back.png", mimeType: "image/png", buffer: uploadBuffer },
+      ],
+    );
+
+    await expect
+      .poll(
+        () => storage.uploadRequests.filter(({ order }) => order === 0).length,
+        { timeout: 10000 },
+      )
+      .toBe(3);
+    const modal = page.locator("#quickvint-batch-modal");
+    const computerSessionId = await modal.getAttribute("data-session-id");
+    await page.waitForTimeout(100);
+    expect(
+      await page.evaluate((sessionId) =>
+        window.__extensionHarness.runtimeMessages.some(
+          (message) =>
+            String(message?.url || "").includes("action=cleanup") &&
+            String(message?.url || "").includes(sessionId),
+        ),
+      computerSessionId),
+    ).toBe(false);
+    await expect(
+      modal.locator(".batch-computer-error"),
+    ).toHaveCount(0);
+
+    storage.releaseUploads();
+    await expect(modal.locator(".batch-computer-error")).toContainText(
+      "Could not upload every photo. Try again.",
+    );
+    await expect
+      .poll(() =>
+        page.evaluate((sessionId) =>
+          window.__extensionHarness.runtimeMessages.some(
+            (message) =>
+              String(message?.url || "").includes("action=cleanup") &&
+              String(message?.url || "").includes(sessionId),
+          ),
+        computerSessionId),
+      )
+      .toBe(true);
+  });
+
   test("locks batch computer controls after phone photos begin arriving", async ({
     page,
   }) => {
@@ -1231,6 +1429,77 @@ test.describe("AutoLister extension smoke flows", () => {
     );
   });
 
+  test("ignores a delayed phone poll after computer upload starts", async ({
+    page,
+  }) => {
+    const storage = await routeBatchComputerStorageUploads(page, {
+      holdUploads: true,
+    });
+    await openContentHarness(page, { allowed: true, available: 10 }, {
+      emptyListing: true,
+    });
+    await page.evaluate(() => {
+      const originalSendMessage = window.chrome.runtime.sendMessage;
+      window.chrome.runtime.sendMessage = (message, callback) => {
+        const url = String(message?.url || "");
+        if (
+          !window.__delayedBatchPhonePoll &&
+          message?.type === "PROXY_FETCH" &&
+          url.includes("/api/phone-upload?sessionId=")
+        ) {
+          window.__delayedBatchPhonePoll = callback;
+          return;
+        }
+        originalSendMessage(message, callback);
+      };
+    });
+
+    await chooseBatchUpload(page);
+    await expect
+      .poll(() =>
+        page.evaluate(() => typeof window.__delayedBatchPhonePoll),
+      )
+      .toBe("function");
+    await page.setInputFiles(
+      "#quickvint-batch-modal .batch-computer-files-input",
+      {
+        name: "computer.png",
+        mimeType: "image/png",
+        buffer: Buffer.from(tinyPngDataUrl.split(",")[1], "base64"),
+      },
+    );
+
+    const modal = page.locator("#quickvint-batch-modal");
+    await expect(modal.locator(".batch-computer-progress")).toBeVisible();
+    await page.evaluate(() => {
+      window.__delayedBatchPhonePoll({
+        ok: true,
+        data: {
+          files: [
+            {
+              name: "phone.jpg",
+              path: "old-session/phone.jpg",
+              url: "https://storage.test/phone.jpg",
+              order: 0,
+            },
+          ],
+          count: 1,
+          complete: true,
+        },
+      });
+    });
+
+    await expect(modal.locator(".batch-computer-progress")).toBeVisible();
+    await expect(modal.locator(".batch-title")).toHaveText("Batch upload");
+    storage.releaseUploads();
+    await expect(modal.locator(".batch-title")).toHaveText("Organize items");
+    await expect(modal.locator(".batch-gallery .batch-photo")).toHaveCount(1);
+    await expect(modal.locator(".batch-gallery img")).toHaveAttribute(
+      "src",
+      /computer\.jpg/,
+    );
+  });
+
   test("warns before closing while computer photos are uploading", async ({
     page,
   }) => {
@@ -1270,7 +1539,7 @@ test.describe("AutoLister extension smoke flows", () => {
     await expect(modal.locator(".batch-title")).toHaveText("Organize items");
   });
 
-  test("defers computer session cleanup until an accepted close settles uploads", async ({
+  test("accepted close aborts uploads before cleaning the computer session", async ({
     page,
   }) => {
     const storage = await routeBatchComputerStorageUploads(page, {
@@ -1298,17 +1567,6 @@ test.describe("AutoLister extension smoke flows", () => {
     await modal.locator(".batch-close").click();
     await expect(modal).toHaveCount(0);
 
-    expect(
-      await page.evaluate((sessionId) =>
-        window.__extensionHarness.runtimeMessages.some(
-          (message) =>
-            String(message?.url || "").includes("action=cleanup") &&
-            String(message?.url || "").includes(sessionId),
-        ),
-      computerSessionId),
-    ).toBe(false);
-
-    storage.releaseUploads();
     await expect
       .poll(() =>
         page.evaluate((sessionId) =>
@@ -1320,6 +1578,7 @@ test.describe("AutoLister extension smoke flows", () => {
         computerSessionId),
       )
       .toBe(true);
+    storage.releaseUploads();
   });
 
   test("opens a simple phone upload chooser with clear current-listing copy", async ({

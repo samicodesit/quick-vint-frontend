@@ -1076,6 +1076,7 @@
   let batchCapacityLoading = false;
   let batchInputSource = null;
   let batchComputerUploadPromise = null;
+  let batchComputerUploadAbortController = null;
   let listingToolsReadyTracked = false;
   let signedOutToolsReadyTracked = false;
   let eventQueue = [];
@@ -2782,8 +2783,9 @@
     capturedUpload.capturedAt = Date.now();
   }
 
-  async function uploadManualFileToTempStorage(sessionId, file, order) {
-    const uploadFile = await compressFileForStorageUpload(file);
+  async function uploadManualFileToTempStorage(sessionId, file, order, signal) {
+    signal?.throwIfAborted();
+    const uploadFile = await compressFileForStorageUpload(file, signal);
     let lastError = null;
     let lastStatus = null;
     let attempts = 0;
@@ -2809,6 +2811,7 @@
           {
             method: "POST",
             body: formData,
+            signal,
           },
         );
         const data = await response.json().catch(() => ({}));
@@ -2823,6 +2826,7 @@
         error.status = response.status;
         throw error;
       } catch (error) {
+        if (signal?.aborted) throw error;
         lastError = error;
         lastStatus = Number.isFinite(Number(error?.status))
           ? Number(error.status)
@@ -2839,7 +2843,7 @@
           retryable,
           message: error?.message || String(error),
         });
-        await sleep(delayMs);
+        await sleep(delayMs, signal);
       }
     }
 
@@ -2857,8 +2861,20 @@
     return status === 408 || status === 409 || status === 425 || status === 429 || status >= 500;
   }
 
-  function sleep(ms) {
-    return new Promise((resolve) => setTimeout(resolve, ms));
+  function sleep(ms, signal) {
+    if (!signal) return new Promise((resolve) => setTimeout(resolve, ms));
+    signal.throwIfAborted();
+    return new Promise((resolve, reject) => {
+      const timeout = setTimeout(() => {
+        signal.removeEventListener("abort", onAbort);
+        resolve();
+      }, ms);
+      const onAbort = () => {
+        clearTimeout(timeout);
+        reject(signal.reason || new DOMException("Aborted", "AbortError"));
+      };
+      signal.addEventListener("abort", onAbort, { once: true });
+    });
   }
 
   async function mapWithConcurrency(items, limit, mapper) {
@@ -2875,7 +2891,11 @@
       }
     }
 
-    await Promise.all(Array.from({ length: workerCount }, runWorker));
+    const workers = await Promise.allSettled(
+      Array.from({ length: workerCount }, runWorker),
+    );
+    const failedWorker = workers.find(({ status }) => status === "rejected");
+    if (failedWorker) throw failedWorker.reason;
     return results;
   }
 
@@ -2902,7 +2922,7 @@
     }
   }
 
-  async function compressFileForStorageUpload(file) {
+  async function compressFileForStorageUpload(file, signal) {
     let lastError = null;
     for (
       let attempt = 0;
@@ -2910,12 +2930,16 @@
       attempt += 1
     ) {
       try {
-        return await compressFileForStorageUploadOnce(file);
+        signal?.throwIfAborted();
+        const compressed = await compressFileForStorageUploadOnce(file);
+        signal?.throwIfAborted();
+        return compressed;
       } catch (error) {
+        if (signal?.aborted) throw error;
         lastError = error;
         const delayMs = MANUAL_STORAGE_COMPRESSION_RETRY_DELAYS_MS[attempt];
         if (!delayMs) break;
-        await sleep(delayMs);
+        await sleep(delayMs, signal);
       }
     }
     console.warn("AutoLister AI: manual temp upload compression failed", lastError);
@@ -2928,10 +2952,10 @@
     return file;
   }
 
-  async function listTempStorageFiles(sessionId) {
+  async function listTempStorageFiles(sessionId, signal) {
     const response = await fetch(
       `${PHONE_UPLOAD_API}?sessionId=${encodeURIComponent(sessionId)}&t=${Date.now()}`,
-      { method: "GET" },
+      { method: "GET", signal },
     );
     const data = await response.json().catch(() => ({}));
     if (!response.ok) {
@@ -8739,7 +8763,7 @@
       }
 
       #${BATCH_MODAL_ID} .batch-computer-actions button {
-        min-height: 38px;
+        min-height: 44px;
         padding: 0 13px;
         border: 1px solid #d7dce5;
         border-radius: 9px;
@@ -12572,6 +12596,7 @@
     batchCapacityLoading = false;
     batchInputSource = null;
     batchComputerUploadPromise = null;
+    batchComputerUploadAbortController = null;
     isBatchPollInFlight = false;
     batchImagePreloadUrls = new Set();
     batchImagePreloadCache = new Map();
@@ -12648,8 +12673,10 @@
   function closeBatchModal({ cleanup = true } = {}) {
     const sessionId = batchUploadSessionId;
     const computerUpload = batchComputerUploadPromise;
+    const computerUploadAbortController = batchComputerUploadAbortController;
     document.getElementById(BATCH_MODAL_ID)?.remove();
     setBatchModalScrollLock(false);
+    computerUploadAbortController?.abort();
 
     if (batchPollInterval) {
       clearInterval(batchPollInterval);
@@ -12759,13 +12786,16 @@
     const modal = document.createElement("div");
     modal.id = BATCH_MODAL_ID;
     modal.dataset.sessionId = sessionId;
+    modal.setAttribute("role", "dialog");
+    modal.setAttribute("aria-modal", "true");
+    modal.setAttribute("aria-labelledby", "quickvint-batch-title");
     setBatchModalScrollLock(true);
 
     modal.innerHTML = `
       <div class="batch-content">
         <div class="batch-topbar">
           <div class="batch-heading">
-            <h3 class="batch-title">Batch upload</h3>
+            <h3 id="quickvint-batch-title" class="batch-title">Batch upload</h3>
             <p class="batch-subtitle">Create several listings at once.</p>
           </div>
           <button class="batch-close" type="button" aria-label="Close">&times;</button>
@@ -12892,11 +12922,10 @@
     dropzone?.addEventListener("drop", async (event) => {
       event.preventDefault();
       dropzone.classList.remove("is-dragging");
-      try {
-        queueBatchComputerUpload(await getDroppedBatchFiles(event.dataTransfer));
-      } catch {
-        showToast("Could not read that folder. Try choosing it instead.", "error");
-      }
+      queueBatchComputerUpload(getDroppedBatchFiles(event.dataTransfer), {
+        preserveOrder: true,
+        readErrorMessage: "Could not read that folder. Try choosing it instead.",
+      });
     });
     renderBatchUploadStrip();
   }
@@ -12969,16 +12998,48 @@
       .map((item) => item.webkitGetAsEntry?.())
       .filter(Boolean);
     if (!entries.length) return Array.from(dataTransfer?.files || []);
-    return (await Promise.all(entries.map(readDroppedBatchEntry))).flat();
+    const groups = await Promise.all(
+      entries.map(async (entry) => {
+        const files = await readDroppedBatchEntry(entry);
+        return entry.isDirectory
+          ? sortBatchComputerFiles(files)
+          : files.filter(isBatchImageFile);
+      }),
+    );
+    return groups.flat();
   }
 
-  function queueBatchComputerUpload(files) {
-    const upload = startBatchComputerUpload(files);
+  function queueBatchComputerUpload(
+    files,
+    { preserveOrder = false, readErrorMessage = "" } = {},
+  ) {
+    if (batchComputerUploadPromise || batchInputSource) return;
+    const modal = document.getElementById(BATCH_MODAL_ID);
+    const sourceSessionId = batchUploadSessionId;
+    const pendingFiles = files instanceof Promise ? files : Array.from(files || []);
+    const upload = Promise.resolve(pendingFiles)
+      .then((resolvedFiles) => {
+        if (
+          document.getElementById(BATCH_MODAL_ID) !== modal ||
+          batchUploadSessionId !== sourceSessionId
+        ) {
+          return;
+        }
+        return startBatchComputerUpload(resolvedFiles, { preserveOrder });
+      })
+      .catch((error) => {
+        if (
+          readErrorMessage &&
+          document.getElementById(BATCH_MODAL_ID) === modal &&
+          batchUploadSessionId === sourceSessionId
+        ) {
+          showToast(readErrorMessage, "error");
+          return;
+        }
+        console.error("Batch computer upload error:", error);
+      });
     batchComputerUploadPromise = upload;
     upload
-      .catch((error) => {
-        console.error("Batch computer upload error:", error);
-      })
       .finally(() => {
         if (batchComputerUploadPromise === upload) {
           batchComputerUploadPromise = null;
@@ -13052,9 +13113,11 @@
     if (copy) copy.textContent = "Your selected photos are uploading.";
   }
 
-  async function startBatchComputerUpload(fileList) {
+  async function startBatchComputerUpload(fileList, { preserveOrder = false } = {}) {
     if (batchInputSource === "phone") return;
-    const files = sortBatchComputerFiles(fileList);
+    const files = preserveOrder
+      ? Array.from(fileList || []).filter(isBatchImageFile)
+      : sortBatchComputerFiles(fileList);
     if (!files.length) {
       showToast("Add image files to continue.", "info");
       return;
@@ -13063,6 +13126,8 @@
     const qrSessionId = batchUploadSessionId;
     const sessionId = generateSessionId();
     const modal = document.getElementById(BATCH_MODAL_ID);
+    const abortController = new AbortController();
+    batchComputerUploadAbortController = abortController;
     batchInputSource = "computer";
     batchUploadSessionId = sessionId;
     if (modal) modal.dataset.sessionId = sessionId;
@@ -13090,13 +13155,21 @@
         files,
         MANUAL_STORAGE_UPLOAD_CONCURRENCY,
         async (file, order) => {
-          const result = await uploadManualFileToTempStorage(sessionId, file, order);
+          const result = await uploadManualFileToTempStorage(
+            sessionId,
+            file,
+            order,
+            abortController.signal,
+          );
           uploadedCount += 1;
           renderBatchComputerUploadProgress(uploadedCount, files.length);
           return result;
         },
       );
-      const remoteFiles = await listTempStorageFiles(sessionId);
+      const remoteFiles = await listTempStorageFiles(
+        sessionId,
+        abortController.signal,
+      );
       if (remoteFiles.length !== files.length) {
         throw new Error("Could not upload every photo.");
       }
@@ -13155,6 +13228,10 @@
         message: error?.message || String(error),
         fileCount: files.length,
       });
+    } finally {
+      if (batchComputerUploadAbortController === abortController) {
+        batchComputerUploadAbortController = null;
+      }
     }
   }
 
@@ -14143,6 +14220,7 @@
           url: `${PHONE_UPLOAD_API}?sessionId=${sessionId}&t=${Date.now()}`,
           options: { method: "GET" },
         });
+        if (batchUploadSessionId !== sessionId) return;
         if (!response?.ok) return;
 
         const data =
