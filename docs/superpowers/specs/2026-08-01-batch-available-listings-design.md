@@ -45,7 +45,8 @@ because the number can change when a time-based allowance resets.
 - Positive capacity: show the unified number.
 - Refreshing in the organization phase: show `Checking availability...` in the
   existing capacity status area; do not invent a temporary number.
-- Capacity lower than grouped items: retain the existing warning and
+- Capacity lower than grouped items: show `You can generate X of Y listings
+  right now. The first X will be generated.` and retain the existing
   `Generate first X of Y` action.
 - Zero or blocked capacity: retain the existing paywall/error handling before
   the chooser and the existing batch safety check before generation.
