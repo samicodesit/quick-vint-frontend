@@ -1036,6 +1036,45 @@ test.describe("AutoLister extension smoke flows", () => {
     );
   });
 
+  test("computer batch upload reports unreadable dropped folders", async ({
+    page,
+  }) => {
+    await openContentHarness(page, { allowed: true, available: 10 }, {
+      emptyListing: true,
+    });
+    await chooseBatchUpload(page);
+    await expect(
+      page.locator("#quickvint-batch-modal .batch-computer-dropzone"),
+    ).toBeVisible();
+
+    await page.evaluate(() => {
+      const directoryEntry = {
+        isFile: false,
+        isDirectory: true,
+        createReader: () => ({
+          readEntries: (_resolve, reject) => reject(new Error("Folder denied")),
+        }),
+      };
+      const event = new Event("drop", { bubbles: true, cancelable: true });
+      Object.defineProperty(event, "dataTransfer", {
+        value: {
+          files: [],
+          items: [{ webkitGetAsEntry: () => directoryEntry }],
+        },
+      });
+      document
+        .querySelector("#quickvint-batch-modal .batch-computer-dropzone")
+        .dispatchEvent(event);
+    });
+
+    await expect(page.locator("#quickvint-toast.error")).toContainText(
+      "Could not read that folder. Try choosing it instead.",
+    );
+    await expect(
+      page.locator("#quickvint-batch-modal .batch-source-computer"),
+    ).toBeVisible();
+  });
+
   test("computer batch upload shows progress before opening the organizer", async ({
     page,
   }) => {

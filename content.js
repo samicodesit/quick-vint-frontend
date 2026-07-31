@@ -12892,7 +12892,11 @@
     dropzone?.addEventListener("drop", async (event) => {
       event.preventDefault();
       dropzone.classList.remove("is-dragging");
-      queueBatchComputerUpload(await getDroppedBatchFiles(event.dataTransfer));
+      try {
+        queueBatchComputerUpload(await getDroppedBatchFiles(event.dataTransfer));
+      } catch {
+        showToast("Could not read that folder. Try choosing it instead.", "error");
+      }
     });
     renderBatchUploadStrip();
   }
