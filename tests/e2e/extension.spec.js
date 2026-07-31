@@ -836,6 +836,9 @@ test.describe("AutoLister extension smoke flows", () => {
     const modal = page.locator("#quickvint-batch-modal");
 
     await expect(modal.locator(".batch-source-phone")).toBeVisible();
+    await expect(modal.locator(".batch-source-phone .batch-wait-title")).toHaveText(
+      "Scan QR code",
+    );
     await expect(modal.locator(".batch-computer-dropzone")).toContainText(
       "Drop photos or a folder",
     );
@@ -1069,6 +1072,10 @@ test.describe("AutoLister extension smoke flows", () => {
     await expect(modal.locator(".batch-source-phone")).toContainText(
       "Using this computer",
     );
+    await page.setViewportSize({ width: 390, height: 844 });
+    await expectInsideViewport(page, "#quickvint-batch-modal .batch-content");
+    await expect(modal.locator(".batch-computer-progress")).toBeVisible();
+    await expectNoHorizontalOverflow(page);
 
     storage.releaseUploads();
     await expect(modal.locator(".batch-title")).toHaveText("Organize items");

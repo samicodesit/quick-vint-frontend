@@ -13194,8 +13194,7 @@
         ? `Check phone (<span class="batch-count-number">${receivedCount}</span> received)`
         : `Receiving <span class="batch-count-number">${receivedCount}</span> photo${receivedCount === 1 ? "" : "s"}<span class="waiting-dots" aria-hidden="true"><span>.</span><span>.</span><span>.</span></span>`;
     } else {
-      title.innerHTML =
-        'Waiting for photos<span class="waiting-dots" aria-hidden="true"><span>.</span><span>.</span><span>.</span></span>';
+      title.textContent = "Scan QR code";
     }
     if (countChanged) {
       const countEl = title.querySelector(".batch-count-number");
