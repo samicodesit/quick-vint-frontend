@@ -993,7 +993,7 @@
   };
   const WAND_ICON_SVG = `<svg fill="#ffffff" viewBox="0 0 512 512" version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink"> <path d="M454.321,219.727l-38.766-51.947l20.815-61.385c2.046-6.032,0.489-12.704-4.015-17.208 c-4.504-4.504-11.175-6.061-17.208-4.015l-61.384,20.815l-51.951-38.766c-5.103-3.809-11.929-4.392-17.605-1.499 c-5.676,2.893-9.217,8.755-9.136,15.125l0.829,64.815l-52.923,37.426c-5.201,3.678-7.863,9.989-6.867,16.282 c0.996,6.291,5.479,11.471,11.561,13.363l43.844,13.63L14.443,483.432c-6.535,6.534-6.535,17.131,0,23.666s17.131,6.535,23.666,0 l257.073-257.072l13.629,43.843c2.172,6.986,8.638,11.768,15.984,11.768c5.375,0,10.494-2.595,13.66-7.072l37.426-52.923 l64.815,0.828c6.322,0.051,12.233-3.462,15.125-9.136S458.131,224.833,454.321,219.727z"></path> <polygon points="173.373,67.274 160.014,42.848 146.656,67.274 122.23,80.632 146.656,93.992 160.014,118.417 173.373,93.992 197.799,80.632 "></polygon> <polygon points="362.946,384.489 352.14,364.731 341.335,384.489 321.577,395.294 341.335,406.1 352.14,425.856 362.946,406.1 382.703,395.294 "></polygon> <polygon points="378.142,19.757 367.337,0 356.531,19.757 336.774,30.563 356.531,41.369 367.337,61.126 378.142,41.369 397.9,30.563 "></polygon> <polygon points="490.635,142.513 484.167,130.689 477.701,142.513 465.876,148.979 477.701,155.446 484.167,167.27 490.635,155.446 502.458,148.979 "></polygon> <polygon points="492.626,294.117 465.876,301.951 439.128,294.117 446.962,320.865 439.128,347.615 465.876,339.781 492.626,347.615 484.791,320.865 "></polygon> </svg>`;
   const PHONE_ICON_SVG = `<svg fill="#ffffff" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M17 1.01L7 1c-1.1 0-2 .9-2 2v18c0 1.1.9 2 2 2h10c1.1 0 2-.9 2-2V3c0-1.1-.9-1.99-2-1.99zM17 19H7V5h10v14z"/></svg>`;
-  const BATCH_ICON_SVG = `<svg fill="#ffffff" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M5 4h11.5A2.5 2.5 0 0 1 19 6.5V18H7.5A2.5 2.5 0 0 1 5 15.5V4Zm2 2v9.5c0 .28.22.5.5.5H17V6.5a.5.5 0 0 0-.5-.5H7Zm-3 2h1v9.5A1.5 1.5 0 0 0 6.5 19H17v1H6.5A2.5 2.5 0 0 1 4 17.5V8Zm5.25 6h5.5l-1.75-2.33-1.38 1.72-.95-1.14L9.25 14ZM10 9.5A1.5 1.5 0 1 0 10 12.5 1.5 1.5 0 0 0 10 9.5Z"/></svg>`;
+  const BATCH_ICON_SVG = `<svg data-icon="upload" fill="none" viewBox="0 0 24 24" stroke="#ffffff" stroke-width="2" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5m-13.5-9L12 3m0 0 4.5 4.5M12 3v13.5"/></svg>`;
   const REPORT_ICON_SVG = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" xmlns="http://www.w3.org/2000/svg"><path d="m3 11 18-5v12L3 13v-2Z"/><path d="M11.6 14.4 13 20H9.5L8.2 13.6"/></svg>`;
   const PLAN_LIMITS = {
     free: { name: "Free", daily: null, monthly: 5, price: "Free" },
@@ -4716,23 +4716,18 @@
       }
 
       #${UPLOAD_CHOICE_MODAL_ID} .quickvint-upload-choice-capacity {
-        display: inline-flex;
-        align-items: center;
-        gap: 7px;
         margin: 10px 0 0;
-        color: #64748b;
-        font-size: 13px;
-        font-weight: 650;
-        line-height: 1.3;
+        color: #475569;
+        font-size: 14px;
+        font-weight: 600;
+        line-height: 1.4;
       }
 
-      #${UPLOAD_CHOICE_MODAL_ID} .quickvint-upload-choice-capacity::before {
-        content: "";
-        width: 7px;
-        height: 7px;
-        border-radius: 999px;
-        background: #7c6cf2;
-        box-shadow: 0 0 0 4px rgba(124, 108, 242, 0.12);
+      #${UPLOAD_CHOICE_MODAL_ID} .quickvint-upload-choice-capacity strong {
+        color: #4f46e5;
+        font-size: 16px;
+        font-weight: 800;
+        font-variant-numeric: tabular-nums;
       }
 
       #${UPLOAD_CHOICE_MODAL_ID} .quickvint-upload-choice-close {
@@ -5299,11 +5294,21 @@
       }
 
       #${BATCH_MODAL_ID} .batch-availability {
-        color: #64748b;
-        font-size: 12px;
-        font-weight: 650;
-        line-height: 1.2;
+        display: inline-flex;
+        align-items: baseline;
+        gap: 4px;
+        color: #475569;
+        font-size: 13px;
+        font-weight: 600;
+        line-height: 1.3;
         white-space: nowrap;
+      }
+
+      #${BATCH_MODAL_ID} .batch-availability strong {
+        color: #4f46e5;
+        font-size: 15px;
+        font-weight: 800;
+        font-variant-numeric: tabular-nums;
       }
 
       #${BATCH_MODAL_ID} .batch-subtitle {
@@ -5351,13 +5356,6 @@
         height: 164px;
         border-radius: 8px;
         background: #ffffff;
-      }
-
-      #${BATCH_MODAL_ID} .batch-qr-note {
-        margin: 10px 0 0;
-        color: #6b7280;
-        font-size: 12px;
-        line-height: 1.4;
       }
 
       #${BATCH_MODAL_ID} .batch-status {
@@ -6031,11 +6029,6 @@
       #${BATCH_MODAL_ID} .batch-qr-placeholder {
         width: 148px;
         height: 148px;
-      }
-
-      #${BATCH_MODAL_ID} .batch-qr-note {
-        margin-top: 8px;
-        font-size: 11px;
       }
 
       #${BATCH_MODAL_ID} .batch-wait-panel {
@@ -8710,18 +8703,9 @@
         font-size: 11.5px;
       }
 
-      #${BATCH_MODAL_ID} .batch-source-phone .batch-qr-note {
-        margin: 6px 0 0;
-        font-size: 10.5px;
-      }
-
       #${BATCH_MODAL_ID} .batch-source-phone.is-computer-locked .batch-qr {
         opacity: 0.22;
         filter: grayscale(1);
-      }
-
-      #${BATCH_MODAL_ID} .batch-source-phone.is-computer-locked .batch-qr-note {
-        visibility: hidden;
       }
 
       #${BATCH_MODAL_ID} .batch-computer-dropzone {
@@ -8787,11 +8771,6 @@
         color: #0f172a;
         font-size: 14px;
         font-weight: 850;
-      }
-
-      #${BATCH_MODAL_ID} .batch-computer-dropzone > span:last-child {
-        margin-top: 3px;
-        font-size: 11px;
       }
 
       #${BATCH_MODAL_ID} .batch-computer-actions {
@@ -9241,7 +9220,7 @@
       <div class="quickvint-upload-choice-card">
         <div class="quickvint-upload-choice-head">
           <h2 id="quickvint-upload-choice-title" class="quickvint-upload-choice-title">${escapeHtml(copy.title)}</h2>
-          <p class="quickvint-upload-choice-capacity">${available} listing${available === 1 ? "" : "s"} available now</p>
+          <p class="quickvint-upload-choice-capacity"><strong>${available}</strong> listing${available === 1 ? "" : "s"} available</p>
           <button type="button" class="quickvint-upload-choice-close" aria-label="${escapeHtml(copy.close)}">&times;</button>
         </div>
         <div class="quickvint-upload-choice-options">
@@ -12822,9 +12801,9 @@
           <div class="batch-heading">
             <div class="batch-title-row">
               <h3 id="quickvint-batch-title" class="batch-title">Batch upload</h3>
-              <span class="batch-availability" aria-live="polite">${available} available</span>
+              <span class="batch-availability" aria-live="polite"><strong>${available}</strong> listing${available === 1 ? "" : "s"} available</span>
             </div>
-            <p class="batch-subtitle">Create several listings at once.</p>
+            <p class="batch-subtitle" hidden></p>
           </div>
           <button class="batch-close" type="button" aria-label="Close">&times;</button>
         </div>
@@ -12859,8 +12838,8 @@
     const subtitleEl = document.querySelector(`#${BATCH_MODAL_ID} .batch-subtitle`);
     if (titleEl) titleEl.textContent = "Batch upload";
     if (subtitleEl) {
-      subtitleEl.hidden = false;
-      subtitleEl.textContent = "Create several listings at once.";
+      subtitleEl.hidden = true;
+      subtitleEl.textContent = "";
     }
     document
       .querySelector(`#${BATCH_MODAL_ID} .organize-progress`)
@@ -12879,8 +12858,7 @@
             </div>
             <div class="batch-source-copy">
               <div class="batch-wait-title">Scan QR code</div>
-              <div class="batch-wait-copy">Choose photos on your phone. They will appear here.</div>
-              <p class="batch-qr-note">Keep the phone page open.</p>
+              <div class="batch-wait-copy">Choose photos. Keep page open.</div>
             </div>
           </div>
         </section>
@@ -12890,7 +12868,6 @@
             <input class="batch-computer-files-input" type="file" accept="image/*" multiple />
             <span class="batch-computer-icon" aria-hidden="true">${BATCH_ICON_SVG}</span>
             <strong>Drop photos or a folder</strong>
-            <span>or choose them from this computer</span>
           </label>
           <div class="batch-computer-actions">
             <button type="button" class="primary batch-choose-files">Choose photos</button>
@@ -13123,9 +13100,7 @@
     const dropzone = panel.querySelector(".batch-computer-dropzone");
     dropzone?.setAttribute("aria-disabled", "true");
     const title = dropzone?.querySelector("strong");
-    const copy = dropzone?.querySelector(":scope > span:last-child");
     if (title) title.textContent = "Receiving from phone";
-    if (copy) copy.textContent = "Finish there to continue";
   }
 
   function lockBatchPhoneControlsForComputer() {
@@ -13317,7 +13292,7 @@
         ? isStale
           ? "Reopen the phone page, then leave it visible."
           : "Keep the phone page open."
-        : "Choose photos on your phone. They will appear here.";
+        : "Choose photos. Keep page open.";
 
     if (groupButton) {
       groupButton.disabled = !batchIsComplete || receivedCount === 0;
@@ -13950,7 +13925,7 @@
         available > 0;
       availability.hidden = !showAvailability;
       if (showAvailability) {
-        availability.textContent = `${available} available`;
+        availability.innerHTML = `<strong>${available}</strong> listing${available === 1 ? "" : "s"} available`;
       }
     }
     if (clearButton) {

@@ -861,6 +861,18 @@ test.describe("AutoLister extension smoke flows", () => {
     await expect(modal.locator(".batch-computer-dropzone")).toContainText(
       "Drop photos or a folder",
     );
+    await expect(modal.locator(".batch-computer-dropzone")).not.toContainText(
+      "or choose them from this computer",
+    );
+    await expect(modal.locator(".batch-computer-icon svg")).toHaveAttribute(
+      "data-icon",
+      "upload",
+    );
+    await expect(modal.locator(".batch-subtitle")).toBeHidden();
+    await expect(modal.locator(".batch-wait-copy")).toHaveText(
+      "Choose photos. Keep page open.",
+    );
+    await expect(modal.locator(".batch-qr-note")).toHaveCount(0);
     await expect(modal.locator(".batch-computer-files-input")).toHaveAttribute(
       "multiple",
       "",
@@ -1608,8 +1620,30 @@ test.describe("AutoLister extension smoke flows", () => {
       "How many items do you want to sell?",
     );
     await expect(modal.locator(".quickvint-upload-choice-capacity")).toHaveText(
-      "12 listings available now",
+      "12 listings available",
     );
+    await expect(
+      modal.locator(".quickvint-upload-choice-capacity strong"),
+    ).toHaveText("12");
+    expect(
+      await modal.locator(".quickvint-upload-choice-capacity").evaluate((element) => {
+        const style = getComputedStyle(element);
+        const valueStyle = getComputedStyle(element.querySelector("strong"));
+        return {
+          color: style.color,
+          fontSize: style.fontSize,
+          valueColor: valueStyle.color,
+          valueFontSize: valueStyle.fontSize,
+          valueFontWeight: valueStyle.fontWeight,
+        };
+      }),
+    ).toEqual({
+      color: "rgb(71, 85, 105)",
+      fontSize: "14px",
+      valueColor: "rgb(79, 70, 229)",
+      valueFontSize: "16px",
+      valueFontWeight: "800",
+    });
     await expect(modal).not.toContainText(/daily|monthly|extra credit/i);
     await expect(modal.locator(".quickvint-upload-choice-single")).toContainText(
       "1 item",
@@ -1653,7 +1687,9 @@ test.describe("AutoLister extension smoke flows", () => {
     await chooser.locator(".quickvint-upload-choice-multiple").click();
     const batch = page.locator("#quickvint-batch-modal");
 
-    await expect(batch.locator(".batch-availability")).toHaveText("12 available");
+    await expect(batch.locator(".batch-availability")).toHaveText(
+      "12 listings available",
+    );
     expect(
       await batch.locator(".batch-availability").evaluate((element) => {
         const style = getComputedStyle(element);
@@ -1662,6 +1698,11 @@ test.describe("AutoLister extension smoke flows", () => {
           borderStyle: style.borderStyle,
           borderRadius: style.borderRadius,
           paddingLeft: style.paddingLeft,
+          color: style.color,
+          fontSize: style.fontSize,
+          valueColor: getComputedStyle(element.querySelector("strong")).color,
+          valueFontSize: getComputedStyle(element.querySelector("strong")).fontSize,
+          valueFontWeight: getComputedStyle(element.querySelector("strong")).fontWeight,
         };
       }),
     ).toEqual({
@@ -1669,6 +1710,11 @@ test.describe("AutoLister extension smoke flows", () => {
       borderStyle: "none",
       borderRadius: "0px",
       paddingLeft: "0px",
+      color: "rgb(71, 85, 105)",
+      fontSize: "13px",
+      valueColor: "rgb(79, 70, 229)",
+      valueFontSize: "15px",
+      valueFontWeight: "800",
     });
     expect(await getCapacityRequestCount(page)).toBe(1);
     await expect(batch).not.toContainText(/daily|monthly|extra credit/i);
@@ -1692,7 +1738,9 @@ test.describe("AutoLister extension smoke flows", () => {
       await batch.locator(".batch-mark-group").click();
     }
 
-    await expect(batch.locator(".batch-availability")).toHaveText("12 available");
+    await expect(batch.locator(".batch-availability")).toHaveText(
+      "12 listings available",
+    );
     await expect(batch.locator(".batch-capacity-note")).toHaveText(
       "Using 2 of 12 available",
     );
@@ -1710,7 +1758,9 @@ test.describe("AutoLister extension smoke flows", () => {
     const batch = page.locator("#quickvint-batch-modal");
     const gallery = batch.locator(".batch-gallery");
     await expect(gallery.locator(".batch-photo")).toHaveCount(3);
-    await expect(batch.locator(".batch-availability")).toHaveText("2 available");
+    await expect(batch.locator(".batch-availability")).toHaveText(
+      "2 listings available",
+    );
 
     for (const key of ["phone-1.jpg", "phone-2.jpg", "phone-3.jpg"]) {
       await gallery.locator(`.batch-photo[data-photo-key="${key}"]`).click();
