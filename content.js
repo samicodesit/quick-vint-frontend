@@ -6302,25 +6302,29 @@
       }
 
       @keyframes batchGalleryAttention {
-        35% {
-          border-color: #3b82f6;
-          box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.2);
+        20%, 60% {
+          border-color: #2563eb;
+          box-shadow:
+            0 0 0 5px rgba(37, 99, 235, 0.28),
+            0 12px 28px rgba(37, 99, 235, 0.2);
         }
       }
 
       @keyframes batchRemainingAttention {
-        35% {
+        20%, 60% {
+          background: #dbeafe;
           color: #1d4ed8;
-          text-shadow: 0 0 14px rgba(37, 99, 235, 0.45);
+          box-shadow: 0 0 0 6px #dbeafe;
+          transform: scale(1.05);
         }
       }
 
       #${BATCH_MODAL_ID}.organizing .batch-gallery-section.is-attention {
-        animation: batchGalleryAttention 760ms ease-out;
+        animation: batchGalleryAttention 1100ms ease-out;
       }
 
       #${BATCH_MODAL_ID}.organizing .organize-jump-to-photos.is-attention {
-        animation: batchRemainingAttention 760ms ease-out;
+        animation: batchRemainingAttention 1100ms ease-out;
       }
 
       #${BATCH_MODAL_ID}.organizing .batch-section-head,
@@ -6750,16 +6754,11 @@
         right: auto;
         bottom: auto;
         display: grid;
-        grid-template-columns: minmax(0, 1fr) minmax(160px, 240px);
-        grid-template-areas:
-          "status primary"
-          "secondary primary";
         align-items: center;
-        row-gap: 8px;
-        column-gap: 14px;
+        gap: 10px;
         margin: 0 -18px;
-        min-height: 94px;
-        padding: 14px 24px 16px;
+        min-height: 72px;
+        padding: 13px 24px 15px;
         background: rgba(255, 255, 255, 0.98);
         box-shadow: 0 -10px 26px rgba(15, 23, 42, 0.08);
         border-top: 1px solid #e5e7eb;
@@ -6771,14 +6770,15 @@
         align-items: center;
         justify-content: flex-start;
         min-width: 0;
-        max-height: 32px;
-        min-height: 24px;
+        width: auto;
+        max-height: none;
+        min-height: 40px;
         margin: 0;
         padding: 0 12px;
         border: 1px solid #c7d2fe;
         border-radius: 10px;
         background: #eef2ff;
-        color: #64748b;
+        color: #4338ca;
         cursor: pointer;
         font-size: 12.5px;
         font-weight: 650;
@@ -6817,29 +6817,42 @@
         transition: opacity 120ms ease, transform 120ms ease;
       }
 
-      #${BATCH_MODAL_ID}.organizing .batch-actions:not(.has-primary-action) .batch-secondary-actions {
-        justify-content: flex-end;
-      }
-
-      #${BATCH_MODAL_ID}.organizing .batch-actions:not(.has-primary-action) {
+      #${BATCH_MODAL_ID}.organizing .batch-actions[data-state="browse"],
+      #${BATCH_MODAL_ID}.organizing .batch-actions[data-state="empty"] {
         grid-template-columns: minmax(0, 1fr);
-        grid-template-areas:
-          "status"
-          "secondary";
-        min-height: 94px;
-      }
-
-      #${BATCH_MODAL_ID}.organizing .batch-actions:not(.has-primary-action):not(.has-secondary-action) {
         grid-template-areas: "status";
-        min-height: 0;
       }
 
-      #${BATCH_MODAL_ID}.organizing .batch-actions:not(.has-primary-action) .batch-selection-count {
+      #${BATCH_MODAL_ID}.organizing .batch-actions[data-state="browse"] .batch-selection-count,
+      #${BATCH_MODAL_ID}.organizing .batch-actions[data-state="empty"] .batch-selection-count {
         width: 100%;
-        min-height: 42px;
+        min-height: 44px;
         justify-content: center;
-        color: #4338ca;
         font-weight: 800;
+      }
+
+      #${BATCH_MODAL_ID}.organizing .batch-actions[data-state="selecting"] {
+        grid-template-columns: max-content max-content minmax(180px, 1fr);
+        grid-template-areas: "status secondary primary";
+      }
+
+      #${BATCH_MODAL_ID}.organizing .batch-actions[data-state="selecting"] .batch-selection-count,
+      #${BATCH_MODAL_ID}.organizing .batch-actions[data-state="selecting"] .batch-clear-selection {
+        min-height: 42px;
+      }
+
+      #${BATCH_MODAL_ID}.organizing .batch-actions[data-state="selecting"] .batch-secondary-actions {
+        max-height: 40px;
+        min-height: 40px;
+      }
+
+      #${BATCH_MODAL_ID}.organizing .batch-actions[data-state="ready"] {
+        grid-template-columns: minmax(0, 1fr);
+        grid-template-areas: "primary";
+      }
+
+      #${BATCH_MODAL_ID}.organizing .batch-actions[data-state="ready"] .batch-selection-count {
+        display: none;
       }
 
       #${BATCH_MODAL_ID}.organizing .batch-secondary-actions.is-hidden {
@@ -6877,6 +6890,11 @@
         background: ${PRIMARY_BUTTON_BACKGROUND};
         border-color: #4f46e5;
         box-shadow: 0 10px 24px rgba(79, 70, 229, 0.28);
+      }
+
+      #${BATCH_MODAL_ID}.organizing .batch-actions[data-state="selecting"] .batch-mark-group,
+      #${BATCH_MODAL_ID}.organizing .batch-actions[data-state="ready"] .batch-start {
+        min-height: 46px;
       }
 
       #${BATCH_MODAL_ID}.organizing .footer-control.is-hidden {
@@ -7233,16 +7251,24 @@
         }
 
         #${BATCH_MODAL_ID}.organizing .batch-actions {
-          grid-template-columns: minmax(0, 1fr);
-          grid-template-areas:
-            "status"
-            "primary"
-            "secondary";
           row-gap: 10px;
           column-gap: 0;
           margin: 0 -14px;
-          min-height: 126px;
+          min-height: 0;
           padding: 14px 18px 18px;
+        }
+
+        #${BATCH_MODAL_ID}.organizing .batch-actions[data-state="selecting"] {
+          grid-template-columns: minmax(0, 1fr) max-content;
+          grid-template-areas:
+            "status secondary"
+            "primary primary";
+        }
+
+        #${BATCH_MODAL_ID}.organizing .batch-actions[data-state="browse"],
+        #${BATCH_MODAL_ID}.organizing .batch-actions[data-state="empty"],
+        #${BATCH_MODAL_ID}.organizing .batch-actions[data-state="ready"] {
+          grid-template-columns: minmax(0, 1fr);
         }
 
         #${BATCH_MODAL_ID}.organizing .batch-selection-count {
@@ -13690,7 +13716,7 @@
         targets.forEach((target) => target.classList.remove("is-attention"));
         void body.offsetWidth;
         targets.forEach((target) => target.classList.add("is-attention"));
-      }, scrollBehavior === "auto" ? 0 : 320);
+      }, scrollBehavior === "auto" ? 0 : 420);
     };
     topbarEl?.querySelector(".organize-jump-to-photos")?.addEventListener("click", scrollToBatchGallery);
     body.querySelector(".batch-selection-count")?.addEventListener("click", scrollToBatchGallery);
@@ -13940,18 +13966,19 @@
     const groupedPct = batchRemoteFiles.length
       ? Math.round((markedKeys.size / batchRemoteFiles.length) * 100)
       : 0;
-    const hasStatusLine = true;
-    const hasSecondaryAction = selectedCount > 0;
-    const hasPrimaryAction =
-      selectedCount > 0 || (groups.length > 0 && remainingCount === 0);
+    const footerState = selectedCount > 0
+      ? "selecting"
+      : remainingCount > 0
+        ? "browse"
+        : groups.length > 0
+          ? "ready"
+          : "empty";
 
     if (subtitleEl) {
       subtitleEl.textContent = "";
     }
     if (actions) {
-      actions.classList.toggle("has-status-line", hasStatusLine);
-      actions.classList.toggle("has-secondary-action", hasSecondaryAction);
-      actions.classList.toggle("has-primary-action", hasPrimaryAction);
+      actions.dataset.state = footerState;
     }
     if (jumpToPhotos) {
       jumpToPhotos.disabled = remainingCount === 0;
@@ -13976,7 +14003,7 @@
           ? "Select photos for one item ↑"
           : "Ready to generate";
       selectionCount.disabled = remainingCount === 0;
-      setBatchControlHidden(selectionCount, false);
+      setBatchControlHidden(selectionCount, footerState === "ready");
     }
     if (review) {
       review.classList.toggle("is-all-grouped", remainingCount === 0);
