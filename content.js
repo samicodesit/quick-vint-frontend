@@ -6301,6 +6301,28 @@
         background: #ffffff;
       }
 
+      @keyframes batchGalleryAttention {
+        35% {
+          border-color: #3b82f6;
+          box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.2);
+        }
+      }
+
+      @keyframes batchRemainingAttention {
+        35% {
+          color: #1d4ed8;
+          text-shadow: 0 0 14px rgba(37, 99, 235, 0.45);
+        }
+      }
+
+      #${BATCH_MODAL_ID}.organizing .batch-gallery-section.is-attention {
+        animation: batchGalleryAttention 760ms ease-out;
+      }
+
+      #${BATCH_MODAL_ID}.organizing .organize-jump-to-photos.is-attention {
+        animation: batchRemainingAttention 760ms ease-out;
+      }
+
       #${BATCH_MODAL_ID}.organizing .batch-section-head,
       #${BATCH_MODAL_ID}.organizing .batch-summary-head {
         display: flex;
@@ -6752,7 +6774,12 @@
         max-height: 32px;
         min-height: 24px;
         margin: 0;
+        padding: 0 12px;
+        border: 1px solid #c7d2fe;
+        border-radius: 10px;
+        background: #eef2ff;
         color: #64748b;
+        cursor: pointer;
         font-size: 12.5px;
         font-weight: 650;
         text-align: left;
@@ -6800,6 +6827,19 @@
           "status"
           "secondary";
         min-height: 94px;
+      }
+
+      #${BATCH_MODAL_ID}.organizing .batch-actions:not(.has-primary-action):not(.has-secondary-action) {
+        grid-template-areas: "status";
+        min-height: 0;
+      }
+
+      #${BATCH_MODAL_ID}.organizing .batch-actions:not(.has-primary-action) .batch-selection-count {
+        width: 100%;
+        min-height: 42px;
+        justify-content: center;
+        color: #4338ca;
+        font-weight: 800;
       }
 
       #${BATCH_MODAL_ID}.organizing .batch-secondary-actions.is-hidden {
@@ -13608,7 +13648,7 @@
         </section>
       </div>
       <div class="batch-actions">
-        <span class="batch-selection-count"></span>
+        <button type="button" class="batch-selection-count"></button>
         <div class="batch-secondary-actions is-hidden" hidden>
           <button type="button" class="footer-control batch-clear-selection is-hidden" hidden aria-hidden="true">Clear</button>
         </div>
@@ -13640,9 +13680,20 @@
     const scrollBehavior = window.matchMedia("(prefers-reduced-motion: reduce)").matches
       ? "auto"
       : "smooth";
-    topbarEl?.querySelector(".organize-jump-to-photos")?.addEventListener("click", () => {
+    const scrollToBatchGallery = () => {
       review?.scrollTo({ top: 0, behavior: scrollBehavior });
-    });
+      window.setTimeout(() => {
+        const targets = [
+          body.querySelector(".batch-gallery-section"),
+          topbarEl?.querySelector(".organize-jump-to-photos"),
+        ].filter(Boolean);
+        targets.forEach((target) => target.classList.remove("is-attention"));
+        void body.offsetWidth;
+        targets.forEach((target) => target.classList.add("is-attention"));
+      }, scrollBehavior === "auto" ? 0 : 320);
+    };
+    topbarEl?.querySelector(".organize-jump-to-photos")?.addEventListener("click", scrollToBatchGallery);
+    body.querySelector(".batch-selection-count")?.addEventListener("click", scrollToBatchGallery);
     topbarEl?.querySelector(".organize-jump-to-groups")?.addEventListener("click", () => {
       const groupsSection = body.querySelector(".batch-groups-section");
       if (!review || !groupsSection) return;
@@ -13918,12 +13969,13 @@
     }
     if (selectionCount) {
       selectionCount.textContent = selectedCount
-        ? `${selectedCount} selected`
+        ? `${selectedCount} selected ↑`
         : !batchRemoteFiles.length
           ? "No photos left in this batch"
           : remainingCount
-          ? "Select photos for one item"
+          ? "Select photos for one item ↑"
           : "Ready to generate";
+      selectionCount.disabled = remainingCount === 0;
       setBatchControlHidden(selectionCount, false);
     }
     if (review) {
