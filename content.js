@@ -992,6 +992,19 @@
     },
   };
   const WAND_ICON_SVG = `<svg fill="#ffffff" viewBox="0 0 512 512" version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink"> <path d="M454.321,219.727l-38.766-51.947l20.815-61.385c2.046-6.032,0.489-12.704-4.015-17.208 c-4.504-4.504-11.175-6.061-17.208-4.015l-61.384,20.815l-51.951-38.766c-5.103-3.809-11.929-4.392-17.605-1.499 c-5.676,2.893-9.217,8.755-9.136,15.125l0.829,64.815l-52.923,37.426c-5.201,3.678-7.863,9.989-6.867,16.282 c0.996,6.291,5.479,11.471,11.561,13.363l43.844,13.63L14.443,483.432c-6.535,6.534-6.535,17.131,0,23.666s17.131,6.535,23.666,0 l257.073-257.072l13.629,43.843c2.172,6.986,8.638,11.768,15.984,11.768c5.375,0,10.494-2.595,13.66-7.072l37.426-52.923 l64.815,0.828c6.322,0.051,12.233-3.462,15.125-9.136S458.131,224.833,454.321,219.727z"></path> <polygon points="173.373,67.274 160.014,42.848 146.656,67.274 122.23,80.632 146.656,93.992 160.014,118.417 173.373,93.992 197.799,80.632 "></polygon> <polygon points="362.946,384.489 352.14,364.731 341.335,384.489 321.577,395.294 341.335,406.1 352.14,425.856 362.946,406.1 382.703,395.294 "></polygon> <polygon points="378.142,19.757 367.337,0 356.531,19.757 336.774,30.563 356.531,41.369 367.337,61.126 378.142,41.369 397.9,30.563 "></polygon> <polygon points="490.635,142.513 484.167,130.689 477.701,142.513 465.876,148.979 477.701,155.446 484.167,167.27 490.635,155.446 502.458,148.979 "></polygon> <polygon points="492.626,294.117 465.876,301.951 439.128,294.117 446.962,320.865 439.128,347.615 465.876,339.781 492.626,347.615 484.791,320.865 "></polygon> </svg>`;
+  /*!
+   * LDRS Mirage loader, adapted from https://github.com/GriffinJohnston/ldrs
+   * Copyright (c) 2022 Griffin Johnston. MIT License.
+   * Permission is hereby granted, free of charge, to any person obtaining a copy
+   * of this software and associated documentation files (the "Software"), to deal
+   * in the Software without restriction, including without limitation the rights
+   * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+   * copies of the Software, subject to inclusion of this notice. The Software is
+   * provided "AS IS", without warranty of any kind.
+   */
+  function mirageLoaderSvg(filterId) {
+    return `<span class="quickvint-mirage" aria-hidden="true"><svg viewBox="0 0 30 6.9" role="presentation" focusable="false" style="filter:url(#${filterId})" xmlns="http://www.w3.org/2000/svg"><circle class="dot" cx="0" cy="3.45" r="3.45"/><circle class="dot" cx="0" cy="3.45" r="3.45"/><circle class="dot" cx="0" cy="3.45" r="3.45"/><circle class="dot" cx="0" cy="3.45" r="3.45"/><circle class="dot" cx="0" cy="3.45" r="3.45"/><defs><filter id="${filterId}"><feGaussianBlur in="SourceGraphic" stdDeviation="1.5" result="blur"/><feColorMatrix in="blur" mode="matrix" values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 18 -7" result="ooze"/><feBlend in="SourceGraphic" in2="ooze"/></filter></defs></svg></span>`;
+  }
   const PHONE_ICON_SVG = `<svg fill="#ffffff" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M17 1.01L7 1c-1.1 0-2 .9-2 2v18c0 1.1.9 2 2 2h10c1.1 0 2-.9 2-2V3c0-1.1-.9-1.99-2-1.99zM17 19H7V5h10v14z"/></svg>`;
   const BATCH_ICON_SVG = `<svg data-icon="upload" fill="none" viewBox="0 0 24 24" stroke="#ffffff" stroke-width="2" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5m-13.5-9L12 3m0 0 4.5 4.5M12 3v13.5"/></svg>`;
   const BATCH_ARROW_UP_SVG = `<svg class="batch-direction-icon" aria-hidden="true" focusable="false" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.25" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" d="M4.5 10.5 12 3m0 0 7.5 7.5M12 3v18"/></svg>`;
@@ -1039,7 +1052,7 @@
   let outputShapeToggleBtn = null;
   let signInBtn = null;
   let isBusy = false;
-  let generateBusyLabel = "Generating...";
+  let generateBusyLabel = "Generating";
   let isAuthenticated = null;
   let pollInterval = null;
   let downloadedFiles = new Set();
@@ -3073,8 +3086,8 @@
     }
   }
 
-  function setGenerateBusyLabel(label = "Generating...") {
-    generateBusyLabel = label || "Generating...";
+  function setGenerateBusyLabel(label = "Generating") {
+    generateBusyLabel = label || "Generating";
     if (isBusy) updateButtonUI();
   }
 
@@ -3947,6 +3960,10 @@
         position: relative;
       }
 
+      #${BTN_ID} {
+        min-width: 147px;
+      }
+
       #${PHONE_BTN_ID} .quickvint-phone-new-badge {
         position: absolute;
         top: -10px;
@@ -4100,7 +4117,6 @@
         height: 100%;
       }
 
-      #${BTN_ID}.is-loading::before,
       #${PHONE_BTN_ID}.is-loading::before {
         content: "";
         width: 14px;
@@ -4111,9 +4127,84 @@
         animation: quickvintSpin 760ms linear infinite;
       }
 
-      #${BTN_ID}.is-loading .icon,
       #${PHONE_BTN_ID}.is-loading .icon {
         display: none !important;
+      }
+
+      .quickvint-generation-action .quickvint-mirage {
+        display: none;
+        align-items: center;
+        justify-content: center;
+        width: 30px;
+        height: 17px;
+        flex: 0 0 30px;
+        color: #ffffff;
+      }
+
+      #${MODAL_ID} .quickvint-generation-action,
+      #${BATCH_MODAL_ID} .quickvint-generation-action {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 7px;
+      }
+
+      .quickvint-generation-action .quickvint-mirage svg {
+        display: block;
+        width: 30px;
+        height: 6.9px;
+        overflow: visible;
+      }
+
+      .quickvint-generation-action .quickvint-mirage .dot {
+        fill: currentColor;
+        animation: quickvintMirage 1.65s linear infinite both;
+        transform-box: fill-box;
+        transform-origin: center;
+      }
+
+      .quickvint-generation-action .quickvint-mirage .dot:nth-child(2) {
+        animation-delay: -0.33s;
+      }
+
+      .quickvint-generation-action .quickvint-mirage .dot:nth-child(3) {
+        animation-delay: -0.66s;
+      }
+
+      .quickvint-generation-action .quickvint-mirage .dot:nth-child(4) {
+        animation-delay: -0.99s;
+      }
+
+      .quickvint-generation-action .quickvint-mirage .dot:nth-child(5) {
+        animation-delay: -1.32s;
+      }
+
+      .quickvint-generation-action.is-loading .quickvint-mirage {
+        display: inline-flex;
+      }
+
+      .quickvint-generation-action.is-loading .icon {
+        display: none !important;
+      }
+
+      @keyframes quickvintMirage {
+        0%, 100% {
+          transform: translateX(0) scale(0);
+        }
+
+        50% {
+          transform: translateX(15px) scale(1);
+        }
+
+        99.999% {
+          transform: translateX(30px) scale(0);
+        }
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        .quickvint-generation-action .quickvint-mirage .dot {
+          animation-play-state: paused;
+        }
       }
 
       @keyframes quickvintSpin {
@@ -9269,8 +9360,10 @@
   function createButton() {
     const btn = document.createElement("button");
     btn.id = BTN_ID;
+    btn.className = "quickvint-generation-action";
     btn.innerHTML = `
         <span class="icon">${WAND_ICON_SVG}</span>
+        ${mirageLoaderSvg("quickvint-mirage-main")}
         <span class="label">Generate</span>
     `;
     btn.addEventListener("click", onGenerateClick);
@@ -10682,7 +10775,7 @@
     } else {
       generateBtn.classList.remove("is-loading");
       generateBtn.disabled = false;
-      generateBusyLabel = "Generating...";
+      generateBusyLabel = "Generating";
       icon.style.display = "";
       label.textContent = "Generate";
       generateBtn.style.background = PRIMARY_BUTTON_BACKGROUND;
@@ -11891,8 +11984,9 @@
         <div class="status waiting">Waiting for photos from your phone...</div>
         <div class="modal-buttons">
           <button class="close-btn">Done</button>
-          <button class="generate-btn">
-            <span class="icon" style="width: 14px; height: 14px; display: inline-block; margin-right: 6px;">${WAND_ICON_SVG}</span>
+          <button class="generate-btn quickvint-generation-action">
+            <span class="icon" style="width: 14px; height: 14px; display: inline-block;">${WAND_ICON_SVG}</span>
+            ${mirageLoaderSvg("quickvint-mirage-phone")}
             <span class="label">Done + Generate</span>
           </button>
         </div>
@@ -11983,7 +12077,7 @@
       return;
     }
 
-    const restoreGenerateButton = setActionButtonLoading(button, "Generating...");
+    const restoreGenerateButton = setActionButtonLoading(button, "Generating");
     isPhoneUploadGenerateInFlight = true;
 
     try {
@@ -13681,7 +13775,7 @@
           <button type="button" class="footer-control batch-clear-selection is-hidden" hidden aria-hidden="true">Clear</button>
         </div>
         <button type="button" class="primary footer-control batch-mark-group is-hidden" disabled hidden aria-hidden="true">Group photos</button>
-        <button type="button" class="primary footer-control batch-start is-hidden" hidden aria-hidden="true"></button>
+        <button type="button" class="primary footer-control batch-start quickvint-generation-action is-hidden" hidden aria-hidden="true">${mirageLoaderSvg("quickvint-mirage-batch")}<span class="label"></span></button>
       </div>
     `;
 
@@ -14098,7 +14192,8 @@
         : null;
       const effectiveCount =
         available === null ? groups.length : Math.min(groups.length, available);
-      startButton.textContent = batchCapacityLoading
+      const startLabel = startButton.querySelector(".label");
+      if (startLabel) startLabel.textContent = batchCapacityLoading
         ? "Checking availability..."
         : available !== null && groups.length > 0 && available < groups.length && available > 0
           ? `Generate first ${available} of ${groups.length}`
@@ -14489,7 +14584,7 @@
       return;
     }
 
-    const restoreStartButton = setActionButtonLoading(startButton, "Starting...");
+    const restoreStartButton = setActionButtonLoading(startButton, "Starting");
 
     let capacity;
     try {
@@ -15050,7 +15145,7 @@
       isBusy = true;
       generateBusyLabel = hasManualCapturedFilesMissingStorageUrls()
         ? "Preparing..."
-        : "Generating...";
+        : "Generating";
     }
     removeDescriptionApplyPrompt();
     if (activeGenerationOutputEditCleanup) {
@@ -15061,7 +15156,7 @@
     try {
       await waitForManualStorageUrlsForGenerate();
       if (manageButtonState) {
-        setGenerateBusyLabel("Generating...");
+        setGenerateBusyLabel("Generating");
       }
       imageEntries = getUploadedImageEntries();
       imageUrls = imageEntries.map((entry) => entry.url);

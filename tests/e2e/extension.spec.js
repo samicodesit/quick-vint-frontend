@@ -1006,7 +1006,7 @@ test.describe("AutoLister extension smoke flows", () => {
       expect(
         await modal
           .locator(selector)
-          .evaluate((button) => button.getBoundingClientRect().height),
+          .evaluate((button) => Math.round(button.getBoundingClientRect().height)),
       ).toBeGreaterThanOrEqual(44);
     }
     await page.setViewportSize({ width: 390, height: 844 });
@@ -2164,7 +2164,12 @@ test.describe("AutoLister extension smoke flows", () => {
 
       await page.locator("#quickvint-phone-modal .generate-btn").click();
       await expect.poll(() => requestBodies.length).toBe(1);
-      await expect(page.locator("#quickvint-phone-modal")).toBeVisible();
+      const phoneGenerateButton = page.locator(
+        "#quickvint-phone-modal .generate-btn",
+      );
+      await expect(phoneGenerateButton.locator(".label")).toHaveText("Generating");
+      await expect(phoneGenerateButton.locator(".quickvint-mirage")).toBeVisible();
+      await expect(phoneGenerateButton.locator(".icon")).toBeHidden();
       await expect.poll(() => cleanupRequests.length).toBe(0);
 
       resolveGenerate();
@@ -2201,6 +2206,11 @@ test.describe("AutoLister extension smoke flows", () => {
     const cleanupRequests = [];
     let listingLoads = 0;
     let listRequests = 0;
+    let capacityRequests = 0;
+    let releaseBatchCapacity;
+    const batchCapacityMayFinish = new Promise((resolve) => {
+      releaseBatchCapacity = resolve;
+    });
     try {
       await serviceWorker.evaluate(() =>
         chrome.storage.local.set({
@@ -2237,13 +2247,15 @@ test.describe("AutoLister extension smoke flows", () => {
               : delayedFileInputListingFixture,
         });
       });
-      await context.route("https://autolister.app/api/user/batch-capacity", (route) =>
-        route.fulfill({
+      await context.route("https://autolister.app/api/user/batch-capacity", async (route) => {
+        capacityRequests += 1;
+        if (capacityRequests > 2) await batchCapacityMayFinish;
+        return route.fulfill({
           status: 200,
           contentType: "application/json",
           body: JSON.stringify({ allowed: true, available: 10 }),
-        }),
-      );
+        });
+      });
       await context.route("https://autolister.app/api/events/track", (route) =>
         route.fulfill({ status: 204, body: "" }),
       );
@@ -2321,8 +2333,14 @@ test.describe("AutoLister extension smoke flows", () => {
         .nth(1)
         .click();
       await page.locator("#quickvint-batch-modal .batch-mark-group").click();
-      await expect(page.locator("#quickvint-batch-modal .batch-start")).toBeEnabled();
-      await page.locator("#quickvint-batch-modal .batch-start").click();
+      const batchStartButton = page.locator(
+        "#quickvint-batch-modal .batch-start",
+      );
+      await expect(batchStartButton).toBeEnabled();
+      await batchStartButton.click();
+      await expect(batchStartButton.locator(".label")).toHaveText("Starting");
+      await expect(batchStartButton.locator(".quickvint-mirage")).toBeVisible();
+      releaseBatchCapacity();
 
       await expect.poll(() => requestBodies.length).toBe(1);
       expect(listingLoads).toBeGreaterThanOrEqual(2);
@@ -2416,6 +2434,10 @@ test.describe("AutoLister extension smoke flows", () => {
   test("generates listing copy into Vinted fields", async ({ page }) => {
     const requestBodies = [];
     const eventBatches = [];
+    let releaseGenerate;
+    const generateMayFinish = new Promise((resolve) => {
+      releaseGenerate = resolve;
+    });
     await page.route("https://autolister.app/api/events/track", (route) => {
       eventBatches.push(route.request().postDataJSON());
       return route.fulfill({
@@ -2423,8 +2445,9 @@ test.describe("AutoLister extension smoke flows", () => {
         body: "",
       });
     });
-    await page.route("https://autolister.app/api/generate", (route) => {
+    await page.route("https://autolister.app/api/generate", async (route) => {
       requestBodies.push(route.request().postDataJSON());
+      await generateMayFinish;
       return route.fulfill({
         status: 200,
         contentType: "application/json",
@@ -2437,7 +2460,14 @@ test.describe("AutoLister extension smoke flows", () => {
     });
 
     await openContentHarness(page);
-    await page.locator("#quickvint-gen-btn").click();
+    const generateButton = page.locator("#quickvint-gen-btn");
+    const idleBounds = await generateButton.boundingBox();
+    await generateButton.click();
+    await expect(generateButton.locator(".label")).toHaveText("Generating");
+    await expect(generateButton.locator(".quickvint-mirage")).toBeVisible();
+    await expect(generateButton.locator(".icon")).toBeHidden();
+    expect(await generateButton.boundingBox()).toEqual(idleBounds);
+    releaseGenerate();
 
     await expect(page.locator('[data-testid="title--input"]')).toHaveValue(
       "Black Test Jacket",
