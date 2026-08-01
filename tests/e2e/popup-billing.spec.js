@@ -258,6 +258,78 @@ test.describe("popup billing portal", () => {
     await expect(page.locator("#monthlyProgressBar").locator("..")).toBeHidden();
   });
 
+  for (const { tier, dailyLimit, monthlyLimit } of [
+    { tier: "starter", dailyLimit: 10, monthlyLimit: 75 },
+    { tier: "pro", dailyLimit: 25, monthlyLimit: 250 },
+    { tier: "business", dailyLimit: 60, monthlyLimit: 600 },
+  ]) {
+    test(`shows ${tier} usage bars as quota consumed`, async ({ page }) => {
+      await page.route("https://autolister.app/api/events/track", (route) =>
+        route.fulfill({ status: 204, body: "" }),
+      );
+
+      await installPopupHarness(page, {
+        initialStorage: {
+          supabaseSession: createSession(),
+          userProfile: {
+            ...createPaidProfile(),
+            subscription_tier: tier,
+          },
+          userUsageCount: {
+            daily: dailyLimit / 2,
+            monthly: monthlyLimit / 5,
+            tier,
+            limits: { daily: dailyLimit, monthly: monthlyLimit },
+            packCredits: 0,
+          },
+        },
+      });
+
+      await expect(page.locator("#dailyCallsUsed")).toHaveText(
+        `${dailyLimit / 2} / ${dailyLimit}`,
+      );
+      await expect(page.locator("#monthlyCallsUsed")).toHaveText(
+        `${monthlyLimit / 5} / ${monthlyLimit}`,
+      );
+      await expect(page.locator("#dailyProgressBar")).toHaveAttribute(
+        "style",
+        /width: 50%/,
+      );
+      await expect(page.locator("#monthlyProgressBar")).toHaveAttribute(
+        "style",
+        /width: 20%/,
+      );
+    });
+  }
+
+  test("shows unlimited daily capacity without a meaningless bar", async ({ page }) => {
+    await page.route("https://autolister.app/api/events/track", (route) =>
+      route.fulfill({ status: 204, body: "" }),
+    );
+
+    await installPopupHarness(page, {
+      initialStorage: {
+        supabaseSession: createSession(),
+        userProfile: createPaidProfile(),
+        userUsageCount: {
+          daily: 12,
+          monthly: 15,
+          tier: "starter",
+          limits: { daily: null, monthly: 75 },
+          packCredits: 0,
+        },
+      },
+    });
+
+    await expect(page.locator("#dailyCallsUsed")).toHaveText("Unlimited");
+    await expect(page.locator("#dailyProgressBar").locator("..")).toBeHidden();
+    await expect(page.locator("#monthlyCallsUsed")).toHaveText("15 / 75");
+    await expect(page.locator("#monthlyProgressBar")).toHaveAttribute(
+      "style",
+      /width: 20%/,
+    );
+  });
+
   test("opens the billing portal from the stored extension session, not popup Supabase memory", async ({
     page,
   }) => {
