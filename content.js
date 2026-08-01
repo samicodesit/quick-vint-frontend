@@ -6215,12 +6215,11 @@
 
       #${BATCH_MODAL_ID}.organizing .organize-progress {
         position: relative;
-        flex: 1 0 100%;
         width: 100%;
-        height: 5px;
-        margin: 10px 0 0;
+        height: 8px;
+        margin: 0;
         border-radius: 999px;
-        background: #e2e8f0;
+        background: #e5e7eb;
         overflow: hidden;
       }
 
@@ -6235,22 +6234,18 @@
 
       #${BATCH_MODAL_ID}.organizing .organize-status-row {
         flex: 1 0 100%;
-        display: flex;
-        align-items: center;
-        gap: 10px;
+        display: grid;
+        gap: 8px;
         width: 100%;
-        margin: 10px 0 0;
-      }
-
-      #${BATCH_MODAL_ID}.organizing .organize-status-row .organize-progress {
-        flex: 1 1 auto;
-        margin: 0;
+        margin: 12px 0 0;
       }
 
       #${BATCH_MODAL_ID}.organizing .organize-nav {
         display: flex;
         align-items: center;
-        gap: 12px;
+        justify-content: space-between;
+        gap: 16px;
+        width: 100%;
       }
 
       #${BATCH_MODAL_ID}.organizing .organize-jump-to-photos,
@@ -6261,20 +6256,17 @@
         border: 0;
         border-radius: 0;
         background: transparent;
-        color: #9a3412;
+        color: #2563eb;
         cursor: pointer;
-        font-size: 12px;
-        font-weight: 850;
+        font-size: 13px;
+        font-weight: 750;
         line-height: 1.2;
-        text-decoration: underline;
-        text-decoration-thickness: 1px;
-        text-underline-offset: 3px;
         white-space: nowrap;
       }
 
       #${BATCH_MODAL_ID}.organizing :is(.organize-jump-to-photos, .organize-jump-to-groups):hover:not(:disabled),
       #${BATCH_MODAL_ID}.organizing :is(.organize-jump-to-photos, .organize-jump-to-groups):focus-visible {
-        color: #c2410c;
+        color: #1d4ed8;
       }
 
       #${BATCH_MODAL_ID}.organizing .organize-jump-to-photos:disabled {
@@ -6285,11 +6277,21 @@
 
       #${BATCH_MODAL_ID}.organizing .organize-progress-done {
         left: 0;
-        background: #22c55e;
+        background: #2563eb;
       }
 
-      #${BATCH_MODAL_ID}.organizing .organize-progress-active {
-        background: #fb923c;
+      #${BATCH_MODAL_ID}.organizing .organize-items-count {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 20px;
+        height: 20px;
+        margin-left: 4px;
+        border-radius: 50%;
+        background: #dbeafe;
+        color: #1d4ed8;
+        font-size: 11px;
+        font-weight: 850;
       }
 
       #${BATCH_MODAL_ID}.organizing .batch-gallery-section {
@@ -6506,6 +6508,26 @@
       #${BATCH_MODAL_ID}.organizing .batch-summary-head {
         align-items: center;
         margin: 0 0 12px;
+      }
+
+      #${BATCH_MODAL_ID}.organizing .batch-summary-title-row {
+        display: flex;
+        align-items: center;
+        gap: 7px;
+      }
+
+      #${BATCH_MODAL_ID}.organizing .batch-summary-title-row .batch-summary-count {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-width: 22px;
+        height: 22px;
+        padding: 0 5px;
+        border-radius: 50%;
+        background: #dbeafe;
+        color: #1d4ed8;
+        font-size: 11px;
+        font-weight: 850;
       }
 
       #${BATCH_MODAL_ID}.organizing .batch-summary-actions {
@@ -9064,19 +9086,8 @@
           max-height: none;
         }
 
-        #${BATCH_MODAL_ID}.organizing .organize-nav {
-          width: 100%;
-          gap: 16px;
-          justify-content: flex-end;
-        }
-
         #${BATCH_MODAL_ID}.organizing .organize-status-row {
-          flex-wrap: wrap;
-          gap: 0;
-        }
-
-        #${BATCH_MODAL_ID}.organizing .organize-status-row .organize-progress {
-          flex: 1 0 100%;
+          gap: 6px;
         }
 
         #${BATCH_MODAL_ID}.organizing .organize-jump-to-photos,
@@ -13554,13 +13565,12 @@
         "beforeend",
         `
           <div class="organize-status-row" aria-live="polite">
-            <div class="organize-progress" aria-hidden="true">
-              <span class="organize-progress-done"></span>
-              <span class="organize-progress-active"></span>
-            </div>
             <div class="organize-nav">
               <button type="button" class="organize-jump-to-photos" aria-controls="quickvint-batch-gallery-section"></button>
-              <button type="button" class="organize-jump-to-groups" aria-controls="quickvint-batch-groups-section" hidden></button>
+              <button type="button" class="organize-jump-to-groups" aria-controls="quickvint-batch-groups-section" hidden>Items <span class="organize-items-count"></span> ↓</button>
+            </div>
+            <div class="organize-progress" aria-hidden="true">
+              <span class="organize-progress-done"></span>
             </div>
           </div>
         `,
@@ -13584,9 +13594,11 @@
         </section>
         <section class="batch-groups-section" id="quickvint-batch-groups-section" aria-labelledby="quickvint-batch-groups-title">
           <div class="batch-summary-head">
-            <h3 class="batch-section-title" id="quickvint-batch-groups-title">Grouped items</h3>
-            <div class="batch-summary-actions">
+            <div class="batch-summary-title-row">
+              <h3 class="batch-section-title" id="quickvint-batch-groups-title">Items</h3>
               <span class="batch-summary-count" aria-live="polite"></span>
+            </div>
+            <div class="batch-summary-actions">
               <button type="button" class="batch-summary-reset batch-reset-groups is-hidden" hidden aria-hidden="true">Reset</button>
             </div>
           </div>
@@ -13853,7 +13865,6 @@
     const capacityNote = document.querySelector(`#${BATCH_MODAL_ID} .batch-capacity-note`);
     const availability = document.querySelector(`#${BATCH_MODAL_ID} .batch-availability`);
     const progressDone = document.querySelector(`#${BATCH_MODAL_ID} .organize-progress-done`);
-    const progressActive = document.querySelector(`#${BATCH_MODAL_ID} .organize-progress-active`);
     const jumpToPhotos = document.querySelector(`#${BATCH_MODAL_ID} .organize-jump-to-photos`);
     const jumpToGroups = document.querySelector(`#${BATCH_MODAL_ID} .organize-jump-to-groups`);
     const groups = getBatchGroups();
@@ -13878,9 +13889,6 @@
     const groupedPct = batchRemoteFiles.length
       ? Math.round((markedKeys.size / batchRemoteFiles.length) * 100)
       : 0;
-    const remainingPct = batchRemoteFiles.length
-      ? Math.max(0, 100 - groupedPct)
-      : 0;
     const hasStatusLine = true;
     const hasSecondaryAction = selectedCount > 0;
     const hasPrimaryAction =
@@ -13898,18 +13906,15 @@
       jumpToPhotos.disabled = remainingCount === 0;
       jumpToPhotos.textContent = remainingCount === 0
         ? "All photos grouped"
-        : `${remainingCount} photo${remainingCount === 1 ? "" : "s"} left ↑`;
+        : `${remainingCount} photo${remainingCount === 1 ? "" : "s"} remaining ↑`;
     }
     if (jumpToGroups) {
       jumpToGroups.hidden = groups.length === 0;
-      jumpToGroups.textContent = `${groups.length} grouped item${groups.length === 1 ? "" : "s"} ↓`;
+      const itemsCount = jumpToGroups.querySelector(".organize-items-count");
+      if (itemsCount) itemsCount.textContent = String(groups.length);
     }
     if (progressDone) {
       progressDone.style.width = `${groupedPct}%`;
-    }
-    if (progressActive) {
-      progressActive.style.left = `${groupedPct}%`;
-      progressActive.style.width = `${remainingPct}%`;
     }
     if (selectionCount) {
       selectionCount.textContent = selectedCount
@@ -13941,7 +13946,7 @@
       );
     }
     if (summaryCount) {
-      summaryCount.textContent = `${groups.length} item${groups.length === 1 ? "" : "s"}`;
+      summaryCount.textContent = String(groups.length);
     }
     if (groupsEmpty) {
       groupsEmpty.hidden = groups.length > 0;
