@@ -2617,7 +2617,7 @@ test.describe("AutoLister extension smoke flows", () => {
 
     await expect(modal.locator(".batch-gallery-sticky")).toHaveCount(0);
     await expect(gallerySection.getByRole("heading", { name: "Photos to group" })).toBeVisible();
-    await expect(groupsSection.getByRole("heading", { name: "Grouped items" })).toBeVisible();
+    await expect(groupsSection.getByRole("heading", { name: "Items" })).toBeVisible();
     await expect(galleryGrid.locator(".batch-photo-wrap:not([hidden])")).toHaveCount(15);
     await expect(groupsSection.locator(".batch-groups-empty")).toHaveText(
       "No items grouped yet.",
@@ -2657,12 +2657,17 @@ test.describe("AutoLister extension smoke flows", () => {
     await expect(galleryGrid.locator(".batch-photo-wrap:not([hidden])")).toHaveCount(9);
     await expect(modal.locator(".batch-item-card")).toHaveCount(3);
     await expect(groupsSection.locator(".batch-groups-empty")).toBeHidden();
-    await expect(jumpToPhotos).toHaveText("9 photos left ↑");
+    await expect(jumpToPhotos.locator(".organize-photos-label")).toHaveText(
+      "9 photos remaining",
+    );
+    await expect(jumpToPhotos.locator(".batch-direction-icon")).toBeVisible();
     await expect(jumpToPhotos).toHaveAttribute(
       "aria-controls",
       "quickvint-batch-gallery-section",
     );
-    await expect(jumpToGroups).toHaveText("3 grouped items ↓");
+    await expect(jumpToGroups).toContainText("Items");
+    await expect(jumpToGroups.locator(".organize-items-count")).toHaveText("3");
+    await expect(jumpToGroups.locator(".batch-direction-icon")).toBeVisible();
     await expect(jumpToGroups).toHaveAttribute(
       "aria-controls",
       "quickvint-batch-groups-section",
