@@ -11165,6 +11165,7 @@
   }
 
   function startGenerationOutputEditTracking({
+    generationAttemptId,
     mode,
     photoCount,
     titleLanguageCode,
@@ -11262,6 +11263,7 @@
         descriptionLanguageCode,
         descriptionApplyChoice,
         outputTrackingId,
+        generationAttemptId,
         editSequence: summaryCount,
         editSnapshotReason: reason,
         editDelayMs: now - startedAt,
@@ -15482,6 +15484,7 @@
       }
 
       startGenerationOutputEditTracking({
+        generationAttemptId,
         mode,
         photoCount: imageUrls.length,
         titleLanguageCode,
