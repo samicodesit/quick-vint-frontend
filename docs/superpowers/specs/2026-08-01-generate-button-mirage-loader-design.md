@@ -2,14 +2,17 @@
 
 ## Goal
 
-Replace the Generate button's conventional busy spinner with the approved
-Mirage animation while a listing is being generated.
+Replace conventional busy treatment on every action that starts generation
+with the approved Mirage animation.
 
 ## Behavior
 
-- Idle state remains unchanged: wand icon and `Generate` label.
+- Apply Mirage to the main `Generate`, phone-modal `Done + Generate`, and batch
+  `Generate N listings` actions.
+- Idle labels and wand icons remain unchanged.
 - Active generation replaces the wand with a white Mirage animation and uses
-  the label `Generating` without an ellipsis.
+  the label `Generating` without an ellipsis. Batch preflight uses `Starting`
+  without an ellipsis before the modal enters its generating state.
 - Existing non-generation labels, success state, disabled behavior, button
   dimensions, and phone-button loading state remain unchanged.
 - The animation stays on the left so the label does not shift.
@@ -21,13 +24,12 @@ the existing content-script button markup and stylesheet, with an attribution
 comment. Keep it local: Chrome extension code must not import executable code
 from a CDN, and this visual does not justify a new runtime dependency.
 
-The existing `is-loading` state will reveal the Mirage element for generation
-and hide the wand. The phone button will retain its current spinner. Reduced
-motion will render a static Mirage frame.
+The existing `is-loading` state will reveal the Mirage element on generation
+actions and hide their wand icon. The ordinary Phone upload button will retain
+its current spinner. Reduced motion will render a static Mirage frame.
 
 ## Verification
 
-Browser coverage will hold the generation request open and verify that the
-button shows `Generating`, displays Mirage instead of the wand, and preserves
-its geometry. The same coverage will verify that the idle state restores the
-wand and `Generate` label after completion.
+Browser coverage will hold generation requests open and verify that each
+generation action shows Mirage with an ellipsis-free label. The same coverage
+will verify that idle states retain their existing labels and icons.
