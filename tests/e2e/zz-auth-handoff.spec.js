@@ -15,18 +15,12 @@ const apiPath = apiPathCandidates.find((candidate) =>
   fs.existsSync(path.join(candidate, "src/pages/auth/callback.html")),
 );
 
-if (!apiPath) {
-  throw new Error(`API checkout not found. Checked: ${apiPathCandidates.join(", ")}`);
-}
-
-const callbackHtml = fs.readFileSync(
-  path.join(apiPath, "src/pages/auth/callback.html"),
-  "utf8",
-);
-const callbackJs = fs.readFileSync(
-  path.join(apiPath, "public/auth-callback.js"),
-  "utf8",
-);
+const callbackHtml = apiPath
+  ? fs.readFileSync(path.join(apiPath, "src/pages/auth/callback.html"), "utf8")
+  : "";
+const callbackJs = apiPath
+  ? fs.readFileSync(path.join(apiPath, "public/auth-callback.js"), "utf8")
+  : "";
 
 function fakeAccessToken(email = "seller@example.com") {
   const header = Buffer.from(
@@ -114,6 +108,8 @@ async function installAuthRoutes(context, events, options = {}) {
 }
 
 test.describe("HTTPS auth handoff", () => {
+  test.skip(!apiPath, "API checkout is not available");
+
   test("hands Supabase magic-link tokens from the real web callback page to the loaded extension", async () => {
     const { context, serviceWorker } = await loadExtension();
     const events = [];
