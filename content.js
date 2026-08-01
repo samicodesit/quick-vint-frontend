@@ -8878,6 +8878,52 @@
         margin-top: 2px;
       }
 
+      @media (min-width: 681px) {
+        #${BATCH_MODAL_ID} .batch-content,
+        #${BATCH_MODAL_ID}.organizing .batch-content,
+        #${BATCH_MODAL_ID}.generating .batch-content {
+          width: min(620px, calc(100vw - 32px));
+          height: min(780px, calc(100dvh - 32px));
+          min-height: min(680px, calc(100dvh - 32px));
+          max-height: min(780px, calc(100dvh - 32px));
+        }
+
+        #${BATCH_MODAL_ID} .batch-body,
+        #${BATCH_MODAL_ID}.organizing .batch-body {
+          flex: 1 1 auto;
+        }
+
+        #${BATCH_MODAL_ID}.organizing .batch-review {
+          flex: 1 1 auto;
+          max-height: none;
+        }
+
+        #${BATCH_MODAL_ID} .batch-source-grid {
+          flex: 1 1 auto;
+          min-height: 0;
+          align-items: stretch;
+        }
+
+        #${BATCH_MODAL_ID} .batch-source-panel {
+          height: 100%;
+        }
+
+        #${BATCH_MODAL_ID} .batch-source-phone-content {
+          min-height: calc(100% - 24px);
+          justify-content: center;
+        }
+
+        #${BATCH_MODAL_ID} .batch-source-computer {
+          display: flex;
+          flex-direction: column;
+        }
+
+        #${BATCH_MODAL_ID} .batch-computer-dropzone,
+        #${BATCH_MODAL_ID} .batch-computer-progress {
+          flex: 1 1 auto;
+        }
+      }
+
       @media (max-width: 680px) {
         .quickvint-tools {
           width: 100%;
@@ -9041,16 +9087,48 @@
         }
 
         #${BATCH_MODAL_ID} .batch-content {
+          height: 100%;
+          min-height: 100%;
           border-radius: 18px 18px 0 0;
         }
 
+        #${BATCH_MODAL_ID}.organizing .batch-content,
+        #${BATCH_MODAL_ID}.generating .batch-content {
+          height: 100%;
+          min-height: 100%;
+          max-height: 100%;
+        }
+
+        #${BATCH_MODAL_ID} .batch-body,
+        #${BATCH_MODAL_ID}.organizing .batch-body {
+          flex: 1 1 auto;
+        }
+
+        #${BATCH_MODAL_ID}.organizing .batch-review {
+          flex: 1 1 auto;
+          max-height: none;
+        }
+
         #${BATCH_MODAL_ID} .batch-actions {
+          margin-right: -14px;
+          margin-left: -14px;
           padding-bottom: max(12px, env(safe-area-inset-bottom));
         }
 
+        #${BATCH_MODAL_ID}.organizing .batch-actions {
+          padding-bottom: max(18px, env(safe-area-inset-bottom));
+        }
+
+        #${BATCH_MODAL_ID}.generating .batch-actions {
+          padding-bottom: max(20px, env(safe-area-inset-bottom));
+        }
+
         #${BATCH_MODAL_ID} .batch-source-grid {
+          flex: 1 1 auto;
+          min-height: 0;
           grid-template-columns: 1fr;
           gap: 9px;
+          align-content: start;
           overflow-y: auto;
         }
 

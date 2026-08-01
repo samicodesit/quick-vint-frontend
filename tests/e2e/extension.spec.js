@@ -394,13 +394,14 @@ async function expectBatchModalLayoutStable(page, modal) {
       const actions = root.querySelector(".batch-actions");
       const viewportWidth = window.innerWidth;
       const viewportHeight = window.innerHeight;
+      const viewportInset = viewportWidth <= 680 ? 0 : 14;
       const contentRect = content.getBoundingClientRect();
       const galleryRect = gallery.getBoundingClientRect();
       const actionsRect = actions.getBoundingClientRect();
       return {
         panelIsConstrained:
-          contentRect.width <= viewportWidth - 14 &&
-          contentRect.height <= viewportHeight - 14,
+          contentRect.width <= viewportWidth - viewportInset &&
+          contentRect.height <= viewportHeight - viewportInset,
         galleryVisible:
           galleryRect.width > 0 &&
           galleryRect.height >= 44 &&
@@ -827,6 +828,21 @@ test.describe("AutoLister extension smoke flows", () => {
     await chooseBatchUpload(page);
     await expect(page.locator("#quickvint-batch-modal")).toBeVisible();
     await expectInsideViewport(page, "#quickvint-batch-modal .batch-content");
+    expect(
+      await page
+        .locator("#quickvint-batch-modal .batch-content")
+        .evaluate((element) => element.getBoundingClientRect().height),
+    ).toBeGreaterThanOrEqual(820);
+    const footerGap = await page
+      .locator("#quickvint-batch-modal")
+      .evaluate((modal) => {
+        const content = modal.querySelector(".batch-content").getBoundingClientRect();
+        const actions = modal.querySelector(".batch-actions").getBoundingClientRect();
+        return Math.round(content.bottom - actions.bottom);
+      });
+    expect(footerGap).toBeGreaterThanOrEqual(0);
+    expect(footerGap).toBeLessThanOrEqual(16);
+    await expectInsideViewport(page, "#quickvint-batch-modal .batch-actions");
     for (const selector of [
       "#quickvint-batch-modal .batch-close",
       "#quickvint-batch-modal .batch-cancel",
@@ -838,6 +854,70 @@ test.describe("AutoLister extension smoke flows", () => {
       ).toBeGreaterThanOrEqual(44);
     }
     await expectNoHorizontalOverflow(page);
+  });
+
+  test("keeps a tall stable batch frame through every phase", async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 1280, height: 900 });
+    await openContentHarness(page, { allowed: true, available: 20 }, {
+      emptyListing: true,
+    });
+    await chooseBatchUpload(page);
+
+    const modal = page.locator("#quickvint-batch-modal");
+    const measureFrame = () =>
+      modal.evaluate((root) => {
+        const content = root.querySelector(".batch-content").getBoundingClientRect();
+        const body = root.querySelector(".batch-body").getBoundingClientRect();
+        const actions = root.querySelector(".batch-actions").getBoundingClientRect();
+        const review = root.querySelector(".batch-review")?.getBoundingClientRect();
+        return {
+          width: Math.round(content.width),
+          height: Math.round(content.height),
+          bodyHeight: Math.round(body.height),
+          reviewHeight: Math.round(review?.height || 0),
+          footerGap: Math.round(content.bottom - actions.bottom),
+        };
+      });
+
+    const sourceFrame = await measureFrame();
+    expect(sourceFrame.height).toBeGreaterThanOrEqual(760);
+    expect(sourceFrame.bodyHeight).toBeGreaterThanOrEqual(680);
+    expect(Math.abs(sourceFrame.footerGap)).toBeLessThanOrEqual(1);
+
+    await setupReadyPhoneUploadWithDelayedThumbnails(
+      page,
+      [],
+      15,
+      { allowed: true, available: 20 },
+    );
+    await chooseBatchUpload(page);
+    await expect(modal.locator(".batch-title")).toHaveText("Organize items");
+
+    const organizingFrame = await measureFrame();
+    expect(Math.abs(organizingFrame.width - sourceFrame.width)).toBeLessThanOrEqual(1);
+    expect(Math.abs(organizingFrame.height - sourceFrame.height)).toBeLessThanOrEqual(1);
+    expect(organizingFrame.reviewHeight).toBeGreaterThanOrEqual(520);
+    expect(Math.abs(organizingFrame.footerGap)).toBeLessThanOrEqual(1);
+
+    const photos = modal.locator(
+      ".batch-gallery-sticky .batch-photo, .batch-gallery-grid .batch-photo",
+    );
+    for (let index = 0; index < 15; index += 1) await photos.nth(index).click();
+    await modal.locator(".batch-mark-group").click();
+    await modal.locator(".batch-start").click();
+    await expect(modal).toHaveClass(/generating/);
+
+    const generatingFrame = await measureFrame();
+    expect(Math.abs(generatingFrame.width - sourceFrame.width)).toBeLessThanOrEqual(1);
+    expect(Math.abs(generatingFrame.height - sourceFrame.height)).toBeLessThanOrEqual(1);
+    expect(Math.abs(generatingFrame.footerGap)).toBeLessThanOrEqual(1);
+
+    await page.setViewportSize({ width: 390, height: 844 });
+    await expectInsideViewport(page, "#quickvint-batch-modal .batch-content");
+    await expectInsideViewport(page, "#quickvint-batch-modal .batch-actions");
+    expect((await measureFrame()).height).toBeGreaterThanOrEqual(820);
   });
 
   test("shows phone and computer batch sources without another chooser", async ({
