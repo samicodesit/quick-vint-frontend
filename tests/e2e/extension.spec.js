@@ -1787,7 +1787,7 @@ test.describe("AutoLister extension smoke flows", () => {
     await expectNoHorizontalOverflow(page);
   });
 
-  test("shows availability through the chooser and batch source screen", async ({
+  test("keeps the batch source header free of availability copy", async ({
     page,
   }) => {
     await openContentHarness(page, { allowed: true, available: 12 }, {
@@ -1798,41 +1798,13 @@ test.describe("AutoLister extension smoke flows", () => {
     await chooser.locator(".quickvint-upload-choice-multiple").click();
     const batch = page.locator("#quickvint-batch-modal");
 
-    await expect(batch.locator(".batch-availability")).toHaveText(
-      "12 listings available",
-    );
-    expect(
-      await batch.locator(".batch-availability").evaluate((element) => {
-        const style = getComputedStyle(element);
-        return {
-          backgroundColor: style.backgroundColor,
-          borderStyle: style.borderStyle,
-          borderRadius: style.borderRadius,
-          paddingLeft: style.paddingLeft,
-          color: style.color,
-          fontSize: style.fontSize,
-          fontWeight: style.fontWeight,
-        };
-      }),
-    ).toEqual({
-      backgroundColor: "rgba(0, 0, 0, 0)",
-      borderStyle: "none",
-      borderRadius: "0px",
-      paddingLeft: "0px",
-      color: "rgb(51, 65, 85)",
-      fontSize: "14px",
-      fontWeight: "700",
-    });
-    const [titleBox, availabilityBox] = await Promise.all([
-      batch.locator(".batch-title").boundingBox(),
-      batch.locator(".batch-availability").boundingBox(),
-    ]);
-    expect(availabilityBox.y).toBeGreaterThanOrEqual(titleBox.y + titleBox.height);
+    await expect(batch.locator(".batch-availability")).toHaveCount(0);
+    await expect(batch).not.toContainText("12 listings available");
     expect(await getCapacityRequestCount(page)).toBe(1);
     await expect(batch).not.toContainText(/daily|monthly|extra credit/i);
   });
 
-  test("shows available listings while organizing a batch", async ({ page }) => {
+  test("keeps sufficient capacity hidden while organizing a batch", async ({ page }) => {
     await setupReadyPhoneUploadWithDelayedThumbnails(
       page,
       [],
@@ -1850,14 +1822,12 @@ test.describe("AutoLister extension smoke flows", () => {
       await batch.locator(".batch-mark-group").click();
     }
 
-    await expect(batch.locator(".batch-availability")).toHaveText(
-      "12 listings available",
-    );
+    await expect(batch.locator(".batch-availability")).toHaveCount(0);
     await expect(batch.locator(".batch-capacity-note")).toBeHidden();
     await expect(batch).not.toContainText(/Using \d+ of \d+ available/);
   });
 
-  test("shows refreshed batch availability before limited generation", async ({
+  test("shows only an actionable warning for limited generation", async ({
     page,
   }) => {
     await setupReadyPhoneUploadWithDelayedThumbnails(page, [], 3, [
@@ -1869,9 +1839,7 @@ test.describe("AutoLister extension smoke flows", () => {
     const batch = page.locator("#quickvint-batch-modal");
     const gallery = batch.locator(".batch-gallery");
     await expect(gallery.locator(".batch-photo")).toHaveCount(3);
-    await expect(batch.locator(".batch-availability")).toHaveText(
-      "2 listings available",
-    );
+    await expect(batch.locator(".batch-availability")).toHaveCount(0);
 
     for (const key of ["phone-1.jpg", "phone-2.jpg", "phone-3.jpg"]) {
       await gallery.locator(`.batch-photo[data-photo-key="${key}"]`).click();

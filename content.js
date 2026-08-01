@@ -5288,14 +5288,6 @@
         margin: 0;
       }
 
-      #${BATCH_MODAL_ID} .batch-availability {
-        color: #334155;
-        font-size: 14px;
-        font-weight: 700;
-        line-height: 1.4;
-        white-space: nowrap;
-      }
-
       #${BATCH_MODAL_ID} .batch-subtitle {
         margin: 0;
         color: #6b7280;
@@ -12908,10 +12900,6 @@
   }
 
   function createBatchModal(sessionId) {
-    const available = Math.max(
-      0,
-      Math.floor(Number(batchGenerationCapacity?.available || 0)),
-    );
     const modal = document.createElement("div");
     modal.id = BATCH_MODAL_ID;
     modal.dataset.sessionId = sessionId;
@@ -12926,7 +12914,6 @@
           <div class="batch-heading">
             <div class="batch-title-row">
               <h3 id="quickvint-batch-title" class="batch-title">Batch upload</h3>
-              <span class="batch-availability" aria-live="polite">${available} listing${available === 1 ? "" : "s"} available</span>
             </div>
             <p class="batch-subtitle" hidden></p>
           </div>
@@ -13955,7 +13942,6 @@
     const summaryCount = document.querySelector(`#${BATCH_MODAL_ID} .batch-summary-count`);
     const groupsEmpty = document.querySelector(`#${BATCH_MODAL_ID} .batch-groups-empty`);
     const capacityNote = document.querySelector(`#${BATCH_MODAL_ID} .batch-capacity-note`);
-    const availability = document.querySelector(`#${BATCH_MODAL_ID} .batch-availability`);
     const progressDone = document.querySelector(`#${BATCH_MODAL_ID} .organize-progress-done`);
     const jumpToPhotos = document.querySelector(`#${BATCH_MODAL_ID} .organize-jump-to-photos`);
     const jumpToGroups = document.querySelector(`#${BATCH_MODAL_ID} .organize-jump-to-groups`);
@@ -14087,19 +14073,6 @@
           capacityNote.classList.add("is-hidden");
           capacityNote.setAttribute("aria-hidden", "true");
         }
-      }
-    }
-    if (availability) {
-      const available = batchGenerationCapacity
-        ? Math.max(0, Math.floor(Number(batchGenerationCapacity.available || 0)))
-        : 0;
-      const showAvailability =
-        !batchCapacityLoading &&
-        Boolean(batchGenerationCapacity?.allowed) &&
-        available > 0;
-      availability.hidden = !showAvailability;
-      if (showAvailability) {
-        availability.textContent = `${available} listing${available === 1 ? "" : "s"} available`;
       }
     }
     if (clearButton) {
