@@ -12,6 +12,7 @@ on:
           - package-only
           - upload
           - upload-and-submit
+          - cancel-submission
       bump_patch:
         description: "Bump manifest patch version before packaging"
         type: boolean
@@ -81,7 +82,7 @@ jobs:
           if-no-files-found: error
 
       - name: Upload to Chrome Web Store
-        if: ${{ inputs.mode == 'upload' || inputs.mode == 'upload-and-submit' }}
+        if: ${{ inputs.mode == 'upload' || inputs.mode == 'upload-and-submit' || inputs.mode == 'cancel-submission' }}
         env:
           CHROME_WEB_STORE_SERVICE_ACCOUNT_JSON: ${{ secrets.CHROME_WEB_STORE_SERVICE_ACCOUNT_JSON }}
         run: npm run release:chrome-web-store -- --zip "${{ steps.package.outputs.zip_path }}" --mode "${{ inputs.mode }}"

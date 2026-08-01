@@ -742,17 +742,24 @@ document.addEventListener("DOMContentLoaded", () => {
     setCreditPackVisibility(false);
 
     if (tier === "free") {
-      if (dailyMeterLabel) dailyMeterLabel.textContent = "Free Listings";
+      if (dailyMeterLabel) dailyMeterLabel.textContent = "Free listings";
       if (monthlyMeterLabel) monthlyMeterLabel.textContent = "Extra credits";
     } else {
-      if (dailyMeterLabel) dailyMeterLabel.textContent = "Daily Usage";
-      if (monthlyMeterLabel) monthlyMeterLabel.textContent = "Monthly Usage";
+      if (dailyMeterLabel) dailyMeterLabel.textContent = "Daily usage";
+      if (monthlyMeterLabel) monthlyMeterLabel.textContent = "Monthly usage";
     }
 
     if (dailyCallsUsed) dailyCallsUsed.textContent = "Loading...";
     if (monthlyCallsUsed) monthlyCallsUsed.textContent = "Loading...";
     if (dailyProgressBar) dailyProgressBar.style.width = "0%";
     if (monthlyProgressBar) monthlyProgressBar.style.width = "0%";
+    if (dailyProgressBar?.parentElement) {
+      dailyProgressBar.parentElement.style.display = "";
+    }
+    if (monthlyProgressBar?.parentElement) {
+      monthlyProgressBar.parentElement.style.display =
+        tier === "free" ? "none" : "";
+    }
   }
 
   function encodeUserData(data) {
@@ -846,23 +853,28 @@ document.addEventListener("DOMContentLoaded", () => {
       );
       const freePercent =
         freeLimit > 0 ? Math.min((freeUsed / freeLimit) * 100, 100) : 0;
+      const freeRemaining = Math.max(0, freeLimit - freeUsed);
 
-      if (dailyMeterLabel) dailyMeterLabel.textContent = "Free Listings";
+      if (dailyMeterLabel) dailyMeterLabel.textContent = "Free listings";
       if (monthlyMeterLabel) monthlyMeterLabel.textContent = "Extra credits";
-      if (dailyCallsUsed) dailyCallsUsed.textContent = `${freeUsed} / ${freeLimit}`;
+      if (dailyCallsUsed)
+        dailyCallsUsed.textContent = `${freeUsed} / ${freeLimit} used`;
       if (monthlyCallsUsed)
-        monthlyCallsUsed.textContent =
-          packCredits > 0 ? `${packCredits} left` : "None";
+        monthlyCallsUsed.textContent = `${packCredits} available`;
       if (dailyProgressBar) dailyProgressBar.style.width = `${freePercent}%`;
-      if (monthlyProgressBar)
-        monthlyProgressBar.style.width = packCredits > 0 ? "100%" : "0%";
+      if (dailyProgressBar?.parentElement) {
+        dailyProgressBar.parentElement.style.display = "";
+      }
+      if (monthlyProgressBar?.parentElement) {
+        monthlyProgressBar.parentElement.style.display = "none";
+      }
 
       updateUsageUpsell({
         tier,
         dailyPercent: freePercent,
         monthlyPercent: 0,
         packCredits,
-        freeRemaining: Math.max(0, freeLimit - freeUsed),
+        freeRemaining,
         freeLimit,
       });
       return;
@@ -883,17 +895,23 @@ document.addEventListener("DOMContentLoaded", () => {
         : 100;
     const monthlyPercent =
       monthlyTotal > 0 ? Math.min((monthlyUsed / monthlyTotal) * 100, 100) : 0;
-
-    if (dailyMeterLabel) dailyMeterLabel.textContent = "Daily Usage";
-    if (monthlyMeterLabel) monthlyMeterLabel.textContent = "Monthly Usage";
+    if (dailyMeterLabel) dailyMeterLabel.textContent = "Daily usage";
+    if (monthlyMeterLabel) monthlyMeterLabel.textContent = "Monthly usage";
     if (dailyCallsUsed)
       dailyCallsUsed.textContent = hasDailyLimit
         ? `${displayDailyUsed} / ${dailyTotal}`
-        : "No daily limit";
+        : "Unlimited";
     if (monthlyCallsUsed)
       monthlyCallsUsed.textContent = `${displayMonthlyUsed} / ${monthlyTotal}`;
     if (dailyProgressBar) dailyProgressBar.style.width = `${dailyPercent}%`;
-    if (monthlyProgressBar) monthlyProgressBar.style.width = `${monthlyPercent}%`;
+    if (monthlyProgressBar)
+      monthlyProgressBar.style.width = `${monthlyPercent}%`;
+    if (dailyProgressBar?.parentElement) {
+      dailyProgressBar.parentElement.style.display = hasDailyLimit ? "" : "none";
+    }
+    if (monthlyProgressBar?.parentElement) {
+      monthlyProgressBar.parentElement.style.display = "";
+    }
 
     updateUsageUpsell({
       tier,

@@ -222,8 +222,40 @@ test.describe("popup billing portal", () => {
     });
 
     await expect(page.locator("#planName")).toHaveText("Custom Plan");
+    await expect(page.locator("#dailyMeterLabel")).toHaveText("Daily usage");
+    await expect(page.locator("#monthlyMeterLabel")).toHaveText("Monthly usage");
     await expect(page.locator("#dailyCallsUsed")).toHaveText("12 / 100");
     await expect(page.locator("#monthlyCallsUsed")).toHaveText("91 / 1000");
+    await expect(page.locator("#dailyProgressBar")).toHaveAttribute("style", /width: 12%/);
+    await expect(page.locator("#monthlyProgressBar")).toHaveAttribute("style", /width: 9\.1%/);
+  });
+
+  test("separates free quota usage from the extra-credit balance", async ({ page }) => {
+    await page.route("https://autolister.app/api/events/track", (route) =>
+      route.fulfill({ status: 204, body: "" }),
+    );
+
+    await installPopupHarness(page, {
+      initialStorage: {
+        supabaseSession: createSession(),
+        userProfile: { ...createFreeProfile(), pack_credits: 10 },
+        userUsageCount: {
+          daily: 0,
+          monthly: 0,
+          tier: "free",
+          limits: { daily: 5, monthly: 5 },
+          freeLifetimeUsed: 5,
+          freeLifetimeLimit: 5,
+          packCredits: 10,
+        },
+      },
+    });
+
+    await expect(page.locator("#dailyMeterLabel")).toHaveText("Free listings");
+    await expect(page.locator("#dailyCallsUsed")).toHaveText("5 / 5 used");
+    await expect(page.locator("#dailyProgressBar")).toHaveAttribute("style", /width: 100%/);
+    await expect(page.locator("#monthlyCallsUsed")).toHaveText("10 available");
+    await expect(page.locator("#monthlyProgressBar").locator("..")).toBeHidden();
   });
 
   test("opens the billing portal from the stored extension session, not popup Supabase memory", async ({
