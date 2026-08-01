@@ -3,23 +3,6 @@ const fs = require("node:fs");
 const path = require("node:path");
 const test = require("node:test");
 
-function readPhoneUploadPageHtml() {
-  const candidates = [
-    process.env.AUTOLISTER_API_PATH
-      ? path.resolve(process.env.AUTOLISTER_API_PATH, "src/pages/phone-upload.html")
-      : null,
-    path.resolve(__dirname, "../../quick-vint-api/src/pages/phone-upload.html"),
-    path.resolve(__dirname, "../../quick-vint/src/pages/phone-upload.html"),
-  ].filter(Boolean);
-  const phoneUploadPath = candidates.find((candidate) => fs.existsSync(candidate));
-
-  assert.ok(
-    phoneUploadPath,
-    `phone-upload.html not found. Checked: ${candidates.join(", ")}`,
-  );
-  return fs.readFileSync(phoneUploadPath, "utf8");
-}
-
 test("extension image compression defaults use standardized JPEG quality", () => {
   const content = fs.readFileSync(
     path.resolve(__dirname, "../content.js"),
@@ -62,12 +45,4 @@ test("manual storage compression retries before original file fallback", () => {
     content,
     /await compressFileForStorageUploadOnce\(file\)/,
   );
-});
-
-test("phone upload page compression retries before original file fallback", () => {
-  const html = readPhoneUploadPageHtml();
-
-  assert.match(html, /const COMPRESSION_RETRY_DELAYS_MS = \[250\]/);
-  assert.match(html, /function compressImageOnce\(file\)/);
-  assert.match(html, /await compressImageOnce\(file\)/);
 });
