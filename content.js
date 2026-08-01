@@ -994,6 +994,8 @@
   const WAND_ICON_SVG = `<svg fill="#ffffff" viewBox="0 0 512 512" version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink"> <path d="M454.321,219.727l-38.766-51.947l20.815-61.385c2.046-6.032,0.489-12.704-4.015-17.208 c-4.504-4.504-11.175-6.061-17.208-4.015l-61.384,20.815l-51.951-38.766c-5.103-3.809-11.929-4.392-17.605-1.499 c-5.676,2.893-9.217,8.755-9.136,15.125l0.829,64.815l-52.923,37.426c-5.201,3.678-7.863,9.989-6.867,16.282 c0.996,6.291,5.479,11.471,11.561,13.363l43.844,13.63L14.443,483.432c-6.535,6.534-6.535,17.131,0,23.666s17.131,6.535,23.666,0 l257.073-257.072l13.629,43.843c2.172,6.986,8.638,11.768,15.984,11.768c5.375,0,10.494-2.595,13.66-7.072l37.426-52.923 l64.815,0.828c6.322,0.051,12.233-3.462,15.125-9.136S458.131,224.833,454.321,219.727z"></path> <polygon points="173.373,67.274 160.014,42.848 146.656,67.274 122.23,80.632 146.656,93.992 160.014,118.417 173.373,93.992 197.799,80.632 "></polygon> <polygon points="362.946,384.489 352.14,364.731 341.335,384.489 321.577,395.294 341.335,406.1 352.14,425.856 362.946,406.1 382.703,395.294 "></polygon> <polygon points="378.142,19.757 367.337,0 356.531,19.757 336.774,30.563 356.531,41.369 367.337,61.126 378.142,41.369 397.9,30.563 "></polygon> <polygon points="490.635,142.513 484.167,130.689 477.701,142.513 465.876,148.979 477.701,155.446 484.167,167.27 490.635,155.446 502.458,148.979 "></polygon> <polygon points="492.626,294.117 465.876,301.951 439.128,294.117 446.962,320.865 439.128,347.615 465.876,339.781 492.626,347.615 484.791,320.865 "></polygon> </svg>`;
   const PHONE_ICON_SVG = `<svg fill="#ffffff" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M17 1.01L7 1c-1.1 0-2 .9-2 2v18c0 1.1.9 2 2 2h10c1.1 0 2-.9 2-2V3c0-1.1-.9-1.99-2-1.99zM17 19H7V5h10v14z"/></svg>`;
   const BATCH_ICON_SVG = `<svg data-icon="upload" fill="none" viewBox="0 0 24 24" stroke="#ffffff" stroke-width="2" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5m-13.5-9L12 3m0 0 4.5 4.5M12 3v13.5"/></svg>`;
+  const BATCH_ARROW_UP_SVG = `<svg class="batch-direction-icon" aria-hidden="true" focusable="false" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.25" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" d="M4.5 10.5 12 3m0 0 7.5 7.5M12 3v18"/></svg>`;
+  const BATCH_ARROW_DOWN_SVG = `<svg class="batch-direction-icon" aria-hidden="true" focusable="false" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.25" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" d="M19.5 13.5 12 21m0 0-7.5-7.5M12 21V3"/></svg>`;
   const REPORT_ICON_SVG = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" xmlns="http://www.w3.org/2000/svg"><path d="m3 11 18-5v12L3 13v-2Z"/><path d="M11.6 14.4 13 20H9.5L8.2 13.6"/></svg>`;
   const PLAN_LIMITS = {
     free: { name: "Free", daily: null, monthly: 5, price: "Free" },
@@ -6251,6 +6253,9 @@
       #${BATCH_MODAL_ID}.organizing .organize-jump-to-photos,
       #${BATCH_MODAL_ID}.organizing .organize-jump-to-groups {
         flex: 0 0 auto;
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
         min-height: 30px;
         padding: 0;
         border: 0;
@@ -6262,6 +6267,12 @@
         font-weight: 750;
         line-height: 1.2;
         white-space: nowrap;
+      }
+
+      #${BATCH_MODAL_ID}.organizing .batch-direction-icon {
+        flex: 0 0 auto;
+        width: 18px;
+        height: 18px;
       }
 
       #${BATCH_MODAL_ID}.organizing :is(.organize-jump-to-photos, .organize-jump-to-groups):hover:not(:disabled),
@@ -6793,6 +6804,10 @@
           opacity 160ms ease,
           transform 160ms ease,
           color 160ms ease;
+      }
+
+      #${BATCH_MODAL_ID}.organizing .batch-selection-count {
+        gap: 7px;
       }
 
       #${BATCH_MODAL_ID}.organizing .batch-selection-count.is-hidden {
@@ -13632,8 +13647,8 @@
         `
           <div class="organize-status-row" aria-live="polite">
             <div class="organize-nav">
-              <button type="button" class="organize-jump-to-photos" aria-controls="quickvint-batch-gallery-section"></button>
-              <button type="button" class="organize-jump-to-groups" aria-controls="quickvint-batch-groups-section" hidden>Items <span class="organize-items-count"></span> ↓</button>
+              <button type="button" class="organize-jump-to-photos" aria-controls="quickvint-batch-gallery-section"><span class="organize-photos-label"></span>${BATCH_ARROW_UP_SVG}</button>
+              <button type="button" class="organize-jump-to-groups" aria-controls="quickvint-batch-groups-section" hidden><span>Items</span><span class="organize-items-count"></span>${BATCH_ARROW_DOWN_SVG}</button>
             </div>
             <div class="organize-progress" aria-hidden="true">
               <span class="organize-progress-done"></span>
@@ -13674,7 +13689,7 @@
         </section>
       </div>
       <div class="batch-actions">
-        <button type="button" class="batch-selection-count"></button>
+        <button type="button" class="batch-selection-count"><span class="batch-selection-label"></span>${BATCH_ARROW_UP_SVG}</button>
         <div class="batch-secondary-actions is-hidden" hidden>
           <button type="button" class="footer-control batch-clear-selection is-hidden" hidden aria-hidden="true">Clear</button>
         </div>
@@ -13982,9 +13997,14 @@
     }
     if (jumpToPhotos) {
       jumpToPhotos.disabled = remainingCount === 0;
-      jumpToPhotos.textContent = remainingCount === 0
-        ? "All photos grouped"
-        : `${remainingCount} photo${remainingCount === 1 ? "" : "s"} remaining ↑`;
+      const photosLabel = jumpToPhotos.querySelector(".organize-photos-label");
+      const directionIcon = jumpToPhotos.querySelector(".batch-direction-icon");
+      if (photosLabel) {
+        photosLabel.textContent = remainingCount === 0
+          ? "All photos grouped"
+          : `${remainingCount} photo${remainingCount === 1 ? "" : "s"} remaining`;
+      }
+      if (directionIcon) directionIcon.hidden = remainingCount === 0;
     }
     if (jumpToGroups) {
       jumpToGroups.hidden = groups.length === 0;
@@ -13995,13 +14015,18 @@
       progressDone.style.width = `${groupedPct}%`;
     }
     if (selectionCount) {
-      selectionCount.textContent = selectedCount
-        ? `${selectedCount} selected ↑`
-        : !batchRemoteFiles.length
-          ? "No photos left in this batch"
-          : remainingCount
-          ? "Select photos for one item ↑"
-          : "Ready to generate";
+      const selectionLabel = selectionCount.querySelector(".batch-selection-label");
+      const directionIcon = selectionCount.querySelector(".batch-direction-icon");
+      if (selectionLabel) {
+        selectionLabel.textContent = selectedCount
+          ? `${selectedCount} selected`
+          : !batchRemoteFiles.length
+            ? "No photos left in this batch"
+            : remainingCount
+              ? "Select photos for one item"
+              : "Ready to generate";
+      }
+      if (directionIcon) directionIcon.hidden = remainingCount === 0;
       selectionCount.disabled = remainingCount === 0;
       setBatchControlHidden(selectionCount, footerState === "ready");
     }
