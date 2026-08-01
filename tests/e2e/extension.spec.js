@@ -388,9 +388,7 @@ async function expectBatchModalLayoutStable(page, modal) {
       const content = root.querySelector(".batch-content");
       const body = root.querySelector(".batch-body");
       const review = root.querySelector(".batch-review");
-      const gallery =
-        root.querySelector(".batch-gallery-sticky:not(:empty)") ||
-        root.querySelector(".batch-gallery");
+      const gallery = root.querySelector(".batch-gallery");
       const actions = root.querySelector(".batch-actions");
       const viewportWidth = window.innerWidth;
       const viewportHeight = window.innerHeight;
@@ -405,8 +403,8 @@ async function expectBatchModalLayoutStable(page, modal) {
         galleryVisible:
           galleryRect.width > 0 &&
           galleryRect.height >= 44 &&
-          galleryRect.top >= contentRect.top &&
-          galleryRect.bottom <= actionsRect.top + 1,
+          galleryRect.bottom > contentRect.top &&
+          galleryRect.top < actionsRect.top,
         actionsVisible:
           actionsRect.width > 0 &&
           actionsRect.height >= 44 &&
@@ -885,6 +883,19 @@ test.describe("AutoLister extension smoke flows", () => {
     expect(sourceFrame.height).toBeGreaterThanOrEqual(760);
     expect(sourceFrame.bodyHeight).toBeGreaterThanOrEqual(680);
     expect(Math.abs(sourceFrame.footerGap)).toBeLessThanOrEqual(1);
+    const sourceGeometry = await modal.evaluate((root) => {
+      const panels = Array.from(root.querySelectorAll(".batch-source-panel"));
+      return {
+        panelHeights: panels.map((panel) =>
+          Math.round(panel.getBoundingClientRect().height),
+        ),
+        dropzoneHeight: Math.round(
+          root.querySelector(".batch-computer-dropzone").getBoundingClientRect().height,
+        ),
+      };
+    });
+    expect(Math.max(...sourceGeometry.panelHeights)).toBeLessThanOrEqual(430);
+    expect(sourceGeometry.dropzoneHeight).toBeLessThanOrEqual(270);
 
     await setupReadyPhoneUploadWithDelayedThumbnails(
       page,
@@ -901,9 +912,8 @@ test.describe("AutoLister extension smoke flows", () => {
     expect(organizingFrame.reviewHeight).toBeGreaterThanOrEqual(520);
     expect(Math.abs(organizingFrame.footerGap)).toBeLessThanOrEqual(1);
 
-    const photos = modal.locator(
-      ".batch-gallery-sticky .batch-photo, .batch-gallery-grid .batch-photo",
-    );
+    const photos = modal.locator(".batch-gallery-grid .batch-photo");
+    await expect(photos).toHaveCount(15);
     for (let index = 0; index < 15; index += 1) await photos.nth(index).click();
     await modal.locator(".batch-mark-group").click();
     await modal.locator(".batch-start").click();
@@ -918,6 +928,33 @@ test.describe("AutoLister extension smoke flows", () => {
     await expectInsideViewport(page, "#quickvint-batch-modal .batch-content");
     await expectInsideViewport(page, "#quickvint-batch-modal .batch-actions");
     expect((await measureFrame()).height).toBeGreaterThanOrEqual(820);
+  });
+
+  test("keeps compact source controls reachable in a short desktop window", async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 900, height: 480 });
+    await openContentHarness(page, { allowed: true, available: 10 }, {
+      emptyListing: true,
+    });
+    await chooseBatchUpload(page);
+
+    const modal = page.locator("#quickvint-batch-modal");
+    const sourceGrid = modal.locator(".batch-source-grid");
+    await expectInsideViewport(page, "#quickvint-batch-modal .batch-content");
+    expect(
+      await sourceGrid.evaluate((grid) => ({
+        overflowY: getComputedStyle(grid).overflowY,
+        canScroll: grid.scrollHeight > grid.clientHeight,
+      })),
+    ).toEqual({ overflowY: "auto", canScroll: true });
+
+    await sourceGrid.evaluate((grid) => {
+      grid.scrollTop = grid.scrollHeight;
+    });
+    await expectInsideViewport(page, "#quickvint-batch-modal .batch-choose-files");
+    await expectInsideViewport(page, "#quickvint-batch-modal .batch-choose-folder");
+    await expectInsideViewport(page, "#quickvint-batch-modal .batch-actions");
   });
 
   test("shows phone and computer batch sources without another chooser", async ({
@@ -1816,9 +1853,8 @@ test.describe("AutoLister extension smoke flows", () => {
     await expect(batch.locator(".batch-availability")).toHaveText(
       "12 listings available",
     );
-    await expect(batch.locator(".batch-capacity-note")).toHaveText(
-      "Using 2 of 12 available",
-    );
+    await expect(batch.locator(".batch-capacity-note")).toBeHidden();
+    await expect(batch).not.toContainText(/Using \d+ of \d+ available/);
   });
 
   test("shows refreshed batch availability before limited generation", async ({
@@ -2586,7 +2622,7 @@ test.describe("AutoLister extension smoke flows", () => {
     await expect(pingBatchTab()).resolves.toEqual({ ok: false });
   });
 
-  test("keeps only the first ungrouped row sticky while the gallery wraps", async ({
+  test("separates photos from grouped items with an always-visible return path", async ({
     page,
   }) => {
     await page.setViewportSize({ width: 1280, height: 720 });
@@ -2604,22 +2640,37 @@ test.describe("AutoLister extension smoke flows", () => {
 
     await chooseBatchUpload(page);
     const modal = page.locator("#quickvint-batch-modal");
-    const gallery = modal.locator(".batch-gallery");
+    const review = modal.locator(".batch-review");
+    const gallerySection = modal.locator(".batch-gallery-section");
     const galleryGrid = modal.locator(".batch-gallery-grid");
-    const stickyRow = modal.locator(".batch-gallery-sticky");
-    const ungroupedPhotos = modal.locator(
-      ".batch-gallery-sticky .batch-photo, .batch-gallery .batch-photo",
+    const groupsSection = modal.locator(".batch-groups-section");
+    const jumpToPhotos = modal.locator(".organize-jump-to-photos");
+    const jumpToGroups = modal.locator(".organize-jump-to-groups");
+
+    await expect(modal.locator(".batch-gallery-sticky")).toHaveCount(0);
+    await expect(gallerySection.getByRole("heading", { name: "Photos to group" })).toBeVisible();
+    await expect(groupsSection.getByRole("heading", { name: "Grouped items" })).toBeVisible();
+    await expect(galleryGrid.locator(".batch-photo-wrap:not([hidden])")).toHaveCount(15);
+    await expect(groupsSection.locator(".batch-groups-empty")).toHaveText(
+      "No items grouped yet.",
     );
-    await expect(ungroupedPhotos).toHaveCount(15);
-    await expect(stickyRow.locator(".batch-photo-wrap:not([hidden])")).toHaveCount(4);
-    await expect(galleryGrid.locator(".batch-photo-wrap:not([hidden])")).toHaveCount(11);
-    await expect(stickyRow).not.toHaveClass(/is-sticky-row/);
+    await expect(jumpToGroups).toBeHidden();
     expect(
       await galleryGrid.locator(".batch-photo-wrap:not([hidden])").evaluateAll((wrappers) =>
         new Set(wrappers.map((wrapper) => Math.round(wrapper.getBoundingClientRect().y)))
           .size,
       ),
     ).toBeGreaterThan(1);
+    const scrollSurface = await review.evaluate((node) => ({
+      overflowY: getComputedStyle(node).overflowY,
+      scrollbarWidth: getComputedStyle(node).scrollbarWidth,
+      reservedWidth: node.offsetWidth - node.clientWidth,
+    }));
+    expect(scrollSurface).toMatchObject({
+      overflowY: "scroll",
+      scrollbarWidth: "auto",
+    });
+    expect(scrollSurface.reservedWidth).toBeGreaterThan(0);
 
     for (let groupIndex = 0; groupIndex < 3; groupIndex += 1) {
       await modal
@@ -2635,61 +2686,53 @@ test.describe("AutoLister extension smoke flows", () => {
       await modal.locator(".batch-mark-group").click();
     }
 
-    await expect(stickyRow).toHaveClass(/is-sticky-row/);
-    await expect(stickyRow.locator(".batch-photo-wrap:not([hidden])")).toHaveCount(4);
-    await expect(galleryGrid.locator(".batch-photo-wrap:not([hidden])")).toHaveCount(5);
-    expect(
-      await stickyRow
-        .locator(".batch-photo-wrap:not([hidden]) .batch-photo")
-        .evaluateAll((photos) => photos.map((photo) => photo.dataset.photoKey)),
-    ).toEqual(["phone-7.jpg", "phone-8.jpg", "phone-9.jpg", "phone-10.jpg"]);
+    await expect(galleryGrid.locator(".batch-photo-wrap:not([hidden])")).toHaveCount(9);
+    await expect(modal.locator(".batch-item-card")).toHaveCount(3);
+    await expect(groupsSection.locator(".batch-groups-empty")).toBeHidden();
+    await expect(jumpToPhotos).toHaveText("9 photos left ↑");
+    await expect(jumpToPhotos).toHaveAttribute(
+      "aria-controls",
+      "quickvint-batch-gallery-section",
+    );
+    await expect(jumpToGroups).toHaveText("3 grouped items ↓");
+    await expect(jumpToGroups).toHaveAttribute(
+      "aria-controls",
+      "quickvint-batch-groups-section",
+    );
     expect(
       await galleryGrid.evaluate((node) => node.scrollWidth > node.clientWidth),
     ).toBe(false);
-    await expect(modal.locator(".batch-review")).not.toHaveClass(/is-reflowing/);
-    await expect(modal.locator(".batch-item-card")).toHaveCount(3);
     await expect(modal.locator(".batch-item-card").last()).not.toHaveClass(
       /is-entering/,
     );
-    expect(await gallery.evaluate((node) => node.scrollLeft)).toBe(0);
-    const review = modal.locator(".batch-review");
-    await review.evaluate((node) => {
-      node.scrollTop = node.scrollHeight;
+
+    const sectionBounds = await modal.evaluate((root) => {
+      const gallery = root.querySelector(".batch-gallery-section").getBoundingClientRect();
+      const groups = root.querySelector(".batch-groups-section").getBoundingClientRect();
+      return {
+        galleryBottom: Math.round(gallery.bottom),
+        groupsTop: Math.round(groups.top),
+      };
     });
+    expect(sectionBounds.groupsTop).toBeGreaterThanOrEqual(sectionBounds.galleryBottom);
+
+    await jumpToGroups.click();
     await expect
-      .poll(async () => {
-        const [stickyBox, reviewBox] = await Promise.all([
-          stickyRow.boundingBox(),
-          review.boundingBox(),
-        ]);
-        return Math.abs(stickyBox.y - reviewBox.y);
-      })
-      .toBeLessThanOrEqual(1);
-    expect(
-      await review.evaluate((node) => node.scrollLeft),
-    ).toBe(0);
+      .poll(() => review.evaluate((node) => node.scrollTop))
+      .toBeGreaterThan(0);
+    await jumpToPhotos.click();
+    await expect.poll(() => review.evaluate((node) => node.scrollTop)).toBe(0);
+
+    expect(await review.evaluate((node) => node.scrollLeft)).toBe(0);
     expect(
       await review.evaluate((node) => node.offsetWidth - node.clientWidth),
-    ).toBe(0);
+    ).toBeGreaterThan(0);
     expect(
       await modal.locator(".batch-body").evaluate((body) => body.scrollLeft),
     ).toBe(0);
-    expect(
-      await modal.evaluate((root) => {
-        const body = root.querySelector(".batch-body");
-        const bodyRect = body.getBoundingClientRect();
-        if (getComputedStyle(body).overflowX === "visible") return true;
-        return [".batch-summary-title", ".batch-selection-count"].every(
-          (selector) => {
-            const rect = root.querySelector(selector).getBoundingClientRect();
-            return rect.left >= bodyRect.left && rect.right <= bodyRect.right;
-          },
-        );
-      }),
-    ).toBe(true);
     await expectBatchModalLayoutStable(page, modal);
 
-    const stalePhoto = stickyRow.locator(".batch-photo-wrap:not([hidden])").first();
+    const stalePhoto = galleryGrid.locator(".batch-photo-wrap:not([hidden])").first();
     await stalePhoto.evaluate((wrapper) => {
       wrapper.hidden = true;
       wrapper.classList.add("is-grouped");
@@ -2702,12 +2745,21 @@ test.describe("AutoLister extension smoke flows", () => {
     await expect(stalePhoto).toBeVisible();
 
     await page.setViewportSize({ width: 390, height: 844 });
-    await expect(stickyRow).toHaveClass(/is-sticky-row/);
-    await expect(stickyRow.locator(".batch-photo-wrap:not([hidden])")).toHaveCount(3);
+    for (const control of [jumpToPhotos, jumpToGroups]) {
+      expect(
+        await control.evaluate((button) => button.getBoundingClientRect().height),
+      ).toBeGreaterThanOrEqual(44);
+    }
+    expect(
+      await galleryGrid.locator(".batch-photo-wrap:not([hidden])").evaluateAll((wrappers) =>
+        new Set(wrappers.map((wrapper) => Math.round(wrapper.getBoundingClientRect().x)))
+          .size,
+      ),
+    ).toBe(3);
     await expectBatchModalLayoutStable(page, modal);
 
-    const remainingPhotos = modal.locator(
-      ".batch-gallery-sticky .batch-photo-wrap:not([hidden]) .batch-photo, .batch-gallery .batch-photo-wrap:not([hidden]) .batch-photo",
+    const remainingPhotos = galleryGrid.locator(
+      ".batch-photo-wrap:not([hidden]) .batch-photo",
     );
     for (let index = 0; index < (await remainingPhotos.count()); index += 1) {
       const photo = remainingPhotos.nth(index);
@@ -2716,8 +2768,8 @@ test.describe("AutoLister extension smoke flows", () => {
       }
     }
     await modal.locator(".batch-mark-group").click();
-    await expect(stickyRow).not.toHaveClass(/is-sticky-row/);
-    await expect(modal.locator(".organize-unsorted-badge")).toHaveText("All sorted");
+    await expect(jumpToPhotos).toHaveText("All photos grouped");
+    await expect(jumpToPhotos).toBeDisabled();
   });
 
   test("uses uploaded storage URLs for batch files when Vinted thumbnails are late", async ({
