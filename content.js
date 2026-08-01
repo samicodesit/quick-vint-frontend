@@ -6309,9 +6309,29 @@
       }
 
       #${BATCH_MODAL_ID}.organizing .batch-gallery {
+        display: block;
+        max-height: none;
+        overflow: visible;
+        margin: 0;
+        padding: 0;
+      }
+
+      #${BATCH_MODAL_ID}.organizing .batch-gallery-sticky,
+      #${BATCH_MODAL_ID}.organizing .batch-gallery-grid {
         display: grid;
         grid-template-columns: repeat(4, minmax(0, 1fr));
         gap: 9px;
+      }
+
+      #${BATCH_MODAL_ID}.organizing .batch-gallery-sticky {
+        margin: 0 0 9px;
+      }
+
+      #${BATCH_MODAL_ID}.organizing .batch-gallery-sticky:empty {
+        display: none;
+      }
+
+      #${BATCH_MODAL_ID}.organizing .batch-gallery-grid {
         min-height: var(--quickvint-batch-gallery-min-height, 0);
         max-height: none;
         overflow: hidden;
@@ -6330,46 +6350,27 @@
         pointer-events: none;
       }
 
-      #${BATCH_MODAL_ID}.organizing .batch-gallery.is-empty {
+      #${BATCH_MODAL_ID}.organizing .batch-gallery-grid.is-empty {
         min-height: 0;
         padding-bottom: 0;
         border-bottom-color: transparent;
       }
 
-      #${BATCH_MODAL_ID}.organizing .batch-gallery.is-settling {
+      #${BATCH_MODAL_ID}.organizing .batch-gallery-grid.is-settling {
         padding-bottom: 22px;
         border-bottom-color: #e2e8f0;
       }
 
-      #${BATCH_MODAL_ID}.organizing .batch-gallery.is-sticky-row {
+      #${BATCH_MODAL_ID}.organizing .batch-gallery-sticky.is-sticky-row {
         position: sticky;
         top: 0;
         z-index: 2;
-        grid-template-columns: none;
-        grid-auto-flow: column;
-        grid-auto-columns: calc((100% - 27px) / 4);
-        justify-content: start;
-        overflow-x: auto;
-        overflow-y: hidden;
-        overscroll-behavior-x: contain;
         padding: 10px 0 8px;
         background: #f8fafc;
-        border-bottom-color: #cbd5e1;
         box-shadow: 0 10px 18px -18px rgba(15, 23, 42, 0.65);
-        scrollbar-color: #cbd5e1 transparent;
-        scrollbar-width: thin;
       }
 
-      #${BATCH_MODAL_ID}.organizing .batch-gallery.is-sticky-row::-webkit-scrollbar {
-        height: 6px;
-      }
-
-      #${BATCH_MODAL_ID}.organizing .batch-gallery.is-sticky-row::-webkit-scrollbar-thumb {
-        border-radius: 999px;
-        background: #cbd5e1;
-      }
-
-      #${BATCH_MODAL_ID}.organizing .batch-gallery .batch-photo {
+      #${BATCH_MODAL_ID}.organizing :is(.batch-gallery-sticky, .batch-gallery-grid) .batch-photo {
         width: 100%;
         aspect-ratio: 1 / 1;
         border: 2px solid transparent;
@@ -6384,14 +6385,14 @@
           transform 180ms ease;
       }
 
-      #${BATCH_MODAL_ID}.organizing .batch-gallery .batch-photo.tap-target:not(.selected) {
+      #${BATCH_MODAL_ID}.organizing :is(.batch-gallery-sticky, .batch-gallery-grid) .batch-photo.tap-target:not(.selected) {
         border-color: rgba(99, 102, 241, 0.34);
         border-style: dashed;
         box-shadow: 0 5px 14px rgba(15, 23, 42, 0.08);
       }
 
-      #${BATCH_MODAL_ID}.organizing .batch-gallery .batch-photo.tap-target:not(.selected):hover,
-      #${BATCH_MODAL_ID}.organizing .batch-gallery .batch-photo.tap-target:not(.selected):focus-visible {
+      #${BATCH_MODAL_ID}.organizing :is(.batch-gallery-sticky, .batch-gallery-grid) .batch-photo.tap-target:not(.selected):hover,
+      #${BATCH_MODAL_ID}.organizing :is(.batch-gallery-sticky, .batch-gallery-grid) .batch-photo.tap-target:not(.selected):focus-visible {
         border-color: rgba(79, 70, 229, 0.48);
         border-style: solid;
         box-shadow: 0 8px 18px rgba(79, 70, 229, 0.14);
@@ -6399,18 +6400,18 @@
         transform: translateY(-1px);
       }
 
-      #${BATCH_MODAL_ID}.organizing .batch-gallery .batch-photo:active:not(.marked) {
+      #${BATCH_MODAL_ID}.organizing :is(.batch-gallery-sticky, .batch-gallery-grid) .batch-photo:active:not(.marked) {
         transform: scale(0.96);
       }
 
-      #${BATCH_MODAL_ID}.organizing .batch-gallery .batch-photo.selected {
+      #${BATCH_MODAL_ID}.organizing :is(.batch-gallery-sticky, .batch-gallery-grid) .batch-photo.selected {
         border-color: #2563eb;
         border-style: solid;
         box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.22);
         transform: scale(0.96);
       }
 
-      #${BATCH_MODAL_ID}.organizing .batch-gallery .batch-photo.selected::after {
+      #${BATCH_MODAL_ID}.organizing :is(.batch-gallery-sticky, .batch-gallery-grid) .batch-photo.selected::after {
         content: "";
         position: absolute;
         inset: 0;
@@ -6418,7 +6419,7 @@
         pointer-events: none;
       }
 
-      #${BATCH_MODAL_ID}.organizing .batch-gallery .batch-photo.marked {
+      #${BATCH_MODAL_ID}.organizing :is(.batch-gallery-sticky, .batch-gallery-grid) .batch-photo.marked {
         opacity: 1;
       }
 
@@ -6442,7 +6443,7 @@
         transition: opacity 160ms ease, transform 160ms ease;
       }
 
-      #${BATCH_MODAL_ID}.organizing .batch-gallery .batch-photo.selected .batch-select-check {
+      #${BATCH_MODAL_ID}.organizing :is(.batch-gallery-sticky, .batch-gallery-grid) .batch-photo.selected .batch-select-check {
         opacity: 1;
         transform: translate(-50%, -50%) scale(1);
       }
@@ -6473,7 +6474,7 @@
         transition: opacity 140ms ease, transform 140ms ease, background 140ms ease;
       }
 
-      #${BATCH_MODAL_ID}.organizing .batch-gallery .batch-photo:hover .batch-discard-photo,
+      #${BATCH_MODAL_ID}.organizing :is(.batch-gallery-sticky, .batch-gallery-grid) .batch-photo:hover .batch-discard-photo,
       #${BATCH_MODAL_ID}.organizing .batch-discard-photo:focus-visible {
         opacity: 1;
       }
@@ -7215,14 +7216,10 @@
           padding: 16px 14px 14px;
         }
 
-        #${BATCH_MODAL_ID}.organizing .batch-gallery {
+        #${BATCH_MODAL_ID}.organizing .batch-gallery-sticky,
+        #${BATCH_MODAL_ID}.organizing .batch-gallery-grid {
           grid-template-columns: repeat(3, minmax(0, 1fr));
           gap: 8px;
-        }
-
-        #${BATCH_MODAL_ID}.organizing .batch-gallery.is-sticky-row {
-          grid-template-columns: none;
-          grid-auto-columns: calc((100% - 16px) / 3);
         }
 
         #${BATCH_MODAL_ID}.organizing .batch-actions {
@@ -13335,7 +13332,9 @@
 
     const timerKey = "__quickvintReflowTimer";
     const galleryTimerKey = "__quickvintGalleryHeightTimer";
-    const gallery = document.querySelector(`#${BATCH_MODAL_ID}.organizing .batch-gallery`);
+    const gallery = document.querySelector(
+      `#${BATCH_MODAL_ID}.organizing .batch-gallery-grid`,
+    );
     if (review[timerKey]) {
       clearTimeout(review[timerKey]);
     }
@@ -13366,11 +13365,11 @@
   }
 
   function measureBatchGalleryPositions() {
-    const gallery = document.querySelector(`#${BATCH_MODAL_ID}.organizing .batch-gallery`);
-    if (!gallery) return new Map();
+    const review = document.querySelector(`#${BATCH_MODAL_ID}.organizing .batch-review`);
+    if (!review) return new Map();
 
     const positions = new Map();
-    gallery.querySelectorAll(".batch-photo-wrap:not([hidden])").forEach((wrapper) => {
+    review.querySelectorAll(".batch-photo-wrap:not([hidden])").forEach((wrapper) => {
       const key = wrapper.querySelector(".batch-photo")?.dataset?.photoKey;
       if (!key) return;
       const rect = wrapper.getBoundingClientRect();
@@ -13380,11 +13379,11 @@
   }
 
   function animateBatchGalleryFromPositions(beforePositions) {
-    const gallery = document.querySelector(`#${BATCH_MODAL_ID}.organizing .batch-gallery`);
-    if (!gallery || !beforePositions?.size) return;
+    const review = document.querySelector(`#${BATCH_MODAL_ID}.organizing .batch-review`);
+    if (!review || !beforePositions?.size) return;
 
     const movingItems = [];
-    gallery.querySelectorAll(".batch-photo-wrap:not([hidden])").forEach((wrapper) => {
+    review.querySelectorAll(".batch-photo-wrap:not([hidden])").forEach((wrapper) => {
       const key = wrapper.querySelector(".batch-photo")?.dataset?.photoKey;
       const before = key ? beforePositions.get(key) : null;
       if (!before) return;
@@ -13410,6 +13409,33 @@
       });
     });
   }
+
+  function layoutBatchGalleryRows() {
+    const stickyRow = document.querySelector(
+      `#${BATCH_MODAL_ID}.organizing .batch-gallery-sticky`,
+    );
+    const galleryGrid = document.querySelector(
+      `#${BATCH_MODAL_ID}.organizing .batch-gallery-grid`,
+    );
+    if (!stickyRow || !galleryGrid) return;
+
+    const wrappers = [...stickyRow.children, ...galleryGrid.children]
+      .filter((element) => element.classList.contains("batch-photo-wrap"))
+      .sort(
+        (a, b) =>
+          Number(a.querySelector(".batch-photo")?.dataset.photoIndex || 0) -
+          Number(b.querySelector(".batch-photo")?.dataset.photoIndex || 0),
+      );
+    const columnCount = window.innerWidth <= 560 ? 3 : 4;
+    const stickyWrappers = new Set(
+      wrappers.filter((wrapper) => !wrapper.hidden).slice(0, columnCount),
+    );
+    wrappers.forEach((wrapper) => {
+      (stickyWrappers.has(wrapper) ? stickyRow : galleryGrid).appendChild(wrapper);
+    });
+  }
+
+  window.addEventListener("resize", layoutBatchGalleryRows);
 
   function createBatchPhotoElement(file, index, itemNumber, options = {}) {
     const {
@@ -13518,17 +13544,20 @@
           <span class="organize-tip-icon">▧</span>
           <span>Tap photos for one item</span>
         </div>
-        <div class="batch-gallery" aria-live="polite"></div>
-        <div class="batch-empty-state is-hidden" aria-hidden="true">Review grouped items below.</div>
-        <div class="batch-summary-head">
-          <span class="batch-summary-title">
-            <span>Items</span>
-            <span class="batch-summary-count"></span>
-          </span>
-          <button type="button" class="batch-summary-reset batch-reset-groups is-hidden" hidden aria-hidden="true">Reset groups</button>
+        <div class="batch-gallery" aria-live="polite">
+          <div class="batch-gallery-sticky"></div>
+          <div class="batch-gallery-grid"></div>
+          <div class="batch-empty-state is-hidden" aria-hidden="true">Review grouped items below.</div>
+          <div class="batch-summary-head">
+            <span class="batch-summary-title">
+              <span>Items</span>
+              <span class="batch-summary-count"></span>
+            </span>
+            <button type="button" class="batch-summary-reset batch-reset-groups is-hidden" hidden aria-hidden="true">Reset groups</button>
+          </div>
+          <div class="batch-capacity-note">Checking availability...</div>
+          <div class="batch-groups" aria-live="polite"></div>
         </div>
-        <div class="batch-capacity-note">Checking availability...</div>
-        <div class="batch-groups" aria-live="polite"></div>
       </div>
       <div class="batch-actions">
         <span class="batch-selection-count"></span>
@@ -13565,12 +13594,14 @@
 
   function buildBatchGroupingGallery() {
     const gallery = document.querySelector(`#${BATCH_MODAL_ID} .batch-gallery`);
+    const galleryGrid = gallery?.querySelector(".batch-gallery-grid");
     const groupsEl = document.querySelector(`#${BATCH_MODAL_ID} .batch-groups`);
-    if (!gallery || !groupsEl) return;
+    if (!gallery || !galleryGrid || !groupsEl) return;
 
     batchPhotoTileByKey = new Map();
     batchGroupRowById = new Map();
-    gallery.textContent = "";
+    gallery.querySelector(".batch-gallery-sticky").textContent = "";
+    galleryGrid.textContent = "";
     groupsEl.textContent = "";
 
     const markedKeys = getMarkedBatchPhotoKeys();
@@ -13587,7 +13618,7 @@
       batchPhotoTileByKey.set(key, tile.querySelector(".batch-photo"));
       fragment.appendChild(tile);
     });
-    gallery.appendChild(fragment);
+    galleryGrid.appendChild(fragment);
 
     batchMarkedGroups.forEach((group) => renderBatchGroupRow(group));
     updateBatchGroupingControls();
@@ -13762,6 +13793,8 @@
     const review = document.querySelector(`#${BATCH_MODAL_ID} .batch-review`);
     const organizeTip = document.querySelector(`#${BATCH_MODAL_ID} .organize-tip`);
     const gallery = document.querySelector(`#${BATCH_MODAL_ID} .batch-gallery`);
+    const stickyRow = gallery?.querySelector(".batch-gallery-sticky");
+    const galleryGrid = gallery?.querySelector(".batch-gallery-grid");
     const summaryHead = document.querySelector(`#${BATCH_MODAL_ID} .batch-summary-head`);
     const summaryCount = document.querySelector(`#${BATCH_MODAL_ID} .batch-summary-count`);
     const emptyState = document.querySelector(`#${BATCH_MODAL_ID} .batch-empty-state`);
@@ -13786,6 +13819,7 @@
       wrapper.classList.remove("is-grouped");
       wrapper.setAttribute("aria-hidden", "false");
     });
+    layoutBatchGalleryRows();
     const visibleGalleryCount = gallery
       ? gallery.querySelectorAll(".batch-photo-wrap:not([hidden])").length
       : remainingCount;
@@ -13838,13 +13872,21 @@
       organizeTip.classList.toggle("is-hidden", remainingCount === 0);
       organizeTip.setAttribute("aria-hidden", remainingCount === 0 ? "true" : "false");
     }
-    if (gallery) {
-      gallery.classList.toggle(
+    if (stickyRow) {
+      stickyRow.classList.toggle(
         "is-sticky-row",
-        remainingCount > 0,
+        groups.length > 0 && remainingCount > 0,
       );
-      gallery.classList.toggle("is-settling", remainingCount === 0 && visibleGalleryCount > 0);
-      gallery.classList.toggle("is-empty", remainingCount === 0 && visibleGalleryCount === 0);
+    }
+    if (galleryGrid) {
+      galleryGrid.classList.toggle(
+        "is-settling",
+        remainingCount === 0 && visibleGalleryCount > 0,
+      );
+      galleryGrid.classList.toggle(
+        "is-empty",
+        remainingCount === 0 && visibleGalleryCount === 0,
+      );
     }
     if (summaryHead) {
       summaryHead.classList.toggle("is-hidden", groups.length === 0);

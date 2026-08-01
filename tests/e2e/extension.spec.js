@@ -388,7 +388,9 @@ async function expectBatchModalLayoutStable(page, modal) {
       const content = root.querySelector(".batch-content");
       const body = root.querySelector(".batch-body");
       const review = root.querySelector(".batch-review");
-      const gallery = root.querySelector(".batch-gallery");
+      const gallery =
+        root.querySelector(".batch-gallery-sticky:not(:empty)") ||
+        root.querySelector(".batch-gallery");
       const actions = root.querySelector(".batch-actions");
       const viewportWidth = window.innerWidth;
       const viewportHeight = window.innerHeight;
@@ -2504,7 +2506,7 @@ test.describe("AutoLister extension smoke flows", () => {
     await expect(pingBatchTab()).resolves.toEqual({ ok: false });
   });
 
-  test("keeps the unsorted row visible while grouped items scroll", async ({
+  test("keeps only the first ungrouped row sticky while the gallery wraps", async ({
     page,
   }) => {
     await page.setViewportSize({ width: 1280, height: 720 });
@@ -2523,17 +2525,29 @@ test.describe("AutoLister extension smoke flows", () => {
     await chooseBatchUpload(page);
     const modal = page.locator("#quickvint-batch-modal");
     const gallery = modal.locator(".batch-gallery");
-    const galleryPhotos = gallery.locator(".batch-photo");
-    await expect(galleryPhotos).toHaveCount(15);
-    await expect(gallery).toHaveClass(/is-sticky-row/);
+    const galleryGrid = modal.locator(".batch-gallery-grid");
+    const stickyRow = modal.locator(".batch-gallery-sticky");
+    const ungroupedPhotos = modal.locator(
+      ".batch-gallery-sticky .batch-photo, .batch-gallery .batch-photo",
+    );
+    await expect(ungroupedPhotos).toHaveCount(15);
+    await expect(stickyRow.locator(".batch-photo-wrap:not([hidden])")).toHaveCount(4);
+    await expect(galleryGrid.locator(".batch-photo-wrap:not([hidden])")).toHaveCount(11);
+    await expect(stickyRow).not.toHaveClass(/is-sticky-row/);
+    expect(
+      await galleryGrid.locator(".batch-photo-wrap:not([hidden])").evaluateAll((wrappers) =>
+        new Set(wrappers.map((wrapper) => Math.round(wrapper.getBoundingClientRect().y)))
+          .size,
+      ),
+    ).toBeGreaterThan(1);
 
     for (let groupIndex = 0; groupIndex < 3; groupIndex += 1) {
-      await gallery
+      await modal
         .locator(
           `.batch-photo[data-photo-key="phone-${groupIndex * 2 + 1}.jpg"]`,
         )
         .click();
-      await gallery
+      await modal
         .locator(
           `.batch-photo[data-photo-key="phone-${groupIndex * 2 + 2}.jpg"]`,
         )
@@ -2541,16 +2555,17 @@ test.describe("AutoLister extension smoke flows", () => {
       await modal.locator(".batch-mark-group").click();
     }
 
-    await expect(gallery).toHaveClass(/is-sticky-row/);
-    await expect(gallery.locator(".batch-photo-wrap:not([hidden])")).toHaveCount(9);
+    await expect(stickyRow).toHaveClass(/is-sticky-row/);
+    await expect(stickyRow.locator(".batch-photo-wrap:not([hidden])")).toHaveCount(4);
+    await expect(galleryGrid.locator(".batch-photo-wrap:not([hidden])")).toHaveCount(5);
     expect(
-      await gallery
+      await stickyRow
         .locator(".batch-photo-wrap:not([hidden]) .batch-photo")
-        .evaluateAll((photos) => photos.slice(0, 4).map((photo) => photo.dataset.photoKey)),
+        .evaluateAll((photos) => photos.map((photo) => photo.dataset.photoKey)),
     ).toEqual(["phone-7.jpg", "phone-8.jpg", "phone-9.jpg", "phone-10.jpg"]);
     expect(
-      await gallery.evaluate((node) => node.scrollWidth > node.clientWidth),
-    ).toBe(true);
+      await galleryGrid.evaluate((node) => node.scrollWidth > node.clientWidth),
+    ).toBe(false);
     await expect(modal.locator(".batch-review")).not.toHaveClass(/is-reflowing/);
     await expect(modal.locator(".batch-item-card")).toHaveCount(3);
     await expect(modal.locator(".batch-item-card").last()).not.toHaveClass(
@@ -2563,11 +2578,11 @@ test.describe("AutoLister extension smoke flows", () => {
     });
     await expect
       .poll(async () => {
-        const [galleryBox, reviewBox] = await Promise.all([
-          gallery.boundingBox(),
+        const [stickyBox, reviewBox] = await Promise.all([
+          stickyRow.boundingBox(),
           review.boundingBox(),
         ]);
-        return Math.abs(galleryBox.y - reviewBox.y);
+        return Math.abs(stickyBox.y - reviewBox.y);
       })
       .toBeLessThanOrEqual(1);
     expect(
@@ -2594,24 +2609,25 @@ test.describe("AutoLister extension smoke flows", () => {
     ).toBe(true);
     await expectBatchModalLayoutStable(page, modal);
 
-    const stalePhoto = gallery.locator(".batch-photo-wrap:not([hidden])").first();
+    const stalePhoto = stickyRow.locator(".batch-photo-wrap:not([hidden])").first();
     await stalePhoto.evaluate((wrapper) => {
       wrapper.hidden = true;
       wrapper.classList.add("is-grouped");
       wrapper.setAttribute("aria-hidden", "true");
     });
-    await gallery
+    await modal
       .locator(".batch-photo-wrap:not([hidden]) .batch-photo")
       .first()
       .click();
     await expect(stalePhoto).toBeVisible();
 
     await page.setViewportSize({ width: 390, height: 844 });
-    await expect(gallery).toHaveClass(/is-sticky-row/);
+    await expect(stickyRow).toHaveClass(/is-sticky-row/);
+    await expect(stickyRow.locator(".batch-photo-wrap:not([hidden])")).toHaveCount(3);
     await expectBatchModalLayoutStable(page, modal);
 
-    const remainingPhotos = gallery.locator(
-      ".batch-photo-wrap:not([hidden]) .batch-photo",
+    const remainingPhotos = modal.locator(
+      ".batch-gallery-sticky .batch-photo-wrap:not([hidden]) .batch-photo, .batch-gallery .batch-photo-wrap:not([hidden]) .batch-photo",
     );
     for (let index = 0; index < (await remainingPhotos.count()); index += 1) {
       const photo = remainingPhotos.nth(index);
@@ -2620,7 +2636,7 @@ test.describe("AutoLister extension smoke flows", () => {
       }
     }
     await modal.locator(".batch-mark-group").click();
-    await expect(gallery).not.toHaveClass(/is-sticky-row/);
+    await expect(stickyRow).not.toHaveClass(/is-sticky-row/);
     await expect(modal.locator(".organize-unsorted-badge")).toHaveText("All sorted");
   });
 
