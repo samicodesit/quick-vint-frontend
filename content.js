@@ -16491,6 +16491,7 @@
     });
     controller.querySelector(".quickvint-wardrobe-selection-start").addEventListener("click", async () => {
       const capacity = await loadWardrobeRewriteCapacity();
+      if (wardrobeSelectionController !== controller) return;
       wardrobeSelectionCapacity = capacity.available;
       if (wardrobeRewriteSelectedItems.size > wardrobeSelectionCapacity) {
         controller.querySelector(".quickvint-wardrobe-selection-feedback").textContent =

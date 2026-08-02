@@ -171,7 +171,12 @@ function installChromeHarness(page, capacityResponse = null, initialStorage = {}
             };
           }
 
-          setTimeout(() => callback?.(response), 0);
+          setTimeout(
+            () => callback?.(response),
+            message?.type === "GET_BATCH_CAPACITY"
+              ? Math.max(0, Number(currentCapacity?.delayMs || 0))
+              : 0,
+          );
         },
       },
       storage: {
@@ -6169,6 +6174,33 @@ test.describe("own wardrobe rewrite widget", () => {
     await page.getByRole("button", { name: "Exit selection" }).click();
     await enterWardrobeSelection(page);
     await page.evaluate(() => window.dispatchEvent(new PageTransitionEvent("pagehide")));
+    await expect(page.locator(".quickvint-wardrobe-selection-controller")).toHaveCount(0);
+    await expect(page.locator(".quickvint-wardrobe-select-item")).toHaveCount(0);
+  });
+
+  test("does not start from a cancelled wardrobe selection after capacity resolves", async ({
+    page,
+  }) => {
+    await page.emulateMedia({ reducedMotion: "reduce" });
+    await openWardrobeHarness(page, {
+      capacityResponse: [
+        { allowed: true, available: 2 },
+        { allowed: true, available: 2, delayMs: 100 },
+      ],
+      wardrobeItems: wardrobeItemFixture({ id: "9443601541" }),
+    });
+    await enterWardrobeSelection(page);
+    await page.getByRole("button", { name: /Select Item 9443601541/ }).click();
+    await page.getByRole("button", { name: "Start rewrite" }).click();
+    await page.getByRole("button", { name: "Exit selection" }).click();
+    await page.waitForTimeout(150);
+    expect(
+      await page.evaluate(() =>
+        window.__extensionHarness.runtimeMessages.some(
+          (message) => message?.type === "START_WARDROBE_REWRITE",
+        ),
+      ),
+    ).toBe(false);
     await expect(page.locator(".quickvint-wardrobe-selection-controller")).toHaveCount(0);
     await expect(page.locator(".quickvint-wardrobe-select-item")).toHaveCount(0);
   });
