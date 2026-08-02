@@ -9486,7 +9486,7 @@
       }
 
       #${WARDROBE_REWRITE_WIDGET_ID} .quickvint-wardrobe-rewrite-preference legend {
-        margin-bottom: 8px;
+        margin-bottom: 4px;
         color: #19164d;
         font-size: 16px;
         font-weight: 700;
@@ -9494,8 +9494,11 @@
       }
 
       #${WARDROBE_REWRITE_WIDGET_ID} .quickvint-wardrobe-rewrite-preference label {
-        display: block;
-        margin: 5px 0;
+        display: inline-flex;
+        width: calc(50% - 3px);
+        height: 40px;
+        align-items: center;
+        margin: 0;
         color: #4b4a68;
         font-size: 12px;
         font-weight: 650;
@@ -9507,8 +9510,8 @@
 
       #${WARDROBE_REWRITE_WIDGET_ID} .quickvint-wardrobe-rewrite-preference button,
       #${WARDROBE_REWRITE_WIDGET_ID} .quickvint-wardrobe-rewrite-instruction button {
-        height: 32px;
-        margin-top: 8px;
+        height: 40px;
+        margin-top: 4px;
         padding: 0 10px;
         border: 0;
         border-radius: 8px;
@@ -9725,17 +9728,17 @@
         }
 
         #${WARDROBE_REWRITE_WIDGET_ID} .quickvint-wardrobe-rewrite-preference legend {
-          margin-bottom: 5px;
+          margin-bottom: 2px;
           font-size: 14px;
         }
 
         #${WARDROBE_REWRITE_WIDGET_ID} .quickvint-wardrobe-rewrite-preference label {
-          margin: 3px 0;
+          margin: 0;
         }
 
         #${WARDROBE_REWRITE_WIDGET_ID} .quickvint-wardrobe-rewrite-preference button,
         #${WARDROBE_REWRITE_WIDGET_ID} .quickvint-wardrobe-rewrite-instruction button {
-          height: 28px;
+          height: 40px;
           margin-top: 4px;
         }
 

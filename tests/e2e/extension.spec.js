@@ -6001,6 +6001,31 @@ test.describe("own wardrobe rewrite widget", () => {
     ).toBe(0);
   });
 
+  test("keeps wardrobe preference touch targets usable at desktop and narrow widths", async ({
+    page,
+  }) => {
+    for (const width of [1440, 390]) {
+      await page.setViewportSize({ width, height: 900 });
+      await openWardrobeHarness(page);
+      await page.locator(".quickvint-wardrobe-rewrite-cta").click();
+
+      for (const target of [
+        page.getByLabel("Replace fields").locator("..").first(),
+        page.getByLabel("Review first").locator("..").first(),
+        page.locator(".quickvint-wardrobe-rewrite-back"),
+        page.locator(".quickvint-wardrobe-rewrite-continue"),
+      ]) {
+        expect((await target.boundingBox()).height).toBeGreaterThanOrEqual(40);
+      }
+
+      await page.getByLabel("Review first").check();
+      await page.locator(".quickvint-wardrobe-rewrite-continue").click();
+      expect(
+        (await page.locator(".quickvint-wardrobe-rewrite-exit").boundingBox()).height,
+      ).toBeGreaterThanOrEqual(40);
+    }
+  });
+
   test("retries a failed capacity lookup for wardrobe without showing a stale number", async ({
     page,
   }) => {
