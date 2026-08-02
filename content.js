@@ -9377,6 +9377,10 @@
         isolation: isolate;
       }
 
+      #${WARDROBE_REWRITE_WIDGET_ID}.is-animating {
+        pointer-events: none;
+      }
+
       #${WARDROBE_REWRITE_WIDGET_ID}.quickvint-wardrobe-rewrite-pending {
         visibility: hidden;
       }
@@ -9394,10 +9398,13 @@
       }
 
       #${WARDROBE_REWRITE_WIDGET_ID} .quickvint-wardrobe-rewrite-expanded {
-        position: relative;
+        position: absolute;
+        inset: 0;
         width: 100%;
         height: 100%;
         padding: 19px 166px 18px 21px;
+        opacity: 1;
+        visibility: visible;
       }
 
       #${WARDROBE_REWRITE_WIDGET_ID} .quickvint-wardrobe-rewrite-brand {
@@ -9462,15 +9469,23 @@
         right: 7px;
         z-index: 3;
         display: grid;
-        width: 36px;
-        height: 36px;
+        width: 40px;
+        height: 40px;
         padding: 0;
         place-items: center;
-        border: 0;
+        border: 1px solid #c7c5ff;
         border-radius: 50%;
-        background: rgba(255, 255, 255, .84);
-        color: #595770;
+        background: #fff;
+        color: #3730a3;
+        box-shadow: 0 5px 14px rgba(49, 46, 129, .18);
         cursor: pointer;
+      }
+
+      #${WARDROBE_REWRITE_WIDGET_ID} .quickvint-wardrobe-rewrite-minimize svg {
+        width: 19px;
+        height: 19px;
+        stroke: currentColor;
+        stroke-width: 2.25;
       }
 
       #${WARDROBE_REWRITE_WIDGET_ID} .quickvint-wardrobe-rewrite-minimize:hover,
@@ -9486,7 +9501,9 @@
       }
 
       #${WARDROBE_REWRITE_WIDGET_ID} .quickvint-wardrobe-rewrite-compact {
-        display: none;
+        position: absolute;
+        inset: 0;
+        display: flex;
         width: 100%;
         height: 100%;
         align-items: center;
@@ -9498,6 +9515,8 @@
         cursor: pointer;
         font-size: 13px;
         font-weight: 750;
+        opacity: 0;
+        visibility: hidden;
         white-space: nowrap;
       }
 
@@ -9520,13 +9539,23 @@
         box-shadow: 0 8px 22px rgba(55, 48, 163, .10);
       }
 
-      #${WARDROBE_REWRITE_WIDGET_ID}.is-collapsed::before,
-      #${WARDROBE_REWRITE_WIDGET_ID}.is-collapsed .quickvint-wardrobe-rewrite-expanded {
+      #${WARDROBE_REWRITE_WIDGET_ID}.is-collapsed::before {
         display: none;
       }
 
+      #${WARDROBE_REWRITE_WIDGET_ID}.is-collapsed .quickvint-wardrobe-rewrite-expanded {
+        opacity: 0;
+        visibility: hidden;
+      }
+
       #${WARDROBE_REWRITE_WIDGET_ID}.is-collapsed .quickvint-wardrobe-rewrite-compact {
-        display: flex;
+        opacity: 1;
+        visibility: visible;
+      }
+
+      #${WARDROBE_REWRITE_WIDGET_ID}.is-animating .quickvint-wardrobe-rewrite-expanded,
+      #${WARDROBE_REWRITE_WIDGET_ID}.is-animating .quickvint-wardrobe-rewrite-compact {
+        visibility: visible;
       }
 
       @media (min-width: 1101px) {
@@ -16017,7 +16046,9 @@
     widget.setAttribute("aria-label", "AutoLister listing rewrite");
     widget.innerHTML = `
       <div class="quickvint-wardrobe-rewrite-expanded">
-        <button type="button" class="quickvint-wardrobe-rewrite-minimize" aria-label="Minimize rewrite listings">−</button>
+        <button type="button" class="quickvint-wardrobe-rewrite-minimize" aria-label="Minimize rewrite listings" title="Minimize">
+          <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M6 12h12" stroke-linecap="round" /></svg>
+        </button>
         <p class="quickvint-wardrobe-rewrite-brand">AutoLister AI</p>
         <h2 id="quickvint-wardrobe-rewrite-title">Let's rewrite your listings</h2>
         <p class="quickvint-wardrobe-rewrite-copy">Refresh your titles and descriptions without starting over.</p>
@@ -16031,6 +16062,9 @@
       </button>
     `;
     host.appendChild(widget);
+    const reduceMotion = window.matchMedia(
+      "(prefers-reduced-motion: reduce)",
+    ).matches;
     const fitToViewport = () => {
       if (window.innerWidth > 640) {
         widget.style.removeProperty("width");
@@ -16049,8 +16083,86 @@
       widget.style.marginLeft = `${viewportWidth - 16 - width - naturalLeft}px`;
     };
     const setCollapsed = (collapsed, persist) => {
-      widget.classList.toggle("is-collapsed", collapsed);
-      fitToViewport();
+      const applyState = () => {
+        widget.classList.toggle("is-collapsed", collapsed);
+        fitToViewport();
+      };
+      if (!persist || reduceMotion) {
+        applyState();
+      } else {
+        const first = widget.getBoundingClientRect();
+        const firstHostHeight = host.getBoundingClientRect().height;
+        const firstRadius = getComputedStyle(widget).borderRadius;
+        const outgoing = widget.querySelector(
+          collapsed
+            ? ".quickvint-wardrobe-rewrite-expanded"
+            : ".quickvint-wardrobe-rewrite-compact",
+        );
+        const incoming = widget.querySelector(
+          collapsed
+            ? ".quickvint-wardrobe-rewrite-compact"
+            : ".quickvint-wardrobe-rewrite-expanded",
+        );
+        widget.classList.add("is-animating");
+        applyState();
+        const last = widget.getBoundingClientRect();
+        const lastHostHeight = host.getBoundingClientRect().height;
+        const lastRadius = getComputedStyle(widget).borderRadius;
+        const motion = {
+          duration: 420,
+          easing: "cubic-bezier(.22, 1, .36, 1)",
+        };
+        const widgetAnimation = widget.animate(
+          [
+            {
+              transform: `translate(${first.left - last.left}px, ${first.top - last.top}px) scale(${first.width / last.width}, ${first.height / last.height})`,
+              transformOrigin: "top left",
+              borderRadius: firstRadius,
+            },
+            {
+              transform: "translate(0, 0) scale(1, 1)",
+              transformOrigin: "top left",
+              borderRadius: lastRadius,
+            },
+          ],
+          motion,
+        );
+        const hostAnimation = host.animate(
+          [
+            { height: `${firstHostHeight}px` },
+            { height: `${lastHostHeight}px` },
+          ],
+          motion,
+        );
+        outgoing.style.visibility = "visible";
+        incoming.style.visibility = "visible";
+        const outgoingAnimation = outgoing.animate(
+          [{ opacity: 1 }, { opacity: 0 }],
+          { duration: 220, easing: "ease-out" },
+        );
+        const incomingAnimation = incoming.animate(
+          [
+            { opacity: 0, transform: "translateY(4px)" },
+            { opacity: 1, transform: "translateY(0)" },
+          ],
+          {
+            duration: 280,
+            delay: 60,
+            easing: "ease-out",
+            fill: "backwards",
+          },
+        );
+        Promise.allSettled([
+          widgetAnimation.finished,
+          hostAnimation.finished,
+          outgoingAnimation.finished,
+          incomingAnimation.finished,
+        ]).then(() => {
+          outgoing.style.removeProperty("visibility");
+          incoming.style.removeProperty("visibility");
+          widget.classList.remove("is-animating");
+        });
+      }
       if (persist) {
         chrome.storage.local.set({ [WARDROBE_REWRITE_COLLAPSED_KEY]: collapsed });
       }
@@ -16066,6 +16178,18 @@
       (storage) => {
         setCollapsed(Boolean(storage[WARDROBE_REWRITE_COLLAPSED_KEY]), false);
         widget.classList.remove("quickvint-wardrobe-rewrite-pending");
+        if (!reduceMotion) {
+          widget.animate(
+            [
+              { opacity: 0, transform: "translateY(10px) scale(.98)" },
+              { opacity: 1, transform: "translateY(0) scale(1)" },
+            ],
+            {
+              duration: 360,
+              easing: "cubic-bezier(.22, 1, .36, 1)",
+            },
+          );
+        }
       },
     );
     window.addEventListener("resize", fitToViewport);

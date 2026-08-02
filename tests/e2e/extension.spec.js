@@ -5775,6 +5775,102 @@ test.describe("AutoLister extension smoke flows", () => {
 });
 
 test.describe("own wardrobe rewrite widget", () => {
+  test("reveals smoothly on first display", async ({ page }) => {
+    await openWardrobeHarness(page);
+
+    await expect
+      .poll(() =>
+        page.locator("#quickvint-wardrobe-rewrite-widget").evaluate((widget) =>
+          widget
+            .getAnimations({ subtree: true })
+            .some((animation) => animation.playState === "running"),
+        ),
+      )
+      .toBe(true);
+  });
+
+  test("uses a prominent minimize control", async ({ page }) => {
+    await openWardrobeHarness(page);
+    await page.waitForTimeout(400);
+
+    const minimize = page.getByRole("button", {
+      name: "Minimize rewrite listings",
+    });
+    const box = await minimize.boundingBox();
+    expect(box.width).toBeGreaterThanOrEqual(40);
+    expect(box.height).toBeGreaterThanOrEqual(40);
+    await expect(minimize.locator("svg")).toBeVisible();
+  });
+
+  test("glides through intermediate geometry when collapsed and expanded", async ({
+    page,
+  }) => {
+    await openWardrobeHarness(page);
+    await page.waitForTimeout(400);
+
+    const widget = page.locator("#quickvint-wardrobe-rewrite-widget");
+    const host = page.locator(".quickvint-wardrobe-rewrite-host");
+    const before = await widget.boundingBox();
+    await page.getByRole("button", { name: "Minimize rewrite listings" }).click();
+    await page.waitForTimeout(100);
+    const collapsedMidpoint = await widget.boundingBox();
+    const collapseMotion = await page.evaluate(() => ({
+      widget: document
+        .querySelector("#quickvint-wardrobe-rewrite-widget")
+        .getAnimations()
+        .some((animation) => animation.playState === "running"),
+      host: document
+        .querySelector(".quickvint-wardrobe-rewrite-host")
+        .getAnimations()
+        .some((animation) => animation.playState === "running"),
+      compactOpacity: Number.parseFloat(
+        getComputedStyle(
+          document.querySelector(".quickvint-wardrobe-rewrite-compact"),
+        ).opacity,
+      ),
+    }));
+    await page.waitForTimeout(400);
+    const collapsed = await widget.boundingBox();
+
+    expect(collapseMotion.widget).toBe(true);
+    expect(collapseMotion.host).toBe(true);
+    expect(collapsedMidpoint.width).toBeLessThan(before.width);
+    expect(collapsedMidpoint.width).toBeGreaterThan(collapsed.width);
+    expect(collapseMotion.compactOpacity).toBeGreaterThan(0);
+    expect(collapseMotion.compactOpacity).toBeLessThan(1);
+
+    await page.getByRole("button", { name: "Expand rewrite listings" }).click();
+    await page.waitForTimeout(100);
+    const expandedMidpoint = await widget.boundingBox();
+    expect(expandedMidpoint.width).toBeGreaterThan(collapsed.width);
+    expect(expandedMidpoint.width).toBeLessThan(before.width);
+    await expect(host).toBeVisible();
+  });
+
+  test("applies state immediately when reduced motion is requested", async ({
+    page,
+  }) => {
+    await page.emulateMedia({ reducedMotion: "reduce" });
+    await openWardrobeHarness(page);
+
+    const widget = page.locator("#quickvint-wardrobe-rewrite-widget");
+    expect(
+      await widget.evaluate((element) =>
+        element.getAnimations({ subtree: true }).length,
+      ),
+    ).toBe(0);
+
+    await page.getByRole("button", { name: "Minimize rewrite listings" }).click();
+    expect(
+      await widget.evaluate((element) =>
+        element.getAnimations({ subtree: true }).length,
+      ),
+    ).toBe(0);
+    await expect(
+      page.getByRole("button", { name: "Expand rewrite listings" }),
+    ).toBeVisible();
+  });
+
   test("shows the rewrite widget when Vinted's current member ID matches the profile", async ({
     page,
   }) => {
