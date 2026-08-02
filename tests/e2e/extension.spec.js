@@ -33,6 +33,20 @@ const delayedFileInputListingFixture = emptyListingFixture.replace(
 const freeLimitPaywallSeenStorageKey =
   "quickvintLimitPaywallSeen:test-user:limit_followup_offer_v1";
 
+function wardrobeItemFixture({ id, status = "", title = `Item ${id}` }) {
+  return `<div data-testid="grid-item">
+    <div data-testid="product-item-id-${id}">
+      <div class="new-item-box__image-container">
+        <div data-testid="product-item-id-${id}--image">
+          <img data-testid="product-item-id-${id}--image--img" alt="${title}" src="https://images1.vinted.net/${id}.webp">
+        </div>
+        <a data-testid="product-item-id-${id}--overlay-link" href="/items/${id}"></a>
+        ${status ? `<div data-testid="product-item-id-${id}--status"><p data-testid="product-item-id-${id}--status-text">${status}</p></div>` : ""}
+      </div>
+    </div>
+  </div>`;
+}
+
 async function loadExtension(options = {}) {
   const userDataDir = fs.mkdtempSync(
     path.join(require("node:os").tmpdir(), "quick-vint-e2e-"),
@@ -324,6 +338,8 @@ async function openWardrobeHarness(
     extraBadges = false,
     capacityResponse = { allowed: true, available: 12 },
     signedIn = true,
+    wardrobeItems = null,
+    initialStorage = {},
   } = {},
 ) {
   const state = currentUserId
@@ -390,6 +406,7 @@ async function openWardrobeHarness(
                 </div>
               </div>
               <div class="tabs">Listings &nbsp;&nbsp; Reviews</div>
+              ${wardrobeItems ? `<div data-testid="feed-grid">${wardrobeItems}<div data-testid="infinite-scroll"></div></div>` : ""}
             </main>
           </body>
         </html>`,
@@ -401,6 +418,7 @@ async function openWardrobeHarness(
     ...(signedIn
       ? { supabaseSession: { access_token: "token" } }
       : { supabaseSession: null }),
+    ...initialStorage,
   });
   await page.addScriptTag({ path: languageDefaultsPath });
   await page.addScriptTag({ path: contentScriptPath });
@@ -452,6 +470,13 @@ async function waitForWardrobeMotionToFinish(page) {
       ),
     )
     .toBe(true);
+}
+
+async function enterWardrobeSelection(page, mode = "review") {
+  await page.locator(".quickvint-wardrobe-rewrite-cta").click();
+  await page.getByLabel(mode === "review" ? "Review first" : "Replace fields").check();
+  await page.locator(".quickvint-wardrobe-rewrite-continue").click();
+  await expect(page.locator(".quickvint-wardrobe-selection-controller")).toBeVisible();
 }
 
 async function expectInsideViewport(page, selector) {
@@ -5978,6 +6003,139 @@ test.describe("own wardrobe rewrite widget", () => {
 
     await page.getByRole("button", { name: "Exit selection" }).click();
     await expect(page.getByText("Let's rewrite your listings")).toBeVisible();
+  });
+
+  test("selects active and hidden wardrobe items but excludes sold items", async ({ page }) => {
+    await openWardrobeHarness(page, {
+      capacityResponse: { allowed: true, available: 2 },
+      wardrobeItems: [
+        wardrobeItemFixture({ id: "9443601541" }),
+        wardrobeItemFixture({ id: "7563307251", status: "Hidden" }),
+        wardrobeItemFixture({ id: "6361197692", status: "Sold" }),
+      ].join(""),
+    });
+    await enterWardrobeSelection(page, "review");
+    await expect(page.locator(".quickvint-wardrobe-select-item")).toHaveCount(2);
+    await page.getByRole("button", { name: /Select Item 9443601541/ }).click();
+    await page.getByRole("button", { name: /Select Item 7563307251/ }).click();
+    await expect(page.locator(".quickvint-wardrobe-selection-count")).toHaveText(
+      "2 selected · 2 available",
+    );
+    await expect(page.locator('[data-testid="product-item-id-6361197692"] .quickvint-wardrobe-select-item')).toHaveCount(0);
+    await page.getByRole("button", { name: /Unselect Item 9443601541/ }).press("Enter");
+    await expect(page.locator(".quickvint-wardrobe-selection-count")).toHaveText(
+      "1 selected · 2 available",
+    );
+    await page.getByRole("button", { name: /Select Item 9443601541/ }).click();
+    await expect(page.getByRole("button", { name: /Select Item 7563307251/ })).toBeDisabled();
+    expect(await page.evaluate(() => location.pathname)).toBe("/member/270830120");
+  });
+
+  test("dynamic wardrobe selection only decorates valid cards and respects motion and scroll preferences", async ({
+    page,
+  }) => {
+    await page.emulateMedia({ reducedMotion: "reduce" });
+    await openWardrobeHarness(page, {
+      wardrobeItems: [
+        wardrobeItemFixture({ id: "9443601541" }),
+        wardrobeItemFixture({ id: "7563307251" }).replace(
+          'href="/items/7563307251"',
+          'href="https://example.com/items/7563307251"',
+        ),
+        wardrobeItemFixture({ id: "6361197692" }).replace(
+          'href="/items/6361197692"',
+          'href="/items/999"',
+        ),
+      ].join(""),
+    });
+    await page.locator('[data-testid="feed-grid"]').evaluate((grid) => {
+      grid.style.marginTop = "1600px";
+    });
+    await enterWardrobeSelection(page);
+    await expect(page.locator(".quickvint-wardrobe-select-item")).toHaveCount(1);
+    expect(await page.evaluate(() => window.scrollY)).toBeGreaterThan(1000);
+    expect(
+      await page.locator(".quickvint-wardrobe-select-item").evaluate((button) =>
+        button.getAnimations().length,
+      ),
+    ).toBe(0);
+    await page.locator('[data-testid="feed-grid"]').evaluate((grid) => {
+      grid.insertAdjacentHTML("beforeend", `${wardrobeItemFixture({ id: "8383838383" })}`);
+    });
+    await expect(page.getByRole("button", { name: /Select Item 8383838383/ })).toBeVisible();
+  });
+
+  test("wardrobe controller renders sticky controls, persists languages, and starts the selected listing", async ({
+    page,
+  }) => {
+    await page.emulateMedia({ reducedMotion: "reduce" });
+    await openWardrobeHarness(page, {
+      capacityResponse: { allowed: true, available: 2 },
+      wardrobeItems: wardrobeItemFixture({ id: "9443601541" }),
+      initialStorage: {
+        selectedTitleLanguage: "en",
+        selectedDescriptionLanguage: "nl",
+      },
+    });
+    await enterWardrobeSelection(page);
+    const controller = page.locator(".quickvint-wardrobe-selection-controller");
+    expect(await controller.evaluate((node) => getComputedStyle(node).position)).toBe("sticky");
+    expect(await controller.evaluate((node) => node.nextElementSibling?.dataset.testid)).toBe("feed-grid");
+    await expect(page.getByLabel("Title language")).toHaveValue("en");
+    await expect(page.getByLabel("Description language")).toHaveValue("nl");
+    await expect(page.getByRole("button", { name: "Start rewrite" })).toBeDisabled();
+    await page.getByLabel("Title language").selectOption("nl");
+    await expect.poll(() => page.evaluate(() => window.__extensionHarness.storage.selectedTitleLanguage)).toBe("nl");
+    await page.getByRole("button", { name: /Select Item 9443601541/ }).click();
+    await page.getByRole("button", { name: "Start rewrite" }).click();
+    const startMessage = await page.evaluate(() =>
+      window.__extensionHarness.runtimeMessages.find(
+        (message) => message?.type === "START_WARDROBE_REWRITE",
+      ),
+    );
+    expect(startMessage).toEqual({
+      type: "START_WARDROBE_REWRITE",
+      items: [
+        { id: "9443601541", editUrl: "https://www.vinted.nl/items/9443601541/edit" },
+      ],
+      applyMode: "review",
+      titleLanguageCode: "nl",
+      descriptionLanguageCode: "nl",
+    });
+  });
+
+  test("wardrobe selection refreshes capacity before start and cleans up on Exit and pagehide", async ({
+    page,
+  }) => {
+    await page.emulateMedia({ reducedMotion: "reduce" });
+    await openWardrobeHarness(page, {
+      capacityResponse: [
+        { allowed: true, available: 2 },
+        { allowed: true, available: 0 },
+      ],
+      wardrobeItems: wardrobeItemFixture({ id: "9443601541" }),
+    });
+    await enterWardrobeSelection(page);
+    await page.getByRole("button", { name: /Select Item 9443601541/ }).click();
+    await page.getByRole("button", { name: "Start rewrite" }).click();
+    await expect(page.locator(".quickvint-wardrobe-selection-feedback")).toHaveText(
+      "Deselect to the new maximum of 0.",
+    );
+    expect(
+      await page.evaluate(() =>
+        window.__extensionHarness.runtimeMessages.some(
+          (message) => message?.type === "START_WARDROBE_REWRITE",
+        ),
+      ),
+    ).toBe(false);
+    await page.getByRole("button", { name: "Exit selection" }).click();
+    await expect(page.locator(".quickvint-wardrobe-selection-controller")).toHaveCount(0);
+    await expect(page.locator(".quickvint-wardrobe-select-item")).toHaveCount(0);
+
+    await enterWardrobeSelection(page);
+    await page.evaluate(() => window.dispatchEvent(new PageTransitionEvent("pagehide")));
+    await expect(page.locator(".quickvint-wardrobe-selection-controller")).toHaveCount(0);
+    await expect(page.locator(".quickvint-wardrobe-select-item")).toHaveCount(0);
   });
 
   test("keeps wardrobe preference fixed and keyboard-accessible on narrow reduced-motion screens", async ({

@@ -28,6 +28,13 @@
   let wardrobeRewriteCapacityLoading = false;
   let wardrobeRewriteApplyMode = null;
   let wardrobeRewriteWidget = null;
+  let wardrobeRewriteSelectedItems = new Map();
+  let wardrobeSelectionGrid = null;
+  let wardrobeSelectionController = null;
+  let wardrobeSelectionObserver = null;
+  let wardrobeSelectionPagehide = null;
+  let wardrobeSelectionPulseTimeout = null;
+  let wardrobeSelectionCapacity = 0;
   const DESCRIPTION_APPLY_PROMPT_ID = "quickvint-description-apply-prompt";
   const LIMIT_FOLLOWUP_MODAL_ID = "quickvint-limit-followup-modal";
   const TITLE_LANGUAGE_SELECT_ID = "quickvint-title-language-select";
@@ -9399,6 +9406,92 @@
         text-decoration: underline;
       }
 
+      .quickvint-wardrobe-selection-controller {
+        position: sticky;
+        top: 8px;
+        z-index: 10;
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 8px 12px;
+        margin: 0 0 12px;
+        padding: 12px;
+        border: 1px solid #dfe1ff;
+        border-radius: 12px;
+        background: #fff;
+        box-shadow: 0 8px 20px rgba(55, 48, 163, .12);
+        color: #19164d;
+        font: 600 13px/1.3 Arial, sans-serif;
+      }
+
+      .quickvint-wardrobe-selection-controller label {
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+      }
+
+      .quickvint-wardrobe-selection-controller select,
+      .quickvint-wardrobe-selection-controller button {
+        min-height: 36px;
+        border: 1px solid #c7c5ff;
+        border-radius: 7px;
+        background: #fff;
+        color: #3730a3;
+        font: inherit;
+      }
+
+      .quickvint-wardrobe-selection-controller button {
+        padding: 0 10px;
+        cursor: pointer;
+      }
+
+      .quickvint-wardrobe-selection-controller button:disabled {
+        cursor: default;
+        opacity: .55;
+      }
+
+      .quickvint-wardrobe-selection-feedback {
+        flex-basis: 100%;
+        margin: 0;
+        color: #a13a24;
+      }
+
+      .quickvint-wardrobe-selection-item {
+        position: relative;
+      }
+
+      .quickvint-wardrobe-select-item {
+        position: absolute;
+        top: 8px;
+        right: 8px;
+        z-index: 2;
+        min-width: 36px;
+        min-height: 36px;
+        border: 2px solid #4f46e5;
+        border-radius: 50%;
+        background: #fff;
+        color: #3730a3;
+        cursor: pointer;
+        font-weight: 800;
+      }
+
+      .quickvint-wardrobe-selection-item.quickvint-wardrobe-item-selected .quickvint-wardrobe-select-item {
+        background: #4f46e5;
+        color: #fff;
+      }
+
+      .quickvint-wardrobe-select-item.quickvint-wardrobe-attention {
+        animation: quickvint-wardrobe-attention .7s ease-out 1;
+      }
+
+      @keyframes quickvint-wardrobe-attention {
+        50% { transform: scale(1.15); }
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        .quickvint-wardrobe-select-item.quickvint-wardrobe-attention { animation: none; }
+      }
+
       #${WARDROBE_REWRITE_WIDGET_ID} {
         position: relative;
         width: 100%;
@@ -16247,7 +16340,176 @@
     }
   }
 
+  function readWardrobeListingCard(gridItem) {
+    const root = gridItem.querySelector('[data-testid^="product-item-id-"]');
+    const id = root?.dataset.testid?.match(/^product-item-id-(\d+)$/)?.[1];
+    const link = root?.querySelector('a[data-testid$="--overlay-link"][href]');
+    const image = root?.querySelector(`[data-testid="product-item-id-${id}--image"]`);
+    if (!id || !link || !image) return null;
+    let url;
+    try {
+      url = new URL(link.href, location.origin);
+    } catch {
+      return null;
+    }
+    if (url.origin !== location.origin || url.pathname !== `/items/${id}`) return null;
+    const status =
+      root.querySelector('[data-testid$="--status-text"]')?.textContent?.trim().toLowerCase() ||
+      "active";
+    if (status === "sold" || (status !== "active" && status !== "hidden")) return null;
+    return {
+      id,
+      itemUrl: url.href,
+      editUrl: `${location.origin}/items/${id}/edit`,
+      status,
+      gridItem,
+      image,
+    };
+  }
+
+  function updateWardrobeSelection() {
+    const selectedCount = wardrobeRewriteSelectedItems.size;
+    const atCapacity = selectedCount >= wardrobeSelectionCapacity;
+    for (const button of document.querySelectorAll(".quickvint-wardrobe-select-item")) {
+      const selected = wardrobeRewriteSelectedItems.has(button.dataset.wardrobeId);
+      button.setAttribute("aria-pressed", String(selected));
+      button.setAttribute(
+        "aria-label",
+        `${selected ? "Unselect" : "Select"} ${button.dataset.wardrobeTitle}`,
+      );
+      button.textContent = selected ? "✓" : "+";
+      button.disabled = !selected && atCapacity;
+      button.closest(".quickvint-wardrobe-selection-item")?.classList.toggle(
+        "quickvint-wardrobe-item-selected",
+        selected,
+      );
+    }
+    const count = wardrobeSelectionController?.querySelector(
+      ".quickvint-wardrobe-selection-count",
+    );
+    if (count) {
+      count.textContent = `${selectedCount} selected · ${wardrobeSelectionCapacity} available`;
+    }
+    const start = wardrobeSelectionController?.querySelector(
+      ".quickvint-wardrobe-selection-start",
+    );
+    if (start) start.disabled = selectedCount === 0 || selectedCount > wardrobeSelectionCapacity;
+  }
+
+  function decorateWardrobeListingCards() {
+    if (!wardrobeSelectionGrid) return;
+    for (const gridItem of wardrobeSelectionGrid.querySelectorAll('[data-testid="grid-item"]')) {
+      const card = readWardrobeListingCard(gridItem);
+      if (!card || gridItem.querySelector(".quickvint-wardrobe-select-item")) continue;
+      card.image.classList.add("quickvint-wardrobe-selection-item");
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "quickvint-wardrobe-select-item";
+      button.dataset.wardrobeId = card.id;
+      button.dataset.wardrobeTitle = card.image.querySelector("img")?.alt || `Item ${card.id}`;
+      button.addEventListener("click", (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        if (wardrobeRewriteSelectedItems.has(card.id)) {
+          wardrobeRewriteSelectedItems.delete(card.id);
+        } else if (wardrobeRewriteSelectedItems.size < wardrobeSelectionCapacity) {
+          wardrobeRewriteSelectedItems.set(card.id, card);
+        }
+        updateWardrobeSelection();
+      });
+      card.image.append(button);
+    }
+    updateWardrobeSelection();
+  }
+
+  function stopWardrobeSelection() {
+    wardrobeSelectionObserver?.disconnect();
+    wardrobeSelectionObserver = null;
+    if (wardrobeSelectionPagehide) {
+      window.removeEventListener("pagehide", wardrobeSelectionPagehide);
+      wardrobeSelectionPagehide = null;
+    }
+    if (wardrobeSelectionPulseTimeout) clearTimeout(wardrobeSelectionPulseTimeout);
+    wardrobeSelectionPulseTimeout = null;
+    wardrobeSelectionController?.remove();
+    wardrobeSelectionController = null;
+    for (const node of document.querySelectorAll(".quickvint-wardrobe-select-item")) node.remove();
+    for (const node of document.querySelectorAll(".quickvint-wardrobe-selection-item")) {
+      node.classList.remove(
+        "quickvint-wardrobe-selection-item",
+        "quickvint-wardrobe-item-selected",
+      );
+    }
+    wardrobeSelectionGrid = null;
+    wardrobeSelectionCapacity = 0;
+    wardrobeRewriteSelectedItems.clear();
+  }
+
+  async function renderWardrobeSelectionController() {
+    const grid = wardrobeSelectionGrid;
+    if (!grid) return;
+    const controller = document.createElement("section");
+    controller.className = "quickvint-wardrobe-selection-controller";
+    controller.setAttribute("aria-label", "Rewrite selected listings");
+    controller.innerHTML = `
+      <span class="quickvint-wardrobe-selection-count" role="status" aria-live="polite"></span>
+      <label>Title language <select aria-label="Title language" class="quickvint-wardrobe-title-language"></select></label>
+      <label>Description language <select aria-label="Description language" class="quickvint-wardrobe-description-language"></select></label>
+      <button type="button" class="quickvint-wardrobe-selection-start">Start rewrite</button>
+      <button type="button" class="quickvint-wardrobe-selection-cancel">Cancel selection</button>
+      <p class="quickvint-wardrobe-selection-feedback" aria-live="polite"></p>`;
+    for (const select of controller.querySelectorAll("select")) {
+      for (const language of LANGUAGE_OPTIONS) {
+        select.add(new Option(language.name, language.code));
+      }
+    }
+    grid.before(controller);
+    wardrobeSelectionController = controller;
+    const titleLanguage = controller.querySelector(".quickvint-wardrobe-title-language");
+    const descriptionLanguage = controller.querySelector(
+      ".quickvint-wardrobe-description-language",
+    );
+    const storage = await chrome.storage.local.get([
+      "selectedLanguage",
+      "selectedTitleLanguage",
+      "selectedDescriptionLanguage",
+    ]);
+    if (wardrobeSelectionController !== controller) return;
+    const profile = resolveLanguageProfile(storage);
+    titleLanguage.value = profile.titleLanguageCode;
+    descriptionLanguage.value = profile.descriptionLanguageCode;
+    titleLanguage.addEventListener("change", () =>
+      chrome.storage.local.set({ selectedTitleLanguage: titleLanguage.value }),
+    );
+    descriptionLanguage.addEventListener("change", () =>
+      chrome.storage.local.set({ selectedDescriptionLanguage: descriptionLanguage.value }),
+    );
+    controller.querySelector(".quickvint-wardrobe-selection-cancel").addEventListener("click", () => {
+      stopWardrobeSelection();
+      setWardrobeRewriteStep("intro");
+    });
+    controller.querySelector(".quickvint-wardrobe-selection-start").addEventListener("click", async () => {
+      const capacity = await loadWardrobeRewriteCapacity();
+      wardrobeSelectionCapacity = capacity.available;
+      if (wardrobeRewriteSelectedItems.size > wardrobeSelectionCapacity) {
+        controller.querySelector(".quickvint-wardrobe-selection-feedback").textContent =
+          `Deselect to the new maximum of ${wardrobeSelectionCapacity}.`;
+        updateWardrobeSelection();
+        return;
+      }
+      await sendMessage({
+        type: "START_WARDROBE_REWRITE",
+        items: [...wardrobeRewriteSelectedItems.values()].map(({ id, editUrl }) => ({ id, editUrl })),
+        applyMode: wardrobeRewriteApplyMode,
+        titleLanguageCode: titleLanguage.value,
+        descriptionLanguageCode: descriptionLanguage.value,
+      });
+    });
+    updateWardrobeSelection();
+  }
+
   function startWardrobeSelection() {
+    stopWardrobeSelection();
     const copy = wardrobeRewriteApplyMode === "replace"
       ? "Generated copy will replace your title and description."
       : "Generated copy will be shown for review before changing fields.";
@@ -16256,6 +16518,34 @@
     );
     if (modeCopy) modeCopy.textContent = copy;
     setWardrobeRewriteStep("selection");
+    const grids = [...document.querySelectorAll('[data-testid="infinite-scroll"]')]
+      .map((node) => node.parentElement)
+      .filter((grid) => grid?.querySelector('[data-testid="grid-item"]'));
+    wardrobeSelectionGrid = grids.find((grid) =>
+      [...grid.querySelectorAll('[data-testid="grid-item"]')].some(readWardrobeListingCard),
+    ) || null;
+    if (!wardrobeSelectionGrid) return;
+    wardrobeSelectionCapacity = Math.max(0, wardrobeRewriteCapacity?.available || 0);
+    decorateWardrobeListingCards();
+    renderWardrobeSelectionController();
+    wardrobeSelectionObserver = new MutationObserver(decorateWardrobeListingCards);
+    wardrobeSelectionObserver.observe(wardrobeSelectionGrid, { childList: true, subtree: true });
+    wardrobeSelectionPagehide = stopWardrobeSelection;
+    window.addEventListener("pagehide", wardrobeSelectionPagehide, { once: true });
+    const firstButton = wardrobeSelectionGrid.querySelector(".quickvint-wardrobe-select-item");
+    const firstItem = wardrobeSelectionGrid.querySelector('[data-testid="grid-item"]');
+    const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    if (firstButton && !reduceMotion) {
+      firstButton.classList.add("quickvint-wardrobe-attention");
+      wardrobeSelectionPulseTimeout = setTimeout(
+        () => firstButton.classList.remove("quickvint-wardrobe-attention"),
+        700,
+      );
+    }
+    if (firstItem) {
+      const top = firstItem.getBoundingClientRect().top + scrollY - 96;
+      window.scrollTo({ top: Math.max(0, top), behavior: reduceMotion ? "auto" : "smooth" });
+    }
   }
 
   function injectWardrobeRewriteWidget(ready = false, initialCollapsed = false) {
@@ -16365,9 +16655,10 @@
     widget.querySelector(".quickvint-wardrobe-rewrite-back").addEventListener("click", () =>
       setWardrobeRewriteStep("intro"),
     );
-    widget.querySelector(".quickvint-wardrobe-rewrite-exit").addEventListener("click", () =>
-      setWardrobeRewriteStep("intro"),
-    );
+    widget.querySelector(".quickvint-wardrobe-rewrite-exit").addEventListener("click", () => {
+      stopWardrobeSelection();
+      setWardrobeRewriteStep("intro");
+    });
     shell.appendChild(widget);
     host.appendChild(shell);
     if (isAuthenticated !== false) {
