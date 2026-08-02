@@ -47,6 +47,47 @@ function wardrobeItemFixture({ id, status = "", title = `Item ${id}` }) {
   </div>`;
 }
 
+function loadedWardrobeProfileFixture(items) {
+  return `<!doctype html>
+    <html><head><style>
+      [data-testid="feed-grid"] { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+      .new-item-box__image-container { position: relative; }
+      [data-testid$="--image"] { display: block; height: 180px; }
+      [data-testid$="--image"] img { width: 100%; height: 100%; object-fit: cover; }
+      [data-testid$="--overlay-link"] { position: absolute; inset: 0; }
+    </style></head><body>
+      <header><a href="/member/270830120">seller</a></header>
+      <main>
+        <div class="u-flex-grow">
+          <div><h1 data-testid="profile-username">seller</h1></div>
+          <div class="web_ui__Cell__cell"><div class="web_ui__Cell__content"><div data-testid="profile-location-info">Rotterdam</div></div></div>
+        </div>
+        <div data-testid="feed-grid">${items}<div data-testid="infinite-scroll"></div></div>
+      </main>
+    </body></html>`;
+}
+
+function loadedWardrobeEditFixture(itemId) {
+  return listingFixture
+    .replace(
+      '<input data-testid="title--input" />',
+      `<input data-testid="title--input" value="Original title ${itemId}" />`,
+    )
+    .replace(
+      '<textarea data-testid="description--input"></textarea>',
+      `<textarea data-testid="description--input">Original description ${itemId}</textarea>`,
+    )
+    .replace(
+      "</body>",
+      `<button type="button" aria-label="Vinted Save" onclick="window.__quickvintSaveClicks += 1">Save</button>
+      <script>
+        window.__quickvintSaveClicks = 0;
+        window.__quickvintPhotoChanges = 0;
+        document.querySelector('[data-testid="add-photos-input"]').addEventListener("change", () => window.__quickvintPhotoChanges += 1);
+      </script></body>`,
+    );
+}
+
 async function loadExtension(options = {}) {
   const userDataDir = fs.mkdtempSync(
     path.join(require("node:os").tmpdir(), "quick-vint-e2e-"),
@@ -2143,6 +2184,156 @@ test.describe("AutoLister extension smoke flows", () => {
       ]);
       expect(manifest.host_permissions).toContain("https://autolister.app/*");
     } finally {
+      await context.close();
+    }
+  });
+
+  test("rewrites selected wardrobe listings through the loaded MV3 extension", async () => {
+    const { context, serviceWorker } = await loadExtension();
+    const source = await context.newPage();
+    const generatedRequests = [];
+    let releaseFirstGeneration;
+    const firstGeneration = new Promise((resolve) => {
+      releaseFirstGeneration = resolve;
+    });
+    const itemIds = ["9443601541", "7563307251"];
+    try {
+      await serviceWorker.evaluate(() =>
+        chrome.storage.local.set({
+          supabaseSession: {
+            access_token: "test-access-token",
+            refresh_token: "test-refresh-token",
+            expires_at: Math.floor(Date.now() / 1000) + 3600,
+            user: { id: "270830120", email: "seller@example.com" },
+          },
+          userProfile: {
+            subscription_status: "active",
+            subscription_tier: "pro",
+          },
+          selectedLanguage: "en",
+          selectedTitleLanguage: "en",
+          selectedDescriptionLanguage: "nl",
+          tone: "standard",
+          useBulletPoints: true,
+          descriptionLength: "long",
+          useHashtags: true,
+        }),
+      );
+      await serviceWorker.evaluate(() => {
+        const sendMessage = chrome.tabs.sendMessage.bind(chrome.tabs);
+        globalThis.__wardrobeIntegrationMessages = [];
+        chrome.tabs.sendMessage = (...args) => {
+          globalThis.__wardrobeIntegrationMessages.push(args[1]?.type || "");
+          return sendMessage(...args);
+        };
+      });
+      await serviceWorker.evaluate(() => {
+        // Test-only: extension-created tabs bypass Playwright routing, so duplicate the
+        // routed source tab before navigating it to the worker-requested edit URL.
+        chrome.tabs.create = (details, callback) => {
+          chrome.tabs.query(
+            { url: "https://www.vinted.com/member/270830120" },
+            ([sourceTab]) => {
+              if (!sourceTab?.id) return callback?.();
+              chrome.tabs.duplicate(sourceTab.id, (tab) =>
+                chrome.tabs.update(tab.id, details, callback),
+              );
+            },
+          );
+        };
+      });
+      await context.route("https://www.vinted.com/**", (route) => {
+        const url = new URL(route.request().url());
+        const itemId = url.pathname.match(/^\/items\/(\d+)\/edit$/)?.[1];
+        return route.fulfill({
+          status: 200,
+          contentType: "text/html",
+          body: itemId
+            ? loadedWardrobeEditFixture(itemId)
+            : loadedWardrobeProfileFixture(
+              itemIds.map((id) => wardrobeItemFixture({ id })).join(""),
+            ),
+        });
+      });
+      await context.route("https://autolister.app/api/user/batch-capacity", (route) =>
+        route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify({ allowed: true, available: 2 }),
+        }),
+      );
+      await context.route("https://autolister.app/api/events/track", (route) =>
+        route.fulfill({ status: 204, body: "" }),
+      );
+      await context.route("https://autolister.app/api/generate", async (route) => {
+        generatedRequests.push(route.request().postDataJSON());
+        if (generatedRequests.length === 1) await firstGeneration;
+        return route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify({
+            title: `Generated title ${generatedRequests.length}`,
+            description: `Generated description ${generatedRequests.length}`,
+          }),
+        });
+      });
+
+      await source.goto("https://www.vinted.com/member/270830120", {
+        waitUntil: "domcontentloaded",
+      });
+      await expect(source.locator(".quickvint-wardrobe-rewrite-cta")).toBeVisible();
+      await source.locator(".quickvint-wardrobe-rewrite-cta").click();
+      await source.getByLabel("Review first").check();
+      await source.locator(".quickvint-wardrobe-rewrite-continue").click();
+      for (const itemId of itemIds) {
+        await source.getByRole("button", { name: `Select Item ${itemId}` }).click();
+      }
+      await source.getByRole("button", { name: "Start rewrite" }).click();
+
+      await expect.poll(() => generatedRequests.length).toBe(1);
+      await expect.poll(() => context.pages().filter((page) => /\/items\/\d+\/edit$/.test(page.url())).length).toBe(1);
+      expect(context.pages().filter((page) => /\/items\/\d+\/edit$/.test(page.url()))).toHaveLength(1);
+      expect(
+        await serviceWorker.evaluate(() =>
+          globalThis.__wardrobeIntegrationMessages.filter(
+            (type) => type === "RUN_WARDROBE_REWRITE_ITEM",
+          ).length,
+        ),
+      ).toBe(1);
+
+      releaseFirstGeneration();
+      await expect.poll(() => generatedRequests.length).toBe(2);
+      await expect.poll(() => context.pages().filter((page) => /\/items\/\d+\/edit$/.test(page.url())).length).toBe(2);
+      await expect(source.locator(".quickvint-wardrobe-selection-feedback")).toHaveText(
+        "2 listings ready",
+      );
+
+      const workPages = context.pages().filter((page) => /\/items\/\d+\/edit$/.test(page.url()));
+      for (const workPage of workPages) {
+        const itemId = workPage.url().match(/\/items\/(\d+)\/edit$/)?.[1];
+        await expect(workPage.locator('[data-testid="title--input"]')).toHaveValue(
+          `Original title ${itemId}`,
+        );
+        await expect(workPage.locator('[data-testid="description--input"]')).toHaveValue(
+          `Original description ${itemId}`,
+        );
+        await expect(workPage.locator(".quickvint-wardrobe-review-card")).toHaveCount(2);
+        await expect(workPage.locator("#quickvint-batch-modal")).toHaveCount(0);
+        expect(
+          await workPage.evaluate(() => ({
+            saveClicks: window.__quickvintSaveClicks,
+            photoChanges: window.__quickvintPhotoChanges,
+            fileCount: document.querySelector('[data-testid="add-photos-input"]').files.length,
+          })),
+        ).toEqual({ saveClicks: 0, photoChanges: 0, fileCount: 0 });
+      }
+      await expect(source.locator("#quickvint-batch-modal")).toHaveCount(0);
+      expect(generatedRequests).toHaveLength(2);
+      expect(
+        await serviceWorker.evaluate(() => globalThis.__wardrobeIntegrationMessages),
+      ).not.toContain("RUN_BATCH_ITEM");
+    } finally {
+      releaseFirstGeneration?.();
       await context.close();
     }
   });
