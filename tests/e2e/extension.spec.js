@@ -6005,6 +6005,15 @@ test.describe("own wardrobe rewrite widget", () => {
     await expect(page.getByText("Let's rewrite your listings")).toBeVisible();
   });
 
+  test("opens normal-motion wardrobe selection after Continue", async ({ page }) => {
+    await openWardrobeHarness(page, {
+      capacityResponse: { allowed: true, available: 1 },
+      wardrobeItems: wardrobeItemFixture({ id: "9443601541" }),
+    });
+    await enterWardrobeSelection(page);
+    await expect(page.getByRole("button", { name: /Select Item 9443601541/ })).toBeVisible();
+  });
+
   test("selects active and hidden wardrobe items but excludes sold items", async ({ page }) => {
     await openWardrobeHarness(page, {
       capacityResponse: { allowed: true, available: 2 },

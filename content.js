@@ -16544,7 +16544,9 @@
     }
     if (firstItem) {
       const top = firstItem.getBoundingClientRect().top + scrollY - 96;
-      window.scrollTo({ top: Math.max(0, top), behavior: reduceMotion ? "auto" : "smooth" });
+      requestAnimationFrame(() =>
+        window.scrollTo({ top: Math.max(0, top), behavior: reduceMotion ? "auto" : "smooth" }),
+      );
     }
   }
 
