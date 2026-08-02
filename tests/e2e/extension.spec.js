@@ -5960,9 +5960,20 @@ test.describe("own wardrobe rewrite widget", () => {
     const capacity = shell.locator(".quickvint-wardrobe-rewrite-capacity");
     const cta = shell.locator(".quickvint-wardrobe-rewrite-cta");
     await expect(capacity).toHaveText("1 listing available");
+    await page
+      .locator(".quickvint-wardrobe-rewrite-host")
+      .evaluate((host) => (host.style.width = "380px"));
     await waitForWardrobeMotionToFinish(page);
     await expect(cta).toBeEnabled();
     expect((await cta.boundingBox()).height).toBeGreaterThanOrEqual(40);
+    const [widgetBox, ctaBox] = await Promise.all([
+      page.locator("#quickvint-wardrobe-rewrite-widget").boundingBox(),
+      cta.boundingBox(),
+    ]);
+    expect(ctaBox.y).toBeGreaterThanOrEqual(widgetBox.y);
+    expect(ctaBox.y + ctaBox.height).toBeLessThanOrEqual(
+      widgetBox.y + widgetBox.height,
+    );
     await cta.focus();
     await expect(cta).toBeFocused();
     expect(await cta.evaluate((element) => getComputedStyle(element).outlineStyle)).not.toBe("none");

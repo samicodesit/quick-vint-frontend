@@ -9437,7 +9437,7 @@
         inset: 0;
         width: 100%;
         height: 100%;
-        padding: 19px 166px 18px 21px;
+        padding: 10px 166px 18px 21px;
         opacity: 1;
         visibility: visible;
       }
