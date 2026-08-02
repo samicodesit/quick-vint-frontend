@@ -351,9 +351,9 @@ async function openWardrobeHarness(
               [data-testid="profile-info-follow-button"] { float: right; }
               .tabs { margin-top: 16px; padding: 16px; border-bottom: 1px solid #e5e7eb; }
               @media (max-width: 720px) {
-                .avatar { flex-basis: 92px; height: 92px; }
+                .avatar { flex-basis: 192px; height: 192px; }
                 .profile-row { gap: 8px; }
-                .profile-page { margin-top: 20px; }
+                .profile-page { width: 582px; margin: 20px 0 0 10px; }
                 .details-columns { display: block; }
               }
             </style>
@@ -374,7 +374,9 @@ async function openWardrobeHarness(
                   <div class="web_ui__Cell__cell profile-details">
                     <div class="web_ui__Cell__content">
                       <div class="details-columns">
-                        <div data-testid="profile-location-info">Rotterdam, Nederland</div>
+                        <div class="web_ui__Cell__cell detail-location-cell">
+                          <div data-testid="profile-location-info">Rotterdam, Nederland</div>
+                        </div>
                         <div>Google verified<br />Email verified</div>
                       </div>
                       ${extraBadges ? '<div class="badges">Professional seller · Frequent uploader · Trusted member</div>' : ""}
@@ -5783,6 +5785,102 @@ test.describe("own wardrobe rewrite widget", () => {
       page.getByRole("button", { name: "Rewrite my listings" }),
     ).toBeDisabled();
   });
+
+  test("collapses to a reachable trigger and remembers the choice", async ({
+    page,
+  }) => {
+    await openWardrobeHarness(page);
+
+    await page.getByRole("button", { name: "Minimize rewrite listings" }).click();
+    await expect(
+      page.getByRole("button", { name: "Expand rewrite listings" }),
+    ).toBeVisible();
+    await expect(page.getByText("Refresh your titles and descriptions")).toBeHidden();
+    await expect
+      .poll(() =>
+        page.evaluate(
+          () =>
+            window.__extensionHarness.storage.quickvintWardrobeRewriteCollapsed,
+        ),
+      )
+      .toBe(true);
+
+    await page.getByRole("button", { name: "Expand rewrite listings" }).click();
+    await expect(page.getByText("Let's rewrite your listings")).toBeVisible();
+    await expect
+      .poll(() =>
+        page.evaluate(
+          () =>
+            window.__extensionHarness.storage.quickvintWardrobeRewriteCollapsed,
+        ),
+      )
+      .toBe(false);
+
+    await page.evaluate(() =>
+      document
+        .querySelector('[data-testid="profile-location-info"]')
+        .append(document.createElement("span")),
+    );
+    await expect(page.locator("#quickvint-wardrobe-rewrite-widget")).toHaveCount(1);
+  });
+
+  test("restores the compact trigger when it was previously minimized", async ({
+    page,
+  }) => {
+    await openWardrobeHarness(page, { collapsed: true });
+
+    await expect(
+      page.getByRole("button", { name: "Expand rewrite listings" }),
+    ).toBeVisible();
+    await expect(page.getByText("Let's rewrite your listings")).toBeHidden();
+  });
+
+  for (const viewport of [
+    { name: "wide", width: 1440, sideBySide: true, compactCopy: false },
+    { name: "medium", width: 900, sideBySide: false, compactCopy: false },
+    { name: "narrow", width: 390, sideBySide: false, compactCopy: true },
+  ]) {
+    test(`stays legible on ${viewport.name} profiles with badges`, async ({
+      page,
+    }) => {
+      await page.setViewportSize({ width: viewport.width, height: 900 });
+      await openWardrobeHarness(page, { extraBadges: true });
+
+      const widget = page.locator("#quickvint-wardrobe-rewrite-widget");
+      const details = page.locator(
+        ".profile-details > .web_ui__Cell__content",
+      );
+      await expect(widget).toBeVisible();
+      await expect(page.getByText("Professional seller")).toBeVisible();
+      if (!viewport.compactCopy) await expectNoHorizontalOverflow(page);
+
+      const [widgetBox, detailsBox] = await Promise.all([
+        widget.boundingBox(),
+        details.boundingBox(),
+      ]);
+      expect(widgetBox).not.toBeNull();
+      expect(detailsBox).not.toBeNull();
+      expect(widgetBox.x).toBeGreaterThanOrEqual(0);
+      expect(widgetBox.x + widgetBox.width).toBeLessThanOrEqual(
+        viewport.width + 1,
+      );
+      if (viewport.sideBySide) {
+        expect(widgetBox.x).toBeGreaterThanOrEqual(
+          detailsBox.x + detailsBox.width - 1,
+        );
+      } else {
+        expect(widgetBox.y).toBeGreaterThanOrEqual(
+          detailsBox.y + detailsBox.height - 1,
+        );
+      }
+
+      const supportingCopy = page.getByText(
+        "Refresh your titles and descriptions without starting over.",
+      );
+      if (viewport.compactCopy) await expect(supportingCopy).toBeHidden();
+      else await expect(supportingCopy).toBeVisible();
+    });
+  }
 
   for (const scenario of [
     { name: "another member", currentUserId: "123" },
