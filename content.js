@@ -20,6 +20,7 @@
   const OUTPUT_SHAPE_STORAGE_KEY = "useBulletPoints";
   const HASHTAGS_STORAGE_KEY = "useHashtags";
   const SIGN_IN_BTN_ID = "quickvint-signin-btn";
+  const WARDROBE_REWRITE_WIDGET_ID = "quickvint-wardrobe-rewrite-widget";
   const DESCRIPTION_APPLY_PROMPT_ID = "quickvint-description-apply-prompt";
   const LIMIT_FOLLOWUP_MODAL_ID = "quickvint-limit-followup-modal";
   const TITLE_LANGUAGE_SELECT_ID = "quickvint-title-language-select";
@@ -15699,6 +15700,90 @@
     observer.observe(document.body, { childList: true, subtree: true });
   }
 
+  function getMemberId(pathname = window.location.pathname) {
+    return pathname.match(/^\/member\/(\d+)(?:[-/]|$)/)?.[1] || null;
+  }
+
+  function getRenderedCurrentMemberId() {
+    for (const link of document.querySelectorAll('header a[href*="/member/"]')) {
+      try {
+        const url = new URL(link.href, window.location.origin);
+        if (url.origin === window.location.origin) {
+          const memberId = getMemberId(url.pathname);
+          if (memberId) return memberId;
+        }
+      } catch {}
+    }
+
+    const userIdPattern =
+      /(?:initialUserState\\?":\{\\?"user|(?:^|[,\{])\\?"currentUser)\\?":\{[^{}]{0,500}?\\?"id\\?":(\d+)/;
+    for (const script of document.scripts) {
+      const memberId = script.textContent?.match(userIdPattern)?.[1];
+      if (memberId) return memberId;
+    }
+    return null;
+  }
+
+  function isVisible(element) {
+    return Boolean(
+      element &&
+        (element.offsetWidth || element.offsetHeight || element.getClientRects().length),
+    );
+  }
+
+  function injectWardrobeRewriteWidget() {
+    if (document.getElementById(WARDROBE_REWRITE_WIDGET_ID)) return true;
+
+    const profileId = getMemberId();
+    if (!profileId) return true;
+    if (
+      isVisible(document.querySelector('[data-testid="header--login-button"]')) ||
+      isVisible(
+        document.querySelector('[data-testid="profile-info-follow-button"]'),
+      )
+    ) {
+      return true;
+    }
+
+    const currentMemberId = getRenderedCurrentMemberId();
+    if (!currentMemberId) return false;
+    if (currentMemberId !== profileId) return true;
+
+    const username = document.querySelector('[data-testid="profile-username"]');
+    const profileContent = username?.closest(".u-flex-grow");
+    const location = profileContent?.querySelector(
+      '[data-testid="profile-location-info"]',
+    );
+    const host = location?.closest(".web_ui__Cell__cell");
+    if (!host) return false;
+
+    host.classList.add("quickvint-wardrobe-rewrite-host");
+    const widget = document.createElement("aside");
+    widget.id = WARDROBE_REWRITE_WIDGET_ID;
+    widget.setAttribute("aria-labelledby", "quickvint-wardrobe-rewrite-title");
+    widget.innerHTML = `
+      <div class="quickvint-wardrobe-rewrite-expanded">
+        <p class="quickvint-wardrobe-rewrite-brand">AutoLister AI</p>
+        <h2 id="quickvint-wardrobe-rewrite-title">Let's rewrite your listings</h2>
+        <p class="quickvint-wardrobe-rewrite-copy">Refresh your titles and descriptions without starting over.</p>
+        <button type="button" class="quickvint-wardrobe-rewrite-cta" disabled>Rewrite my listings</button>
+        <img src="${chrome.runtime.getURL("images/wardrobe-rewrite-character.webp")}" alt="" width="142" height="144" />
+      </div>
+    `;
+    host.appendChild(widget);
+    return true;
+  }
+
+  function startWardrobeRewriteObserver() {
+    if (!getMemberId() || injectWardrobeRewriteWidget()) return;
+
+    const observer = new MutationObserver(() => {
+      if (injectWardrobeRewriteWidget()) observer.disconnect();
+    });
+    observer.observe(document.body, { childList: true, subtree: true });
+    setTimeout(() => observer.disconnect(), 5000);
+  }
+
   // --- INITIALIZATION ---
 
   function init() {
@@ -15709,6 +15794,7 @@
     setTimeout(maybeRecoverDomCanaryLogin, 3000);
     setTimeout(maybeRecoverDomCanaryLogin, 10000);
     initializeAuthState();
+    startWardrobeRewriteObserver();
     startInjectionObserver();
   }
 

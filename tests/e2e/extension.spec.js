@@ -311,6 +311,92 @@ async function openContentHarness(page, capacityResponse = null, options = {}) {
   await expect(page.locator("#quickvint-description-footer-btn")).toBeVisible();
 }
 
+async function openWardrobeHarness(
+  page,
+  {
+    profileId = "270830120",
+    currentUserId = "270830120",
+    login = false,
+    follow = false,
+    collapsed = false,
+    extraBadges = false,
+  } = {},
+) {
+  const state = currentUserId
+    ? `initialUserState\\\":{\\\"user\\\":{\\\"id\\\":${currentUserId}}}`
+    : "initialUserState\\\":{\\\"user\\\":null}";
+  const profileUrl = `https://www.vinted.nl/member/${profileId}`;
+  await page.route(profileUrl, (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: "text/html",
+      body: `<!doctype html>
+        <html>
+          <head>
+            <meta name="viewport" content="width=device-width, initial-scale=1" />
+            <style>
+              * { box-sizing: border-box; }
+              body { margin: 0; font-family: Arial, sans-serif; color: #292929; }
+              header { height: 98px; border-bottom: 1px solid #e5e7eb; }
+              .profile-page { width: min(1200px, calc(100% - 32px)); margin: 40px auto; }
+              .profile-row { display: flex; gap: 16px; }
+              .avatar { flex: 0 0 192px; height: 192px; border-radius: 50%; background: #d8e7e5; }
+              .u-flex-grow { flex: 1; min-width: 0; }
+              .web_ui__Cell__cell { padding: 16px; }
+              .profile-heading { min-height: 68px; }
+              .profile-details { min-height: 140px; }
+              .details-columns { display: flex; gap: 64px; line-height: 1.8; }
+              .badges { margin-top: 8px; }
+              .bio { min-height: 72px; }
+              [data-testid="profile-info-follow-button"] { float: right; }
+              .tabs { margin-top: 16px; padding: 16px; border-bottom: 1px solid #e5e7eb; }
+              @media (max-width: 720px) {
+                .avatar { flex-basis: 92px; height: 92px; }
+                .profile-row { gap: 8px; }
+                .profile-page { margin-top: 20px; }
+                .details-columns { display: block; }
+              }
+            </style>
+            <script type="application/json" data-vinted-state>${state}</script>
+          </head>
+          <body>
+            <header>
+              ${login ? '<a data-testid="header--login-button" href="/member/login">Log in</a>' : ""}
+            </header>
+            <main class="profile-page">
+              <div class="profile-row">
+                <div class="avatar"></div>
+                <div class="u-flex-grow">
+                  <div class="web_ui__Cell__cell profile-heading">
+                    <h1 data-testid="profile-username">seller</h1>
+                    ${follow ? '<button data-testid="profile-info-follow-button">Follow</button>' : ""}
+                  </div>
+                  <div class="web_ui__Cell__cell profile-details">
+                    <div class="web_ui__Cell__content">
+                      <div class="details-columns">
+                        <div data-testid="profile-location-info">Rotterdam, Nederland</div>
+                        <div>Google verified<br />Email verified</div>
+                      </div>
+                      ${extraBadges ? '<div class="badges">Professional seller · Frequent uploader · Trusted member</div>' : ""}
+                    </div>
+                  </div>
+                  <div class="web_ui__Cell__cell bio">Long seller biography remains readable below the profile details.</div>
+                </div>
+              </div>
+              <div class="tabs">Listings &nbsp;&nbsp; Reviews</div>
+            </main>
+          </body>
+        </html>`,
+    }),
+  );
+  await page.goto(profileUrl, { waitUntil: "domcontentloaded" });
+  await installChromeHarness(page, null, {
+    quickvintWardrobeRewriteCollapsed: collapsed,
+  });
+  await page.addScriptTag({ path: languageDefaultsPath });
+  await page.addScriptTag({ path: contentScriptPath });
+}
+
 async function openPhoneChoice(page) {
   await page.locator("#quickvint-phone-btn").click();
   const modal = page.locator("#quickvint-upload-choice-modal");
@@ -5684,4 +5770,32 @@ test.describe("AutoLister extension smoke flows", () => {
     await expect(offer).toBeVisible();
     await expect(offer).toContainText("LISTFASTER20");
   });
+});
+
+test.describe("own wardrobe rewrite widget", () => {
+  test("shows the rewrite widget when Vinted's current member ID matches the profile", async ({
+    page,
+  }) => {
+    await openWardrobeHarness(page);
+
+    await expect(page.locator("#quickvint-wardrobe-rewrite-widget")).toBeVisible();
+    await expect(
+      page.getByRole("button", { name: "Rewrite my listings" }),
+    ).toBeDisabled();
+  });
+
+  for (const scenario of [
+    { name: "another member", currentUserId: "123" },
+    { name: "unreadable user state", currentUserId: null },
+    { name: "signed out", login: true },
+    { name: "followable profile", follow: true },
+  ]) {
+    test(`does not show the rewrite widget for ${scenario.name}`, async ({
+      page,
+    }) => {
+      await openWardrobeHarness(page, scenario);
+
+      await expect(page.locator("#quickvint-wardrobe-rewrite-widget")).toHaveCount(0);
+    });
+  }
 });
