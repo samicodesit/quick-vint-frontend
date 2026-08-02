@@ -370,6 +370,11 @@ async function openWardrobeHarness(
               .bio { min-height: 72px; }
               [data-testid="profile-info-follow-button"] { float: right; }
               .tabs { margin-top: 16px; padding: 16px; border-bottom: 1px solid #e5e7eb; }
+              [data-testid="feed-grid"] { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+              .new-item-box__image-container { position: relative; }
+              [data-testid$="--image"] { display: block; height: 180px; background: #e5e7eb; }
+              [data-testid$="--image"] img { width: 100%; height: 100%; object-fit: cover; }
+              [data-testid$="--overlay-link"] { position: absolute; inset: 0; }
               @media (max-width: 720px) {
                 .avatar { flex-basis: 192px; height: 192px; }
                 .profile-row { gap: 8px; }
@@ -6044,7 +6049,11 @@ test.describe("own wardrobe rewrite widget", () => {
       "1 selected · 2 available",
     );
     await page.getByRole("button", { name: /Select Item 9443601541/ }).click();
-    await expect(page.getByRole("button", { name: /Select Item 7563307251/ })).toBeDisabled();
+    await page.locator('[data-testid="feed-grid"]').evaluate(
+      (grid, item) => grid.insertAdjacentHTML("beforeend", item),
+      wardrobeItemFixture({ id: "1122334455" }),
+    );
+    await expect(page.getByRole("button", { name: /Select Item 1122334455/ })).toBeDisabled();
     expect(await page.evaluate(() => location.pathname)).toBe("/member/270830120");
   });
 
@@ -6076,9 +6085,10 @@ test.describe("own wardrobe rewrite widget", () => {
         button.getAnimations().length,
       ),
     ).toBe(0);
-    await page.locator('[data-testid="feed-grid"]').evaluate((grid) => {
-      grid.insertAdjacentHTML("beforeend", `${wardrobeItemFixture({ id: "8383838383" })}`);
-    });
+    await page.locator('[data-testid="feed-grid"]').evaluate(
+      (grid, item) => grid.insertAdjacentHTML("beforeend", item),
+      wardrobeItemFixture({ id: "8383838383" }),
+    );
     await expect(page.getByRole("button", { name: /Select Item 8383838383/ })).toBeVisible();
   });
 
@@ -6105,12 +6115,11 @@ test.describe("own wardrobe rewrite widget", () => {
     await expect.poll(() => page.evaluate(() => window.__extensionHarness.storage.selectedTitleLanguage)).toBe("nl");
     await page.getByRole("button", { name: /Select Item 9443601541/ }).click();
     await page.getByRole("button", { name: "Start rewrite" }).click();
-    const startMessage = await page.evaluate(() =>
+    await expect.poll(() => page.evaluate(() =>
       window.__extensionHarness.runtimeMessages.find(
         (message) => message?.type === "START_WARDROBE_REWRITE",
       ),
-    );
-    expect(startMessage).toEqual({
+    )).toEqual({
       type: "START_WARDROBE_REWRITE",
       items: [
         { id: "9443601541", editUrl: "https://www.vinted.nl/items/9443601541/edit" },
@@ -6148,7 +6157,16 @@ test.describe("own wardrobe rewrite widget", () => {
     await page.getByRole("button", { name: "Exit selection" }).click();
     await expect(page.locator(".quickvint-wardrobe-selection-controller")).toHaveCount(0);
     await expect(page.locator(".quickvint-wardrobe-select-item")).toHaveCount(0);
+  });
 
+  test("cleans a re-entered wardrobe selection up on pagehide", async ({ page }) => {
+    await page.emulateMedia({ reducedMotion: "reduce" });
+    await openWardrobeHarness(page, {
+      capacityResponse: { allowed: true, available: 2 },
+      wardrobeItems: wardrobeItemFixture({ id: "9443601541" }),
+    });
+    await enterWardrobeSelection(page);
+    await page.getByRole("button", { name: "Exit selection" }).click();
     await enterWardrobeSelection(page);
     await page.evaluate(() => window.dispatchEvent(new PageTransitionEvent("pagehide")));
     await expect(page.locator(".quickvint-wardrobe-selection-controller")).toHaveCount(0);
