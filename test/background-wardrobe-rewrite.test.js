@@ -34,6 +34,7 @@ async function runBackground(options = {}) {
   };
   const tabs = new Map([[sourceTab.id, { ...sourceTab, status: "complete" }]]);
   const runResolvers = [];
+  const capacityResolvers = [];
   const pingCounts = new Map();
   let listener;
   let nextTabId = 100;
@@ -130,10 +131,14 @@ async function runBackground(options = {}) {
     crypto: { randomUUID: () => "cid-test" },
     fetch: async (url) => {
       if (String(url).includes("/api/user/batch-capacity")) {
-        return new Response(JSON.stringify({ allowed: true, available: options.available ?? 3 }), {
+        const response = new Response(JSON.stringify({ allowed: true, available: options.available ?? 3 }), {
           status: 200,
           headers: { "content-type": "application/json" },
         });
+        if (options.holdCapacity) {
+          return new Promise((resolve) => capacityResolvers.push(() => resolve(response)));
+        }
+        return response;
       }
       return new Response(JSON.stringify({}), { status: 200 });
     },
@@ -156,9 +161,12 @@ async function runBackground(options = {}) {
     sourceProgress,
     removedTabs,
     resolveRun: () => runResolvers.shift()?.(),
+    releaseCapacity: () => capacityResolvers.splice(0).forEach((resolve) => resolve()),
+    dispatchRuntimeMessage(message, sender = { tab: sourceTab }) {
+      return new Promise((resolve) => listener(message, sender, resolve));
+    },
     async sendRuntimeMessage(message, sender = { tab: sourceTab }) {
-      let response;
-      listener(message, sender, (value) => { response = value; });
+      const response = this.dispatchRuntimeMessage(message, sender);
       await flush();
       return response;
     },
@@ -219,6 +227,29 @@ test("batch and wardrobe starts share one lock without mixing their messages", a
   assert.equal(blockedRewrite.ok, false);
   assert.equal(batchHarness.createdTabs.length, 0);
   assert.equal(batchHarness.sourceProgress.length, 0);
+});
+
+test("concurrent batch and wardrobe starts recheck the lock after capacity", async () => {
+  const harness = await runBackground({ holdCapacity: true });
+  const batchStart = harness.dispatchRuntimeMessage({
+    type: "START_BATCH_GENERATION",
+    sessionId: "batch-1",
+    groups: [["photo"]],
+  });
+  const wardrobeStart = harness.dispatchRuntimeMessage(rewriteMessage());
+  await flush();
+
+  assert.equal(harness.duplicatedTabs.length, 0);
+  assert.equal(harness.createdTabs.length, 0);
+  harness.releaseCapacity();
+  const [batchResponse, wardrobeResponse] = await Promise.all([batchStart, wardrobeStart]);
+  await flush();
+
+  assert.equal(batchResponse.ok, true);
+  assert.equal(wardrobeResponse.ok, false);
+  assert.equal(harness.duplicatedTabs.length, 1);
+  assert.equal(harness.createdTabs.length, 0);
+  assert.equal(harness.sentToWorkTab.some(({ message }) => message.type === "RUN_WARDROBE_REWRITE_ITEM"), false);
 });
 
 test("wardrobe rewrite waits for each edit tab and reports sequential progress", async () => {

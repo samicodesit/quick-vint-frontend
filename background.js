@@ -785,6 +785,15 @@ async function startBatchGeneration(message, sender) {
     groups = groups.slice(0, available);
   }
 
+  if (activeTabJob) {
+    return {
+      ok: false,
+      error: activeTabJob.kind === "batch"
+        ? "A batch is already running."
+        : "Another tab job is already running.",
+    };
+  }
+
   const job = {
     kind: "batch",
     sourceTabId,
@@ -966,6 +975,10 @@ async function startWardrobeRewrite(message, sender) {
 
   const request = validateWardrobeRewriteRequest(message, sender, available);
   if (!request.ok) return request;
+
+  if (activeTabJob) {
+    return { ok: false, error: "Another tab job is already running." };
+  }
 
   const job = {
     kind: "wardrobe-rewrite",
