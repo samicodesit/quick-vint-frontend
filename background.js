@@ -625,6 +625,22 @@ function notifyWardrobeRewriteProgress(job, payload) {
   });
 }
 
+function getTabJobHeartbeat(message, sender) {
+  if (!["batch", "wardrobe-rewrite"].includes(message?.kind)) {
+    return { ok: false, active: false, error: "Invalid tab job heartbeat." };
+  }
+  const sourceTabId = sender?.tab?.id;
+  if (!Number.isInteger(sourceTabId) || sourceTabId <= 0) {
+    return { ok: false, active: false, error: "Invalid tab job heartbeat." };
+  }
+  return {
+    ok: true,
+    active:
+      activeTabJob?.kind === message.kind &&
+      activeTabJob.sourceTabId === sourceTabId,
+  };
+}
+
 async function cleanupBatchUploadSession(sessionId) {
   if (!sessionId) return;
   try {
@@ -930,6 +946,9 @@ async function runWardrobeRewriteJob(job) {
         itemIndex: activeItemIndex,
         itemId: item.id,
       });
+      if (index < job.items.length - 1) {
+        await sleep(BATCH_ITEM_REVIEW_SETTLE_MS);
+      }
     }
 
     notifyWardrobeRewriteProgress(job, {
@@ -1377,6 +1396,10 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         sendResponse(checkout);
         break;
       }
+
+      case "QUICKVINT_TAB_JOB_HEARTBEAT":
+        sendResponse(getTabJobHeartbeat(message, sender));
+        break;
 
       case "START_BATCH_GENERATION": {
         const batchStart = await startBatchGeneration(message, sender);

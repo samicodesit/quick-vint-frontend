@@ -24,8 +24,10 @@
   const WARDROBE_REWRITE_COLLAPSED_KEY =
     "quickvintWardrobeRewriteCollapsed";
   const WARDROBE_REWRITE_RESULT_ID = "quickvint-wardrobe-rewrite-result";
+  const WARDROBE_REWRITE_STATUS_ID = "quickvint-wardrobe-rewrite-status";
   const WARDROBE_REWRITE_REVIEW_PREFIX = "quickvint-wardrobe-review-";
   const WARDROBE_REWRITE_RESULT_TTL_MS = 5 * 60 * 1000;
+  const TAB_JOB_HEARTBEAT_MS = 20 * 1000;
   let wardrobeRewriteScheduled = false;
   let wardrobeRewriteCapacity = null;
   let wardrobeRewriteCapacityLoading = false;
@@ -36,9 +38,14 @@
   let wardrobeSelectionController = null;
   let wardrobeSelectionObserver = null;
   let wardrobeSelectionPagehide = null;
+  let wardrobeSelectionOwnershipTimer = null;
+  let wardrobeSelectionPathname = null;
+  let wardrobeSelectionShell = null;
   let wardrobeSelectionPulseTimeout = null;
   let wardrobeSelectionCapacity = 0;
+  let wardrobeSelectionJobStatus = "idle";
   let wardrobeRewriteOutputCleanup = null;
+  let activeTabJobHeartbeat = null;
   const DESCRIPTION_APPLY_PROMPT_ID = "quickvint-description-apply-prompt";
   const LIMIT_FOLLOWUP_MODAL_ID = "quickvint-limit-followup-modal";
   const TITLE_LANGUAGE_SELECT_ID = "quickvint-title-language-select";
@@ -2386,6 +2393,31 @@
     return new Promise((resolve) => {
       chrome.runtime.sendMessage(message, resolve);
     });
+  }
+
+  function stopTabJobHeartbeat() {
+    const state = activeTabJobHeartbeat;
+    if (!state) return;
+    clearInterval(state.timer);
+    window.removeEventListener("pagehide", state.pagehide);
+    activeTabJobHeartbeat = null;
+  }
+
+  function startTabJobHeartbeat(kind, onGone) {
+    stopTabJobHeartbeat();
+    const state = { kind, timer: null, pagehide: stopTabJobHeartbeat };
+    const heartbeat = async () => {
+      const response = await sendMessage({
+        type: "QUICKVINT_TAB_JOB_HEARTBEAT",
+        kind,
+      });
+      if (activeTabJobHeartbeat !== state || response?.active) return;
+      stopTabJobHeartbeat();
+      onGone(response?.error || "The background job stopped unexpectedly.");
+    };
+    state.timer = setInterval(heartbeat, TAB_JOB_HEARTBEAT_MS);
+    window.addEventListener("pagehide", state.pagehide, { once: true });
+    activeTabJobHeartbeat = state;
   }
 
   function shouldOpenSignInInTab() {
@@ -7541,6 +7573,7 @@
         text-align: center;
       }
 
+      #${WARDROBE_REWRITE_STATUS_ID},
       #${WARDROBE_REWRITE_RESULT_ID},
       .quickvint-wardrobe-review-card {
         box-sizing: border-box;
@@ -7565,7 +7598,7 @@
 
       #${WARDROBE_REWRITE_RESULT_ID} button,
       .quickvint-wardrobe-review-card button {
-        min-height: 34px;
+        min-height: 40px;
         padding: 6px 10px;
         border: 1px solid #4f46e5;
         border-radius: 7px;
@@ -9494,7 +9527,7 @@
 
       .quickvint-wardrobe-selection-controller select,
       .quickvint-wardrobe-selection-controller button {
-        min-height: 36px;
+        min-height: 40px;
         border: 1px solid #c7c5ff;
         border-radius: 7px;
         background: #fff;
@@ -9520,29 +9553,42 @@
 
       .quickvint-wardrobe-selection-item {
         position: relative;
+        border: 2px solid #4f46e5;
+        border-radius: 10px;
       }
 
       .quickvint-wardrobe-select-item {
         position: absolute;
-        top: 8px;
-        right: 8px;
+        inset: -2px;
         z-index: 2;
-        min-width: 36px;
-        min-height: 36px;
+        display: flex;
+        align-items: flex-start;
+        justify-content: flex-end;
+        padding: 8px;
+        border: 0;
+        border-radius: inherit;
+        background: transparent;
+        cursor: pointer;
+      }
+
+      .quickvint-wardrobe-select-check {
+        display: grid;
+        width: 36px;
+        height: 36px;
+        place-items: center;
         border: 2px solid #4f46e5;
         border-radius: 50%;
         background: #fff;
         color: #3730a3;
-        cursor: pointer;
         font-weight: 800;
       }
 
-      .quickvint-wardrobe-selection-item.quickvint-wardrobe-item-selected .quickvint-wardrobe-select-item {
+      .quickvint-wardrobe-selection-item.quickvint-wardrobe-item-selected .quickvint-wardrobe-select-check {
         background: #4f46e5;
         color: #fff;
       }
 
-      .quickvint-wardrobe-select-item.quickvint-wardrobe-attention {
+      .quickvint-wardrobe-selection-item.quickvint-wardrobe-attention {
         animation: quickvint-wardrobe-attention .7s ease-out 1;
       }
 
@@ -9551,7 +9597,7 @@
       }
 
       @media (prefers-reduced-motion: reduce) {
-        .quickvint-wardrobe-select-item.quickvint-wardrobe-attention { animation: none; }
+        .quickvint-wardrobe-selection-item.quickvint-wardrobe-attention { animation: none; }
       }
 
       #${WARDROBE_REWRITE_WIDGET_ID} {
@@ -15229,13 +15275,24 @@
     });
 
     if (!response?.ok) {
+      stopTabJobHeartbeat();
       renderBatchProgress({
         status: "failed",
         current: 0,
         total: groups.length,
         message: response?.error || "Could not start batch generation.",
       });
-    } else if (response.limited) {
+    } else {
+      startTabJobHeartbeat("batch", (message) =>
+        handleBatchProgress({
+          status: "failed",
+          current: 0,
+          total: batchProgressGroups.length,
+          message,
+        }),
+      );
+    }
+    if (response?.ok && response.limited) {
       const startedCount = Math.max(
         0,
         Math.floor(Number(response.startedCount || 0)),
@@ -15450,6 +15507,7 @@
   }
 
   function handleBatchProgress(message) {
+    if (["done", "failed"].includes(message.status)) stopTabJobHeartbeat();
     const hasBatchModal = Boolean(document.getElementById(BATCH_MODAL_ID));
     if (message.status === "done" && Array.isArray(message.offers)) {
       queueGenerationOffers(message.offers);
@@ -15577,6 +15635,28 @@
     }, delayMs);
   }
 
+  function showWardrobeRewriteStatus(message, state = "loading") {
+    let status = document.getElementById(WARDROBE_REWRITE_STATUS_ID);
+    if (!status) {
+      status = document.createElement("div");
+      status.id = WARDROBE_REWRITE_STATUS_ID;
+    }
+    status.className = state;
+    status.textContent = message;
+    const title = document.querySelector(SELECTORS.title);
+    const description = document.querySelector(SELECTORS.description);
+    const anchor =
+      title?.closest(".web_ui__Card__card") ||
+      description?.closest(".web_ui__Card__card") ||
+      getWardrobeFieldWrapper(title) ||
+      getWardrobeFieldWrapper(description);
+    if (anchor?.parentElement && status.nextSibling !== anchor) {
+      anchor.parentElement.insertBefore(status, anchor);
+    } else if (!status.parentElement) {
+      document.body.appendChild(status);
+    }
+  }
+
   function setListingFieldValue(field, value) {
     if (!field) return;
     field.value = String(value || "");
@@ -15599,11 +15679,13 @@
     return field?.closest("label") || field?.parentElement || field;
   }
 
-  function finishWardrobeRewriteOutput(state, removeUi = false) {
+  function finishWardrobeRewriteOutput(state, removeUi = true) {
     if (state.observer) state.observer.disconnect();
     if (state.timer) clearTimeout(state.timer);
+    if (state.routeTimer) clearInterval(state.routeTimer);
     window.removeEventListener("pagehide", state.pagehide);
     if (removeUi) {
+      document.getElementById(WARDROBE_REWRITE_STATUS_ID)?.remove();
       document.getElementById(WARDROBE_REWRITE_RESULT_ID)?.remove();
       document
         .querySelectorAll(`[id^="${WARDROBE_REWRITE_REVIEW_PREFIX}"]`)
@@ -15612,6 +15694,26 @@
     if (wardrobeRewriteOutputCleanup === state.cleanup) {
       wardrobeRewriteOutputCleanup = null;
     }
+  }
+
+  function isWardrobeRewriteOutputRouteCurrent(state) {
+    return (
+      window.location.pathname === state.expectedPathname &&
+      window.location.pathname === `/items/${state.itemId}/edit`
+    );
+  }
+
+  function getWardrobeRewriteActionField(state, fieldName, expectedValue) {
+    const field = document.querySelector(SELECTORS[fieldName]);
+    if (
+      !isWardrobeRewriteOutputRouteCurrent(state) ||
+      !field ||
+      field.value !== expectedValue
+    ) {
+      finishWardrobeRewriteOutput(state);
+      return null;
+    }
+    return field;
   }
 
   function isWardrobeRewriteOutputResolved(state) {
@@ -15629,6 +15731,10 @@
   }
 
   function attachWardrobeReplaceOutput(state) {
+    if (!isWardrobeRewriteOutputRouteCurrent(state)) {
+      finishWardrobeRewriteOutput(state);
+      return;
+    }
     if (isWardrobeRewriteOutputResolved(state)) {
       document.getElementById(WARDROBE_REWRITE_RESULT_ID)?.remove();
       finishWardrobeRewriteOutput(state);
@@ -15651,7 +15757,13 @@
       if (state.status[fieldName] === "done") continue;
       actions.append(
         createWardrobeButton(`Undo ${fieldName}`, () => {
-          setListingFieldValue(document.querySelector(SELECTORS[fieldName]), state.originals[fieldName]);
+          const field = getWardrobeRewriteActionField(
+            state,
+            fieldName,
+            state.generated[fieldName],
+          );
+          if (!field) return;
+          setListingFieldValue(field, state.originals[fieldName]);
           state.status[fieldName] = "done";
           result.remove();
           attachWardrobeReplaceOutput(state);
@@ -15663,6 +15775,10 @@
   }
 
   function attachWardrobeReviewOutput(state, fieldName) {
+    if (!isWardrobeRewriteOutputRouteCurrent(state)) {
+      finishWardrobeRewriteOutput(state);
+      return;
+    }
     if (state.status[fieldName] === "done") {
       document.getElementById(`${WARDROBE_REWRITE_REVIEW_PREFIX}${fieldName}`)?.remove();
       if (isWardrobeRewriteOutputResolved(state)) finishWardrobeRewriteOutput(state);
@@ -15684,7 +15800,13 @@
     if (state.status[fieldName] === "applied") {
       actions.append(
         createWardrobeButton(`Undo generated ${fieldName}`, () => {
-          setListingFieldValue(document.querySelector(SELECTORS[fieldName]), state.originals[fieldName]);
+          const field = getWardrobeRewriteActionField(
+            state,
+            fieldName,
+            state.generated[fieldName],
+          );
+          if (!field) return;
+          setListingFieldValue(field, state.originals[fieldName]);
           state.status[fieldName] = "done";
           card.remove();
           if (isWardrobeRewriteOutputResolved(state)) finishWardrobeRewriteOutput(state);
@@ -15693,7 +15815,13 @@
     } else {
       actions.append(
         createWardrobeButton(`Apply generated ${fieldName}`, () => {
-          setListingFieldValue(document.querySelector(SELECTORS[fieldName]), state.generated[fieldName]);
+          const field = getWardrobeRewriteActionField(
+            state,
+            fieldName,
+            state.originals[fieldName],
+          );
+          if (!field) return;
+          setListingFieldValue(field, state.generated[fieldName]);
           state.status[fieldName] = "applied";
           card.remove();
           attachWardrobeReviewOutput(state, fieldName);
@@ -15718,15 +15846,18 @@
     }
   }
 
-  function startWardrobeRewriteOutput(mode, originals, generated) {
+  function startWardrobeRewriteOutput(mode, originals, generated, route) {
     wardrobeRewriteOutputCleanup?.("new_rewrite");
     const state = {
       mode,
       originals,
       generated,
+      expectedPathname: route.pathname,
+      itemId: route.itemId,
       status: { title: "active", description: "active" },
       observer: null,
       timer: null,
+      routeTimer: null,
       pagehide: null,
       cleanup: null,
     };
@@ -15735,17 +15866,22 @@
     state.observer = new MutationObserver(() => attachWardrobeRewriteOutput(state));
     state.observer.observe(document.body, { childList: true, subtree: true });
     state.timer = setTimeout(() => finishWardrobeRewriteOutput(state), WARDROBE_REWRITE_RESULT_TTL_MS);
+    state.routeTimer = setInterval(() => {
+      if (!isWardrobeRewriteOutputRouteCurrent(state)) {
+        finishWardrobeRewriteOutput(state);
+      }
+    }, 250);
     window.addEventListener("pagehide", state.pagehide, { once: true });
     wardrobeRewriteOutputCleanup = state.cleanup;
     attachWardrobeRewriteOutput(state);
   }
 
-  function renderWardrobeReplaceUndo(originals, generated) {
-    startWardrobeRewriteOutput("replace", originals, generated);
+  function renderWardrobeReplaceUndo(originals, generated, route) {
+    startWardrobeRewriteOutput("replace", originals, generated, route);
   }
 
-  function renderWardrobeReviewSuggestions(originals, generated) {
-    startWardrobeRewriteOutput("review", originals, generated);
+  function renderWardrobeReviewSuggestions(originals, generated, route) {
+    startWardrobeRewriteOutput("review", originals, generated, route);
   }
 
   async function runWardrobeRewriteItem(message) {
@@ -15753,47 +15889,83 @@
     if (!isWardrobeRewriteTabReady(itemId)) {
       throw new Error("This tab is not ready for the selected wardrobe listing.");
     }
+    if (isBusy) throw new Error("Another generation is already running.");
+    wardrobeRewriteOutputCleanup?.("new_rewrite");
+    const route = { pathname: window.location.pathname, itemId };
     const originals = {
       title: document.querySelector(SELECTORS.title).value || "",
       description: document.querySelector(SELECTORS.description).value || "",
     };
-    const generated = await generateCurrentListing({
-      manageButtonState: false,
-      showMeasurementAdvice: false,
-      throwOnLimit: true,
-      generationMode: "batch",
-      telemetryMode: "wardrobe_rewrite",
-      applyGeneratedOutput: false,
-      languageOverrides: {
-        titleLanguageCode: message.titleLanguageCode,
-        descriptionLanguageCode: message.descriptionLanguageCode,
-      },
-    });
-    if (!generated?.ok) return generated;
-    const output = { title: generated.title, description: generated.description };
-    if (message.applyMode === "replace") {
-      setListingFieldValue(document.querySelector(SELECTORS.title), output.title);
-      setListingFieldValue(document.querySelector(SELECTORS.description), output.description);
-      renderWardrobeReplaceUndo(originals, output);
-    } else {
-      renderWardrobeReviewSuggestions(originals, output);
+    isBusy = true;
+    updateButtonUI();
+    showWardrobeRewriteStatus("Rewriting listing…");
+    try {
+      const generated = await generateCurrentListing({
+        manageButtonState: false,
+        showMeasurementAdvice: false,
+        throwOnLimit: true,
+        generationMode: "batch",
+        telemetryMode: "wardrobe_rewrite",
+        applyGeneratedOutput: false,
+        languageOverrides: {
+          titleLanguageCode: message.titleLanguageCode,
+          descriptionLanguageCode: message.descriptionLanguageCode,
+        },
+      });
+      if (!generated?.ok) return generated;
+      const title = document.querySelector(SELECTORS.title);
+      const description = document.querySelector(SELECTORS.description);
+      if (
+        window.location.pathname !== route.pathname ||
+        route.pathname !== `/items/${itemId}/edit` ||
+        title?.value !== originals.title ||
+        description?.value !== originals.description
+      ) {
+        throw new Error("This listing changed while the rewrite was generated.");
+      }
+      const output = { title: generated.title, description: generated.description };
+      if (message.applyMode === "replace") {
+        setListingFieldValue(title, output.title);
+        setListingFieldValue(description, output.description);
+        renderWardrobeReplaceUndo(originals, output, route);
+        showWardrobeRewriteStatus("Generated copy applied. Review before saving.", "success");
+      } else {
+        renderWardrobeReviewSuggestions(originals, output, route);
+        showWardrobeRewriteStatus("Generated copy ready to review.", "success");
+      }
+      return { ok: true, offers: generated.offers || [] };
+    } catch (error) {
+      showWardrobeRewriteStatus(
+        error?.message || "Wardrobe rewrite failed.",
+        "error",
+      );
+      throw error;
+    } finally {
+      isBusy = false;
+      updateButtonUI();
     }
-    return { ok: true, offers: generated.offers || [] };
   }
 
   function handleWardrobeRewriteProgress(message) {
+    const terminal = ["done", "failed"].includes(message.status);
     const controller = document.querySelector(".quickvint-wardrobe-selection-controller");
     if (controller) {
       const feedback = controller.querySelector(".quickvint-wardrobe-selection-feedback");
       const current = Math.max(0, Number(message.current || 0));
       const total = Math.max(current, Number(message.total || 0));
       if (feedback) {
-        feedback.textContent = message.message || (message.status === "done"
-          ? `${total} listing${total === 1 ? "" : "s"} ready`
-          : `Rewriting ${current} of ${total}`);
+        feedback.textContent = message.message ||
+          (message.status === "done"
+            ? `${total} listing${total === 1 ? "" : "s"} ready`
+            : message.status === "failed"
+              ? "Wardrobe rewrite stopped."
+              : `Rewriting ${current} of ${total}`);
       }
     }
-    if (message.status === "done") {
+    if (terminal) {
+      stopTabJobHeartbeat();
+      wardrobeSelectionJobStatus = "terminal";
+      updateWardrobeSelection();
       loadWardrobeRewriteCapacity().then((capacity) =>
         renderWardrobeRewriteCapacity(
           document.querySelector(".quickvint-wardrobe-rewrite-shell"),
@@ -16273,6 +16445,15 @@
         }
       }
 
+      const { title, description, measurementAdvice, offers = [] } = await response.json();
+      if (
+        typeof title !== "string" ||
+        !title.trim() ||
+        typeof description !== "string" ||
+        !description.trim()
+      ) {
+        throw new Error("Generated listing response was incomplete.");
+      }
       if (requestImageMetadata.some(isCapturedStoragePayload)) {
         clearCapturedPromptUploadGenerationUrls("generate_success");
       }
@@ -16283,8 +16464,6 @@
       ) {
         finishCapturedPromptUploadPhoneSessions();
       }
-
-      const { title, description, measurementAdvice, offers = [] } = await response.json();
       const titleInput = document.querySelector(SELECTORS.title);
       const descInput = document.querySelector(SELECTORS.description);
 
@@ -16664,6 +16843,9 @@
   function updateWardrobeSelection() {
     const selectedCount = wardrobeRewriteSelectedItems.size;
     const atCapacity = selectedCount >= wardrobeSelectionCapacity;
+    const locked = ["active", "terminal"].includes(
+      wardrobeSelectionJobStatus,
+    );
     for (const button of document.querySelectorAll(".quickvint-wardrobe-select-item")) {
       const selected = wardrobeRewriteSelectedItems.has(button.dataset.wardrobeId);
       button.setAttribute("aria-pressed", String(selected));
@@ -16671,9 +16853,10 @@
         "aria-label",
         `${selected ? "Unselect" : "Select"} ${button.dataset.wardrobeTitle}`,
       );
+      const check = button.querySelector(".quickvint-wardrobe-select-check");
       const label = selected ? "✓" : "+";
-      if (button.textContent !== label) button.textContent = label;
-      button.disabled = !selected && atCapacity;
+      if (check?.textContent !== label) check.textContent = label;
+      button.disabled = locked || (!selected && atCapacity);
       button.closest(".quickvint-wardrobe-selection-item")?.classList.toggle(
         "quickvint-wardrobe-item-selected",
         selected,
@@ -16688,7 +16871,23 @@
     const start = wardrobeSelectionController?.querySelector(
       ".quickvint-wardrobe-selection-start",
     );
-    if (start) start.disabled = selectedCount === 0 || selectedCount > wardrobeSelectionCapacity;
+    if (start) {
+      start.disabled =
+        wardrobeSelectionJobStatus !== "idle" ||
+        selectedCount === 0 ||
+        selectedCount > wardrobeSelectionCapacity;
+    }
+    for (const select of wardrobeSelectionController?.querySelectorAll("select") || []) {
+      select.disabled = wardrobeSelectionJobStatus === "active";
+    }
+    const cancel = wardrobeSelectionController?.querySelector(
+      ".quickvint-wardrobe-selection-cancel",
+    );
+    if (cancel) cancel.disabled = wardrobeSelectionJobStatus === "active";
+    const exit = wardrobeRewriteWidget?.querySelector(
+      ".quickvint-wardrobe-rewrite-exit",
+    );
+    if (exit) exit.disabled = wardrobeSelectionJobStatus === "active";
   }
 
   function decorateWardrobeListingCards() {
@@ -16700,6 +16899,7 @@
       const button = document.createElement("button");
       button.type = "button";
       button.className = "quickvint-wardrobe-select-item";
+      button.innerHTML = '<span class="quickvint-wardrobe-select-check" aria-hidden="true">+</span>';
       button.dataset.wardrobeId = card.id;
       button.dataset.wardrobeTitle = card.image.querySelector("img")?.alt || `Item ${card.id}`;
       button.addEventListener("click", (event) => {
@@ -16718,12 +16918,15 @@
   }
 
   function stopWardrobeSelection() {
+    stopTabJobHeartbeat();
     wardrobeSelectionObserver?.disconnect();
     wardrobeSelectionObserver = null;
     if (wardrobeSelectionPagehide) {
       window.removeEventListener("pagehide", wardrobeSelectionPagehide);
       wardrobeSelectionPagehide = null;
     }
+    if (wardrobeSelectionOwnershipTimer) clearInterval(wardrobeSelectionOwnershipTimer);
+    wardrobeSelectionOwnershipTimer = null;
     if (wardrobeSelectionPulseTimeout) clearTimeout(wardrobeSelectionPulseTimeout);
     wardrobeSelectionPulseTimeout = null;
     wardrobeSelectionController?.remove();
@@ -16736,8 +16939,20 @@
       );
     }
     wardrobeSelectionGrid = null;
+    wardrobeSelectionPathname = null;
+    wardrobeSelectionShell = null;
     wardrobeSelectionCapacity = 0;
+    wardrobeSelectionJobStatus = "idle";
     wardrobeRewriteSelectedItems.clear();
+  }
+
+  function stopWardrobeSelectionForOwnershipChange() {
+    const shell = wardrobeSelectionShell;
+    const host = shell?.closest(".quickvint-wardrobe-rewrite-host");
+    stopWardrobeSelection();
+    shell?.remove();
+    host?.classList.remove("quickvint-wardrobe-rewrite-host");
+    wardrobeRewriteWidget = null;
   }
 
   async function renderWardrobeSelectionController() {
@@ -16784,22 +16999,46 @@
       setWardrobeRewriteStep("intro");
     });
     controller.querySelector(".quickvint-wardrobe-selection-start").addEventListener("click", async () => {
+      if (wardrobeSelectionJobStatus !== "idle") return;
+      wardrobeSelectionJobStatus = "starting";
+      controller.querySelector(".quickvint-wardrobe-selection-feedback").textContent = "Starting…";
+      updateWardrobeSelection();
       const capacity = await loadWardrobeRewriteCapacity();
       if (wardrobeSelectionController !== controller) return;
       wardrobeSelectionCapacity = capacity.available;
       if (wardrobeRewriteSelectedItems.size > wardrobeSelectionCapacity) {
+        wardrobeSelectionJobStatus = "idle";
         controller.querySelector(".quickvint-wardrobe-selection-feedback").textContent =
           `Deselect to the new maximum of ${wardrobeSelectionCapacity}.`;
         updateWardrobeSelection();
         return;
       }
-      await sendMessage({
+      const response = await sendMessage({
         type: "START_WARDROBE_REWRITE",
         items: [...wardrobeRewriteSelectedItems.values()].map(({ id, editUrl }) => ({ id, editUrl })),
         applyMode: wardrobeRewriteApplyMode,
         titleLanguageCode: titleLanguage.value,
         descriptionLanguageCode: descriptionLanguage.value,
       });
+      if (wardrobeSelectionController !== controller) return;
+      if (!response?.ok) {
+        stopTabJobHeartbeat();
+        wardrobeSelectionJobStatus = "idle";
+        controller.querySelector(".quickvint-wardrobe-selection-feedback").textContent =
+          response?.error || "Could not start wardrobe rewrite.";
+        updateWardrobeSelection();
+        return;
+      }
+      wardrobeSelectionJobStatus = "active";
+      startTabJobHeartbeat("wardrobe-rewrite", (error) =>
+        handleWardrobeRewriteProgress({
+          status: "failed",
+          current: 0,
+          total: wardrobeRewriteSelectedItems.size,
+          message: error,
+        }),
+      );
+      updateWardrobeSelection();
     });
     updateWardrobeSelection();
   }
@@ -16814,6 +17053,10 @@
     );
     if (modeCopy) modeCopy.textContent = copy;
     setWardrobeRewriteStep("selection");
+    wardrobeSelectionPathname = window.location.pathname;
+    wardrobeSelectionShell = wardrobeRewriteWidget?.closest(
+      ".quickvint-wardrobe-rewrite-shell",
+    );
     const grids = [...document.querySelectorAll('[data-testid="infinite-scroll"]')]
       .map((node) => node.parentElement)
       .filter((grid) => grid?.querySelector('[data-testid="grid-item"]'));
@@ -16828,13 +17071,21 @@
     wardrobeSelectionObserver.observe(wardrobeSelectionGrid, { childList: true, subtree: true });
     wardrobeSelectionPagehide = stopWardrobeSelection;
     window.addEventListener("pagehide", wardrobeSelectionPagehide, { once: true });
+    wardrobeSelectionOwnershipTimer = setInterval(() => {
+      if (
+        window.location.pathname !== wardrobeSelectionPathname ||
+        !wardrobeRewriteWidget?.isConnected
+      ) {
+        stopWardrobeSelectionForOwnershipChange();
+      }
+    }, 250);
     const firstButton = wardrobeSelectionGrid.querySelector(".quickvint-wardrobe-select-item");
     const firstItem = wardrobeSelectionGrid.querySelector('[data-testid="grid-item"]');
     const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     if (firstButton && !reduceMotion) {
-      firstButton.classList.add("quickvint-wardrobe-attention");
+      firstButton.parentElement?.classList.add("quickvint-wardrobe-attention");
       wardrobeSelectionPulseTimeout = setTimeout(
-        () => firstButton.classList.remove("quickvint-wardrobe-attention"),
+        () => firstButton.parentElement?.classList.remove("quickvint-wardrobe-attention"),
         700,
       );
     }

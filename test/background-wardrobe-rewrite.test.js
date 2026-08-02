@@ -36,6 +36,7 @@ async function runBackground(options = {}) {
   const runResolvers = [];
   const capacityResolvers = [];
   const pingCounts = new Map();
+  const settleDelays = [];
   let listener;
   let nextTabId = 100;
 
@@ -99,7 +100,13 @@ async function runBackground(options = {}) {
           }
           return;
         }
-        if (message.type === "RUN_BATCH_ITEM") sentToWorkTab.push({ tabId, message });
+        if (message.type === "RUN_BATCH_ITEM") {
+          sentToWorkTab.push({ tabId, message });
+          if (options.holdBatchRuns) {
+            runResolvers.push(() => callback?.({ ok: true }));
+            return;
+          }
+        }
         callback?.({ ok: true });
       },
       query(_query, callback) { callback([]); },
@@ -143,6 +150,7 @@ async function runBackground(options = {}) {
       return new Response(JSON.stringify({}), { status: 200 });
     },
     setTimeout(callback, delay) {
+      if (delay === 900) settleDelays.push(delay);
       if (delay < 1000) queueMicrotask(callback);
       return 1;
     },
@@ -160,6 +168,7 @@ async function runBackground(options = {}) {
     sentToWorkTab,
     sourceProgress,
     removedTabs,
+    settleDelays,
     resolveRun: () => runResolvers.shift()?.(),
     releaseCapacity: () => capacityResolvers.splice(0).forEach((resolve) => resolve()),
     dispatchRuntimeMessage(message, sender = { tab: sourceTab }) {
@@ -229,6 +238,38 @@ test("batch and wardrobe starts share one lock without mixing their messages", a
   assert.equal(batchHarness.sourceProgress.length, 0);
 });
 
+test("tab job heartbeat validates the source tab and isolates the active job kind", async () => {
+  const wardrobe = await runBackground({ holdRuns: true });
+  assert.equal((await wardrobe.sendRuntimeMessage(rewriteMessage())).ok, true);
+  assert.deepEqual({ ...await wardrobe.sendRuntimeMessage({
+    type: "QUICKVINT_TAB_JOB_HEARTBEAT",
+    kind: "wardrobe-rewrite",
+  }) }, { ok: true, active: true });
+  assert.deepEqual({ ...await wardrobe.sendRuntimeMessage({
+    type: "QUICKVINT_TAB_JOB_HEARTBEAT",
+    kind: "batch",
+  }) }, { ok: true, active: false });
+  assert.deepEqual({ ...await wardrobe.sendRuntimeMessage({
+    type: "QUICKVINT_TAB_JOB_HEARTBEAT",
+    kind: "wardrobe-rewrite",
+  }, { tab: { id: 8, url: sourceTab.url } }) }, { ok: true, active: false });
+  assert.equal((await wardrobe.sendRuntimeMessage({
+    type: "QUICKVINT_TAB_JOB_HEARTBEAT",
+    kind: "other",
+  })).ok, false);
+
+  const batch = await runBackground({ holdBatchRuns: true });
+  assert.equal((await batch.sendRuntimeMessage({
+    type: "START_BATCH_GENERATION",
+    sessionId: "batch-1",
+    groups: [["photo"]],
+  })).ok, true);
+  assert.deepEqual({ ...await batch.sendRuntimeMessage({
+    type: "QUICKVINT_TAB_JOB_HEARTBEAT",
+    kind: "batch",
+  }) }, { ok: true, active: true });
+});
+
 test("concurrent batch and wardrobe starts recheck the lock after capacity", async () => {
   const harness = await runBackground({ holdCapacity: true });
   const batchStart = harness.dispatchRuntimeMessage({
@@ -265,6 +306,7 @@ test("wardrobe rewrite waits for each edit tab and reports sequential progress",
   harness.resolveRun();
   await flush();
   assert.equal(harness.createdTabs.length, 2);
+  assert.deepEqual(harness.settleDelays, [900]);
   assert.equal(harness.sentToWorkTab.length, 2);
   harness.resolveRun();
   await flush();
@@ -285,6 +327,7 @@ test("wardrobe rewrite stops after the first failed item and leaves its tab open
   await flush();
 
   assert.equal(harness.createdTabs.length, 1);
+  assert.deepEqual(harness.settleDelays, []);
   assert.equal(harness.sourceProgress.at(-1).status, "failed");
   assert.deepEqual(harness.removedTabs, []);
 });
