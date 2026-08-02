@@ -137,7 +137,7 @@ async function runBackgroundHandoff(
   const sandbox = {
     console,
     chrome,
-    fetch: async () => ({ ok: true, json: async () => ({}) }),
+    fetch: options.fetch || (async () => ({ ok: true, json: async () => ({}) })),
     setTimeout(callback, delay) {
       const timer = { callback, delay };
       timers.push(timer);
@@ -315,4 +315,25 @@ test("background verifies email OTP codes and stores the Supabase session", asyn
   assert.equal(storageData.supabaseSession.access_token, "otp-access");
   assert.equal(storageData.supabaseSession.user.email, "seller@example.com");
   assert.equal(storageData.accountEmail, "seller@example.com");
+});
+
+test("background proxy preserves structured API errors", async () => {
+  const { response } = await runBackgroundMessage(
+    { type: "PROXY_FETCH", url: "https://autolister.app/api/phone-upload" },
+    {
+      fetch: async () => ({
+        ok: false,
+        status: 410,
+        headers: { get: () => "application/json" },
+        json: async () => ({ status: "expired", error: "Upload session expired" }),
+      }),
+    },
+  );
+
+  assert.deepEqual(JSON.parse(JSON.stringify(response)), {
+    ok: false,
+    status: 410,
+    data: { status: "expired", error: "Upload session expired" },
+    error: "Upload session expired",
+  });
 });

@@ -41,7 +41,6 @@
   const MAX_PHONE_UPLOAD_PREVIEWS = 7;
   const BATCH_POLL_INTERVAL_MS = 3000;
   const BATCH_UPLOAD_STALE_MS = 15000;
-  const BATCH_UPLOAD_IDLE_TIMEOUT_MS = 5 * 60 * 1000;
   const BATCH_SIGNED_URL_TTL_MS = 60 * 60 * 1000;
   const BATCH_SIGNED_URL_REFRESH_SAFETY_MS = 15 * 60 * 1000;
   const BATCH_ESTIMATED_ITEM_DURATION_MS = 2 * 60 * 1000;
@@ -1035,7 +1034,6 @@
   const GENERATION_OUTPUT_EDIT_TRACKING_TTL_MS = 5 * 60 * 1000;
   const GENERATION_OUTPUT_EDIT_MAX_SUMMARIES = 3;
   const CAPTURED_PROMPT_UPLOAD_TTL_MS = 30 * 60 * 1000;
-  const PHONE_UPLOAD_PENDING_GENERATE_BLOCK_MS = 5 * 60 * 1000;
   const MANUAL_STORAGE_COMPRESSION_RETRY_DELAYS_MS = [250];
   const MANUAL_STORAGE_UPLOAD_CONCURRENCY = 3;
   const MANUAL_STORAGE_UPLOAD_RETRY_DELAYS_MS = [700, 1500];
@@ -1070,19 +1068,18 @@
   let phoneUploadPreviewUrls = [];
   let displayedPhoneUploadPreviewCount = 0;
   let phoneUploadPreviewTimer = null;
-  let phoneUploadAutoCloseTimer = null;
   let inlineLanguageListenersBound = false;
   let activeDescriptionApplyPromptCleanup = null;
   let activeLimitFollowupOfferCleanup = null;
   let activeGenerationOutputEditCleanup = null;
   let batchUploadSessionId = null;
   let batchPollInterval = null;
-  let batchAutoCloseTimer = null;
   let batchRemoteFiles = [];
   let batchRemoteFileKeys = new Set();
   let batchMarkedGroups = [];
   let batchSelectedPhotoKeys = new Set();
   let batchIsComplete = false;
+  let batchExpectedCount = 0;
   let batchPhotoTileByKey = new Map();
   let batchGroupRowById = new Map();
   let batchNextGroupId = 1;
@@ -2373,6 +2370,19 @@
     });
   }
 
+  function shouldWarnBeforeLeavingListing() {
+    return Boolean(
+      document.getElementById(MODAL_ID) || document.getElementById(BATCH_MODAL_ID),
+    );
+  }
+
+  window.addEventListener("beforeunload", (event) => {
+    if (!shouldWarnBeforeLeavingListing()) return;
+    event.preventDefault();
+    event.returnValue = true;
+    return true;
+  });
+
   function shouldOpenSignInInTab() {
     return (
       /Android|iPhone|iPad|iPod/i.test(navigator.userAgent) ||
@@ -3534,6 +3544,8 @@
     window.__AUTOLISTER_TEST_HOOKS__.compressImages = compressImages;
     window.__AUTOLISTER_TEST_HOOKS__.compressImagesWithMetadata =
       compressImagesWithMetadata;
+    window.__AUTOLISTER_TEST_HOOKS__.shouldWarnBeforeLeavingListing =
+      shouldWarnBeforeLeavingListing;
   }
 
   function getUploadedImageEntries() {
@@ -12171,7 +12183,35 @@
   // --- PHONE UPLOAD LOGIC ---
 
   function generateSessionId() {
-    return "sess_" + Math.random().toString(36).substring(2, 15);
+    if (crypto.randomUUID) return crypto.randomUUID();
+    const bytes = crypto.getRandomValues(new Uint8Array(16));
+    bytes[6] = (bytes[6] & 0x0f) | 0x40;
+    bytes[8] = (bytes[8] & 0x3f) | 0x80;
+    const value = Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("");
+    return `${value.slice(0, 8)}-${value.slice(8, 12)}-${value.slice(12, 16)}-${value.slice(16, 20)}-${value.slice(20)}`;
+  }
+
+  async function openPhoneUploadSession(sessionId, mode) {
+    const { access_token } = await sendMessage({ type: "GET_ACCESS_TOKEN" });
+    if (!access_token) throw new Error("Sign in again to start phone upload.");
+    const response = await sendMessage({
+      type: "PROXY_FETCH",
+      url: `${PHONE_UPLOAD_API}?action=open&v=2&sessionId=${encodeURIComponent(sessionId)}&mode=${mode}`,
+      options: {
+        method: "POST",
+        headers: { Authorization: `Bearer ${access_token}` },
+      },
+    });
+    if (!response?.ok) {
+      throw new Error(response?.data?.error || "Could not start phone upload. Try again.");
+    }
+  }
+
+  function createLocalQrDataUrl(uploadUrl) {
+    const code = qrcode(0, "M");
+    code.addData(uploadUrl, "Byte");
+    code.make();
+    return code.createDataURL(5, 10);
   }
 
   async function createModal(sessionId) {
@@ -12179,7 +12219,8 @@
     modal.id = MODAL_ID;
     modal.dataset.sessionId = sessionId;
 
-    const uploadUrl = `${PHONE_UPLOAD_PAGE}?s=${sessionId}`;
+    const uploadUrl = `${PHONE_UPLOAD_PAGE}?s=${sessionId}&v=2`;
+    const qrDataUrl = createLocalQrDataUrl(uploadUrl);
 
     // Get saved language preferences. Fall back to the legacy single language setting.
     const languageStorage = await chrome.storage.local.get([
@@ -12221,11 +12262,9 @@
         </div>
         <p class="subtitle">Scan with your camera app</p>
         <div class="qr-container">
-          <img id="qr-code" src="https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(
-            uploadUrl,
-          )}" alt="QR Code" />
+          <img id="qr-code" data-upload-url="${uploadUrl}" src="${qrDataUrl}" alt="QR Code" />
         </div>
-        <p class="instruction">Photos will appear in this listing automatically</p>
+        <p class="instruction">Expires after 1 hour idle.</p>
         <div class="phone-previews" aria-live="polite">
           <div class="preview-header">
             <span>Photos</span>
@@ -12414,7 +12453,10 @@
       modal.remove();
     }
     if (!keepSessionAlive) {
-      finishPhoneUploadSession(sessionId);
+      finishPhoneUploadSession(
+        sessionId,
+        cancelUpload ? "cancelled" : "completed",
+      );
     }
 
     maybeShowPendingPrompts();
@@ -12438,7 +12480,7 @@
     return capturedUpload.files.length > getVisibleUploadedPhotoCount();
   }
 
-  function finishPhoneUploadSession(sessionId) {
+  function finishPhoneUploadSession(sessionId, reason = "completed") {
     invalidateCapturedPromptUploadGenerationUrls(
       sessionId,
       "phone_upload_session_finished",
@@ -12454,17 +12496,13 @@
       clearInterval(pollInterval);
       pollInterval = null;
     }
-    if (phoneUploadAutoCloseTimer) {
-      clearTimeout(phoneUploadAutoCloseTimer);
-      phoneUploadAutoCloseTimer = null;
-    }
     resetPhoneUploadTransientState();
     updateButtonUI();
 
     if (sessionId && chrome.runtime?.id) {
       sendMessage({
         type: "PROXY_FETCH",
-        url: `${PHONE_UPLOAD_API}?action=cleanup&sessionId=${sessionId}`,
+        url: `${PHONE_UPLOAD_API}?action=cleanup&v=2&reason=${reason}&sessionId=${sessionId}`,
         options: {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -12520,12 +12558,24 @@
     }
 
     const sessionId = generateSessionId();
+    try {
+      await openPhoneUploadSession(sessionId, "single");
+    } catch (error) {
+      showToast(error?.message || "Could not start phone upload. Try again.", "error");
+      return;
+    }
     trackGrowthEvent("phone_upload_start", {
       mode: "single",
       available,
       sessionId,
     });
-    await createModal(sessionId);
+    try {
+      await createModal(sessionId);
+    } catch (error) {
+      showToast("Could not create QR code. Start a new upload.", "error");
+      finishPhoneUploadSession(sessionId, "cancelled");
+      return;
+    }
     startPolling(sessionId);
   }
 
@@ -12549,9 +12599,7 @@
       startedAt: Date.now(),
       updatedAt: Date.now(),
     };
-    schedulePhoneUploadAutoClose(sessionId);
-
-    pollInterval = setInterval(async () => {
+    const poll = async () => {
       if (isPhoneUploadPollInFlight) return;
 
       try {
@@ -12566,7 +12614,7 @@
 
         const response = await sendMessage({
           type: "PROXY_FETCH",
-          url: `${PHONE_UPLOAD_API}?sessionId=${sessionId}&t=${Date.now()}`,
+          url: `${PHONE_UPLOAD_API}?sessionId=${sessionId}&v=2&t=${Date.now()}`,
           options: { method: "GET" },
         });
 
@@ -12574,7 +12622,10 @@
           return;
         }
 
-        if (!response || !response.ok) return;
+        if (!response?.ok) {
+          renderPhoneUploadPollError(statusEl, sessionId, response);
+          return;
+        }
 
         const data =
           typeof response.data === "string"
@@ -12582,8 +12633,15 @@
             : response.data;
         updateLastPhoneUploadState(sessionId, data, initialImageCount);
         updateButtonUI();
-        const remoteFiles = getPhoneUploadPhotoFiles(data?.files);
-        if (remoteFiles.length > 0) {
+        const remoteFiles = getPhoneUploadPhotoFiles(data?.files).sort(
+          (a, b) => Number(a.order || 0) - Number(b.order || 0),
+        );
+        const expectedCount = Number(data?.expectedCount ?? data?.count ?? 0);
+        const exactComplete =
+          data?.complete === true &&
+          expectedCount > 0 &&
+          remoteFiles.length === expectedCount;
+        if (remoteFiles.length > 0 && exactComplete) {
           const newRemoteFiles = remoteFiles.filter((file) => {
             const fileKey = getPhoneUploadFileKey(file);
             return (
@@ -12594,7 +12652,6 @@
           });
 
           if (newRemoteFiles.length > 0) {
-            schedulePhoneUploadAutoClose(sessionId);
             newRemoteFiles.forEach((file) =>
               pendingPhoneFiles.add(getPhoneUploadFileKey(file)),
             );
@@ -12633,7 +12690,7 @@
                 });
               }
 
-              if (filesToInject.length > 0) {
+              if (filesToInject.length > 0 && failedDownloadCount === 0) {
                 if (
                   injectFilesIntoVinted(filesToInject, "phone_upload_single", {
                     generateUrls: successfulDownloads.map(
@@ -12674,10 +12731,10 @@
           updateButtonUI();
         } else {
           // No files yet, show waiting message
-          if (statusEl && downloadedFiles.size === 0) {
+          if (statusEl && remoteFiles.length === 0) {
             statusEl.className = "status waiting";
             statusEl.textContent = "Waiting for photos from your phone...";
-          } else if (statusEl && downloadedFiles.size > 0) {
+          } else if (statusEl) {
             updatePhoneUploadStatus(statusEl, initialImageCount);
           }
         }
@@ -12698,25 +12755,9 @@
           isPhoneUploadPollInFlight = false;
         }
       }
-    }, 3000);
-
-  }
-
-  function schedulePhoneUploadAutoClose(sessionId) {
-    if (phoneUploadAutoCloseTimer) {
-      clearTimeout(phoneUploadAutoCloseTimer);
-      phoneUploadAutoCloseTimer = null;
-    }
-
-    // Auto-close after 5 minutes of inactivity (silent, no alert)
-    phoneUploadAutoCloseTimer = setTimeout(
-      () => {
-        if (isPhoneUploadSessionActive(sessionId)) {
-          closeModal();
-        }
-      },
-      5 * 60 * 1000,
-    );
+    };
+    poll();
+    pollInterval = setInterval(poll, 3000);
   }
 
   function isPhoneUploadSessionActive(sessionId) {
@@ -12962,9 +13003,6 @@
   function getIncompletePhoneUploadState() {
     const state = lastPhoneUploadState;
     if (!state) return null;
-    if (Date.now() - state.startedAt > PHONE_UPLOAD_PENDING_GENERATE_BLOCK_MS) {
-      return null;
-    }
 
     const visibleAddedCount = getPhoneUploadVisibleAddedCount(state);
     const hasPhotosInFlight =
@@ -12984,7 +13022,10 @@
   function updatePhoneUploadStatus(statusEl, initialImageCount) {
     if (!statusEl) return;
 
-    const sentCount = downloadedFiles.size;
+    const sentCount = Math.max(
+      downloadedFiles.size,
+      Number(lastPhoneUploadState?.receivedCount || 0),
+    );
     const expectedCount = Number(lastPhoneUploadState?.expectedCount || 0);
     const capturedReadyCount = getPhoneUploadCapturedReadyCount();
 
@@ -13002,6 +13043,39 @@
       statusEl.textContent = "Waiting for photos from your phone...";
     } else {
       statusEl.textContent = "Receiving...";
+    }
+  }
+
+  function renderPhoneUploadPollError(statusEl, sessionId, response) {
+    if (!statusEl || !isPhoneUploadSessionActive(sessionId)) return;
+    if (response?.status !== 410 && response?.status !== 404) {
+      statusEl.className = "status waiting";
+      statusEl.textContent = "Connection lost. Retrying…";
+      return;
+    }
+
+    const reason = response?.data?.status;
+    const message =
+      response.status === 404
+        ? "This upload link is no longer valid."
+        : reason === "cancelled"
+          ? "This upload was cancelled."
+          : "This upload expired. Its temporary photos are no longer available.";
+    statusEl.className = "status error";
+    statusEl.textContent = message;
+    const restart = document.createElement("button");
+    restart.type = "button";
+    restart.className = "phone-upload-restart";
+    restart.textContent = "Start new upload";
+    restart.addEventListener("click", () => {
+      document.getElementById(MODAL_ID)?.remove();
+      finishPhoneUploadSession(sessionId);
+      document.getElementById(PHONE_BTN_ID)?.click();
+    });
+    statusEl.append(" ", restart);
+    if (pollInterval) {
+      clearInterval(pollInterval);
+      pollInterval = null;
     }
   }
 
@@ -13090,6 +13164,7 @@
     batchMarkedGroups = [];
     batchSelectedPhotoKeys = new Set();
     batchIsComplete = false;
+    batchExpectedCount = 0;
     batchPhotoTileByKey = new Map();
     batchGroupRowById = new Map();
     batchNextGroupId = 1;
@@ -13130,10 +13205,6 @@
       clearInterval(batchPollInterval);
       batchPollInterval = null;
     }
-    if (batchAutoCloseTimer) {
-      clearTimeout(batchAutoCloseTimer);
-      batchAutoCloseTimer = null;
-    }
     resetBatchState();
   }
 
@@ -13143,6 +13214,7 @@
     return (
       isBatchGenerationActive() ||
       Boolean(batchComputerUploadPromise) ||
+      (!batchIsComplete && batchExpectedCount > 0) ||
       batchRemoteFiles.length > 0 ||
       batchSelectedPhotoKeys.size > 0 ||
       batchMarkedGroups.length > 0
@@ -13158,7 +13230,7 @@
       return "Photos are still uploading. Closing now will discard this batch upload. Close anyway?";
     }
 
-    if (!batchIsComplete && batchRemoteFiles.length > 0) {
+    if (!batchIsComplete && (batchExpectedCount > 0 || batchRemoteFiles.length > 0)) {
       return "Photos are still uploading. Closing now will discard this batch upload. Close anyway?";
     }
 
@@ -13178,6 +13250,7 @@
 
   function closeBatchModal({ cleanup = true } = {}) {
     const sessionId = batchUploadSessionId;
+    const isPhoneSession = batchInputSource !== "computer";
     const computerUpload = batchComputerUploadPromise;
     const computerUploadAbortController = batchComputerUploadAbortController;
     document.getElementById(BATCH_MODAL_ID)?.remove();
@@ -13188,15 +13261,11 @@
       clearInterval(batchPollInterval);
       batchPollInterval = null;
     }
-    if (batchAutoCloseTimer) {
-      clearTimeout(batchAutoCloseTimer);
-      batchAutoCloseTimer = null;
-    }
 
     const cleanupSession = () =>
       sendMessage({
         type: "PROXY_FETCH",
-        url: `${PHONE_UPLOAD_API}?action=cleanup&sessionId=${sessionId}`,
+        url: `${PHONE_UPLOAD_API}?action=cleanup${isPhoneSession ? "&v=2&reason=cancelled" : ""}&sessionId=${sessionId}`,
         options: {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -13213,32 +13282,6 @@
 
     resetBatchState();
     maybeShowPendingPrompts();
-  }
-
-  function shouldKeepBatchUploadSessionOpen() {
-    return (
-      batchRemoteFiles.length > 0 ||
-      batchSelectedPhotoKeys.size > 0 ||
-      batchMarkedGroups.length > 0
-    );
-  }
-
-  function scheduleBatchAutoClose(sessionId) {
-    if (batchAutoCloseTimer) {
-      clearTimeout(batchAutoCloseTimer);
-      batchAutoCloseTimer = null;
-    }
-
-    if (shouldKeepBatchUploadSessionOpen()) return;
-
-    batchAutoCloseTimer = setTimeout(() => {
-      if (
-        batchUploadSessionId === sessionId &&
-        !shouldKeepBatchUploadSessionOpen()
-      ) {
-        closeBatchModal({ cleanup: true });
-      }
-    }, BATCH_UPLOAD_IDLE_TIMEOUT_MS);
   }
 
   async function onBatchUploadClick(capacity) {
@@ -13267,6 +13310,13 @@
     }
 
     const sessionId = generateSessionId();
+    try {
+      await openPhoneUploadSession(sessionId, "batch");
+    } catch (error) {
+      showToast(error?.message || "Could not start batch upload. Try again.", "error");
+      resetBatchState();
+      return;
+    }
     batchUploadSessionId = sessionId;
     batchLastFileChangeAt = Date.now();
     trackGrowthEvent("phone_upload_start", { mode: "batch", available });
@@ -13310,7 +13360,7 @@
   }
 
   function getBatchUploadUrl(sessionId) {
-    return `${PHONE_UPLOAD_PAGE}?s=${sessionId}&mode=batch`;
+    return `${PHONE_UPLOAD_PAGE}?s=${sessionId}&mode=batch&v=2`;
   }
 
   function getBatchBody() {
@@ -13333,19 +13383,24 @@
       ?.remove();
 
     const uploadUrl = getBatchUploadUrl(sessionId);
+    let qrDataUrl;
+    try {
+      qrDataUrl = createLocalQrDataUrl(uploadUrl);
+    } catch (error) {
+      body.innerHTML = '<div class="batch-computer-error" role="alert">Could not create QR code. Start a new upload.</div>';
+      return;
+    }
     body.innerHTML = `
       <div class="batch-source-grid">
         <section class="batch-source-panel batch-source-phone batch-wait-panel">
           <div class="batch-source-kicker">From your phone</div>
           <div class="batch-source-phone-content">
             <div class="batch-qr">
-              <div class="batch-qr-placeholder" data-qr-src="https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(
-                uploadUrl,
-              )}"></div>
+              <img src="${qrDataUrl}" data-upload-url="${uploadUrl}" alt="Batch upload QR Code" />
             </div>
             <div class="batch-source-copy">
               <div class="batch-wait-title">Scan QR code</div>
-              <div class="batch-wait-copy">Choose photos. Keep page open.</div>
+              <div class="batch-wait-copy">Expires after 1 hour idle.</div>
             </div>
           </div>
         </section>
@@ -13368,20 +13423,6 @@
         <button type="button" class="primary batch-group" disabled hidden>Group photos</button>
       </div>
     `;
-
-    requestAnimationFrame(() => {
-      const placeholder = body.querySelector(".batch-qr-placeholder");
-      if (!placeholder?.dataset.qrSrc) return;
-      const img = document.createElement("img");
-      img.alt = "Batch upload QR Code";
-      img.onload = () => {
-        placeholder.replaceWith(img);
-      };
-      img.onerror = () => {
-        placeholder.classList.add("error");
-      };
-      img.src = placeholder.dataset.qrSrc;
-    });
 
     body.querySelector(".batch-cancel")?.addEventListener("click", () => {
       requestCloseBatchModal({ cleanup: true });
@@ -13629,7 +13670,7 @@
     if (qrSessionId) {
       sendMessage({
         type: "PROXY_FETCH",
-        url: `${PHONE_UPLOAD_API}?action=cleanup&sessionId=${qrSessionId}`,
+        url: `${PHONE_UPLOAD_API}?action=cleanup&v=2&reason=cancelled&sessionId=${qrSessionId}`,
         options: {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -13749,7 +13790,9 @@
           ? isStale
             ? "Connection paused"
             : `${receivedCount} received`
-          : "Waiting";
+          : batchExpectedCount
+            ? `0 of ${batchExpectedCount} received`
+            : "Waiting";
     }
 
     const previousCount = Number(title.dataset.receivedCount || "0");
@@ -13764,6 +13807,8 @@
       title.innerHTML = isStale
         ? `Check phone (<span class="batch-count-number">${receivedCount}</span> received)`
         : `Receiving <span class="batch-count-number">${receivedCount}</span> photo${receivedCount === 1 ? "" : "s"}<span class="waiting-dots" aria-hidden="true"><span>.</span><span>.</span><span>.</span></span>`;
+    } else if (batchExpectedCount) {
+      title.textContent = `Receiving 0 of ${batchExpectedCount} photos`;
     } else {
       title.textContent = "Scan QR code";
     }
@@ -13779,7 +13824,9 @@
         ? isStale
           ? "Reopen the phone page, then leave it visible."
           : "Keep the phone page open."
-        : "Choose photos. Keep page open.";
+        : batchExpectedCount
+          ? "Keep the phone page open."
+          : "Expires after 1 hour idle.";
 
     if (groupButton) {
       groupButton.disabled = !batchIsComplete || receivedCount === 0;
@@ -14296,6 +14343,11 @@
     });
   }
 
+  function getBatchCapacityDiscardMessage(available, total) {
+    const remaining = total - available;
+    return `You can generate ${available} of ${total} listings. Only the first ${available} will be generated. The remaining ${remaining} group${remaining === 1 ? "" : "s"} will not be saved.`;
+  }
+
   function updateBatchGroupingControls() {
     const subtitleEl = document.querySelector(`#${BATCH_MODAL_ID} .batch-subtitle`);
     const selectionCount = document.querySelector(
@@ -14443,7 +14495,10 @@
           capacityNote.classList.remove("is-hidden");
           capacityNote.classList.add("warning");
           capacityNote.setAttribute("aria-hidden", "false");
-          capacityNote.textContent = `You can generate ${available} of ${groups.length} listings right now. The first ${available} will be generated.`;
+          capacityNote.textContent = getBatchCapacityDiscardMessage(
+            available,
+            groups.length,
+          );
         } else {
           capacityNote.classList.add("is-hidden");
           capacityNote.setAttribute("aria-hidden", "true");
@@ -14696,7 +14751,7 @@
   async function refreshBatchRemoteFilesForGeneration(sessionId) {
     const response = await sendMessage({
       type: "PROXY_FETCH",
-      url: `${PHONE_UPLOAD_API}?sessionId=${sessionId}&t=${Date.now()}`,
+      url: `${PHONE_UPLOAD_API}?sessionId=${sessionId}&v=2&t=${Date.now()}`,
       options: { method: "GET" },
     });
     if (!response?.ok) {
@@ -14745,13 +14800,43 @@
     );
   }
 
+  function renderBatchPollError(sessionId, response) {
+    if (
+      batchUploadSessionId !== sessionId ||
+      (response?.status !== 410 && response?.status !== 404)
+    ) {
+      return;
+    }
+
+    const title = document.querySelector(`#${BATCH_MODAL_ID} .batch-wait-title`);
+    const copy = document.querySelector(`#${BATCH_MODAL_ID} .batch-wait-copy`);
+    if (!title || !copy) return;
+
+    title.textContent = response.status === 404 ? "Upload unavailable" : "Upload expired";
+    copy.textContent =
+      response.status === 404
+        ? "This upload link is no longer valid."
+        : "Its temporary photos are no longer available.";
+    const restart = document.createElement("button");
+    restart.type = "button";
+    restart.className = "batch-upload-restart";
+    restart.textContent = "Start new upload";
+    restart.addEventListener("click", () => {
+      closeBatchModal({ cleanup: false });
+      document.getElementById(PHONE_BTN_ID)?.click();
+    });
+    copy.append(" ", restart);
+    if (batchPollInterval) {
+      clearInterval(batchPollInterval);
+      batchPollInterval = null;
+    }
+  }
+
   function startBatchPolling(sessionId) {
     if (batchPollInterval) {
       clearInterval(batchPollInterval);
       batchPollInterval = null;
     }
-    scheduleBatchAutoClose(sessionId);
-
     const poll = async () => {
       if (isBatchPollInFlight || batchUploadSessionId !== sessionId) return;
 
@@ -14759,11 +14844,14 @@
         isBatchPollInFlight = true;
         const response = await sendMessage({
           type: "PROXY_FETCH",
-          url: `${PHONE_UPLOAD_API}?sessionId=${sessionId}&t=${Date.now()}`,
+          url: `${PHONE_UPLOAD_API}?sessionId=${sessionId}&v=2&t=${Date.now()}`,
           options: { method: "GET" },
         });
         if (batchUploadSessionId !== sessionId) return;
-        if (!response?.ok) return;
+        if (!response?.ok) {
+          renderBatchPollError(sessionId, response);
+          return;
+        }
 
         const data =
           typeof response.data === "string"
@@ -14772,12 +14860,19 @@
         const files = Array.isArray(data.files)
           ? normalizeBatchRemoteFiles(data.files)
           : [];
+        const expectedCount = Number(data.expectedCount ?? data.count ?? 0);
+        batchExpectedCount = Math.max(batchExpectedCount, expectedCount || 0);
+        if (batchExpectedCount && !batchInputSource) {
+          lockBatchComputerControlsForPhone();
+        }
         if (files.length) {
           batchSignedUrlsListedAt = Date.now();
-          if (!batchInputSource) lockBatchComputerControlsForPhone();
         }
         const wasComplete = batchIsComplete;
-        batchIsComplete = data.complete === true;
+        batchIsComplete =
+          data.complete === true &&
+          expectedCount > 0 &&
+          files.length === expectedCount;
         let added = false;
 
         files.forEach((file) => {
@@ -14804,12 +14899,7 @@
 
         const openedGrouping = maybeAutoOpenBatchGrouping();
 
-        if (openedGrouping) {
-          scheduleBatchAutoClose(sessionId);
-        } else if (added || batchIsComplete !== wasComplete) {
-          scheduleBatchAutoClose(sessionId);
-          refreshBatchWaitingState();
-        } else {
+        if (!openedGrouping) {
           refreshBatchWaitingState();
         }
 
@@ -14891,7 +14981,7 @@
 
     if (available < groups.length) {
       const confirmed = window.confirm(
-        `You have ${available} of ${groups.length} listings available. Generate the first ${available}?`,
+        getBatchCapacityDiscardMessage(available, groups.length),
       );
       if (!confirmed) {
         restoreStartButton();
@@ -14909,10 +14999,6 @@
     if (batchPollInterval) {
       clearInterval(batchPollInterval);
       batchPollInterval = null;
-    }
-    if (batchAutoCloseTimer) {
-      clearTimeout(batchAutoCloseTimer);
-      batchAutoCloseTimer = null;
     }
 
     batchProgressGroups = groupsWithKeys;
