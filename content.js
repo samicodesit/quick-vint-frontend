@@ -16177,19 +16177,28 @@
       { [WARDROBE_REWRITE_COLLAPSED_KEY]: false },
       (storage) => {
         setCollapsed(Boolean(storage[WARDROBE_REWRITE_COLLAPSED_KEY]), false);
-        widget.classList.remove("quickvint-wardrobe-rewrite-pending");
-        if (!reduceMotion) {
-          widget.animate(
-            [
-              { opacity: 0, transform: "translateY(10px) scale(.98)" },
-              { opacity: 1, transform: "translateY(0) scale(1)" },
-            ],
-            {
-              duration: 360,
-              easing: "cubic-bezier(.22, 1, .36, 1)",
-            },
-          );
-        }
+        const reveal = () =>
+          setTimeout(() => {
+            if (!widget.isConnected) return;
+            requestAnimationFrame(() => {
+              fitToViewport();
+              widget.classList.remove("quickvint-wardrobe-rewrite-pending");
+              if (!reduceMotion) {
+                widget.animate(
+                  [
+                    { opacity: 0, transform: "translateY(10px) scale(.98)" },
+                    { opacity: 1, transform: "translateY(0) scale(1)" },
+                  ],
+                  {
+                    duration: 360,
+                    easing: "cubic-bezier(.22, 1, .36, 1)",
+                  },
+                );
+              }
+            });
+          }, 650);
+        if (document.readyState === "complete") reveal();
+        else window.addEventListener("load", reveal, { once: true });
       },
     );
     window.addEventListener("resize", fitToViewport);
