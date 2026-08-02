@@ -1,0 +1,447 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>AutoLister wardrobe rewrite widget preview</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --vinted: #007782;
+      --ink: #292929;
+      --muted: #626b6d;
+      --line: #e5e7e8;
+      --brand: #4f46e5;
+      --brand-dark: #3730a3;
+    }
+
+    * { box-sizing: border-box; }
+
+    html, body { margin: 0; min-width: 0; overflow-x: hidden; }
+
+    body {
+      background: #fff;
+      color: var(--ink);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    button, input { font: inherit; }
+
+    .site-header {
+      border-bottom: 1px solid var(--line);
+      background: #fff;
+    }
+
+    .topbar,
+    .category-nav,
+    .page {
+      width: min(1260px, calc(100% - 48px));
+      margin: 0 auto;
+    }
+
+    .topbar {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      height: 52px;
+    }
+
+    .logo {
+      flex: 0 0 auto;
+      color: var(--vinted);
+      font-family: Georgia, serif;
+      font-size: 27px;
+      font-style: italic;
+      font-weight: 800;
+      letter-spacing: -1.5px;
+    }
+
+    .search {
+      display: flex;
+      align-items: center;
+      flex: 1;
+      max-width: 635px;
+      height: 38px;
+      border-radius: 7px;
+      background: #eef2f2;
+      color: #6b7375;
+      overflow: hidden;
+    }
+
+    .search span { padding: 0 15px; font-size: 14px; }
+    .search span + span { flex: 1; border-left: 1px solid #d8dddd; }
+
+    .top-actions {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-left: auto;
+    }
+
+    .top-actions button {
+      height: 34px;
+      padding: 0 13px;
+      border: 1px solid var(--vinted);
+      border-radius: 7px;
+      background: #fff;
+      color: var(--vinted);
+      font-size: 13px;
+      font-weight: 650;
+    }
+
+    .top-actions .sell { background: var(--vinted); color: #fff; }
+
+    .category-nav {
+      display: flex;
+      align-items: center;
+      gap: 32px;
+      height: 46px;
+      color: #52595b;
+      font-size: 14px;
+      white-space: nowrap;
+    }
+
+    .page { padding: 40px 0 60px; }
+
+    .wardrobe-profile {
+      display: grid;
+      grid-template-columns: 160px minmax(310px, 1fr) minmax(360px, 440px) auto;
+      gap: 24px;
+      align-items: start;
+      min-height: 230px;
+    }
+
+    .avatar {
+      width: 160px;
+      aspect-ratio: 1;
+      border-radius: 50%;
+      background:
+        radial-gradient(circle at 52% 43%, #f2c68f 0 18%, transparent 19%),
+        linear-gradient(145deg, #8bb6a7 0 34%, #e9d8bd 35% 66%, #8a6f5a 67%);
+      box-shadow: inset 0 0 0 1px rgba(0, 0, 0, .06);
+    }
+
+    .profile-summary { padding-top: 14px; }
+
+    .profile-summary h1 {
+      margin: 0 0 7px;
+      color: #111;
+      font-size: 22px;
+      line-height: 1.15;
+    }
+
+    .rating { color: #f5a623; font-size: 17px; }
+    .rating span { color: #566063; font-size: 14px; }
+
+    .active-seller {
+      display: flex;
+      gap: 10px;
+      align-items: flex-start;
+      margin-top: 20px;
+    }
+
+    .active-icon {
+      display: grid;
+      flex: 0 0 30px;
+      height: 30px;
+      place-items: center;
+      border-radius: 50%;
+      background: #d7f4f2;
+      color: var(--vinted);
+      font-weight: 900;
+    }
+
+    .active-seller strong { display: block; color: #111; font-size: 15px; }
+    .active-seller p { margin: 4px 0 0; color: var(--muted); font-size: 13px; }
+
+    .profile-facts {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px 22px;
+      margin-top: 20px;
+      color: var(--muted);
+      font-size: 14px;
+    }
+
+    .profile-facts span { white-space: nowrap; }
+
+    .profile-actions {
+      display: flex;
+      align-items: center;
+      gap: 18px;
+      padding-top: 24px;
+      white-space: nowrap;
+    }
+
+    .profile-actions button {
+      height: 38px;
+      padding: 0 17px;
+      border: 0;
+      border-radius: 7px;
+      background: var(--vinted);
+      color: #fff;
+      font-size: 14px;
+      font-weight: 700;
+    }
+
+    .profile-actions span { color: #6f7779; font-size: 22px; letter-spacing: 2px; }
+
+    .qv-rewrite-widget {
+      position: relative;
+      display: flex;
+      align-self: center;
+      width: 100%;
+      height: 176px;
+      margin-top: 2px;
+      overflow: hidden;
+      border: 1px solid #dfe1ff;
+      border-radius: 16px;
+      background:
+        radial-gradient(circle at 94% 16%, rgba(45, 212, 191, .19), transparent 34%),
+        linear-gradient(135deg, #fff 30%, #f4f3ff 100%);
+      box-shadow: 0 14px 34px rgba(55, 48, 163, .10);
+      isolation: isolate;
+    }
+
+    .qv-rewrite-widget::before {
+      content: "";
+      position: absolute;
+      inset: auto -32px -54px auto;
+      width: 190px;
+      height: 190px;
+      border-radius: 50%;
+      background: rgba(79, 70, 229, .08);
+      z-index: -1;
+    }
+
+    .qv-rewrite-widget__copy {
+      position: relative;
+      z-index: 2;
+      width: 100%;
+      padding: 19px 166px 18px 21px;
+    }
+
+    .qv-rewrite-widget__eyebrow {
+      color: var(--brand);
+      font-size: 10px;
+      font-weight: 850;
+      letter-spacing: .09em;
+      text-transform: uppercase;
+    }
+
+    .qv-rewrite-widget h2 {
+      max-width: 280px;
+      margin: 4px 0 5px;
+      color: #19164d;
+      font-size: 21px;
+      line-height: 1.08;
+      letter-spacing: -.025em;
+    }
+
+    .qv-rewrite-widget__body {
+      max-width: 245px;
+      margin: 0 0 10px;
+      color: #686783;
+      font-size: 12px;
+      line-height: 1.35;
+    }
+
+    .qv-rewrite-widget button {
+      height: 33px;
+      padding: 0 13px;
+      border: 0;
+      border-radius: 9px;
+      background: var(--brand);
+      box-shadow: 0 7px 16px rgba(79, 70, 229, .22);
+      color: #fff;
+      font-size: 12px;
+      font-weight: 760;
+    }
+
+    .qv-rewrite-widget img {
+      position: absolute;
+      right: -3px;
+      bottom: -9px;
+      width: 169px;
+      height: auto;
+      pointer-events: none;
+      filter: drop-shadow(0 12px 12px rgba(30, 41, 59, .15));
+    }
+
+    .tabs {
+      display: flex;
+      gap: 28px;
+      margin-top: 16px;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .tab {
+      padding: 15px 16px 13px;
+      border-bottom: 2px solid transparent;
+      color: #737b7d;
+      font-size: 14px;
+    }
+
+    .tab.active { border-color: var(--vinted); color: #191919; }
+
+    .listing-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 20px;
+      padding: 46px 16px 21px;
+    }
+
+    .listing-head strong { font-size: 17px; }
+    .filters { display: flex; gap: 24px; color: #454c4e; font-size: 14px; }
+
+    .listing-grid {
+      display: grid;
+      grid-template-columns: repeat(5, minmax(0, 1fr));
+      gap: 16px;
+      padding: 0 2px;
+    }
+
+    .listing-card { min-width: 0; }
+
+    .listing-photo {
+      aspect-ratio: .72;
+      border-radius: 7px;
+      background: linear-gradient(135deg, var(--photo-a), var(--photo-b));
+      box-shadow: inset 0 0 0 1px rgba(0, 0, 0, .04);
+    }
+
+    .listing-card:nth-child(1) { --photo-a: #efe6d0; --photo-b: #75827a; }
+    .listing-card:nth-child(2) { --photo-a: #dbcdb7; --photo-b: #3d4340; }
+    .listing-card:nth-child(3) { --photo-a: #8c9daf; --photo-b: #d8cab1; }
+    .listing-card:nth-child(4) { --photo-a: #508bc5; --photo-b: #7b765f; }
+    .listing-card:nth-child(5) { --photo-a: #d32f63; --photo-b: #756d62; }
+
+    .listing-card p { margin: 8px 4px 2px; color: #737b7d; font-size: 12px; }
+    .listing-card strong { margin-left: 4px; color: #222; font-size: 13px; }
+
+    @media (max-width: 1100px) {
+      .category-nav { gap: 22px; overflow: hidden; }
+      .wardrobe-profile {
+        grid-template-columns: 136px minmax(0, 1fr) auto;
+        min-height: 0;
+      }
+      .avatar { width: 136px; }
+      .qv-rewrite-widget {
+        grid-column: 2 / 4;
+        grid-row: 2;
+        width: min(520px, 100%);
+        height: 166px;
+        margin-top: 0;
+      }
+      .profile-actions { grid-column: 3; grid-row: 1; }
+      .qv-rewrite-widget__copy { padding-top: 17px; }
+      .listing-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    }
+
+    @media (max-width: 720px) {
+      .topbar, .category-nav, .page { width: min(100% - 28px, 1260px); }
+      .search span:first-child, .top-actions button:not(.sell), .category-nav { display: none; }
+      .topbar { gap: 10px; }
+      .search { min-width: 0; }
+      .top-actions .sell { padding: 0 10px; }
+      .page { padding-top: 24px; }
+      .wardrobe-profile { grid-template-columns: 104px minmax(0, 1fr); gap: 16px; }
+      .avatar { width: 104px; }
+      .profile-summary { padding-top: 4px; }
+      .profile-summary h1 { font-size: 19px; }
+      .active-seller { margin-top: 13px; }
+      .profile-facts { gap: 6px 12px; margin-top: 13px; font-size: 12px; }
+      .profile-actions { grid-column: 2; grid-row: 2; padding-top: 0; }
+      .qv-rewrite-widget { grid-column: 1 / -1; grid-row: 3; }
+      .listing-head { padding-top: 28px; }
+      .filters span:first-child { display: none; }
+      .listing-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    }
+
+    @media (max-width: 640px) {
+      .qv-rewrite-widget { height: 148px; border-radius: 14px; }
+      .qv-rewrite-widget__copy { padding: 17px 104px 15px 17px; }
+      .qv-rewrite-widget h2 { max-width: 230px; margin-top: 3px; font-size: 19px; }
+      .qv-rewrite-widget__body { display: none; }
+      .qv-rewrite-widget button { height: 32px; margin-top: 10px; padding: 0 11px; font-size: 11px; }
+      .qv-rewrite-widget img { right: -10px; bottom: -5px; width: 118px; }
+      .tabs { margin-top: 2px; }
+      .listing-head { padding-inline: 4px; }
+      .filters { gap: 12px; }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after { scroll-behavior: auto !important; }
+    }
+  </style>
+</head>
+<body>
+  <header class="site-header">
+    <div class="topbar">
+      <div class="logo">Vinted</div>
+      <div class="search" aria-hidden="true"><span>Items ▾</span><span>⌕ Search for items</span></div>
+      <div class="top-actions" aria-hidden="true">
+        <button type="button">Sign up | Log in</button>
+        <button type="button" class="sell">Sell now</button>
+      </div>
+    </div>
+    <nav class="category-nav" aria-label="Mock categories">
+      <span>Women</span><span>Men</span><span>Designer</span><span>Kids</span>
+      <span>Home</span><span>Electronics</span><span>Entertainment</span><span>Sport</span>
+    </nav>
+  </header>
+
+  <main class="page">
+    <section class="wardrobe-profile" aria-label="Mock Vinted wardrobe profile">
+      <div class="avatar" aria-hidden="true"></div>
+
+      <div class="profile-summary" data-profile-summary>
+        <h1>jeremymrn59</h1>
+        <div class="rating">★★★★★ <span>4 reviews</span></div>
+        <div class="active-seller">
+          <span class="active-icon">↻</span>
+          <div><strong>Active seller</strong><p>Regularly lists at least 5 items.</p></div>
+        </div>
+        <div class="profile-facts">
+          <span>⌖ Lille, France</span><span>✓ Google verified</span>
+          <span>◷ Active 3 minutes ago</span><span>✓ Email verified</span>
+        </div>
+      </div>
+
+      <aside class="qv-rewrite-widget" aria-labelledby="qv-rewrite-title">
+        <div class="qv-rewrite-widget__copy">
+          <span class="qv-rewrite-widget__eyebrow">AutoLister AI</span>
+          <h2 id="qv-rewrite-title">Let's rewrite your listings</h2>
+          <p class="qv-rewrite-widget__body">Refresh your titles and descriptions without starting over.</p>
+          <button type="button">Rewrite my listings</button>
+        </div>
+        <img src="../images/wardrobe-rewrite-character.webp" alt="" width="560" height="568" />
+      </aside>
+
+      <div class="profile-actions" data-profile-actions aria-hidden="true">
+        <button type="button">Follow</button><span>•••</span>
+      </div>
+    </section>
+
+    <div class="tabs" aria-hidden="true">
+      <span class="tab active">Listings</span><span class="tab">Reviews</span>
+    </div>
+
+    <section aria-label="Mock listings">
+      <div class="listing-head">
+        <strong>34 items</strong>
+        <div class="filters"><span>Category&nbsp;&nbsp; All⌄</span><span>Sort by&nbsp;&nbsp; Relevance⌄</span></div>
+      </div>
+      <div class="listing-grid">
+        <article class="listing-card"><div class="listing-photo"></div><p>Zara · M · Good</p><strong>€7.00</strong></article>
+        <article class="listing-card"><div class="listing-photo"></div><p>Zara · M · Very good</p><strong>€26.95</strong></article>
+        <article class="listing-card"><div class="listing-photo"></div><p>Jules · L · New</p><strong>€9.10</strong></article>
+        <article class="listing-card"><div class="listing-photo"></div><p>Jules · M · Very good</p><strong>€4.90</strong></article>
+        <article class="listing-card"><div class="listing-photo"></div><p>Jules · L · Very good</p><strong>€4.90</strong></article>
+      </div>
+    </section>
+  </main>
+</body>
+</html>
