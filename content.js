@@ -24,6 +24,8 @@
   const WARDROBE_REWRITE_COLLAPSED_KEY =
     "quickvintWardrobeRewriteCollapsed";
   let wardrobeRewriteScheduled = false;
+  let wardrobeRewriteCapacity = null;
+  let wardrobeRewriteCapacityLoading = false;
   const DESCRIPTION_APPLY_PROMPT_ID = "quickvint-description-apply-prompt";
   const LIMIT_FOLLOWUP_MODAL_ID = "quickvint-limit-followup-modal";
   const TITLE_LANGUAGE_SELECT_ID = "quickvint-title-language-select";
@@ -3869,6 +3871,10 @@
     chrome.storage.local.get("supabaseSession", ({ supabaseSession }) => {
       isAuthenticated = !!supabaseSession?.access_token;
       updateButtonUI();
+      renderWardrobeRewriteCapacity(
+        document.querySelector(".quickvint-wardrobe-rewrite-shell"),
+        wardrobeRewriteCapacity,
+      );
     });
   }
 
@@ -3876,6 +3882,10 @@
     if (changes.supabaseSession) {
       isAuthenticated = !!changes.supabaseSession.newValue?.access_token;
       updateButtonUI();
+      renderWardrobeRewriteCapacity(
+        document.querySelector(".quickvint-wardrobe-rewrite-shell"),
+        wardrobeRewriteCapacity,
+      );
     }
     if (
       changes.selectedLanguage ||
@@ -9363,6 +9373,30 @@
         box-sizing: border-box;
       }
 
+      .quickvint-wardrobe-rewrite-shell {
+        min-width: 0;
+      }
+
+      .quickvint-wardrobe-rewrite-capacity {
+        min-height: 32px;
+        margin: 0 0 8px;
+        color: #4b4a68;
+        font-size: 12px;
+        font-weight: 700;
+        line-height: 1.3;
+      }
+
+      .quickvint-wardrobe-rewrite-capacity-retry {
+        margin-left: 8px;
+        border: 0;
+        background: transparent;
+        color: #4338ca;
+        cursor: pointer;
+        font-size: inherit;
+        font-weight: 800;
+        text-decoration: underline;
+      }
+
       #${WARDROBE_REWRITE_WIDGET_ID} {
         position: relative;
         width: 100%;
@@ -9441,17 +9475,22 @@
       }
 
       #${WARDROBE_REWRITE_WIDGET_ID} .quickvint-wardrobe-rewrite-cta {
-        height: 33px;
+        height: 40px;
         padding: 0 13px;
         border: 0;
         border-radius: 9px;
         background: #4f46e5;
         box-shadow: 0 7px 16px rgba(79, 70, 229, .22);
         color: #fff;
-        cursor: default;
+        cursor: pointer;
         font-size: 12px;
         font-weight: 760;
-        opacity: .88;
+      }
+
+      #${WARDROBE_REWRITE_WIDGET_ID} .quickvint-wardrobe-rewrite-cta:focus-visible,
+      #${WARDROBE_REWRITE_WIDGET_ID} .quickvint-wardrobe-rewrite-capacity-retry:focus-visible {
+        outline: 3px solid rgba(79, 70, 229, .3);
+        outline-offset: 2px;
       }
 
       #${WARDROBE_REWRITE_WIDGET_ID} .quickvint-wardrobe-rewrite-character {
@@ -9571,6 +9610,10 @@
           grid-template-columns: minmax(0, 1fr) auto;
         }
 
+        .quickvint-wardrobe-rewrite-host:has(#${WARDROBE_REWRITE_WIDGET_ID}.is-collapsed) .quickvint-wardrobe-rewrite-shell {
+          width: 196px;
+        }
+
         .quickvint-wardrobe-rewrite-host > .web_ui__Cell__content {
           min-width: 0;
         }
@@ -9608,7 +9651,7 @@
         }
 
         #${WARDROBE_REWRITE_WIDGET_ID} .quickvint-wardrobe-rewrite-cta {
-          height: 32px;
+          height: 40px;
           margin-top: 10px;
           padding: 0 11px;
           font-size: 11px;
@@ -16009,6 +16052,71 @@
     );
   }
 
+  async function loadWardrobeRewriteCapacity() {
+    wardrobeRewriteCapacityLoading = true;
+    wardrobeRewriteCapacity = null;
+    try {
+      const response = await sendMessage({ type: "GET_BATCH_CAPACITY" });
+      if (!response?.ok) throw new Error(response?.error || "Availability unavailable");
+      const capacity = response.capacity || {};
+      wardrobeRewriteCapacity = {
+        allowed: Boolean(capacity.allowed),
+        available: Math.max(0, Math.floor(Number(capacity.available || 0))),
+        message: String(capacity.message || ""),
+        reason: capacity.reason || null,
+        tier: capacity.tier || null,
+      };
+      return wardrobeRewriteCapacity;
+    } catch (error) {
+      wardrobeRewriteCapacity = {
+        allowed: false,
+        available: 0,
+        error: error?.message || "Availability unavailable",
+      };
+      return wardrobeRewriteCapacity;
+    } finally {
+      wardrobeRewriteCapacityLoading = false;
+    }
+  }
+
+  function renderWardrobeRewriteCapacity(shell, state) {
+    const badge = shell?.querySelector(".quickvint-wardrobe-rewrite-capacity");
+    const cta = shell?.querySelector(".quickvint-wardrobe-rewrite-cta");
+    if (!badge || !cta) return;
+
+    badge.replaceChildren();
+    if (isAuthenticated === false) {
+      badge.textContent = "Sign in to check availability";
+    } else if (wardrobeRewriteCapacityLoading || isAuthenticated === null) {
+      badge.textContent = "Checking availability…";
+    } else if (state?.error) {
+      badge.append("Availability unavailable");
+      const retry = document.createElement("button");
+      retry.type = "button";
+      retry.className = "quickvint-wardrobe-rewrite-capacity-retry";
+      retry.textContent = "Retry";
+      retry.addEventListener("click", async () => {
+        const request = loadWardrobeRewriteCapacity();
+        renderWardrobeRewriteCapacity(shell, wardrobeRewriteCapacity);
+        renderWardrobeRewriteCapacity(shell, await request);
+      });
+      badge.append(retry);
+    } else {
+      const available = state?.available || 0;
+      badge.textContent = `${available} listing${available === 1 ? "" : "s"} available`;
+    }
+
+    cta.disabled =
+      isAuthenticated === null ||
+      (isAuthenticated !== false && wardrobeRewriteCapacityLoading);
+    cta.onclick = async () => {
+      if (isAuthenticated === false) return openSignInPopup("wardrobe_rewrite_cta");
+      if (!wardrobeRewriteCapacity?.allowed || !wardrobeRewriteCapacity.available) {
+        return showBatchCapacityBlocked(wardrobeRewriteCapacity || {});
+      }
+    };
+  }
+
   function injectWardrobeRewriteWidget(ready = false, initialCollapsed = false) {
     if (document.getElementById(WARDROBE_REWRITE_WIDGET_ID)) return true;
 
@@ -16063,6 +16171,9 @@
     const characterUrl = chrome.runtime.getURL(
       "images/wardrobe-rewrite-character.webp",
     );
+    const shell = document.createElement("div");
+    shell.className = "quickvint-wardrobe-rewrite-shell";
+    shell.innerHTML = '<div class="quickvint-wardrobe-rewrite-capacity"></div>';
     const widget = document.createElement("aside");
     widget.id = WARDROBE_REWRITE_WIDGET_ID;
     widget.className = "quickvint-wardrobe-rewrite-pending";
@@ -16075,7 +16186,7 @@
         <p class="quickvint-wardrobe-rewrite-brand">AutoLister AI</p>
         <h2 id="quickvint-wardrobe-rewrite-title">Let's rewrite your listings</h2>
         <p class="quickvint-wardrobe-rewrite-copy">Refresh your titles and descriptions without starting over.</p>
-        <button type="button" class="quickvint-wardrobe-rewrite-cta" disabled>Rewrite my listings</button>
+        <button type="button" class="quickvint-wardrobe-rewrite-cta">Rewrite my listings</button>
         <img class="quickvint-wardrobe-rewrite-character" src="${characterUrl}" alt="" width="560" height="568" />
       </div>
       <button type="button" class="quickvint-wardrobe-rewrite-compact" aria-label="Expand rewrite listings">
@@ -16084,7 +16195,17 @@
         <span class="quickvint-wardrobe-rewrite-chevron" aria-hidden="true">›</span>
       </button>
     `;
-    host.appendChild(widget);
+    shell.appendChild(widget);
+    host.appendChild(shell);
+    if (isAuthenticated !== false) {
+      const request = loadWardrobeRewriteCapacity();
+      renderWardrobeRewriteCapacity(shell, wardrobeRewriteCapacity);
+      request.then((capacity) =>
+        renderWardrobeRewriteCapacity(shell, capacity),
+      );
+    } else {
+      renderWardrobeRewriteCapacity(shell, wardrobeRewriteCapacity);
+    }
     const reduceMotion = window.matchMedia(
       "(prefers-reduced-motion: reduce)",
     ).matches;

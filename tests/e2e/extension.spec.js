@@ -124,7 +124,9 @@ function installChromeHarness(page, capacityResponse = null, initialStorage = {}
             };
           } else if (message?.type === "GET_BATCH_CAPACITY") {
             if (capacityQueue.length) currentCapacity = capacityQueue.shift();
-            response = { ok: true, capacity: currentCapacity };
+            response = currentCapacity?.runtimeError
+              ? { ok: false, error: currentCapacity.runtimeError }
+              : { ok: true, capacity: currentCapacity };
           } else if (message?.type === "GET_USER_PROFILE") {
             response = {
               user: storage.supabaseSession?.user || null,
@@ -320,6 +322,8 @@ async function openWardrobeHarness(
     follow = false,
     collapsed = false,
     extraBadges = false,
+    capacityResponse = { allowed: true, available: 12 },
+    signedIn = true,
   } = {},
 ) {
   const state = currentUserId
@@ -392,8 +396,11 @@ async function openWardrobeHarness(
     }),
   );
   await page.goto(profileUrl, { waitUntil: "domcontentloaded" });
-  await installChromeHarness(page, null, {
+  await installChromeHarness(page, capacityResponse, {
     quickvintWardrobeRewriteCollapsed: collapsed,
+    ...(signedIn
+      ? { supabaseSession: { access_token: "token" } }
+      : { supabaseSession: null }),
   });
   await page.addScriptTag({ path: languageDefaultsPath });
   await page.addScriptTag({ path: contentScriptPath });
@@ -5915,15 +5922,72 @@ test.describe("own wardrobe rewrite widget", () => {
     ).toBeVisible();
   });
 
-  test("shows the rewrite widget when Vinted's current member ID matches the profile", async ({
+  test("docks unified availability above the wardrobe rewrite widget", async ({
     page,
   }) => {
-    await openWardrobeHarness(page);
+    await openWardrobeHarness(page, {
+      capacityResponse: { allowed: true, available: 12 },
+    });
+    const shell = page.locator(".quickvint-wardrobe-rewrite-shell");
+    await expect(shell.locator(".quickvint-wardrobe-rewrite-capacity")).toHaveText(
+      "12 listings available",
+    );
+    await expect(shell.locator(".quickvint-wardrobe-rewrite-cta")).toBeEnabled();
+    await expect(shell).not.toContainText(/daily|monthly|credit/i);
+  });
 
-    await expect(page.locator("#quickvint-wardrobe-rewrite-widget")).toBeVisible();
-    await expect(
-      page.getByRole("button", { name: "Rewrite my listings" }),
-    ).toBeDisabled();
+  test("retries a failed capacity lookup for wardrobe without showing a stale number", async ({
+    page,
+  }) => {
+    await openWardrobeHarness(page, {
+      capacityResponse: [
+        { runtimeError: "Connection issue." },
+        { allowed: true, available: 8 },
+      ],
+    });
+    const capacity = page.locator(".quickvint-wardrobe-rewrite-capacity");
+    await expect(capacity).toContainText("Availability unavailable");
+    await expect(capacity).not.toContainText(/\d+ listings?/);
+    await page.locator(".quickvint-wardrobe-rewrite-capacity-retry").click();
+    await expect(capacity).toHaveText("8 listings available");
+  });
+
+  test("enables the real wardrobe rewrite CTA across availability states", async ({
+    page,
+  }) => {
+    await openWardrobeHarness(page, { capacityResponse: { allowed: true, available: 1 } });
+    const shell = page.locator(".quickvint-wardrobe-rewrite-shell");
+    const capacity = shell.locator(".quickvint-wardrobe-rewrite-capacity");
+    const cta = shell.locator(".quickvint-wardrobe-rewrite-cta");
+    await expect(capacity).toHaveText("1 listing available");
+    await waitForWardrobeMotionToFinish(page);
+    await expect(cta).toBeEnabled();
+    expect((await cta.boundingBox()).height).toBeGreaterThanOrEqual(40);
+    await cta.focus();
+    await expect(cta).toBeFocused();
+    expect(await cta.evaluate((element) => getComputedStyle(element).outlineStyle)).not.toBe("none");
+
+    await page.setViewportSize({ width: 390, height: 900 });
+    await expect(page.locator("#quickvint-wardrobe-rewrite-widget")).toHaveCSS("height", "148px");
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await expect(page.locator("#quickvint-wardrobe-rewrite-widget")).toHaveCSS("height", "176px");
+    await page.getByRole("button", { name: "Minimize rewrite listings" }).click();
+    await expect(shell.locator(".quickvint-wardrobe-rewrite-capacity")).toBeVisible();
+  });
+
+  test("shows zero and signed-out wardrobe availability states", async ({ page }) => {
+    await openWardrobeHarness(page, { capacityResponse: { allowed: true, available: 0 } });
+    await expect(page.locator(".quickvint-wardrobe-rewrite-capacity")).toHaveText(
+      "0 listings available",
+    );
+    await expect(page.locator(".quickvint-wardrobe-rewrite-cta")).toBeEnabled();
+  });
+
+  test("shows signed-out wardrobe availability copy", async ({ page }) => {
+    await openWardrobeHarness(page, { signedIn: false });
+    await expect(page.locator(".quickvint-wardrobe-rewrite-capacity")).toHaveText(
+      "Sign in to check availability",
+    );
   });
 
   test("collapses to a reachable trigger and remembers the choice", async ({
