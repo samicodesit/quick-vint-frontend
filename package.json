@@ -25,6 +25,8 @@
     "canary:dom": "node scripts/run-dom-canary.mjs",
     "canary:dom:check": "DOM_CANARY_NO_POST=1 node scripts/run-dom-canary.mjs",
     "canary:dom:setup": "DOM_CANARY_HEADED=1 DOM_CANARY_NO_POST=1 DOM_CANARY_KEEP_OPEN_MS=600000 node scripts/run-dom-canary.mjs",
+    "live:session": "node scripts/create-live-test-session.mjs",
+    "test:live:wardrobe": "powershell.exe -NoProfile -ExecutionPolicy Bypass -File \"$(wslpath -w scripts/run-live-wardrobe-rewrite.ps1)\"",
     "package": "node build.js"
   },
   "repository": {

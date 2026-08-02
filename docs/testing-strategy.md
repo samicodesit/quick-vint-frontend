@@ -34,3 +34,9 @@ Add or update Playwright E2E tests when touching:
 - billing, checkout, paywall, or plan-limit flows.
 
 Do not rely on unit/static tests alone for upload or generation behavior.
+
+## Live Wardrobe Rewrite Smoke Test
+
+After `npm test`, use `npm run test:live:wardrobe` when current Vinted wardrobe DOM or the production generation path needs verification. It is an opt-in test because it uses the network and one generation credit.
+
+Read `docs/live-wardrobe-rewrite-testing.md` first. The test runs Chrome for Testing headlessly with a fresh disposable profile and must never use normal Chrome. It uses real public wardrobe DOM and the production AutoLister API, while synthetic owner identity and the existing edit-page fixture isolate Vinted's automated-login boundary.

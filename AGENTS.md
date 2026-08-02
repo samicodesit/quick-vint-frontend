@@ -23,6 +23,8 @@ For upload/generation incidents, verify the relevant E2E coverage in `tests/e2e/
 
 See `docs/testing-strategy.md` for the frontend test map.
 
+For agent-driven live wardrobe/relisting checks, read `docs/live-wardrobe-rewrite-testing.md`. Hard rules: use the checked-in disposable Chrome-for-Testing runner, never normal Chrome, never automate Vinted CAPTCHA, and never save a listing.
+
 ## Chrome Web Store Releases
 
 Do not guess extension versions from memory, screenshots, old ZIP files, previous chat context, or the public Chrome Web Store listing.
