@@ -26,6 +26,8 @@
   let wardrobeRewriteScheduled = false;
   let wardrobeRewriteCapacity = null;
   let wardrobeRewriteCapacityLoading = false;
+  let wardrobeRewriteApplyMode = null;
+  let wardrobeRewriteWidget = null;
   const DESCRIPTION_APPLY_PROMPT_ID = "quickvint-description-apply-prompt";
   const LIMIT_FOLLOWUP_MODAL_ID = "quickvint-limit-followup-modal";
   const TITLE_LANGUAGE_SELECT_ID = "quickvint-title-language-select";
@@ -9470,8 +9472,85 @@
         line-height: 1.35;
       }
 
+      #${WARDROBE_REWRITE_WIDGET_ID} .quickvint-wardrobe-rewrite-preference,
+      #${WARDROBE_REWRITE_WIDGET_ID} .quickvint-wardrobe-rewrite-instruction {
+        height: 100%;
+        padding: 13px 48px 12px 21px;
+      }
+
+      #${WARDROBE_REWRITE_WIDGET_ID} .quickvint-wardrobe-rewrite-preference fieldset {
+        min-width: 0;
+        margin: 0;
+        padding: 0;
+        border: 0;
+      }
+
+      #${WARDROBE_REWRITE_WIDGET_ID} .quickvint-wardrobe-rewrite-preference legend {
+        margin-bottom: 8px;
+        color: #19164d;
+        font-size: 16px;
+        font-weight: 700;
+        line-height: 1.15;
+      }
+
+      #${WARDROBE_REWRITE_WIDGET_ID} .quickvint-wardrobe-rewrite-preference label {
+        display: block;
+        margin: 5px 0;
+        color: #4b4a68;
+        font-size: 12px;
+        font-weight: 650;
+      }
+
+      #${WARDROBE_REWRITE_WIDGET_ID} .quickvint-wardrobe-rewrite-preference input {
+        accent-color: #4f46e5;
+      }
+
+      #${WARDROBE_REWRITE_WIDGET_ID} .quickvint-wardrobe-rewrite-preference button,
+      #${WARDROBE_REWRITE_WIDGET_ID} .quickvint-wardrobe-rewrite-instruction button {
+        height: 32px;
+        margin-top: 8px;
+        padding: 0 10px;
+        border: 0;
+        border-radius: 8px;
+        background: #4f46e5;
+        color: #fff;
+        cursor: pointer;
+        font-size: 12px;
+        font-weight: 760;
+      }
+
+      #${WARDROBE_REWRITE_WIDGET_ID} .quickvint-wardrobe-rewrite-back {
+        margin-right: 6px;
+        background: #e7e6ff !important;
+        color: #3730a3 !important;
+      }
+
+      #${WARDROBE_REWRITE_WIDGET_ID} .quickvint-wardrobe-rewrite-continue:disabled {
+        cursor: default;
+        opacity: .55;
+      }
+
+      #${WARDROBE_REWRITE_WIDGET_ID} .quickvint-wardrobe-rewrite-instruction h2 {
+        margin-top: 2px;
+      }
+
+      #${WARDROBE_REWRITE_WIDGET_ID} .quickvint-wardrobe-rewrite-mode-copy {
+        margin: 0;
+        color: #686783;
+        font-size: 12px;
+        line-height: 1.35;
+      }
+
+      #${WARDROBE_REWRITE_WIDGET_ID}.quickvint-wardrobe-rewrite-step-active .quickvint-wardrobe-rewrite-character {
+        display: none;
+      }
+
       #${WARDROBE_REWRITE_WIDGET_ID} button {
         font: inherit;
+      }
+
+      #${WARDROBE_REWRITE_WIDGET_ID} [hidden] {
+        display: none !important;
       }
 
       #${WARDROBE_REWRITE_WIDGET_ID} .quickvint-wardrobe-rewrite-cta {
@@ -9638,6 +9717,26 @@
 
         #${WARDROBE_REWRITE_WIDGET_ID} .quickvint-wardrobe-rewrite-expanded {
           padding: 17px 104px 15px 17px;
+        }
+
+        #${WARDROBE_REWRITE_WIDGET_ID} .quickvint-wardrobe-rewrite-preference,
+        #${WARDROBE_REWRITE_WIDGET_ID} .quickvint-wardrobe-rewrite-instruction {
+          padding: 10px 48px 8px 17px;
+        }
+
+        #${WARDROBE_REWRITE_WIDGET_ID} .quickvint-wardrobe-rewrite-preference legend {
+          margin-bottom: 5px;
+          font-size: 14px;
+        }
+
+        #${WARDROBE_REWRITE_WIDGET_ID} .quickvint-wardrobe-rewrite-preference label {
+          margin: 3px 0;
+        }
+
+        #${WARDROBE_REWRITE_WIDGET_ID} .quickvint-wardrobe-rewrite-preference button,
+        #${WARDROBE_REWRITE_WIDGET_ID} .quickvint-wardrobe-rewrite-instruction button {
+          height: 28px;
+          margin-top: 4px;
         }
 
         #${WARDROBE_REWRITE_WIDGET_ID} h2 {
@@ -16114,7 +16213,46 @@
       if (!wardrobeRewriteCapacity?.allowed || !wardrobeRewriteCapacity.available) {
         return showBatchCapacityBlocked(wardrobeRewriteCapacity || {});
       }
+      wardrobeRewriteApplyMode = null;
+      wardrobeRewriteWidget
+        ?.querySelector(".quickvint-wardrobe-rewrite-preference")
+        ?.reset();
+      setWardrobeRewriteStep("preference");
     };
+  }
+
+  function setWardrobeRewriteStep(step) {
+    const widget = wardrobeRewriteWidget;
+    if (!widget || !["intro", "preference", "selection"].includes(step)) return;
+    widget.querySelector(".quickvint-wardrobe-rewrite-intro").hidden = step !== "intro";
+    widget.querySelector(".quickvint-wardrobe-rewrite-preference").hidden = step !== "preference";
+    widget.querySelector(".quickvint-wardrobe-rewrite-instruction").hidden = step !== "selection";
+    widget.classList.toggle("quickvint-wardrobe-rewrite-step-active", step !== "intro");
+    for (const control of widget.querySelectorAll(
+      ".quickvint-wardrobe-rewrite-minimize, .quickvint-wardrobe-rewrite-compact",
+    )) {
+      control.hidden = step !== "intro";
+      control.disabled = step !== "intro";
+    }
+    if (step === "preference") {
+      const selected = widget.querySelector(
+        `input[name="quickvint-wardrobe-apply-mode"][value="${wardrobeRewriteApplyMode}"]`,
+      );
+      if (selected) selected.checked = true;
+      widget.querySelector(".quickvint-wardrobe-rewrite-continue").disabled =
+        !wardrobeRewriteApplyMode;
+    }
+  }
+
+  function startWardrobeSelection() {
+    const copy = wardrobeRewriteApplyMode === "replace"
+      ? "Generated copy will replace your title and description."
+      : "Generated copy will be shown for review before changing fields.";
+    const modeCopy = wardrobeRewriteWidget?.querySelector(
+      ".quickvint-wardrobe-rewrite-mode-copy",
+    );
+    if (modeCopy) modeCopy.textContent = copy;
+    setWardrobeRewriteStep("selection");
   }
 
   function injectWardrobeRewriteWidget(ready = false, initialCollapsed = false) {
@@ -16183,10 +16321,26 @@
         <button type="button" class="quickvint-wardrobe-rewrite-minimize" aria-label="Minimize rewrite listings" title="Minimize">
           <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M6 12h12" stroke-linecap="round" /></svg>
         </button>
-        <p class="quickvint-wardrobe-rewrite-brand">AutoLister AI</p>
-        <h2 id="quickvint-wardrobe-rewrite-title">Let's rewrite your listings</h2>
-        <p class="quickvint-wardrobe-rewrite-copy">Refresh your titles and descriptions without starting over.</p>
-        <button type="button" class="quickvint-wardrobe-rewrite-cta">Rewrite my listings</button>
+        <div class="quickvint-wardrobe-rewrite-intro">
+          <p class="quickvint-wardrobe-rewrite-brand">AutoLister AI</p>
+          <h2 id="quickvint-wardrobe-rewrite-title">Let's rewrite your listings</h2>
+          <p class="quickvint-wardrobe-rewrite-copy">Refresh your titles and descriptions without starting over.</p>
+          <button type="button" class="quickvint-wardrobe-rewrite-cta">Rewrite my listings</button>
+        </div>
+        <form class="quickvint-wardrobe-rewrite-preference" hidden>
+          <fieldset>
+            <legend>How should generated copy be handled?</legend>
+            <label><input type="radio" name="quickvint-wardrobe-apply-mode" value="replace"> Replace fields</label>
+            <label><input type="radio" name="quickvint-wardrobe-apply-mode" value="review"> Review first</label>
+          </fieldset>
+          <button type="button" class="quickvint-wardrobe-rewrite-back">Back</button>
+          <button type="submit" class="quickvint-wardrobe-rewrite-continue" disabled>Continue</button>
+        </form>
+        <div class="quickvint-wardrobe-rewrite-instruction" hidden>
+          <h2>Select listings below</h2>
+          <p class="quickvint-wardrobe-rewrite-mode-copy"></p>
+          <button type="button" class="quickvint-wardrobe-rewrite-exit">Exit selection</button>
+        </div>
         <img class="quickvint-wardrobe-rewrite-character" src="${characterUrl}" alt="" width="560" height="568" />
       </div>
       <button type="button" class="quickvint-wardrobe-rewrite-compact" aria-label="Expand rewrite listings">
@@ -16195,6 +16349,22 @@
         <span class="quickvint-wardrobe-rewrite-chevron" aria-hidden="true">›</span>
       </button>
     `;
+    wardrobeRewriteWidget = widget;
+    widget.querySelector(".quickvint-wardrobe-rewrite-preference").addEventListener("change", (event) => {
+      if (event.target.name !== "quickvint-wardrobe-apply-mode") return;
+      wardrobeRewriteApplyMode = event.target.value;
+      widget.querySelector(".quickvint-wardrobe-rewrite-continue").disabled = false;
+    });
+    widget.querySelector(".quickvint-wardrobe-rewrite-preference").addEventListener("submit", (event) => {
+      event.preventDefault();
+      if (wardrobeRewriteApplyMode) startWardrobeSelection();
+    });
+    widget.querySelector(".quickvint-wardrobe-rewrite-back").addEventListener("click", () =>
+      setWardrobeRewriteStep("intro"),
+    );
+    widget.querySelector(".quickvint-wardrobe-rewrite-exit").addEventListener("click", () =>
+      setWardrobeRewriteStep("intro"),
+    );
     shell.appendChild(widget);
     host.appendChild(shell);
     if (isAuthenticated !== false) {

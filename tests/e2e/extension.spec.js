@@ -5936,6 +5936,71 @@ test.describe("own wardrobe rewrite widget", () => {
     await expect(shell).not.toContainText(/daily|monthly|credit/i);
   });
 
+  test("asks how generated wardrobe copy should be handled without resizing", async ({
+    page,
+  }) => {
+    await openWardrobeHarness(page);
+    await waitForWardrobeMotionToFinish(page);
+    const widget = page.locator("#quickvint-wardrobe-rewrite-widget");
+    const before = await widget.boundingBox();
+
+    await page.locator(".quickvint-wardrobe-rewrite-cta").click();
+    await expect(
+      page.getByText("How should generated copy be handled?"),
+    ).toBeVisible();
+    await expect(
+      page.locator('input[name="quickvint-wardrobe-apply-mode"]'),
+    ).toHaveCount(2);
+    await expect(page.locator(".quickvint-wardrobe-rewrite-continue")).toBeDisabled();
+    await page.getByLabel("Review first").check();
+    await expect(page.locator(".quickvint-wardrobe-rewrite-continue")).toBeEnabled();
+
+    const after = await widget.boundingBox();
+    expect(after.height).toBe(before.height);
+    expect(after.width).toBe(before.width);
+  });
+
+  test("uses wardrobe preference navigation and selection instruction", async ({
+    page,
+  }) => {
+    await openWardrobeHarness(page);
+    await page.locator(".quickvint-wardrobe-rewrite-cta").click();
+    await page.getByLabel("Replace fields").check();
+    await page.locator(".quickvint-wardrobe-rewrite-back").click();
+    await expect(page.getByText("Let's rewrite your listings")).toBeVisible();
+
+    await page.locator(".quickvint-wardrobe-rewrite-cta").click();
+    await page.getByLabel("Replace fields").check();
+    await page.locator(".quickvint-wardrobe-rewrite-continue").click();
+    await expect(page.getByRole("heading", { name: "Select listings below" })).toBeVisible();
+    await expect(page.getByText("Generated copy will replace your title and description.")).toBeVisible();
+    await expect(page.getByRole("button", { name: "Minimize rewrite listings" })).toBeHidden();
+
+    await page.getByRole("button", { name: "Exit selection" }).click();
+    await expect(page.getByText("Let's rewrite your listings")).toBeVisible();
+  });
+
+  test("keeps wardrobe preference fixed and keyboard-accessible on narrow reduced-motion screens", async ({
+    page,
+  }) => {
+    await page.emulateMedia({ reducedMotion: "reduce" });
+    await page.setViewportSize({ width: 390, height: 900 });
+    await openWardrobeHarness(page);
+    const widget = page.locator("#quickvint-wardrobe-rewrite-widget");
+
+    await page.locator(".quickvint-wardrobe-rewrite-cta").click();
+    await expect(widget).toHaveCSS("height", "148px");
+    await page.getByLabel("Replace fields").focus();
+    await page.keyboard.press("ArrowDown");
+    await expect(page.getByLabel("Review first")).toBeChecked();
+    await page.locator(".quickvint-wardrobe-rewrite-continue").focus();
+    await page.keyboard.press("Enter");
+    await expect(page.getByRole("heading", { name: "Select listings below" })).toBeVisible();
+    expect(
+      await widget.evaluate((element) => element.getAnimations({ subtree: true }).length),
+    ).toBe(0);
+  });
+
   test("retries a failed capacity lookup for wardrobe without showing a stale number", async ({
     page,
   }) => {
