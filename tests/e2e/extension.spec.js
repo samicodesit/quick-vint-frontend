@@ -6005,13 +6005,21 @@ test.describe("own wardrobe rewrite widget", () => {
     await expect(page.getByText("Let's rewrite your listings")).toBeVisible();
   });
 
-  test("opens normal-motion wardrobe selection after Continue", async ({ page }) => {
+  test("keeps normal-motion wardrobe selection responsive after dynamic decoration", async ({ page }) => {
     await openWardrobeHarness(page, {
       capacityResponse: { allowed: true, available: 1 },
       wardrobeItems: wardrobeItemFixture({ id: "9443601541" }),
     });
     await enterWardrobeSelection(page);
     await expect(page.getByRole("button", { name: /Select Item 9443601541/ })).toBeVisible();
+    await page.locator('[data-testid="feed-grid"]').evaluate((grid) => {
+      grid.insertAdjacentHTML(
+        "beforeend",
+        `<div data-testid="grid-item"><div data-testid="product-item-id-8383838383"><div data-testid="product-item-id-8383838383--image"><img alt="Item 8383838383"></div><a data-testid="product-item-id-8383838383--overlay-link" href="/items/8383838383"></a></div></div>`,
+      );
+    });
+    await expect(page.getByRole("button", { name: /Select Item 8383838383/ })).toBeVisible();
+    expect(await page.evaluate(() => new Promise((resolve) => setTimeout(resolve, 0)))).toBeUndefined();
   });
 
   test("selects active and hidden wardrobe items but excludes sold items", async ({ page }) => {

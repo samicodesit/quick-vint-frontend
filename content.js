@@ -16377,7 +16377,8 @@
         "aria-label",
         `${selected ? "Unselect" : "Select"} ${button.dataset.wardrobeTitle}`,
       );
-      button.textContent = selected ? "✓" : "+";
+      const label = selected ? "✓" : "+";
+      if (button.textContent !== label) button.textContent = label;
       button.disabled = !selected && atCapacity;
       button.closest(".quickvint-wardrobe-selection-item")?.classList.toggle(
         "quickvint-wardrobe-item-selected",
@@ -16544,9 +16545,7 @@
     }
     if (firstItem) {
       const top = firstItem.getBoundingClientRect().top + scrollY - 96;
-      requestAnimationFrame(() =>
-        window.scrollTo({ top: Math.max(0, top), behavior: reduceMotion ? "auto" : "smooth" }),
-      );
+      window.scrollTo({ top: Math.max(0, top), behavior: reduceMotion ? "auto" : "smooth" });
     }
   }
 
