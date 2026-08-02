@@ -80,12 +80,16 @@ const LEGACY_TIER_LIMITS = {
   business: { daily: null, monthly: 1500 },
 };
 const BATCH_ITEM_REVIEW_SETTLE_MS = 900;
+const SUPPORTED_LANGUAGE_CODES = new Set([
+  "en", "fr", "cz", "da", "nl", "de", "el", "hr", "fi", "hu",
+  "it", "lt", "pl", "pt", "ro", "es", "sk", "sv",
+]);
 
 // --- STATE ---
 const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 let isRefreshingToken = false;
 let tokenRefreshTimeout = null;
-let activeBatchJob = null;
+let activeTabJob = null;
 
 // --- SESSION & TOKEN MANAGEMENT ---
 
@@ -502,6 +506,19 @@ function duplicateTab(tabId) {
   });
 }
 
+function createInactiveTab(url) {
+  return new Promise((resolve, reject) => {
+    chrome.tabs.create({ url, active: false }, (tab) => {
+      const error = chrome.runtime.lastError;
+      if (error || !tab?.id) {
+        reject(new Error(error?.message || "Could not open Vinted edit tab."));
+        return;
+      }
+      resolve(tab);
+    });
+  });
+}
+
 function waitForTabComplete(tabId, timeoutMs = 30000) {
   return new Promise((resolve, reject) => {
     let done = false;
@@ -571,10 +588,39 @@ async function waitForBatchTabReady(tabId, timeoutMs = 30000) {
   );
 }
 
+async function waitForWardrobeRewriteTabReady(tabId, itemId, timeoutMs = 30000) {
+  const startedAt = Date.now();
+  let lastError = null;
+
+  while (Date.now() - startedAt < timeoutMs) {
+    try {
+      const response = await sendTabMessage(tabId, {
+        type: "WARDROBE_REWRITE_PING",
+        itemId,
+      });
+      if (response?.ok) return;
+    } catch (err) {
+      lastError = err;
+    }
+
+    await sleep(250);
+  }
+
+  throw new Error(lastError?.message || "Vinted edit tab was not ready in time.");
+}
+
 function notifyBatchProgress(job, payload) {
   if (!job?.sourceTabId) return;
   chrome.tabs.sendMessage(job.sourceTabId, {
     type: "BATCH_PROGRESS",
+    ...payload,
+  });
+}
+
+function notifyWardrobeRewriteProgress(job, payload) {
+  if (!job?.sourceTabId) return;
+  chrome.tabs.sendMessage(job.sourceTabId, {
+    type: "WARDROBE_REWRITE_PROGRESS",
     ...payload,
   });
 }
@@ -691,13 +737,18 @@ async function runBatchGenerationJob(job) {
       message: err.message || "Batch generation stopped.",
     });
   } finally {
-    activeBatchJob = null;
+    if (activeTabJob === job) activeTabJob = null;
   }
 }
 
 async function startBatchGeneration(message, sender) {
-  if (activeBatchJob) {
-    return { ok: false, error: "A batch is already running." };
+  if (activeTabJob) {
+    return {
+      ok: false,
+      error: activeTabJob.kind === "batch"
+        ? "A batch is already running."
+        : "Another tab job is already running.",
+    };
   }
 
   const sourceTabId = sender?.tab?.id;
@@ -734,19 +785,199 @@ async function startBatchGeneration(message, sender) {
     groups = groups.slice(0, available);
   }
 
-  activeBatchJob = {
+  const job = {
+    kind: "batch",
     sourceTabId,
     sessionId: message.sessionId,
     groups,
   };
 
-  runBatchGenerationJob(activeBatchJob);
+  activeTabJob = job;
+  runBatchGenerationJob(job);
   return {
     ok: true,
     requestedCount,
     startedCount: groups.length,
     limited: groups.length < requestedCount,
   };
+}
+
+function validateWardrobeRewriteRequest(message, sender, available) {
+  const sourceTabId = sender?.tab?.id;
+  const sourceUrl = sender?.tab?.url || sender?.url;
+  if (!Number.isInteger(sourceTabId) || sourceTabId <= 0 || !sourceUrl) {
+    return { ok: false, error: "Could not find the current Vinted tab." };
+  }
+
+  let source;
+  try {
+    source = new URL(sourceUrl);
+  } catch (err) {
+    return { ok: false, error: "Could not verify the current Vinted tab." };
+  }
+  if (source.protocol !== "https:") {
+    return { ok: false, error: "Wardrobe rewrites require a secure Vinted tab." };
+  }
+
+  const items = Array.isArray(message.items) ? message.items : [];
+  if (!items.length) return { ok: false, error: "No wardrobe items were provided." };
+  if (items.length > available) {
+    return { ok: false, error: "Selected items exceed your available listings." };
+  }
+  if (!["replace", "review"].includes(message.applyMode)) {
+    return { ok: false, error: "Unsupported rewrite mode." };
+  }
+  if (
+    !SUPPORTED_LANGUAGE_CODES.has(message.titleLanguageCode) ||
+    !SUPPORTED_LANGUAGE_CODES.has(message.descriptionLanguageCode)
+  ) {
+    return { ok: false, error: "Unsupported language." };
+  }
+
+  const ids = new Set();
+  for (const item of items) {
+    const itemId = item?.id;
+    if (typeof itemId !== "string" || !/^\d+$/.test(itemId) || ids.has(itemId)) {
+      return { ok: false, error: "Wardrobe items must have unique numeric IDs." };
+    }
+    ids.add(itemId);
+
+    try {
+      const editUrl = new URL(item.editUrl);
+      if (
+        editUrl.protocol !== "https:" ||
+        editUrl.origin !== source.origin ||
+        editUrl.pathname !== `/items/${itemId}/edit` ||
+        editUrl.search ||
+        editUrl.hash
+      ) {
+        return { ok: false, error: "Wardrobe item edit URLs are invalid." };
+      }
+    } catch (err) {
+      return { ok: false, error: "Wardrobe item edit URLs are invalid." };
+    }
+  }
+
+  return { ok: true, sourceTabId, items };
+}
+
+async function runWardrobeRewriteJob(job) {
+  let activeItemIndex = 0;
+
+  notifyWardrobeRewriteProgress(job, {
+    status: "queued",
+    current: 0,
+    total: job.items.length,
+  });
+
+  try {
+    for (let index = 0; index < job.items.length; index += 1) {
+      const item = job.items[index];
+      activeItemIndex = index + 1;
+      notifyWardrobeRewriteProgress(job, {
+        status: "opening_tab",
+        current: activeItemIndex,
+        total: job.items.length,
+        itemIndex: activeItemIndex,
+        itemId: item.id,
+      });
+
+      const workTab = await createInactiveTab(item.editUrl);
+      await waitForTabComplete(workTab.id);
+      await waitForWardrobeRewriteTabReady(workTab.id, item.id);
+
+      notifyWardrobeRewriteProgress(job, {
+        status: "tab_ready",
+        current: activeItemIndex,
+        total: job.items.length,
+        itemIndex: activeItemIndex,
+        itemId: item.id,
+      });
+      notifyWardrobeRewriteProgress(job, {
+        status: "generating",
+        current: activeItemIndex,
+        total: job.items.length,
+        itemIndex: activeItemIndex,
+        itemId: item.id,
+      });
+
+      const result = await sendTabMessage(workTab.id, {
+        type: "RUN_WARDROBE_REWRITE_ITEM",
+        itemId: item.id,
+        itemIndex: activeItemIndex,
+        totalItems: job.items.length,
+        applyMode: job.applyMode,
+        titleLanguageCode: job.titleLanguageCode,
+        descriptionLanguageCode: job.descriptionLanguageCode,
+      });
+      if (!result?.ok) {
+        throw new Error(result?.error || `Listing ${activeItemIndex} could not be rewritten.`);
+      }
+
+      notifyWardrobeRewriteProgress(job, {
+        status: "item_done",
+        current: activeItemIndex,
+        total: job.items.length,
+        itemIndex: activeItemIndex,
+        itemId: item.id,
+      });
+    }
+
+    notifyWardrobeRewriteProgress(job, {
+      status: "done",
+      current: job.items.length,
+      total: job.items.length,
+    });
+  } catch (err) {
+    console.error("[Background] Wardrobe rewrite failed:", err);
+    notifyWardrobeRewriteProgress(job, {
+      status: "failed",
+      current: activeItemIndex,
+      total: job.items.length,
+      itemIndex: activeItemIndex,
+      message: err.message || "Wardrobe rewrite stopped.",
+    });
+  } finally {
+    if (activeTabJob === job) activeTabJob = null;
+  }
+}
+
+async function startWardrobeRewrite(message, sender) {
+  if (activeTabJob) {
+    return { ok: false, error: "Another tab job is already running." };
+  }
+
+  const capacityResult = await getBatchCapacity();
+  if (!capacityResult.ok) {
+    return {
+      ok: false,
+      error: capacityResult.error || "Could not check generation capacity.",
+    };
+  }
+
+  const capacity = capacityResult.capacity || {};
+  const available = Math.max(0, Math.floor(Number(capacity.available || 0)));
+  if (!capacity.allowed || available <= 0) {
+    return {
+      ok: false,
+      error: capacity.message || "You cannot generate more listings right now.",
+    };
+  }
+
+  const request = validateWardrobeRewriteRequest(message, sender, available);
+  if (!request.ok) return request;
+
+  const job = {
+    kind: "wardrobe-rewrite",
+    sourceTabId: request.sourceTabId,
+    items: request.items,
+    applyMode: message.applyMode,
+    titleLanguageCode: message.titleLanguageCode,
+    descriptionLanguageCode: message.descriptionLanguageCode,
+  };
+  activeTabJob = job;
+  runWardrobeRewriteJob(job);
+  return { ok: true, startedCount: job.items.length };
 }
 
 async function getBatchCapacity() {
@@ -1137,6 +1368,12 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       case "START_BATCH_GENERATION": {
         const batchStart = await startBatchGeneration(message, sender);
         sendResponse(batchStart);
+        break;
+      }
+
+      case "START_WARDROBE_REWRITE": {
+        const wardrobeStart = await startWardrobeRewrite(message, sender);
+        sendResponse(wardrobeStart);
         break;
       }
 
