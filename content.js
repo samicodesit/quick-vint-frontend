@@ -23,6 +23,9 @@
   const WARDROBE_REWRITE_WIDGET_ID = "quickvint-wardrobe-rewrite-widget";
   const WARDROBE_REWRITE_COLLAPSED_KEY =
     "quickvintWardrobeRewriteCollapsed";
+  const WARDROBE_REWRITE_RESULT_ID = "quickvint-wardrobe-rewrite-result";
+  const WARDROBE_REWRITE_REVIEW_PREFIX = "quickvint-wardrobe-review-";
+  const WARDROBE_REWRITE_RESULT_TTL_MS = 5 * 60 * 1000;
   let wardrobeRewriteScheduled = false;
   let wardrobeRewriteCapacity = null;
   let wardrobeRewriteCapacityLoading = false;
@@ -35,6 +38,7 @@
   let wardrobeSelectionPagehide = null;
   let wardrobeSelectionPulseTimeout = null;
   let wardrobeSelectionCapacity = 0;
+  let wardrobeRewriteOutputCleanup = null;
   const DESCRIPTION_APPLY_PROMPT_ID = "quickvint-description-apply-prompt";
   const LIMIT_FOLLOWUP_MODAL_ID = "quickvint-limit-followup-modal";
   const TITLE_LANGUAGE_SELECT_ID = "quickvint-title-language-select";
@@ -3942,6 +3946,30 @@
       return false;
     }
 
+    if (message?.type === "WARDROBE_REWRITE_PING") {
+      const itemId = String(message.itemId || "");
+      sendResponse({ ok: isWardrobeRewriteTabReady(itemId), itemId });
+      return false;
+    }
+
+    if (message?.type === "RUN_WARDROBE_REWRITE_ITEM") {
+      runWardrobeRewriteItem(message)
+        .then(sendResponse)
+        .catch((error) =>
+          sendResponse({
+            ok: false,
+            error: error?.message || "Wardrobe rewrite failed.",
+          }),
+        );
+      return true;
+    }
+
+    if (message?.type === "WARDROBE_REWRITE_PROGRESS") {
+      handleWardrobeRewriteProgress(message);
+      sendResponse({ ok: true });
+      return false;
+    }
+
     if (message?.type === "CHECKOUT_FULFILLED") {
       const paywall = document.getElementById("quickvint-toast");
       if (paywall?.classList.contains("paywall")) {
@@ -7511,6 +7539,40 @@
         font-size: 11px;
         color: #9ca3af;
         text-align: center;
+      }
+
+      #${WARDROBE_REWRITE_RESULT_ID},
+      .quickvint-wardrobe-review-card {
+        box-sizing: border-box;
+        width: min(100%, 760px);
+        margin: 12px 0;
+        padding: 12px;
+        border: 1px solid #c7d2fe;
+        border-radius: 10px;
+        background: #f8faff;
+        color: #1f2937;
+        font: 600 13px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        overflow-wrap: anywhere;
+      }
+
+      #${WARDROBE_REWRITE_RESULT_ID} .quickvint-wardrobe-actions,
+      .quickvint-wardrobe-review-card .quickvint-wardrobe-actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        margin-top: 10px;
+      }
+
+      #${WARDROBE_REWRITE_RESULT_ID} button,
+      .quickvint-wardrobe-review-card button {
+        min-height: 34px;
+        padding: 6px 10px;
+        border: 1px solid #4f46e5;
+        border-radius: 7px;
+        background: #fff;
+        color: #3730a3;
+        cursor: pointer;
+        font: inherit;
       }
 
       #${DESCRIPTION_APPLY_PROMPT_ID} {
@@ -11531,8 +11593,7 @@
   }
 
   function setDescriptionValue(descInput, value) {
-    descInput.value = value;
-    descInput.dispatchEvent(new Event("input", { bubbles: true }));
+    setListingFieldValue(descInput, value);
   }
 
   function positionDescriptionApplyPrompt(prompt, descInput) {
@@ -15516,6 +15577,232 @@
     }, delayMs);
   }
 
+  function setListingFieldValue(field, value) {
+    if (!field) return;
+    field.value = String(value || "");
+    field.dispatchEvent(new Event("input", { bubbles: true }));
+    field.dispatchEvent(new Event("change", { bubbles: true }));
+  }
+
+  function isWardrobeRewriteTabReady(itemId) {
+    const pathItemId = window.location.pathname.match(/^\/items\/(\d+)\/edit$/)?.[1];
+    return Boolean(
+      /^\d+$/.test(itemId) &&
+        pathItemId === itemId &&
+        document.querySelector(SELECTORS.title) &&
+        document.querySelector(SELECTORS.description) &&
+        getUploadedImageEntries().length,
+    );
+  }
+
+  function getWardrobeFieldWrapper(field) {
+    return field?.closest("label") || field?.parentElement || field;
+  }
+
+  function finishWardrobeRewriteOutput(state, removeUi = false) {
+    if (state.observer) state.observer.disconnect();
+    if (state.timer) clearTimeout(state.timer);
+    window.removeEventListener("pagehide", state.pagehide);
+    if (removeUi) {
+      document.getElementById(WARDROBE_REWRITE_RESULT_ID)?.remove();
+      document
+        .querySelectorAll(`[id^="${WARDROBE_REWRITE_REVIEW_PREFIX}"]`)
+        .forEach((node) => node.remove());
+    }
+    if (wardrobeRewriteOutputCleanup === state.cleanup) {
+      wardrobeRewriteOutputCleanup = null;
+    }
+  }
+
+  function isWardrobeRewriteOutputResolved(state) {
+    return ["title", "description"].every(
+      (field) => state.status[field] === "done",
+    );
+  }
+
+  function createWardrobeButton(label, onClick) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.textContent = label;
+    button.addEventListener("click", onClick);
+    return button;
+  }
+
+  function attachWardrobeReplaceOutput(state) {
+    if (isWardrobeRewriteOutputResolved(state)) {
+      document.getElementById(WARDROBE_REWRITE_RESULT_ID)?.remove();
+      finishWardrobeRewriteOutput(state);
+      return;
+    }
+    const existing = document.getElementById(WARDROBE_REWRITE_RESULT_ID);
+    if (existing) return;
+    const title = document.querySelector(SELECTORS.title);
+    const description = document.querySelector(SELECTORS.description);
+    const anchor = getWardrobeFieldWrapper(description) || getWardrobeFieldWrapper(title);
+    if (!anchor?.parentElement) return;
+    const result = document.createElement("section");
+    result.id = WARDROBE_REWRITE_RESULT_ID;
+    result.setAttribute("aria-label", "Generated wardrobe rewrite");
+    const summary = document.createElement("span");
+    summary.textContent = "Generated title and description applied.";
+    const actions = document.createElement("div");
+    actions.className = "quickvint-wardrobe-actions";
+    for (const fieldName of ["title", "description"]) {
+      if (state.status[fieldName] === "done") continue;
+      actions.append(
+        createWardrobeButton(`Undo ${fieldName}`, () => {
+          setListingFieldValue(document.querySelector(SELECTORS[fieldName]), state.originals[fieldName]);
+          state.status[fieldName] = "done";
+          result.remove();
+          attachWardrobeReplaceOutput(state);
+        }),
+      );
+    }
+    result.append(summary, actions);
+    anchor.parentElement.insertBefore(result, anchor.nextSibling);
+  }
+
+  function attachWardrobeReviewOutput(state, fieldName) {
+    if (state.status[fieldName] === "done") {
+      document.getElementById(`${WARDROBE_REWRITE_REVIEW_PREFIX}${fieldName}`)?.remove();
+      if (isWardrobeRewriteOutputResolved(state)) finishWardrobeRewriteOutput(state);
+      return;
+    }
+    const cardId = `${WARDROBE_REWRITE_REVIEW_PREFIX}${fieldName}`;
+    if (document.getElementById(cardId)) return;
+    const field = document.querySelector(SELECTORS[fieldName]);
+    const wrapper = getWardrobeFieldWrapper(field);
+    if (!wrapper?.parentElement) return;
+    const card = document.createElement("section");
+    card.id = cardId;
+    card.className = "quickvint-wardrobe-review-card";
+    card.setAttribute("aria-label", `Generated ${fieldName}`);
+    const copy = document.createElement("p");
+    copy.textContent = state.generated[fieldName];
+    const actions = document.createElement("div");
+    actions.className = "quickvint-wardrobe-actions";
+    if (state.status[fieldName] === "applied") {
+      actions.append(
+        createWardrobeButton(`Undo generated ${fieldName}`, () => {
+          setListingFieldValue(document.querySelector(SELECTORS[fieldName]), state.originals[fieldName]);
+          state.status[fieldName] = "done";
+          card.remove();
+          if (isWardrobeRewriteOutputResolved(state)) finishWardrobeRewriteOutput(state);
+        }),
+      );
+    } else {
+      actions.append(
+        createWardrobeButton(`Apply generated ${fieldName}`, () => {
+          setListingFieldValue(document.querySelector(SELECTORS[fieldName]), state.generated[fieldName]);
+          state.status[fieldName] = "applied";
+          card.remove();
+          attachWardrobeReviewOutput(state, fieldName);
+        }),
+        createWardrobeButton(`Reject generated ${fieldName}`, () => {
+          state.status[fieldName] = "done";
+          card.remove();
+          if (isWardrobeRewriteOutputResolved(state)) finishWardrobeRewriteOutput(state);
+        }),
+      );
+    }
+    card.append(copy, actions);
+    wrapper.parentElement.insertBefore(card, wrapper.nextSibling);
+  }
+
+  function attachWardrobeRewriteOutput(state) {
+    if (state.mode === "replace") {
+      attachWardrobeReplaceOutput(state);
+    } else {
+      attachWardrobeReviewOutput(state, "title");
+      attachWardrobeReviewOutput(state, "description");
+    }
+  }
+
+  function startWardrobeRewriteOutput(mode, originals, generated) {
+    wardrobeRewriteOutputCleanup?.("new_rewrite");
+    const state = {
+      mode,
+      originals,
+      generated,
+      status: { title: "active", description: "active" },
+      observer: null,
+      timer: null,
+      pagehide: null,
+      cleanup: null,
+    };
+    state.cleanup = (_reason) => finishWardrobeRewriteOutput(state, true);
+    state.pagehide = () => finishWardrobeRewriteOutput(state);
+    state.observer = new MutationObserver(() => attachWardrobeRewriteOutput(state));
+    state.observer.observe(document.body, { childList: true, subtree: true });
+    state.timer = setTimeout(() => finishWardrobeRewriteOutput(state), WARDROBE_REWRITE_RESULT_TTL_MS);
+    window.addEventListener("pagehide", state.pagehide, { once: true });
+    wardrobeRewriteOutputCleanup = state.cleanup;
+    attachWardrobeRewriteOutput(state);
+  }
+
+  function renderWardrobeReplaceUndo(originals, generated) {
+    startWardrobeRewriteOutput("replace", originals, generated);
+  }
+
+  function renderWardrobeReviewSuggestions(originals, generated) {
+    startWardrobeRewriteOutput("review", originals, generated);
+  }
+
+  async function runWardrobeRewriteItem(message) {
+    const itemId = String(message?.itemId || "");
+    if (!isWardrobeRewriteTabReady(itemId)) {
+      throw new Error("This tab is not ready for the selected wardrobe listing.");
+    }
+    const originals = {
+      title: document.querySelector(SELECTORS.title).value || "",
+      description: document.querySelector(SELECTORS.description).value || "",
+    };
+    const generated = await generateCurrentListing({
+      manageButtonState: false,
+      showMeasurementAdvice: false,
+      throwOnLimit: true,
+      generationMode: "batch",
+      telemetryMode: "wardrobe_rewrite",
+      applyGeneratedOutput: false,
+      languageOverrides: {
+        titleLanguageCode: message.titleLanguageCode,
+        descriptionLanguageCode: message.descriptionLanguageCode,
+      },
+    });
+    if (!generated?.ok) return generated;
+    const output = { title: generated.title, description: generated.description };
+    if (message.applyMode === "replace") {
+      setListingFieldValue(document.querySelector(SELECTORS.title), output.title);
+      setListingFieldValue(document.querySelector(SELECTORS.description), output.description);
+      renderWardrobeReplaceUndo(originals, output);
+    } else {
+      renderWardrobeReviewSuggestions(originals, output);
+    }
+    return { ok: true, offers: generated.offers || [] };
+  }
+
+  function handleWardrobeRewriteProgress(message) {
+    const controller = document.querySelector(".quickvint-wardrobe-selection-controller");
+    if (controller) {
+      const feedback = controller.querySelector(".quickvint-wardrobe-selection-feedback");
+      const current = Math.max(0, Number(message.current || 0));
+      const total = Math.max(current, Number(message.total || 0));
+      if (feedback) {
+        feedback.textContent = message.message || (message.status === "done"
+          ? `${total} listing${total === 1 ? "" : "s"} ready`
+          : `Rewriting ${current} of ${total}`);
+      }
+    }
+    if (message.status === "done") {
+      loadWardrobeRewriteCapacity().then((capacity) =>
+        renderWardrobeRewriteCapacity(
+          document.querySelector(".quickvint-wardrobe-rewrite-shell"),
+          capacity,
+        ),
+      );
+    }
+  }
+
   async function runBatchItem(message) {
     removeClonedBatchUiForWorkTab();
 
@@ -15608,6 +15895,9 @@
     emojiRetry = false,
     overrideUseEmojis = null,
     generationMode = null,
+    telemetryMode = null,
+    applyGeneratedOutput = true,
+    languageOverrides = null,
   } = {}) {
     const incompletePhoneUpload = manageButtonState
       ? getIncompletePhoneUploadState()
@@ -15634,7 +15924,7 @@
     let imageUrls = imageEntries.map((entry) => entry.url);
     let imageSourceTelemetry = buildImageSourceTelemetry(imageEntries);
     const generationAttemptId = createGenerationAttemptId();
-    const mode = manageButtonState ? "manual" : "batch";
+    const mode = telemetryMode || (manageButtonState ? "manual" : "batch");
     const requestGenerationMode = generationMode || mode;
     let generateFetchDiagnostics = null;
 
@@ -15705,6 +15995,12 @@
       } = storage;
       const descriptionLength = normalizeDescriptionLength(storedDescriptionLength);
       const languageProfile = resolveLanguageProfile(storage);
+      const titleLanguageOverride = languageDefaults.getSupportedLanguageCode(
+        languageOverrides?.titleLanguageCode,
+      );
+      const descriptionLanguageOverride = languageDefaults.getSupportedLanguageCode(
+        languageOverrides?.descriptionLanguageCode,
+      );
       const emojiAccess = canUseEmojiSetting(userProfile);
       const effectiveUseEmojis =
         emojiAccess &&
@@ -15729,9 +16025,9 @@
       }
 
       const effectiveDescriptionFooterText = descriptionFooterValidation.text;
-      const titleLanguageCode = languageProfile.titleLanguageCode;
+      const titleLanguageCode = titleLanguageOverride || languageProfile.titleLanguageCode;
       const descriptionLanguageCode =
-        languageProfile.descriptionLanguageCode;
+        descriptionLanguageOverride || languageProfile.descriptionLanguageCode;
       const legacyLanguageCode = descriptionLanguageCode || titleLanguageCode;
       const imageSourceSummary =
         summarizeImageSourcesForTelemetry(imageSourceTelemetry);
@@ -15992,29 +16288,26 @@
       const titleInput = document.querySelector(SELECTORS.title);
       const descInput = document.querySelector(SELECTORS.description);
 
-      if (titleInput) {
-        titleInput.value = title;
-        titleInput.dispatchEvent(new Event("input", { bubbles: true }));
-      }
-      if (descInput) {
-        applyGeneratedDescription(descInput, description, descriptionApplyChoice);
-      }
+      if (applyGeneratedOutput) {
+        if (titleInput) setListingFieldValue(titleInput, title);
+        if (descInput) {
+          applyGeneratedDescription(descInput, description, descriptionApplyChoice);
+        }
 
-      startGenerationOutputEditTracking({
-        generationAttemptId,
-        mode,
-        photoCount: imageUrls.length,
-        titleLanguageCode,
-        descriptionLanguageCode,
-        descriptionApplyChoice,
-        generatedTitle: title,
-        generatedDescription: description,
-        appliedTitle: titleInput?.value || "",
-        appliedDescription: descInput?.value || "",
-      });
+        startGenerationOutputEditTracking({
+          generationAttemptId,
+          mode,
+          photoCount: imageUrls.length,
+          titleLanguageCode,
+          descriptionLanguageCode,
+          descriptionApplyChoice,
+          generatedTitle: title,
+          generatedDescription: description,
+          appliedTitle: titleInput?.value || "",
+          appliedDescription: descInput?.value || "",
+        });
 
-      if (manageButtonState) {
-        setButtonSuccessState();
+        if (manageButtonState) setButtonSuccessState();
       }
 
       trackGrowthEvent("generate_success", {
@@ -16026,13 +16319,14 @@
         emojiRetry: Boolean(emojiRetry),
         hasMeasurementAdvice: Boolean(measurementAdvice && measurementAdvice.trim()),
       });
-      markInlineLanguageHintDone();
+      if (applyGeneratedOutput) markInlineLanguageHintDone();
 
-      const showedOfferPrompt = manageButtonState
+      const showedOfferPrompt = applyGeneratedOutput && manageButtonState
         ? await queueGenerationOffers(offers)
         : false;
 
       if (
+        applyGeneratedOutput &&
         manageButtonState &&
         effectiveUseEmojis &&
         !skipEmojiRetryPrompt &&

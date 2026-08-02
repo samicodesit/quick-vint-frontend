@@ -332,6 +332,38 @@ async function openContentHarness(page, capacityResponse = null, options = {}) {
   await expect(page.locator("#quickvint-description-footer-btn")).toBeVisible();
 }
 
+async function openWardrobeEditHarness(page, itemId = "42", options = {}) {
+  const url = `https://www.vinted.nl/items/${itemId}/edit`;
+  await page.route(url, (route) =>
+    route.fulfill({ status: 200, contentType: "text/html", body: listingFixture }),
+  );
+  await page.goto(url, { waitUntil: "domcontentloaded" });
+  await installChromeHarness(page, options.capacityResponse || null, options.initialStorage || {});
+  if (options.shortenWardrobeTimers) {
+    await page.evaluate(() => {
+      const originalSetTimeout = window.setTimeout.bind(window);
+      window.setTimeout = (callback, delay, ...args) =>
+        originalSetTimeout(callback, delay === 5 * 60 * 1000 ? 25 : delay, ...args);
+    });
+  }
+  await page.addScriptTag({ path: languageDefaultsPath });
+  await page.addScriptTag({ path: contentScriptPath });
+  await expect(page.locator("#quickvint-gen-btn")).toBeVisible();
+}
+
+function sendContentMessage(page, message) {
+  return page.evaluate(
+    (payload) =>
+      new Promise((resolve) => {
+        const listener = window.__extensionHarness.runtimeListeners.find(
+          (candidate) => typeof candidate === "function",
+        );
+        listener(payload, {}, resolve);
+      }),
+    message,
+  );
+}
+
 async function openWardrobeHarness(
   page,
   {
@@ -5827,6 +5859,147 @@ test.describe("AutoLister extension smoke flows", () => {
     const offer = page.locator("#quickvint-limit-followup-modal");
     await expect(offer).toBeVisible();
     await expect(offer).toContainText("LISTFASTER20");
+  });
+});
+
+test.describe("wardrobe rewrite tab", () => {
+  test("is ready only for the matching edit route with fields and photos", async ({ page }) => {
+    await openWardrobeEditHarness(page);
+    const ping = (itemId) => sendContentMessage(page, { type: "WARDROBE_REWRITE_PING", itemId });
+    await expect(ping("42")).resolves.toEqual({ ok: true, itemId: "42" });
+    await expect(ping("43")).resolves.toEqual({ ok: false, itemId: "43" });
+    await page.evaluate(() => history.replaceState({}, "", "/items/new"));
+    await expect(ping("42")).resolves.toEqual({ ok: false, itemId: "42" });
+    await page.evaluate(() => history.replaceState({}, "", "/items/42/edit"));
+    await page.locator('[data-testid="title--input"]').evaluate((input) => input.remove());
+    await expect(ping("42")).resolves.toEqual({ ok: false, itemId: "42" });
+  });
+
+  test("wardrobe rewrite tab rejects missing description and image discovery", async ({ page }) => {
+    await openWardrobeEditHarness(page);
+    const ping = () => sendContentMessage(page, { type: "WARDROBE_REWRITE_PING", itemId: "42" });
+    await page.locator('[data-testid="description--input"]').evaluate((input) => input.remove());
+    await expect(ping()).resolves.toEqual({ ok: false, itemId: "42" });
+    await page.reload({ waitUntil: "domcontentloaded" });
+    await installChromeHarness(page);
+    await page.addScriptTag({ path: languageDefaultsPath });
+    await page.addScriptTag({ path: contentScriptPath });
+    await page.locator('[data-testid^="image-wrapper-"] img').evaluate((image) => image.remove());
+    await expect(ping()).resolves.toEqual({ ok: false, itemId: "42" });
+  });
+
+  test("wardrobe language overrides keep fields and stored defaults unchanged in review", async ({ page }) => {
+    const bodies = [];
+    await page.route("https://autolister.app/api/events/track", (route) => route.fulfill({ status: 204, body: "" }));
+    await page.route("https://autolister.app/api/generate", (route) => {
+      bodies.push(route.request().postDataJSON());
+      return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ title: "New title", description: "New description" }) });
+    });
+    await openWardrobeEditHarness(page, "42", { initialStorage: { selectedTitleLanguage: "de", selectedDescriptionLanguage: "es" } });
+    await page.locator('[data-testid="title--input"]').fill("Original title");
+    await page.locator('[data-testid="description--input"]').fill("Original description");
+    await expect(sendContentMessage(page, { type: "RUN_WARDROBE_REWRITE_ITEM", itemId: "42", applyMode: "review", titleLanguageCode: "fr", descriptionLanguageCode: "nl" })).resolves.toMatchObject({ ok: true });
+    await expect(page.locator('[data-testid="title--input"]')).toHaveValue("Original title");
+    await expect(page.locator('[data-testid="description--input"]')).toHaveValue("Original description");
+    expect(bodies[0]).toMatchObject({ titleLanguageCode: "fr", descriptionLanguageCode: "nl", generationMode: "batch" });
+    expect(await page.evaluate(() => window.__extensionHarness.storage.selectedTitleLanguage)).toBe("de");
+    expect(await page.evaluate(() => window.__extensionHarness.storage.selectedDescriptionLanguage)).toBe("es");
+  });
+
+  test("wardrobe replace applies fields with independent undo and never saves", async ({ page }) => {
+    let saves = 0;
+    await page.route("https://autolister.app/api/events/track", (route) => route.fulfill({ status: 204, body: "" }));
+    await page.route("https://autolister.app/api/generate", (route) => route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ title: "New title", description: "New description" }) }));
+    await openWardrobeEditHarness(page);
+    await page.evaluate(() => {
+      const sentinel = document.createElement("button");
+      sentinel.textContent = "Save sentinel";
+      sentinel.addEventListener("click", () => window.__saveSentinelClicked = (window.__saveSentinelClicked || 0) + 1);
+      document.body.append(sentinel);
+    });
+    await page.locator('[data-testid="title--input"]').fill("Original title");
+    await page.locator('[data-testid="description--input"]').fill("Original description");
+    await expect(sendContentMessage(page, { type: "RUN_WARDROBE_REWRITE_ITEM", itemId: "42", itemIndex: 1, totalItems: 1, applyMode: "replace", titleLanguageCode: "en", descriptionLanguageCode: "nl" })).resolves.toMatchObject({ ok: true });
+    await expect(page.locator('[data-testid="title--input"]')).toHaveValue("New title");
+    await expect(page.locator('[data-testid="description--input"]')).toHaveValue("New description");
+    await page.getByRole("button", { name: "Undo title" }).click();
+    await expect(page.locator('[data-testid="title--input"]')).toHaveValue("Original title");
+    await expect(page.locator('[data-testid="description--input"]')).toHaveValue("New description");
+    await page.getByRole("button", { name: "Undo description" }).click();
+    saves = await page.evaluate(() => window.__saveSentinelClicked || 0);
+    expect(saves).toBe(0);
+  });
+
+  test("wardrobe review applies, rejects, and undoes each field independently", async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 900 });
+    await page.route("https://autolister.app/api/events/track", (route) => route.fulfill({ status: 204, body: "" }));
+    await page.route("https://autolister.app/api/generate", (route) => route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ title: "New title", description: "New description" }) }));
+    await openWardrobeEditHarness(page);
+    await page.locator('[data-testid="title--input"]').fill("Original title");
+    await page.locator('[data-testid="description--input"]').fill("Original description");
+    await sendContentMessage(page, { type: "RUN_WARDROBE_REWRITE_ITEM", itemId: "42", applyMode: "review", titleLanguageCode: "en", descriptionLanguageCode: "en" });
+    await expect(page.locator(".quickvint-wardrobe-review-card")).toHaveCount(2);
+    await page.getByRole("button", { name: "Apply generated title" }).click();
+    await expect(page.locator('[data-testid="title--input"]')).toHaveValue("New title");
+    await expect(page.locator('[data-testid="description--input"]')).toHaveValue("Original description");
+    await page.getByRole("button", { name: "Reject generated description" }).click();
+    await page.getByRole("button", { name: "Undo generated title" }).click();
+    await expect(page.locator('[data-testid="title--input"]')).toHaveValue("Original title");
+    await expect(page.locator('[data-testid="description--input"]')).toHaveValue("Original description");
+    await expectNoHorizontalOverflow(page);
+  });
+
+  test("wardrobe review failure and a second rewrite leave only the current controls", async ({ page }) => {
+    let calls = 0;
+    await page.route("https://autolister.app/api/events/track", (route) => route.fulfill({ status: 204, body: "" }));
+    await page.route("https://autolister.app/api/generate", (route) => {
+      calls += 1;
+      return route.fulfill(calls === 1
+        ? { status: 500, contentType: "application/json", body: JSON.stringify({ error: "No rewrite" }) }
+        : { status: 200, contentType: "application/json", body: JSON.stringify({ title: `New title ${calls}`, description: `New description ${calls}` }) });
+    });
+    await openWardrobeEditHarness(page);
+    await page.locator('[data-testid="title--input"]').fill("Original title");
+    await page.locator('[data-testid="description--input"]').fill("Original description");
+    await expect(sendContentMessage(page, { type: "RUN_WARDROBE_REWRITE_ITEM", itemId: "42", applyMode: "review", titleLanguageCode: "en", descriptionLanguageCode: "en" })).resolves.toMatchObject({ ok: false });
+    await expect(page.locator('[data-testid="title--input"]')).toHaveValue("Original title");
+    await expect(page.locator(".quickvint-wardrobe-review-card")).toHaveCount(0);
+    await sendContentMessage(page, { type: "RUN_WARDROBE_REWRITE_ITEM", itemId: "42", applyMode: "review", titleLanguageCode: "en", descriptionLanguageCode: "en" });
+    await sendContentMessage(page, { type: "RUN_WARDROBE_REWRITE_ITEM", itemId: "42", applyMode: "replace", titleLanguageCode: "en", descriptionLanguageCode: "en" });
+    await expect(page.locator(".quickvint-wardrobe-review-card")).toHaveCount(0);
+    await expect(page.locator("#quickvint-wardrobe-rewrite-result")).toHaveCount(1);
+  });
+
+  test("wardrobe review reattaches after a field wrapper rerender and stops after its timeout", async ({ page }) => {
+    await page.route("https://autolister.app/api/events/track", (route) => route.fulfill({ status: 204, body: "" }));
+    await page.route("https://autolister.app/api/generate", (route) => route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ title: "New title", description: "New description" }) }));
+    await openWardrobeEditHarness(page, "42", { shortenWardrobeTimers: true });
+    await sendContentMessage(page, { type: "RUN_WARDROBE_REWRITE_ITEM", itemId: "42", applyMode: "review", titleLanguageCode: "en", descriptionLanguageCode: "en" });
+    await page.locator('[data-testid="title--input"]').evaluate((input) => input.closest("div").replaceWith(input.closest("div").cloneNode(true)));
+    await expect(page.getByRole("button", { name: "Apply generated title" })).toBeVisible();
+    await page.waitForTimeout(40);
+    await page.locator('[data-testid="title--input"]').evaluate((input) => input.closest("div").remove());
+    await page.waitForTimeout(20);
+    await expect(page.getByRole("button", { name: "Apply generated title" })).toHaveCount(0);
+  });
+});
+
+test.describe("wardrobe rewrite progress", () => {
+  test("updates the sticky controller and refreshes capacity without a batch modal", async ({ page }) => {
+    await openWardrobeHarness(page, {
+      capacityResponse: [
+        { allowed: true, available: 2 },
+        { allowed: true, available: 1 },
+      ],
+      wardrobeItems: wardrobeItemFixture({ id: "9443601541" }),
+    });
+    await enterWardrobeSelection(page);
+    await expect(sendContentMessage(page, { type: "WARDROBE_REWRITE_PROGRESS", status: "generating", current: 1, total: 2 })).resolves.toEqual({ ok: true });
+    await expect(page.locator(".quickvint-wardrobe-selection-feedback")).toHaveText("Rewriting 1 of 2");
+    await sendContentMessage(page, { type: "WARDROBE_REWRITE_PROGRESS", status: "done", current: 2, total: 2 });
+    await expect(page.locator(".quickvint-wardrobe-selection-feedback")).toHaveText("2 listings ready");
+    await expect(page.locator(".quickvint-wardrobe-rewrite-capacity")).toHaveText("1 listing available");
+    await expect(page.locator("#quickvint-batch-modal")).toHaveCount(0);
   });
 });
 
