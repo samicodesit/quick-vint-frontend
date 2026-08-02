@@ -433,6 +433,20 @@ async function expectNoHorizontalOverflow(page) {
   ).toBe(true);
 }
 
+async function waitForWardrobeMotionToFinish(page) {
+  const widget = page.locator("#quickvint-wardrobe-rewrite-widget");
+  await expect(widget).toBeVisible();
+  await expect
+    .poll(() =>
+      widget.evaluate((element) =>
+        element
+          .getAnimations({ subtree: true })
+          .every((animation) => animation.playState !== "running"),
+      ),
+    )
+    .toBe(true);
+}
+
 async function expectInsideViewport(page, selector) {
   const viewport = page.viewportSize();
   await expect
@@ -5775,23 +5789,53 @@ test.describe("AutoLister extension smoke flows", () => {
 });
 
 test.describe("own wardrobe rewrite widget", () => {
-  test("reveals smoothly on first display", async ({ page }) => {
+  test("waits for the profile to settle before changing its layout", async ({
+    page,
+  }) => {
     await openWardrobeHarness(page);
 
-    await expect
-      .poll(() =>
-        page.locator("#quickvint-wardrobe-rewrite-widget").evaluate((widget) =>
-          widget
-            .getAnimations({ subtree: true })
+    await expect(page.locator("#quickvint-wardrobe-rewrite-widget")).toHaveCount(0);
+    await expect(page.locator(".quickvint-wardrobe-rewrite-host")).toHaveCount(0);
+    await expect(
+      page.locator("#quickvint-wardrobe-rewrite-widget"),
+    ).toBeVisible();
+    expect(
+      await page
+        .locator(".quickvint-wardrobe-rewrite-host")
+        .evaluate((host) =>
+          host
+            .getAnimations()
             .some((animation) => animation.playState === "running"),
         ),
-      )
-      .toBe(true);
+    ).toBe(true);
+  });
+
+  test("uses the regular expand motion on first display", async ({ page }) => {
+    await openWardrobeHarness(page);
+
+    const widget = page.locator("#quickvint-wardrobe-rewrite-widget");
+    await expect(widget).toBeVisible();
+    const opening = await widget.boundingBox();
+    const openingMotion = await widget.evaluate((element) => {
+      const animation = element
+        .getAnimations()
+        .find((candidate) => candidate.playState === "running");
+      const firstTransform = animation?.effect.getKeyframes()[0]?.transform || "";
+      return {
+        running: Boolean(animation),
+        scale: Number.parseFloat(firstTransform.match(/scale\(([\d.]+)/)?.[1]),
+      };
+    });
+    expect(openingMotion.running).toBe(true);
+    expect(openingMotion.scale).toBeLessThan(0.6);
+    await page.waitForTimeout(500);
+    const expanded = await widget.boundingBox();
+    expect(expanded.width).toBeGreaterThan(opening.width);
   });
 
   test("uses a prominent minimize control", async ({ page }) => {
     await openWardrobeHarness(page);
-    await page.waitForTimeout(400);
+    await waitForWardrobeMotionToFinish(page);
 
     const minimize = page.getByRole("button", {
       name: "Minimize rewrite listings",
@@ -5806,7 +5850,7 @@ test.describe("own wardrobe rewrite widget", () => {
     page,
   }) => {
     await openWardrobeHarness(page);
-    await page.waitForTimeout(400);
+    await waitForWardrobeMotionToFinish(page);
 
     const widget = page.locator("#quickvint-wardrobe-rewrite-widget");
     const host = page.locator(".quickvint-wardrobe-rewrite-host");
@@ -5929,6 +5973,13 @@ test.describe("own wardrobe rewrite widget", () => {
       page.getByRole("button", { name: "Expand rewrite listings" }),
     ).toBeVisible();
     await expect(page.getByText("Let's rewrite your listings")).toBeHidden();
+    const widget = page.locator("#quickvint-wardrobe-rewrite-widget");
+    expect((await widget.boundingBox()).width).toBeLessThanOrEqual(200);
+    expect(
+      await widget.evaluate(
+        (element) => element.getAnimations({ subtree: true }).length,
+      ),
+    ).toBe(0);
   });
 
   for (const viewport of [

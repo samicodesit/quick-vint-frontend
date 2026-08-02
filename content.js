@@ -23,6 +23,7 @@
   const WARDROBE_REWRITE_WIDGET_ID = "quickvint-wardrobe-rewrite-widget";
   const WARDROBE_REWRITE_COLLAPSED_KEY =
     "quickvintWardrobeRewriteCollapsed";
+  let wardrobeRewriteScheduled = false;
   const DESCRIPTION_APPLY_PROMPT_ID = "quickvint-description-apply-prompt";
   const LIMIT_FOLLOWUP_MODAL_ID = "quickvint-limit-followup-modal";
   const TITLE_LANGUAGE_SELECT_ID = "quickvint-title-language-select";
@@ -16008,7 +16009,7 @@
     );
   }
 
-  function injectWardrobeRewriteWidget() {
+  function injectWardrobeRewriteWidget(ready = false, initialCollapsed = false) {
     if (document.getElementById(WARDROBE_REWRITE_WIDGET_ID)) return true;
 
     const profileId = getMemberId();
@@ -16036,6 +16037,28 @@
       : null;
     if (!host) return false;
 
+    if (!ready) {
+      if (wardrobeRewriteScheduled) return false;
+      wardrobeRewriteScheduled = true;
+      chrome.storage.local.get(
+        { [WARDROBE_REWRITE_COLLAPSED_KEY]: false },
+        (storage) => {
+          const mount = () =>
+            setTimeout(() => {
+              wardrobeRewriteScheduled = false;
+              injectWardrobeRewriteWidget(
+                true,
+                Boolean(storage[WARDROBE_REWRITE_COLLAPSED_KEY]),
+              );
+            }, 650);
+          if (document.readyState === "complete") mount();
+          else window.addEventListener("load", mount, { once: true });
+        },
+      );
+      return false;
+    }
+
+    const initialHostHeight = host.getBoundingClientRect().height;
     host.classList.add("quickvint-wardrobe-rewrite-host");
     const characterUrl = chrome.runtime.getURL(
       "images/wardrobe-rewrite-character.webp",
@@ -16082,16 +16105,22 @@
       widget.style.maxWidth = "none";
       widget.style.marginLeft = `${viewportWidth - 16 - width - naturalLeft}px`;
     };
-    const setCollapsed = (collapsed, persist) => {
+    const setCollapsed = (
+      collapsed,
+      persist,
+      animate = persist,
+      firstHostHeightOverride,
+    ) => {
       const applyState = () => {
         widget.classList.toggle("is-collapsed", collapsed);
         fitToViewport();
       };
-      if (!persist || reduceMotion) {
+      if (!animate || reduceMotion) {
         applyState();
       } else {
         const first = widget.getBoundingClientRect();
-        const firstHostHeight = host.getBoundingClientRect().height;
+        const firstHostHeight =
+          firstHostHeightOverride ?? host.getBoundingClientRect().height;
         const firstRadius = getComputedStyle(widget).borderRadius;
         const outgoing = widget.querySelector(
           collapsed
@@ -16173,34 +16202,11 @@
     widget
       .querySelector(".quickvint-wardrobe-rewrite-compact")
       .addEventListener("click", () => setCollapsed(false, true));
-    chrome.storage.local.get(
-      { [WARDROBE_REWRITE_COLLAPSED_KEY]: false },
-      (storage) => {
-        setCollapsed(Boolean(storage[WARDROBE_REWRITE_COLLAPSED_KEY]), false);
-        const reveal = () =>
-          setTimeout(() => {
-            if (!widget.isConnected) return;
-            requestAnimationFrame(() => {
-              fitToViewport();
-              widget.classList.remove("quickvint-wardrobe-rewrite-pending");
-              if (!reduceMotion) {
-                widget.animate(
-                  [
-                    { opacity: 0, transform: "translateY(10px) scale(.98)" },
-                    { opacity: 1, transform: "translateY(0) scale(1)" },
-                  ],
-                  {
-                    duration: 360,
-                    easing: "cubic-bezier(.22, 1, .36, 1)",
-                  },
-                );
-              }
-            });
-          }, 650);
-        if (document.readyState === "complete") reveal();
-        else window.addEventListener("load", reveal, { once: true });
-      },
-    );
+    setCollapsed(true, false);
+    if (!initialCollapsed) {
+      setCollapsed(false, false, true, initialHostHeight);
+    }
+    widget.classList.remove("quickvint-wardrobe-rewrite-pending");
     window.addEventListener("resize", fitToViewport);
     return true;
   }
