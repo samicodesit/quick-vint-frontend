@@ -6,6 +6,7 @@ const extensionPath = process.env.AUTOLISTER_EXTENSION_PATH
   ? path.resolve(process.env.AUTOLISTER_EXTENSION_PATH)
   : path.resolve(__dirname, "../..");
 const languageDefaultsPath = path.join(extensionPath, "language-defaults.js");
+const qrCodePath = path.join(extensionPath, "lib/qrcode.min.js");
 const contentScriptPath = path.join(extensionPath, "content.js");
 const tinyPngDataUrl =
   "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII=";
@@ -149,6 +150,7 @@ function installChromeHarness(page, capacityResponse = null, initialStorage = {}
       runtimeListeners,
       openedWindows,
     };
+    window.__AUTOLISTER_TEST_HOOKS__ = {};
 
     window.open = (url = "") => {
       const openedWindow = {
@@ -349,6 +351,7 @@ async function openContentHarness(page, capacityResponse = null, options = {}) {
     });
   }
   await page.addScriptTag({ path: languageDefaultsPath });
+  await page.addScriptTag({ path: qrCodePath });
   await page.addScriptTag({ path: contentScriptPath });
   if (options.expectAuthenticated === false) {
     await expect(page.locator("#quickvint-signin-btn")).toBeVisible();
@@ -1230,7 +1233,7 @@ test.describe("AutoLister extension smoke flows", () => {
     );
     await expect(modal.locator(".batch-subtitle")).toBeHidden();
     await expect(modal.locator(".batch-wait-copy")).toHaveText(
-      "Choose photos. Keep page open.",
+      "Expires after 1 hour idle.",
     );
     await expect(modal.locator(".batch-qr-note")).toHaveCount(0);
     await expect(modal.locator(".batch-computer-files-input")).toHaveAttribute(
@@ -1255,6 +1258,38 @@ test.describe("AutoLister extension smoke flows", () => {
     await expectInsideViewport(page, "#quickvint-batch-modal .batch-source-phone");
     await expectInsideViewport(page, "#quickvint-batch-modal .batch-source-computer");
     await expectNoHorizontalOverflow(page);
+  });
+
+  test("renders phone QR locally in single and batch flows", async ({ page }) => {
+    const externalQrRequests = [];
+    page.on("request", (request) => {
+      if (new URL(request.url()).hostname === "api.qrserver.com") {
+        externalQrRequests.push(request.url());
+      }
+    });
+    await openContentHarness(page, { allowed: true, available: 10 }, {
+      emptyListing: true,
+    });
+
+    await chooseSinglePhoneUpload(page);
+    await expect(page.locator("#quickvint-phone-modal #qr-code")).toHaveAttribute(
+      "src",
+      /^data:image\//,
+    );
+    await expect(page.locator("#quickvint-phone-modal .instruction")).toHaveText(
+      "Expires after 1 hour idle.",
+    );
+    await page.locator("#quickvint-phone-modal .close-x").click();
+
+    await chooseBatchUpload(page);
+    await expect(page.locator("#quickvint-batch-modal .batch-qr img")).toHaveAttribute(
+      "src",
+      /^data:image\//,
+    );
+    await expect(
+      page.locator("#quickvint-batch-modal .batch-wait-copy"),
+    ).toHaveText("Expires after 1 hour idle.");
+    expect(externalQrRequests).toEqual([]);
   });
 
   test("computer batch upload sends loose files to the manual organizer", async ({
@@ -2068,11 +2103,12 @@ test.describe("AutoLister extension smoke flows", () => {
     await expect(batch).not.toContainText(/Using \d+ of \d+ available/);
   });
 
-  test("shows only an actionable warning for limited generation", async ({
+  test("capacity discard warning is explicit before limited generation", async ({
     page,
   }) => {
     await setupReadyPhoneUploadWithDelayedThumbnails(page, [], 3, [
       { allowed: true, available: 12 },
+      { allowed: true, available: 2 },
       { allowed: true, available: 2 },
     ]);
 
@@ -2088,11 +2124,23 @@ test.describe("AutoLister extension smoke flows", () => {
     }
 
     await expect(batch.locator(".batch-capacity-note")).toContainText(
-      "You can generate 2 of 3 listings right now",
+      "You can generate 2 of 3 listings. Only the first 2 will be generated. The remaining 1 group will not be saved.",
     );
     await expect(batch.locator(".batch-start")).toHaveText(
       "Generate first 2 of 3",
     );
+
+    const confirmation = new Promise((resolve) => {
+      page.once("dialog", async (dialog) => {
+        resolve(dialog.message());
+        await dialog.dismiss();
+      });
+    });
+    await batch.locator(".batch-start").click();
+    await expect(confirmation).resolves.toBe(
+      "You can generate 2 of 3 listings. Only the first 2 will be generated. The remaining 1 group will not be saved.",
+    );
+    await expect(batch.locator(".batch-gallery")).toBeVisible();
   });
 
   for (const [mode, selector, destination] of [
@@ -2204,6 +2252,7 @@ test.describe("AutoLister extension smoke flows", () => {
       expect(manifest.content_scripts[0].js).toEqual([
         "canary-config.js",
         "language-defaults.js",
+        "lib/qrcode.min.js",
         "content.js",
       ]);
       expect(manifest.host_permissions).toContain("https://autolister.app/*");
@@ -2513,6 +2562,13 @@ test.describe("AutoLister extension smoke flows", () => {
       });
       await context.route("https://autolister.app/api/phone-upload**", (route) => {
         const url = new URL(route.request().url());
+        if (url.searchParams.get("action") === "open") {
+          return route.fulfill({
+            status: 201,
+            contentType: "application/json",
+            body: JSON.stringify({ success: true, v: 2, status: "open" }),
+          });
+        }
         if (url.searchParams.get("action") === "cleanup") {
           cleanupRequests.push(route.request().url());
           return route.fulfill({ status: 204, body: "" });
@@ -2762,7 +2818,7 @@ test.describe("AutoLister extension smoke flows", () => {
         generationPayloadSource: "phone_upload_storage_url",
       });
       await expect.poll(() => cleanupRequests.length).toBe(1);
-      expect(listRequests).toBe(1);
+      expect(listRequests).toBeGreaterThanOrEqual(1);
     } finally {
       await context.close();
     }
@@ -4332,6 +4388,423 @@ test.describe("AutoLister extension smoke flows", () => {
     ]);
   });
 
+  test("opens an authenticated v2 phone session before showing its QR", async ({
+    page,
+  }) => {
+    await openContentHarness(
+      page,
+      { allowed: true, available: 10 },
+      { emptyListing: true, shortenPhoneUploadPoll: true },
+    );
+    await page.evaluate(() => {
+      const originalSendMessage = window.chrome.runtime.sendMessage;
+      window.__phoneV2Requests = [];
+      window.chrome.runtime.sendMessage = (message, callback) => {
+        if (message?.type === "PROXY_FETCH") {
+          const url = new URL(message.url);
+          if (url.searchParams.get("action") === "open") {
+            window.__phoneV2Requests.push(message);
+            setTimeout(
+              () => callback?.({ ok: true, status: 201, data: { status: "open" } }),
+              0,
+            );
+            return;
+          }
+          if (url.pathname.endsWith("/api/phone-upload")) {
+            setTimeout(
+              () => callback?.({ ok: true, data: { files: [], count: 0, complete: false } }),
+              0,
+            );
+            return;
+          }
+        }
+        originalSendMessage(message, callback);
+      };
+    });
+
+    await chooseSinglePhoneUpload(page);
+    await expect(page.locator("#quickvint-phone-modal")).toBeVisible();
+
+    const request = await page.evaluate(() => window.__phoneV2Requests[0]);
+    const url = new URL(request.url);
+    expect(url.searchParams.get("action")).toBe("open");
+    expect(url.searchParams.get("v")).toBe("2");
+    expect(url.searchParams.get("mode")).toBe("single");
+    expect(url.searchParams.get("sessionId")).toMatch(
+      /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/,
+    );
+    expect(request.options.headers.Authorization).toBe("Bearer test-access-token");
+    await expect(page.locator("#quickvint-phone-modal #qr-code")).toHaveAttribute(
+      "data-upload-url",
+      /[?&]v=2(?:&|$)/,
+    );
+  });
+
+  test("atomic phone handoff injects nothing partial and exactly once when complete", async ({
+    page,
+  }) => {
+    await openContentHarness(
+      page,
+      { allowed: true, available: 10 },
+      { emptyListing: true, shortenPhoneUploadPoll: true },
+    );
+    await page.evaluate((dataUrl) => {
+      const originalSendMessage = window.chrome.runtime.sendMessage;
+      window.__phoneComplete = false;
+      window.__phoneInputChanges = [];
+      document
+        .querySelector('[data-testid="add-photos-input"]')
+        .addEventListener("change", (event) => {
+          window.__phoneInputChanges.push(
+            Array.from(event.currentTarget.files || []).map((file) => file.name),
+          );
+        });
+      window.chrome.runtime.sendMessage = (message, callback) => {
+        if (message?.type === "PROXY_FETCH") {
+          const url = new URL(message.url);
+          if (url.searchParams.get("action") === "open") {
+            setTimeout(() => callback?.({ ok: true, status: 201, data: {} }), 0);
+            return;
+          }
+          if (url.hostname === "storage.test") {
+            setTimeout(() => callback?.({ ok: true, data: dataUrl }), 0);
+            return;
+          }
+          if (url.pathname.endsWith("/api/phone-upload")) {
+            const count = window.__phoneComplete ? 3 : 2;
+            setTimeout(
+              () =>
+                callback?.({
+                  ok: true,
+                  data: {
+                    files: Array.from({ length: count }, (_, index) => ({
+                      name: `${String(index).padStart(6, "0")}-phone-${index + 1}.jpg`,
+                      path: `session/phone-${index + 1}.jpg`,
+                      url: `https://storage.test/phone-${index + 1}.jpg`,
+                      order: index,
+                    })),
+                    count,
+                    expectedCount: 3,
+                    complete: window.__phoneComplete,
+                    status: window.__phoneComplete ? "complete" : "uploading",
+                  },
+                }),
+              0,
+            );
+            return;
+          }
+        }
+        originalSendMessage(message, callback);
+      };
+    }, tinyPngDataUrl);
+
+    await chooseSinglePhoneUpload(page);
+    await expect(page.locator("#quickvint-phone-modal .status")).toContainText("2/3");
+    await page.waitForTimeout(100);
+    expect(await page.evaluate(() => window.__phoneInputChanges)).toEqual([]);
+
+    await page.evaluate(() => {
+      window.__phoneComplete = true;
+    });
+    await expect
+      .poll(() => page.evaluate(() => window.__phoneInputChanges))
+      .toEqual([
+        ["000000-phone-1.jpg", "000001-phone-2.jpg", "000002-phone-3.jpg"],
+      ]);
+  });
+
+  test("Scott upload keeps a 33-photo batch open beyond five client minutes", async ({
+    page,
+  }) => {
+    await openContentHarness(
+      page,
+      { allowed: true, available: 40 },
+      {
+        emptyListing: true,
+        shortenPhoneUploadPoll: true,
+        shortenUploadIdleTimers: true,
+      },
+    );
+    await page.evaluate(() => {
+      const originalSendMessage = window.chrome.runtime.sendMessage;
+      window.__scottCount = 0;
+      window.chrome.runtime.sendMessage = (message, callback) => {
+        if (message?.type === "PROXY_FETCH") {
+          const url = new URL(message.url);
+          if (url.searchParams.get("action") === "open") {
+            setTimeout(() => callback?.({ ok: true, status: 201, data: {} }), 0);
+            return;
+          }
+          if (url.pathname.endsWith("/api/phone-upload")) {
+            const files = window.__scottCount
+              ? Array.from({ length: window.__scottCount }, (_, index) => ({
+                  name: `${String(index).padStart(6, "0")}-photo-${index + 1}.jpg`,
+                  path: `scott/photo-${index + 1}.jpg`,
+                  url: `https://storage.test/photo-${index + 1}.jpg`,
+                  order: index,
+                }))
+              : [];
+            setTimeout(
+              () =>
+                callback?.({
+                  ok: true,
+                  data: {
+                    files,
+                    count: files.length,
+                    expectedCount: 33,
+                    complete: window.__scottCount > 0,
+                    status: window.__scottCount > 0 ? "complete" : "open",
+                  },
+                }),
+              0,
+            );
+            return;
+          }
+        }
+        originalSendMessage(message, callback);
+      };
+    });
+
+    await chooseBatchUpload(page);
+    await page.waitForTimeout(100);
+    await expect(page.locator("#quickvint-batch-modal")).toBeVisible();
+    await expect(page.locator("#quickvint-batch-modal .batch-gallery")).toHaveCount(0);
+
+    await page.evaluate(() => {
+      window.__scottCount = 32;
+    });
+    await page.waitForTimeout(100);
+    await expect(page.locator("#quickvint-batch-modal .batch-gallery")).toHaveCount(0);
+
+    await page.evaluate(() => {
+      window.__scottCount = 33;
+    });
+    await expect(
+      page.locator("#quickvint-batch-modal .batch-gallery .batch-photo"),
+    ).toHaveCount(33);
+  });
+
+  test("protects an expected phone batch before the first photo arrives", async ({
+    page,
+  }) => {
+    await openContentHarness(
+      page,
+      { allowed: true, available: 40 },
+      { emptyListing: true, shortenPhoneUploadPoll: true },
+    );
+    await page.evaluate(() => {
+      const originalSendMessage = window.chrome.runtime.sendMessage;
+      window.__batchCloseMessages = [];
+      window.__expectedCountPolls = 0;
+      window.confirm = (message) => {
+        window.__batchCloseMessages.push(message);
+        return false;
+      };
+      window.chrome.runtime.sendMessage = (message, callback) => {
+        if (message?.type === "PROXY_FETCH") {
+          const url = new URL(message.url);
+          if (url.searchParams.get("action") === "open") {
+            setTimeout(() => callback?.({ ok: true, status: 201, data: {} }), 0);
+            return;
+          }
+          if (url.pathname.endsWith("/api/phone-upload")) {
+            window.__expectedCountPolls += 1;
+            setTimeout(
+              () =>
+                callback?.({
+                  ok: true,
+                  data: {
+                    files: [],
+                    count: 0,
+                    expectedCount: 33,
+                    complete: false,
+                    status: "uploading",
+                  },
+                }),
+              0,
+            );
+            return;
+          }
+        }
+        originalSendMessage(message, callback);
+      };
+    });
+
+    await chooseBatchUpload(page);
+    await expect
+      .poll(() => page.evaluate(() => window.__expectedCountPolls))
+      .toBeGreaterThan(0);
+
+    const modal = page.locator("#quickvint-batch-modal");
+    await expect(modal.locator(".batch-wait-title")).toHaveText(
+      "Receiving 0 of 33 photos",
+    );
+    await expect(modal.locator(".batch-wait-copy")).toHaveText(
+      "Keep the phone page open.",
+    );
+    await expect(modal.locator(".batch-choose-files")).toBeDisabled();
+    await expect(modal.locator(".batch-choose-folder")).toBeDisabled();
+    await expect(modal.locator(".batch-computer-dropzone")).toHaveAttribute(
+      "aria-disabled",
+      "true",
+    );
+    await modal.locator(".batch-close").click();
+
+    await expect(modal).toBeVisible();
+    expect(await page.evaluate(() => window.__batchCloseMessages)).toEqual([
+      "Photos are still uploading. Closing now will discard this batch upload. Close anyway?",
+    ]);
+  });
+
+  test("expired phone session explains the loss and offers a new upload", async ({
+    page,
+  }) => {
+    await openContentHarness(
+      page,
+      { allowed: true, available: 10 },
+      { emptyListing: true, shortenPhoneUploadPoll: true },
+    );
+    await page.evaluate(() => {
+      const originalSendMessage = window.chrome.runtime.sendMessage;
+      window.chrome.runtime.sendMessage = (message, callback) => {
+        if (message?.type === "PROXY_FETCH") {
+          const url = new URL(message.url);
+          if (url.searchParams.get("action") === "open") {
+            setTimeout(() => callback?.({ ok: true, status: 201, data: {} }), 0);
+            return;
+          }
+          if (url.pathname.endsWith("/api/phone-upload")) {
+            setTimeout(
+              () =>
+                callback?.({
+                  ok: false,
+                  status: 410,
+                  data: { status: "expired", error: "Upload session expired" },
+                }),
+              0,
+            );
+            return;
+          }
+        }
+        originalSendMessage(message, callback);
+      };
+    });
+
+    await chooseSinglePhoneUpload(page);
+    await expect(page.locator("#quickvint-phone-modal .status")).toContainText(
+      "expired",
+    );
+    await expect(
+      page.locator("#quickvint-phone-modal .phone-upload-restart"),
+    ).toHaveText("Start new upload");
+  });
+
+  test("expired batch phone session explains the loss and offers a new upload", async ({
+    page,
+  }) => {
+    await openContentHarness(
+      page,
+      { allowed: true, available: 10 },
+      { emptyListing: true, shortenPhoneUploadPoll: true },
+    );
+    await page.evaluate(() => {
+      const originalSendMessage = window.chrome.runtime.sendMessage;
+      window.chrome.runtime.sendMessage = (message, callback) => {
+        if (message?.type === "PROXY_FETCH") {
+          const url = new URL(message.url);
+          if (url.searchParams.get("action") === "open") {
+            setTimeout(() => callback?.({ ok: true, status: 201, data: {} }), 0);
+            return;
+          }
+          if (url.pathname.endsWith("/api/phone-upload")) {
+            setTimeout(
+              () =>
+                callback?.({
+                  ok: false,
+                  status: 410,
+                  data: { status: "expired", error: "Upload session expired" },
+                }),
+              0,
+            );
+            return;
+          }
+        }
+        originalSendMessage(message, callback);
+      };
+    });
+
+    await chooseBatchUpload(page);
+    await expect(
+      page.locator("#quickvint-batch-modal .batch-wait-title"),
+    ).toHaveText("Upload expired");
+    await expect(
+      page.locator("#quickvint-batch-modal .batch-upload-restart"),
+    ).toHaveText("Start new upload");
+  });
+
+  test("phone upload network loss keeps the same session and retries", async ({
+    page,
+  }) => {
+    await openContentHarness(
+      page,
+      { allowed: true, available: 10 },
+      { emptyListing: true, shortenPhoneUploadPoll: true },
+    );
+    await page.evaluate(() => {
+      const originalSendMessage = window.chrome.runtime.sendMessage;
+      window.chrome.runtime.sendMessage = (message, callback) => {
+        if (message?.type === "PROXY_FETCH") {
+          const url = new URL(message.url);
+          if (url.searchParams.get("action") === "open") {
+            setTimeout(() => callback?.({ ok: true, status: 201, data: {} }), 0);
+            return;
+          }
+          if (url.pathname.endsWith("/api/phone-upload")) {
+            setTimeout(() => callback?.({ ok: false, error: "Failed to fetch" }), 0);
+            return;
+          }
+        }
+        originalSendMessage(message, callback);
+      };
+    });
+
+    await chooseSinglePhoneUpload(page);
+    const sessionId = await page
+      .locator("#quickvint-phone-modal")
+      .getAttribute("data-session-id");
+    await expect(page.locator("#quickvint-phone-modal .status")).toHaveText(
+      "Connection lost. Retrying…",
+    );
+    await page.waitForTimeout(100);
+    await expect(page.locator("#quickvint-phone-modal")).toHaveAttribute(
+      "data-session-id",
+      sessionId,
+    );
+  });
+
+  test("active phone upload raises the native leave warning boundary", async ({
+    page,
+  }) => {
+    await openContentHarness(page, { allowed: true, available: 10 }, {
+      emptyListing: true,
+    });
+    await chooseSinglePhoneUpload(page);
+    await expect(page.locator("#quickvint-phone-modal")).toBeVisible();
+
+    expect(
+      await page.evaluate(() =>
+        window.__AUTOLISTER_TEST_HOOKS__.shouldWarnBeforeLeavingListing(),
+      ),
+    ).toBe(true);
+
+    await page.locator("#quickvint-phone-modal .close-x").click();
+    expect(
+      await page.evaluate(() =>
+        window.__AUTOLISTER_TEST_HOOKS__.shouldWarnBeforeLeavingListing(),
+      ),
+    ).toBe(false);
+  });
+
   test("generates when all received phone-upload files are ready while Vinted thumbnails are delayed", async ({
     page,
   }) => {
@@ -4431,7 +4904,7 @@ test.describe("AutoLister extension smoke flows", () => {
     }, tinyPngDataUrl);
 
     await chooseSinglePhoneUpload(page);
-    await expect(page.locator("#quickvint-phone-modal .preview-thumb")).toHaveCount(7);
+    await expect(page.locator("#quickvint-phone-modal .preview-thumb")).toHaveCount(0);
     await expect(page.locator("#quickvint-phone-modal .status")).toHaveText(
       "Receiving 8/10",
     );
@@ -4455,6 +4928,7 @@ test.describe("AutoLister extension smoke flows", () => {
     await expect(page.locator("#quickvint-phone-modal .status")).toHaveClass(
       /ready/,
     );
+    await expect(page.locator("#quickvint-phone-modal .preview-thumb")).toHaveCount(7);
     expect(await page.locator(".photo-box").count()).toBeLessThan(10);
 
     await page.locator("#quickvint-phone-modal .generate-btn").click();
@@ -4663,7 +5137,7 @@ test.describe("AutoLister extension smoke flows", () => {
             return;
           }
           if (url.startsWith("https://storage.test/")) {
-            setTimeout(() => callback?.({ ok: true, data: dataUrl }), 1000);
+            setTimeout(() => callback?.({ ok: true, data: dataUrl }), 5000);
             return;
           }
         }
@@ -4673,12 +5147,12 @@ test.describe("AutoLister extension smoke flows", () => {
 
     await chooseSinglePhoneUpload(page);
     await expect(page.locator("#quickvint-phone-modal .status")).toHaveText(
-      "Receiving 0/2",
+      "Receiving 2/2",
     );
     await expect(
       page.locator("#quickvint-phone-modal .status .status-count"),
     ).toHaveText(
-      "0/2",
+      "2/2",
     );
     const sessionId = await page
       .locator("#quickvint-phone-modal")

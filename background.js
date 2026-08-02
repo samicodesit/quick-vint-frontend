@@ -645,7 +645,7 @@ async function cleanupBatchUploadSession(sessionId) {
   if (!sessionId) return;
   try {
     await fetch(
-      `${API_BASE}/api/phone-upload?action=cleanup&sessionId=${encodeURIComponent(sessionId)}`,
+      `${API_BASE}/api/phone-upload?action=cleanup&v=2&reason=completed&sessionId=${encodeURIComponent(sessionId)}`,
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -1424,10 +1424,20 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
           const response = await fetch(message.url, message.options);
 
           if (!response.ok) {
+            let data = null;
+            try {
+              const contentType = response.headers.get("content-type");
+              data = contentType?.includes("application/json")
+                ? await response.json()
+                : await response.text();
+            } catch (error) {
+              // Keep the HTTP status when the error body is unreadable.
+            }
             sendResponse({
               ok: false,
               status: response.status,
-              error: `HTTP ${response.status}`,
+              data,
+              error: data?.error || `HTTP ${response.status}`,
             });
             return;
           }

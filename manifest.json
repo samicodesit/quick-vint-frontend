@@ -91,6 +91,7 @@
       "js": [
         "canary-config.js",
         "language-defaults.js",
+        "lib/qrcode.min.js",
         "content.js"
       ],
       "run_at": "document_idle"
