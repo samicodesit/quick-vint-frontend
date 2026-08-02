@@ -16727,12 +16727,14 @@
       const response = await sendMessage({ type: "GET_BATCH_CAPACITY" });
       if (!response?.ok) throw new Error(response?.error || "Availability unavailable");
       const capacity = response.capacity || {};
+      const error = capacity.error ? String(capacity.error) : null;
       wardrobeRewriteCapacity = {
         allowed: Boolean(capacity.allowed),
         available: Math.max(0, Math.floor(Number(capacity.available || 0))),
-        message: String(capacity.message || ""),
+        message: String(capacity.message || error || ""),
         reason: capacity.reason || null,
         tier: capacity.tier || null,
+        error,
       };
       return wardrobeRewriteCapacity;
     } catch (error) {
@@ -16840,12 +16842,14 @@
     };
   }
 
+  function isWardrobeSelectionLocked() {
+    return ["starting", "active"].includes(wardrobeSelectionJobStatus);
+  }
+
   function updateWardrobeSelection() {
     const selectedCount = wardrobeRewriteSelectedItems.size;
     const atCapacity = selectedCount >= wardrobeSelectionCapacity;
-    const locked = ["active", "terminal"].includes(
-      wardrobeSelectionJobStatus,
-    );
+    const locked = isWardrobeSelectionLocked() || wardrobeSelectionJobStatus === "terminal";
     for (const button of document.querySelectorAll(".quickvint-wardrobe-select-item")) {
       const selected = wardrobeRewriteSelectedItems.has(button.dataset.wardrobeId);
       button.setAttribute("aria-pressed", String(selected));
@@ -16878,16 +16882,16 @@
         selectedCount > wardrobeSelectionCapacity;
     }
     for (const select of wardrobeSelectionController?.querySelectorAll("select") || []) {
-      select.disabled = wardrobeSelectionJobStatus === "active";
+      select.disabled = isWardrobeSelectionLocked();
     }
     const cancel = wardrobeSelectionController?.querySelector(
       ".quickvint-wardrobe-selection-cancel",
     );
-    if (cancel) cancel.disabled = wardrobeSelectionJobStatus === "active";
+    if (cancel) cancel.disabled = isWardrobeSelectionLocked();
     const exit = wardrobeRewriteWidget?.querySelector(
       ".quickvint-wardrobe-rewrite-exit",
     );
-    if (exit) exit.disabled = wardrobeSelectionJobStatus === "active";
+    if (exit) exit.disabled = isWardrobeSelectionLocked();
   }
 
   function decorateWardrobeListingCards() {
@@ -16995,6 +16999,7 @@
       chrome.storage.local.set({ selectedDescriptionLanguage: descriptionLanguage.value }),
     );
     controller.querySelector(".quickvint-wardrobe-selection-cancel").addEventListener("click", () => {
+      if (isWardrobeSelectionLocked()) return;
       stopWardrobeSelection();
       setWardrobeRewriteStep("intro");
     });
@@ -17005,6 +17010,21 @@
       updateWardrobeSelection();
       const capacity = await loadWardrobeRewriteCapacity();
       if (wardrobeSelectionController !== controller) return;
+      if (!capacity.allowed || capacity.error) {
+        wardrobeSelectionJobStatus = "idle";
+        const limitMessage = buildLimitMessage({
+          code: capacity.reason,
+          currentTier: capacity.tier,
+          nextTier: capacity.nextTier,
+          error: capacity.message,
+        });
+        controller.querySelector(".quickvint-wardrobe-selection-feedback").textContent =
+          capacity.error || limitMessage.message || capacity.message;
+        updateWardrobeSelection();
+        if (capacity.error) showToast(capacity.error, "error");
+        else await showBatchCapacityBlocked(capacity);
+        return;
+      }
       wardrobeSelectionCapacity = capacity.available;
       if (wardrobeRewriteSelectedItems.size > wardrobeSelectionCapacity) {
         wardrobeSelectionJobStatus = "idle";
@@ -17203,6 +17223,7 @@
       setWardrobeRewriteStep("intro"),
     );
     widget.querySelector(".quickvint-wardrobe-rewrite-exit").addEventListener("click", () => {
+      if (isWardrobeSelectionLocked()) return;
       stopWardrobeSelection();
       setWardrobeRewriteStep("intro");
     });

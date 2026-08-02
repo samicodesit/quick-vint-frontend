@@ -571,6 +571,21 @@ async function enterWardrobeSelection(page, mode = "review") {
   await expect(page.locator(".quickvint-wardrobe-selection-controller")).toBeVisible();
 }
 
+async function expectWardrobeSelectionControlsDisabled(page, disabled) {
+  const controls = [
+    ...(await page.locator(".quickvint-wardrobe-select-item").all()),
+    page.getByLabel("Title language"),
+    page.getByLabel("Description language"),
+    page.getByRole("button", { name: "Start rewrite" }),
+    page.getByRole("button", { name: "Cancel selection" }),
+    page.getByRole("button", { name: "Exit selection" }),
+  ];
+  for (const control of controls) {
+    if (disabled) await expect(control).toBeDisabled();
+    else await expect(control).toBeEnabled();
+  }
+}
+
 async function expectInsideViewport(page, selector) {
   const viewport = page.viewportSize();
   await expect
@@ -6642,6 +6657,7 @@ test.describe("own wardrobe rewrite widget", () => {
       initialStorage: {
         selectedTitleLanguage: "en",
         selectedDescriptionLanguage: "nl",
+        __startWardrobeDelayMs: 120,
       },
     });
     await enterWardrobeSelection(page);
@@ -6657,7 +6673,14 @@ test.describe("own wardrobe rewrite widget", () => {
     await page.getByLabel("Title language").selectOption("nl");
     await expect.poll(() => page.evaluate(() => window.__extensionHarness.storage.selectedTitleLanguage)).toBe("nl");
     await page.getByRole("button", { name: /Select Item 9443601541/ }).click();
+    await page.evaluate(() => {
+      const originalSetInterval = window.setInterval.bind(window);
+      window.setInterval = (callback, delay, ...args) =>
+        originalSetInterval(callback, delay === 20 * 1000 ? 25 : delay, ...args);
+    });
     await page.getByRole("button", { name: "Start rewrite" }).click();
+    await expect(page.locator(".quickvint-wardrobe-selection-feedback")).toHaveText("Starting…");
+    await expectWardrobeSelectionControlsDisabled(page, true);
     await expect.poll(() => page.evaluate(() =>
       window.__extensionHarness.runtimeMessages.find(
         (message) => message?.type === "START_WARDROBE_REWRITE",
@@ -6671,10 +6694,22 @@ test.describe("own wardrobe rewrite widget", () => {
       titleLanguageCode: "nl",
       descriptionLanguageCode: "nl",
     });
-    await expect(page.getByRole("button", { name: "Start rewrite" })).toBeDisabled();
-    await expect(page.getByRole("button", { name: "Cancel selection" })).toBeDisabled();
-    await expect(page.getByLabel("Title language")).toBeDisabled();
-    await expect(page.getByRole("button", { name: /Unselect Item 9443601541/ })).toBeDisabled();
+    await expect.poll(() => page.evaluate(() =>
+      window.__extensionHarness.runtimeMessages.some(
+        (message) => message?.type === "QUICKVINT_TAB_JOB_HEARTBEAT",
+      ),
+    )).toBe(true);
+    await sendContentMessage(page, {
+      type: "WARDROBE_REWRITE_PROGRESS",
+      status: "running",
+      current: 1,
+      total: 1,
+    });
+    await expect(page.locator(".quickvint-wardrobe-selection-feedback")).toHaveText(
+      "Rewriting 1 of 1",
+    );
+    await page.getByRole("button", { name: "Exit selection" }).dispatchEvent("click");
+    await expect(controller).toBeVisible();
     await sendContentMessage(page, {
       type: "WARDROBE_REWRITE_PROGRESS",
       status: "failed",
@@ -6705,14 +6740,42 @@ test.describe("own wardrobe rewrite widget", () => {
     await page.getByRole("button", { name: /Select Item 9443601541/ }).click();
     await page.getByRole("button", { name: "Start rewrite" }).click();
     await expect(page.locator(".quickvint-wardrobe-selection-feedback")).toHaveText("Starting…");
-    await expect(page.getByRole("button", { name: "Start rewrite" })).toBeDisabled();
+    await expectWardrobeSelectionControlsDisabled(page, true);
+    await page.getByRole("button", { name: "Cancel selection" }).dispatchEvent("click");
+    await expect(page.locator(".quickvint-wardrobe-selection-controller")).toBeVisible();
     await expect(page.locator(".quickvint-wardrobe-selection-feedback")).toHaveText(
       "Background rejected this rewrite.",
     );
-    await expect(page.getByRole("button", { name: "Start rewrite" })).toBeEnabled();
-    await expect(page.getByRole("button", { name: "Cancel selection" })).toBeEnabled();
-    await expect(page.getByLabel("Title language")).toBeEnabled();
-    await expect(page.getByRole("button", { name: /Unselect Item 9443601541/ })).toBeEnabled();
+    await expectWardrobeSelectionControlsDisabled(page, false);
+  });
+
+  test("failed fresh wardrobe capacity restores selection without starting", async ({ page }) => {
+    await page.emulateMedia({ reducedMotion: "reduce" });
+    await openWardrobeHarness(page, {
+      capacityResponse: [
+        { allowed: true, available: 2 },
+        { allowed: false, available: 0, error: "Exact capacity service error." },
+      ],
+      wardrobeItems: wardrobeItemFixture({ id: "9443601541" }),
+    });
+    await enterWardrobeSelection(page);
+    await page.getByRole("button", { name: /Select Item 9443601541/ }).click();
+    await page.getByRole("button", { name: "Start rewrite" }).click();
+
+    await expect(page.locator(".quickvint-wardrobe-selection-feedback")).toHaveText(
+      "Exact capacity service error.",
+    );
+    await expect(page.locator("#quickvint-toast.error")).toContainText(
+      "Exact capacity service error.",
+    );
+    await expectWardrobeSelectionControlsDisabled(page, false);
+    expect(
+      await page.evaluate(() =>
+        window.__extensionHarness.runtimeMessages.some(
+          (message) => message?.type === "START_WARDROBE_REWRITE",
+        ),
+      ),
+    ).toBe(false);
   });
 
   test("wardrobe selection refreshes capacity before start and cleans up on Exit and pagehide", async ({
@@ -6781,7 +6844,7 @@ test.describe("own wardrobe rewrite widget", () => {
     await expect(page.locator(".quickvint-wardrobe-rewrite-shell")).toHaveCount(0);
   });
 
-  test("does not start from a cancelled wardrobe selection after capacity resolves", async ({
+  test("does not start from a page-hidden wardrobe selection after capacity resolves", async ({
     page,
   }) => {
     await page.emulateMedia({ reducedMotion: "reduce" });
@@ -6795,7 +6858,8 @@ test.describe("own wardrobe rewrite widget", () => {
     await enterWardrobeSelection(page);
     await page.getByRole("button", { name: /Select Item 9443601541/ }).click();
     await page.getByRole("button", { name: "Start rewrite" }).click();
-    await page.getByRole("button", { name: "Exit selection" }).click();
+    await expect(page.getByRole("button", { name: "Exit selection" })).toBeDisabled();
+    await page.evaluate(() => window.dispatchEvent(new PageTransitionEvent("pagehide")));
     await page.waitForTimeout(150);
     expect(
       await page.evaluate(() =>
