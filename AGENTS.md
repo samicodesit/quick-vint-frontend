@@ -23,7 +23,11 @@ For upload/generation incidents, verify the relevant E2E coverage in `tests/e2e/
 
 See `docs/testing-strategy.md` for the frontend test map.
 
-For agent-driven live wardrobe/relisting checks, read `docs/live-wardrobe-rewrite-testing.md`. Hard rules: use the checked-in disposable Chrome-for-Testing runner, never normal Chrome, never automate Vinted CAPTCHA, and never save a listing.
+For any agent-driven live browser check, read `docs/real-browser-testing.md`.
+Use the checked-in named Chrome-for-Testing runner without waiting for the user
+to name a browser method. Never use normal Chrome, automate Vinted CAPTCHA, or
+save a listing. `listing-create` is the real authenticated Vinted/daily-canary
+check; `wardrobe-rewrite` has the documented public/hybrid boundary.
 
 ## Chrome Web Store Releases
 
