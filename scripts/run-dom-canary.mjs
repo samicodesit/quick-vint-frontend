@@ -6,13 +6,16 @@ import { chromium } from "@playwright/test";
 const scriptPath = fileURLToPath(import.meta.url);
 const extensionPath = path.resolve(path.dirname(scriptPath), "..");
 
-const selectors = {
+export const selectors = {
   title: 'input[data-testid="title--input"]',
   description: 'textarea[data-testid="description--input"]',
   fileInput:
     '[data-testid="media-upload"] input[data-testid="add-photos-input"][type="file"], input[data-testid="add-photos-input"][type="file"], input[type="file"][name="photos"]',
   generateButton: "#quickvint-gen-btn",
   signInButton: "#quickvint-signin-btn",
+  phoneButton: "#quickvint-phone-btn",
+  titleLanguage: "#quickvint-title-language-select",
+  descriptionLanguage: "#quickvint-description-language-select",
   tools: ".quickvint-tools",
 };
 
@@ -100,6 +103,11 @@ async function collectDomState(page) {
         document.querySelector(selectors.generateButton),
       );
       const signInButton = Boolean(document.querySelector(selectors.signInButton));
+      const phoneButton = Boolean(document.querySelector(selectors.phoneButton));
+      const titleLanguage = Boolean(document.querySelector(selectors.titleLanguage));
+      const descriptionLanguage = Boolean(
+        document.querySelector(selectors.descriptionLanguage),
+      );
       const tools = Boolean(document.querySelector(selectors.tools));
       return {
         title,
@@ -107,6 +115,9 @@ async function collectDomState(page) {
         fileInput,
         generateButton,
         signInButton,
+        phoneButton,
+        titleLanguage,
+        descriptionLanguage,
         tools,
         href: location.href,
         titleText: document.title,
@@ -188,8 +199,11 @@ export async function runDomCanary(config = getConfig()) {
         const description = Boolean(document.querySelector(selectors.description));
         const fileInput = Boolean(document.querySelector(selectors.fileInput));
         const quickvint = Boolean(
-          document.querySelector(selectors.generateButton) ||
-            document.querySelector(selectors.signInButton) ||
+          document.querySelector(selectors.generateButton) &&
+            document.querySelector(selectors.signInButton) &&
+            document.querySelector(selectors.phoneButton) &&
+            document.querySelector(selectors.titleLanguage) &&
+            document.querySelector(selectors.descriptionLanguage) &&
             document.querySelector(selectors.tools),
         );
         return title && description && fileInput && quickvint

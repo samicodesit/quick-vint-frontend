@@ -26,6 +26,22 @@ test("DOM canary runner builds the heartbeat payload", async () => {
   });
 });
 
+test("DOM canary runner checks every required listing control", async () => {
+  const { selectors } = await import("../scripts/run-dom-canary.mjs");
+
+  assert.deepEqual(Object.keys(selectors), [
+    "title",
+    "description",
+    "fileInput",
+    "generateButton",
+    "signInButton",
+    "phoneButton",
+    "titleLanguage",
+    "descriptionLanguage",
+    "tools",
+  ]);
+});
+
 test("DOM canary runner keeps scheduling config explicit", async () => {
   const { getConfig } = await import("../scripts/run-dom-canary.mjs");
 

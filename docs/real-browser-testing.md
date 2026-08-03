@@ -25,7 +25,7 @@ Europe/Amsterdam. Its generated runner:
 3. copies the configured frontend checkout into its canary extension directory;
 4. opens the real Vinted `/items/new` page headed;
 5. lets the extension verify title, description, photo input, AutoLister tools,
-   Generate, and Sign In controls;
+   Generate, Sign In, Phone, and both language controls;
 6. posts the result to `/api/dom-canary`.
 
 The task's `LastTaskResult = 0` only proves the runner launched. The authoritative
@@ -47,14 +47,17 @@ A current selector/injection pass requires all of these:
 - `status === "passed"`
 - `path === "/items/new"`
 - `result.injected === true`
-- `result.dom.title`, `description`, `fileInput`, `tools`, `generateButton`, and
-  `signInButton` are all `true`
+- `result.dom.title`, `description`, `fileInput`, `tools`, `generateButton`,
+  `signInButton`, `phoneButton`, `titleLanguage`, and `descriptionLanguage` are
+  all `true`
 
 Also report `occurredAt`, `extensionVersion`, URL, and title text. A failed result
 with `reason: "auth_required"` proves neither selector stability nor injection.
 
-Last verified: the 2026-08-02 16:30 CEST daily run passed on the real authenticated
-Vinted create page with extension `1.3.70` and every required DOM field present.
+Last production evidence before this expanded contract: the 2026-08-02 16:30
+CEST daily run passed the original real create-page checks with extension
+`1.3.70`. The next scheduled run is the first authoritative production check
+that can prove the added Phone and language-control flags.
 
 ## Explicit fresh run
 
@@ -69,7 +72,7 @@ task. Do not substitute another browser or profile. Record the start time, wait
 for a newer `/api/dom-canary` row, fetch its `log-detail`, and apply every pass
 criterion above. `LastTaskResult` is not the verdict.
 
-This explicit command covers only the canary's existing real create-page
+This explicit command covers only the canary's real create-page
 selector/injection assertions. It does not authorize unrelated live flows,
 generation credits, CAPTCHA automation, or saving a Vinted listing.
 

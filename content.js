@@ -12181,6 +12181,13 @@
     const fileInput = Boolean(document.querySelector(SELECTORS.fileInput));
     const generateButton = Boolean(document.getElementById(BTN_ID));
     const signInButton = Boolean(document.getElementById(SIGN_IN_BTN_ID));
+    const phoneButton = Boolean(document.getElementById(PHONE_BTN_ID));
+    const titleLanguage = Boolean(
+      document.getElementById(TITLE_LANGUAGE_SELECT_ID),
+    );
+    const descriptionLanguage = Boolean(
+      document.getElementById(DESCRIPTION_LANGUAGE_SELECT_ID),
+    );
     const tools = Boolean(document.querySelector(".quickvint-tools"));
     return {
       check: DOM_CANARY_CHECK,
@@ -12197,6 +12204,9 @@
           fileInput,
           generateButton,
           signInButton,
+          phoneButton,
+          titleLanguage,
+          descriptionLanguage,
           tools,
           titleText: document.title,
         },
@@ -12207,6 +12217,9 @@
         fileInput: SELECTORS.fileInput,
         generateButton: `#${BTN_ID}`,
         signInButton: `#${SIGN_IN_BTN_ID}`,
+        phoneButton: `#${PHONE_BTN_ID}`,
+        titleLanguage: `#${TITLE_LANGUAGE_SELECT_ID}`,
+        descriptionLanguage: `#${DESCRIPTION_LANGUAGE_SELECT_ID}`,
         tools: ".quickvint-tools",
       },
     };
@@ -12231,13 +12244,12 @@
     if (!document.querySelector(SELECTORS.title)) return;
     if (!document.querySelector(SELECTORS.description)) return;
     if (!document.querySelector(SELECTORS.fileInput)) return;
-    if (
-      !document.getElementById(BTN_ID) &&
-      !document.getElementById(SIGN_IN_BTN_ID) &&
-      !document.querySelector(".quickvint-tools")
-    ) {
-      return;
-    }
+    if (!document.getElementById(BTN_ID)) return;
+    if (!document.getElementById(SIGN_IN_BTN_ID)) return;
+    if (!document.getElementById(PHONE_BTN_ID)) return;
+    if (!document.getElementById(TITLE_LANGUAGE_SELECT_ID)) return;
+    if (!document.getElementById(DESCRIPTION_LANGUAGE_SELECT_ID)) return;
+    if (!document.querySelector(".quickvint-tools")) return;
     window.__quickvintDomCanaryPassed = true;
     postDomCanary("passed", { injected: true });
   }
@@ -12455,7 +12467,11 @@
   }
 
   function getDescriptionApplyChoice(descInput) {
-    if (!(descInput.value || "").trim()) {
+    const titleInput = document.querySelector(SELECTORS.title);
+    if (
+      !(titleInput?.value || "").trim() &&
+      !(descInput.value || "").trim()
+    ) {
       return Promise.resolve("replace");
     }
 
@@ -16731,10 +16747,11 @@
     );
   }
 
-  function createWardrobeButton(label, onClick) {
+  function createWardrobeButton(label, onClick, ariaLabel = label) {
     const button = document.createElement("button");
     button.type = "button";
     button.textContent = label;
+    button.setAttribute("aria-label", ariaLabel);
     button.addEventListener("click", onClick);
     return button;
   }
@@ -16839,7 +16856,7 @@
           state.status[fieldName] = "active";
           card.remove();
           attachWardrobeReviewOutput(state, fieldName);
-        }),
+        }, `Undo ${fieldName} suggestion`),
       );
       card.append(applied, actions);
     } else {
@@ -16860,7 +16877,7 @@
           state.status[fieldName] = "done";
           card.remove();
           if (isWardrobeRewriteOutputResolved(state)) finishWardrobeRewriteOutput(state);
-        }),
+        }, `Discard ${fieldName} suggestion`),
       );
       card.append(heading, copy, actions);
     }

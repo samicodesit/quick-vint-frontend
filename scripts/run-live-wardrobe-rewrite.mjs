@@ -322,9 +322,13 @@ try {
 
   await workPage.getByRole("button", { name: "Use this title" }).click();
   diagnostics.checks.review.titleApplied = (await title.inputValue()) !== originals.title;
-  await workPage.getByRole("button", { name: "Undo" }).click();
+  await workPage
+    .getByRole("button", { name: "Undo title suggestion", exact: true })
+    .click();
   diagnostics.checks.review.titleUndone = (await title.inputValue()) === originals.title;
-  await workPage.getByRole("button", { name: "Discard suggestion" }).click();
+  await workPage
+    .getByRole("button", { name: "Discard description suggestion", exact: true })
+    .click();
   diagnostics.checks.review.descriptionRejected =
     (await description.inputValue()) === originals.description;
   diagnostics.checks.review.remainingCards =

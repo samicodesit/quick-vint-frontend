@@ -167,7 +167,8 @@ Validate every item at the message boundary:
 
 For each selected item, sequentially:
 
-1. create one inactive tab at the validated edit URL;
+1. create one active tab at the validated edit URL so the seller follows the
+   same visible tab progression as batch generation;
 2. wait for tab load completion;
 3. poll `WARDROBE_REWRITE_PING` until the content script confirms the expected
    item edit route, at least one listing image, and both title and description

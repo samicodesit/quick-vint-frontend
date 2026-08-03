@@ -272,7 +272,14 @@ async function openContentHarness(page, capacityResponse = null, options = {}) {
   page.on("console", (message) => {
     if (message.type() === "error") consoleErrors.push(message.text());
   });
-  await page.setContent(listingFixture, { waitUntil: "domcontentloaded" });
+  if (options.pageUrl) {
+    await page.route(options.pageUrl, (route) =>
+      route.fulfill({ status: 200, contentType: "text/html", body: listingFixture }),
+    );
+    await page.goto(options.pageUrl, { waitUntil: "domcontentloaded" });
+  } else {
+    await page.setContent(listingFixture, { waitUntil: "domcontentloaded" });
+  }
   if (options.userAgent) {
     await page.evaluate((userAgent) => {
       Object.defineProperty(navigator, "userAgent", {
@@ -316,6 +323,11 @@ async function openContentHarness(page, capacityResponse = null, options = {}) {
     });
   }
   await installChromeHarness(page, capacityResponse, options.initialStorage || {});
+  if (options.domCanaryConfig) {
+    await page.evaluate((config) => {
+      globalThis.QUICKVINT_DOM_CANARY = config;
+    }, options.domCanaryConfig);
+  }
   if (options.shortenOfferTimers) {
     await page.evaluate(() => {
       const originalSetTimeout = window.setTimeout.bind(window);
@@ -814,6 +826,53 @@ async function openImageCompressionHarness(page, proxyResponse) {
 }
 
 test.describe("AutoLister extension smoke flows", () => {
+  test("daily DOM canary reports every required listing control", async ({ page }) => {
+    const payloads = [];
+    await page.route("https://autolister.app/api/dom-canary", async (route) => {
+      payloads.push(route.request().postDataJSON());
+      await route.fulfill({ status: 202, contentType: "application/json", body: "{}" });
+    });
+    await openContentHarness(page, null, {
+      pageUrl: "https://www.vinted.nl/items/new",
+      fieldTitleNodes: true,
+      domCanaryConfig: { enabled: true, secret: "test-secret" },
+    });
+
+    await expect.poll(() => payloads.length).toBe(1);
+    expect(payloads[0]).toMatchObject({
+      status: "passed",
+      path: "/items/new",
+      result: {
+        dom: {
+          title: true,
+          description: true,
+          fileInput: true,
+          generateButton: true,
+          signInButton: true,
+          phoneButton: true,
+          titleLanguage: true,
+          descriptionLanguage: true,
+          tools: true,
+        },
+      },
+    });
+  });
+
+  test("daily DOM canary does not pass with missing language controls", async ({ page }) => {
+    const payloads = [];
+    await page.route("https://autolister.app/api/dom-canary", async (route) => {
+      payloads.push(route.request().postDataJSON());
+      await route.fulfill({ status: 202, contentType: "application/json", body: "{}" });
+    });
+    await openContentHarness(page, null, {
+      pageUrl: "https://www.vinted.nl/items/new",
+      domCanaryConfig: { enabled: true, secret: "test-secret" },
+    });
+
+    await page.waitForTimeout(300);
+    expect(payloads).toHaveLength(0);
+  });
+
   async function setupReadyPhoneUploadWithDelayedThumbnails(
     page,
     requestBodies,
@@ -5519,6 +5578,10 @@ test.describe("AutoLister extension smoke flows", () => {
       { allowed: true, available: 10 },
       { emptyListing: true, shortenPhoneUploadPoll: true },
     );
+    await page.locator('[data-testid="title--input"]').fill("Original phone title");
+    await page
+      .locator('[data-testid="description--input"]')
+      .fill("Original phone description");
 
     await page.evaluate((dataUrl) => {
       const originalSendMessage = window.chrome.runtime.sendMessage;
@@ -5561,6 +5624,7 @@ test.describe("AutoLister extension smoke flows", () => {
     );
 
     await page.locator("#quickvint-phone-modal .generate-btn").click();
+    await page.getByRole("button", { name: "Review suggestions" }).click();
 
     await expect.poll(() => requestBodies.length).toBe(1);
     expect(requestBodies[0].imageUrls).toEqual([
@@ -5578,6 +5642,18 @@ test.describe("AutoLister extension smoke flows", () => {
       (body.events || []).map((event) => event.event),
     );
     expect(eventNames).not.toContain("phone_upload_generate_blocked");
+
+    await expect(page.locator('[data-testid="title--input"]')).toHaveValue(
+      "Original phone title",
+    );
+    await expect(page.locator('[data-testid="description--input"]')).toHaveValue(
+      "Original phone description",
+    );
+    await expect(page.locator(".quickvint-wardrobe-review-card")).toHaveCount(2);
+    await page.getByRole("button", { name: "Discard title suggestion", exact: true }).click();
+    await page
+      .getByRole("button", { name: "Discard description suggestion", exact: true })
+      .click();
 
     await expect(page.locator("#quickvint-phone-modal")).toHaveCount(0);
     await expect(page.locator("#quickvint-gen-btn")).toBeEnabled();
@@ -6841,7 +6917,7 @@ test.describe("AutoLister extension smoke flows", () => {
     await expect(offer).toContainText("LISTFASTER20");
   });
 
-  test("keeps existing fields unchanged until review suggestions are used", async ({ page }) => {
+  test("offers review for a title-only listing and keeps fields unchanged", async ({ page }) => {
     let generationRequests = 0;
     await page.route("https://autolister.app/api/generate", (route) => {
       generationRequests += 1;
@@ -6857,7 +6933,6 @@ test.describe("AutoLister extension smoke flows", () => {
     });
     await openContentHarness(page);
     await page.locator('[data-testid="title--input"]').fill("Original title");
-    await page.locator('[data-testid="description--input"]').fill("Original description");
     await page.locator('[data-testid="title--input"]').evaluate((input) => {
       const descriptor = Object.getOwnPropertyDescriptor(
         HTMLInputElement.prototype,
@@ -6875,6 +6950,23 @@ test.describe("AutoLister extension smoke flows", () => {
         },
       });
     });
+    await page.locator('[data-testid="description--input"]').evaluate((input) => {
+      const descriptor = Object.getOwnPropertyDescriptor(
+        HTMLTextAreaElement.prototype,
+        "value",
+      );
+      window.__directDescriptionSetterCalls = 0;
+      Object.defineProperty(input, "value", {
+        configurable: true,
+        get() {
+          return descriptor.get.call(this);
+        },
+        set(value) {
+          window.__directDescriptionSetterCalls += 1;
+          descriptor.set.call(this, value);
+        },
+      });
+    });
 
     await page.locator("#quickvint-gen-btn").click();
     await expect(page.locator("#quickvint-description-apply-prompt")).toContainText(
@@ -6885,7 +6977,7 @@ test.describe("AutoLister extension smoke flows", () => {
 
     await expect.poll(() => generationRequests).toBe(1);
     await expect(page.locator('[data-testid="title--input"]')).toHaveValue("Original title");
-    await expect(page.locator('[data-testid="description--input"]')).toHaveValue("Original description");
+    await expect(page.locator('[data-testid="description--input"]')).toHaveValue("");
     await expect(page.locator(".quickvint-wardrobe-review-card")).toHaveCount(2);
     await expect(page.locator("#quickvint-wardrobe-review-description p")).toHaveText(
       "First line\nSecond line",
@@ -6899,9 +6991,18 @@ test.describe("AutoLister extension smoke flows", () => {
     await expect(page.locator('[data-testid="title--input"]')).toHaveValue("Suggested title");
     expect(await page.evaluate(() => window.__directTitleSetterCalls)).toBe(0);
     await expect(page.locator("#quickvint-wardrobe-review-title p")).toHaveCount(0);
-    await page.getByRole("button", { name: "Undo" }).click();
+    await page.getByRole("button", { name: "Undo title suggestion", exact: true }).click();
     await expect(page.locator('[data-testid="title--input"]')).toHaveValue("Original title");
     await expect(page.getByRole("button", { name: "Use this title" })).toBeVisible();
+    await page.getByRole("button", { name: "Use this description" }).click();
+    await expect(page.locator('[data-testid="description--input"]')).toHaveValue(
+      "First line\nSecond line",
+    );
+    expect(await page.evaluate(() => window.__directDescriptionSetterCalls)).toBe(0);
+    await page
+      .getByRole("button", { name: "Undo description suggestion", exact: true })
+      .click();
+    await expect(page.locator('[data-testid="description--input"]')).toHaveValue("");
   });
 });
 
@@ -7090,8 +7191,10 @@ test.describe("wardrobe rewrite tab", () => {
     await page.getByRole("button", { name: "Use this title" }).click();
     await expect(page.locator('[data-testid="title--input"]')).toHaveValue("New title");
     await expect(page.locator('[data-testid="description--input"]')).toHaveValue("Original description");
-    await page.getByRole("button", { name: "Discard suggestion" }).click();
-    await page.getByRole("button", { name: "Undo" }).click();
+    await page
+      .getByRole("button", { name: "Discard description suggestion", exact: true })
+      .click();
+    await page.getByRole("button", { name: "Undo title suggestion", exact: true }).click();
     await expect(page.locator('[data-testid="title--input"]')).toHaveValue("Original title");
     await expect(page.locator('[data-testid="description--input"]')).toHaveValue("Original description");
     await expectNoHorizontalOverflow(page);
@@ -7118,7 +7221,9 @@ test.describe("wardrobe rewrite tab", () => {
     await sendContentMessage(page, { type: "RUN_WARDROBE_REWRITE_ITEM", itemId: "42", applyMode: "review", titleLanguageCode: "en", descriptionLanguageCode: "en" });
     await page.getByRole("button", { name: "Use this title" }).click();
     await page.locator('[data-testid="title--input"]').fill("Seller changed generated title");
-    await expect(page.getByRole("button", { name: "Undo" })).toHaveCount(0);
+    await expect(
+      page.getByRole("button", { name: "Undo title suggestion", exact: true }),
+    ).toHaveCount(0);
     await expect(page.locator('[data-testid="title--input"]')).toHaveValue("Seller changed generated title");
     await expect(page.locator("#quickvint-wardrobe-review-title")).toHaveCount(0);
     await expect(page.locator("#quickvint-wardrobe-review-description")).toBeVisible();
