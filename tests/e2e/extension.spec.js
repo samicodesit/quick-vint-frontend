@@ -2176,16 +2176,44 @@ test.describe("AutoLister extension smoke flows", () => {
     ["single", ".quickvint-upload-choice-single", "#quickvint-phone-modal"],
     ["batch", ".quickvint-upload-choice-multiple", "#quickvint-batch-modal"],
   ]) {
-    test(`checks capacity on the first Phone click before ${mode} upload choice`, async ({
+    test(`keeps the chooser visible while starting ${mode} phone upload`, async ({
       page,
     }) => {
       await openContentHarness(page, { allowed: true, available: 10 });
+      await page.evaluate(() => {
+        const originalSendMessage = window.chrome.runtime.sendMessage;
+        window.chrome.runtime.sendMessage = (message, callback) => {
+          if (message?.type === "PROXY_FETCH") {
+            const url = new URL(message.url);
+            if (url.searchParams.get("action") === "open") {
+              window.__releasePhoneOpen = () =>
+                callback?.({ ok: true, status: 201, data: { status: "open" } });
+              return;
+            }
+          }
+          originalSendMessage(message, callback);
+        };
+      });
 
       const modal = await openPhoneChoice(page);
       expect(await getCapacityRequestCount(page)).toBe(1);
 
       await modal.locator(selector).click();
+      await expect(modal).toBeVisible();
+      await expect(modal).toHaveClass(/is-pending/);
+      await expect(
+        modal.locator(".quickvint-upload-choice-pending"),
+      ).toContainText(
+        mode === "batch" ? "Starting batch upload…" : "Starting phone upload…",
+      );
+      await expect(
+        modal.locator(".quickvint-upload-choice-option:disabled"),
+      ).toHaveCount(2);
+      await expect(page.locator(destination)).toHaveCount(0);
+
+      await page.evaluate(() => window.__releasePhoneOpen());
       await expect(page.locator(destination)).toBeVisible();
+      await expect(page.locator("#quickvint-upload-choice-modal")).toHaveCount(0);
       expect(await getCapacityRequestCount(page)).toBe(1);
     });
   }

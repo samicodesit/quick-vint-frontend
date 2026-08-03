@@ -4971,6 +4971,50 @@
         box-shadow: 0 3px 10px rgba(15, 23, 42, 0.08);
       }
 
+      #${UPLOAD_CHOICE_MODAL_ID} .quickvint-upload-choice-option:disabled {
+        cursor: default;
+        opacity: .52;
+        transform: none;
+      }
+
+      #${UPLOAD_CHOICE_MODAL_ID}.is-pending .quickvint-upload-choice-head,
+      #${UPLOAD_CHOICE_MODAL_ID}.is-pending .quickvint-upload-choice-options {
+        display: none;
+      }
+
+      #${UPLOAD_CHOICE_MODAL_ID} .quickvint-upload-choice-pending {
+        display: flex;
+        min-height: 330px;
+        padding: 32px;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        text-align: center;
+      }
+
+      #${UPLOAD_CHOICE_MODAL_ID} .quickvint-upload-choice-pending-spinner {
+        width: 36px;
+        height: 36px;
+        margin-bottom: 18px;
+        border: 3px solid #c7d2fe;
+        border-top-color: #4f46e5;
+        border-radius: 999px;
+        animation: quickvintSpin 760ms linear infinite;
+      }
+
+      #${UPLOAD_CHOICE_MODAL_ID} .quickvint-upload-choice-pending strong {
+        color: #111827;
+        font-size: 20px;
+        font-weight: 820;
+      }
+
+      #${UPLOAD_CHOICE_MODAL_ID} .quickvint-upload-choice-pending span:last-child {
+        margin-top: 7px;
+        color: #64748b;
+        font-size: 13px;
+        font-weight: 620;
+      }
+
       #${UPLOAD_CHOICE_MODAL_ID} .quickvint-upload-choice-art {
         min-width: 0;
         aspect-ratio: 1 / 1;
@@ -5062,6 +5106,17 @@
 
         #${UPLOAD_CHOICE_MODAL_ID} .quickvint-upload-choice-copy {
           justify-items: start;
+        }
+
+        #${UPLOAD_CHOICE_MODAL_ID} .quickvint-upload-choice-pending {
+          min-height: 240px;
+          padding: 24px 16px;
+        }
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        #${UPLOAD_CHOICE_MODAL_ID} .quickvint-upload-choice-pending-spinner {
+          animation-play-state: paused;
         }
       }
 
@@ -10115,6 +10170,32 @@
     modal.remove();
   }
 
+  function setUploadChoicePending(modal, mode) {
+    modal.classList.add("is-pending");
+    modal.querySelectorAll("button").forEach((button) => {
+      button.disabled = true;
+    });
+    const pending = document.createElement("div");
+    pending.className = "quickvint-upload-choice-pending";
+    pending.setAttribute("role", "status");
+    pending.setAttribute("aria-live", "polite");
+    pending.setAttribute("aria-busy", "true");
+    pending.innerHTML = `
+      <span class="quickvint-upload-choice-pending-spinner" aria-hidden="true"></span>
+      <strong>Starting ${mode === "batch" ? "batch" : "phone"} upload…</strong>
+      <span>Preparing your secure upload session.</span>
+    `;
+    modal.querySelector(".quickvint-upload-choice-card")?.appendChild(pending);
+    return () => {
+      if (!modal.isConnected) return;
+      modal.classList.remove("is-pending");
+      pending.remove();
+      modal.querySelectorAll("button").forEach((button) => {
+        button.disabled = false;
+      });
+    };
+  }
+
   async function openUploadChoiceModal() {
     if (!isAuthenticated) {
       showToast("Please sign in via the extension popup first.", "error");
@@ -10187,39 +10268,45 @@
     `;
 
     const handleKeyDown = (event) => {
-      if (event.key === "Escape") closeUploadChoiceModal();
+      if (event.key === "Escape" && !modal.classList.contains("is-pending")) {
+        closeUploadChoiceModal();
+      }
     };
     modal.__quickvintHandleKeyDown = handleKeyDown;
     document.addEventListener("keydown", handleKeyDown);
 
     modal.addEventListener("click", (event) => {
-      if (event.target === modal) closeUploadChoiceModal();
+      if (event.target === modal && !modal.classList.contains("is-pending")) {
+        closeUploadChoiceModal();
+      }
     });
     modal
       .querySelector(".quickvint-upload-choice-close")
       ?.addEventListener("click", closeUploadChoiceModal);
-    modal
-      .querySelector(".quickvint-upload-choice-single")
-      ?.addEventListener("click", async () => {
-        closeUploadChoiceModal();
+    const selectUploadMode = async (mode, start, destinationId) => {
+      const restoreChoice = setUploadChoicePending(modal, mode);
+      try {
         trackGrowthEvent("phone_upload_choice_select", {
-          mode: "single",
+          mode,
           listingHasPhotos: getVisibleUploadedPhotoCount() > 0,
           isEditPage: isListingEditPage(),
         });
-        await onPhoneUploadClick(capacity);
-      });
-    modal
-      .querySelector(".quickvint-upload-choice-multiple")
-      ?.addEventListener("click", async () => {
-        closeUploadChoiceModal();
-        trackGrowthEvent("phone_upload_choice_select", {
-          mode: "batch",
-          listingHasPhotos: getVisibleUploadedPhotoCount() > 0,
-          isEditPage: isListingEditPage(),
-        });
-        await onBatchUploadClick(capacity);
-      });
+        await start(capacity);
+      } finally {
+        if (document.getElementById(destinationId)) closeUploadChoiceModal();
+        else restoreChoice();
+      }
+    };
+    const singleOption = modal.querySelector(".quickvint-upload-choice-single");
+    const multipleOption = modal.querySelector(
+      ".quickvint-upload-choice-multiple",
+    );
+    singleOption?.addEventListener("click", () =>
+      selectUploadMode("single", onPhoneUploadClick, MODAL_ID),
+    );
+    multipleOption?.addEventListener("click", () =>
+      selectUploadMode("batch", onBatchUploadClick, BATCH_MODAL_ID),
+    );
 
     document.body.appendChild(modal);
   }
