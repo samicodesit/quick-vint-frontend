@@ -89,7 +89,8 @@ user's normal Chrome.
 The Windows scheduled task runs the same `listing-create` command against the
 dedicated canary profile. The task waits for the check to finish and returns
 the check's exit code. It no longer launches a browser and immediately reports
-success.
+success. Posting is opt-in for the scheduled task; manual live runs never send
+canary alerts.
 
 The check posts one result to `/api/dom-canary`:
 

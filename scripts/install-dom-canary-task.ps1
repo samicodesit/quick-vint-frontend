@@ -25,6 +25,7 @@ $runner = @"
 `$sharedWrapper = '$($sharedWrapper.Replace("'", "''"))'
 & `$sharedWrapper ``
   -Check listing-create ``
+  -PostResult ``
   -CanaryRoot '$($CanaryRoot.Replace("'", "''"))' ``
   -EnvFile '$($EnvFile.Replace("'", "''"))' ``
   -VintedOrigin '$($vintedOrigin.Replace("'", "''"))'

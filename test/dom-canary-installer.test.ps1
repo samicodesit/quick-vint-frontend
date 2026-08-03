@@ -16,13 +16,15 @@ param(
   [string]$Check,
   [string]$CanaryRoot,
   [string]$EnvFile,
-  [string]$VintedOrigin
+  [string]$VintedOrigin,
+  [switch]$PostResult
 )
 [pscustomobject]@{
   Check = $Check
   CanaryRoot = $CanaryRoot
   EnvFile = $EnvFile
   VintedOrigin = $VintedOrigin
+  PostResult = [bool]$PostResult
 } | ConvertTo-Json -Compress | Set-Content -LiteralPath $env:AUTOLISTER_INSTALLER_CAPTURE -Encoding UTF8
 exit 7
 '@
@@ -43,6 +45,7 @@ exit 7
   if ($capture.Check -ne "listing-create") { throw "wrong daily check" }
   if ($capture.CanaryRoot -ne $canaryRoot) { throw "wrong dedicated root" }
   if ($capture.VintedOrigin -ne "https://www.vinted.nl") { throw "wrong Vinted origin" }
+  if ($capture.PostResult -ne $true) { throw "daily canary must post its result" }
 } finally {
   Remove-Item Env:\AUTOLISTER_INSTALLER_CAPTURE -ErrorAction SilentlyContinue
   if (Test-Path -LiteralPath $tempRoot) {

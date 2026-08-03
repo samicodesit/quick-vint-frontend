@@ -2,6 +2,7 @@ param(
   [Parameter(Mandatory = $true)]
   [string]$Check,
   [switch]$Setup,
+  [switch]$PostResult,
   [switch]$Describe,
   [string]$ChromePath = "",
   [string]$SessionFile = "\\wsl.localhost\Ubuntu\tmp\autolister-live-session.json",
@@ -34,6 +35,7 @@ if ($Describe) {
     profileMode = $profileMode
     profileDir = $profileDir
     headless = -not $Setup
+    postResult = [bool]$PostResult
   } | ConvertTo-Json -Compress
   exit 0
 }
@@ -116,12 +118,15 @@ try {
 
   if ($Setup) {
     $env:DOM_CANARY_HEADED = "1"
-    $env:DOM_CANARY_NO_POST = "1"
     $env:DOM_CANARY_KEEP_OPEN_MS = "600000"
   } else {
     Remove-Item Env:\DOM_CANARY_HEADED -ErrorAction SilentlyContinue
-    Remove-Item Env:\DOM_CANARY_NO_POST -ErrorAction SilentlyContinue
     Remove-Item Env:\DOM_CANARY_KEEP_OPEN_MS -ErrorAction SilentlyContinue
+  }
+  if ($PostResult -and -not $Setup) {
+    Remove-Item Env:\DOM_CANARY_NO_POST -ErrorAction SilentlyContinue
+  } else {
+    $env:DOM_CANARY_NO_POST = "1"
   }
 
   node $dispatcher $Check

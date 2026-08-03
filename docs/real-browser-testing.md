@@ -23,7 +23,8 @@ a generation credit.
 The daily canary and the manual `listing-create` command are the same check.
 They load the current checkout as an unpacked extension, visit the real Vinted
 create-listing page, and verify the title, description, photo input, and
-AutoLister controls.
+AutoLister controls. Manual runs write local evidence but never post alerts;
+only the installed daily task opts into `/api/dom-canary` reporting.
 
 ## Hard rules
 

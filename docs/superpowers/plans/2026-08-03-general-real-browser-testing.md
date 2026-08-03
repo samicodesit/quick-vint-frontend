@@ -20,6 +20,8 @@
 - Default to `npm test`; invoke a live check only on explicit user request or
   when current external Vinted DOM, authentication, or production integration
   is necessary evidence that fixtures cannot provide.
+- Manual live checks never post canary alerts; only the installed daily task
+  opts into result posting.
 
 ---
 
