@@ -4713,90 +4713,65 @@ test.describe("AutoLister extension smoke flows", () => {
     await expect(modal.locator(".batch-gallery")).toHaveCount(0);
   });
 
-  test("expired phone session explains the loss and offers a new upload", async ({
+  test("expired phone sessions explain the loss and offer a new upload", async ({
     page,
   }) => {
-    await openContentHarness(
-      page,
-      { allowed: true, available: 10 },
-      { emptyListing: true, shortenPhoneUploadPoll: true },
-    );
-    await page.evaluate(() => {
-      const originalSendMessage = window.chrome.runtime.sendMessage;
-      window.chrome.runtime.sendMessage = (message, callback) => {
-        if (message?.type === "PROXY_FETCH") {
-          const url = new URL(message.url);
-          if (url.searchParams.get("action") === "open") {
-            setTimeout(() => callback?.({ ok: true, status: 201, data: {} }), 0);
-            return;
+    for (const mode of ["single", "batch"]) {
+      await openContentHarness(
+        page,
+        { allowed: true, available: 10 },
+        { emptyListing: true, shortenPhoneUploadPoll: true },
+      );
+      await page.evaluate(() => {
+        const originalSendMessage = window.chrome.runtime.sendMessage;
+        window.chrome.runtime.sendMessage = (message, callback) => {
+          if (message?.type === "PROXY_FETCH") {
+            const url = new URL(message.url);
+            if (url.searchParams.get("action") === "open") {
+              setTimeout(
+                () => callback?.({ ok: true, status: 201, data: {} }),
+                0,
+              );
+              return;
+            }
+            if (url.pathname.endsWith("/api/phone-upload")) {
+              setTimeout(
+                () =>
+                  callback?.({
+                    ok: false,
+                    status: 410,
+                    data: {
+                      status: "expired",
+                      error: "Upload session expired",
+                    },
+                  }),
+                0,
+              );
+              return;
+            }
           }
-          if (url.pathname.endsWith("/api/phone-upload")) {
-            setTimeout(
-              () =>
-                callback?.({
-                  ok: false,
-                  status: 410,
-                  data: { status: "expired", error: "Upload session expired" },
-                }),
-              0,
-            );
-            return;
-          }
-        }
-        originalSendMessage(message, callback);
-      };
-    });
+          originalSendMessage(message, callback);
+        };
+      });
 
-    await chooseSinglePhoneUpload(page);
-    await expect(page.locator("#quickvint-phone-modal .status")).toContainText(
-      "expired",
-    );
-    await expect(
-      page.locator("#quickvint-phone-modal .phone-upload-restart"),
-    ).toHaveText("Start new upload");
-  });
-
-  test("expired batch phone session explains the loss and offers a new upload", async ({
-    page,
-  }) => {
-    await openContentHarness(
-      page,
-      { allowed: true, available: 10 },
-      { emptyListing: true, shortenPhoneUploadPoll: true },
-    );
-    await page.evaluate(() => {
-      const originalSendMessage = window.chrome.runtime.sendMessage;
-      window.chrome.runtime.sendMessage = (message, callback) => {
-        if (message?.type === "PROXY_FETCH") {
-          const url = new URL(message.url);
-          if (url.searchParams.get("action") === "open") {
-            setTimeout(() => callback?.({ ok: true, status: 201, data: {} }), 0);
-            return;
-          }
-          if (url.pathname.endsWith("/api/phone-upload")) {
-            setTimeout(
-              () =>
-                callback?.({
-                  ok: false,
-                  status: 410,
-                  data: { status: "expired", error: "Upload session expired" },
-                }),
-              0,
-            );
-            return;
-          }
-        }
-        originalSendMessage(message, callback);
-      };
-    });
-
-    await chooseBatchUpload(page);
-    await expect(
-      page.locator("#quickvint-batch-modal .batch-wait-title"),
-    ).toHaveText("Upload expired");
-    await expect(
-      page.locator("#quickvint-batch-modal .batch-upload-restart"),
-    ).toHaveText("Start new upload");
+      if (mode === "single") {
+        await chooseSinglePhoneUpload(page);
+        await expect(
+          page.locator("#quickvint-phone-modal .status"),
+        ).toContainText("expired");
+        await expect(
+          page.locator("#quickvint-phone-modal .phone-upload-restart"),
+        ).toHaveText("Start new upload");
+      } else {
+        await chooseBatchUpload(page);
+        await expect(
+          page.locator("#quickvint-batch-modal .batch-wait-title"),
+        ).toHaveText("Upload expired");
+        await expect(
+          page.locator("#quickvint-batch-modal .batch-upload-restart"),
+        ).toHaveText("Start new upload");
+      }
+    }
   });
 
   test("phone upload network loss keeps the same session and retries", async ({
@@ -6914,10 +6889,13 @@ test.describe("own wardrobe rewrite widget", () => {
     ).toBe(true);
   });
 
-  test("uses the regular expand motion on first display", async ({ page }) => {
+  test("animates the regular expand, collapse, and restore journey", async ({
+    page,
+  }) => {
     await openWardrobeHarness(page);
 
     const widget = page.locator("#quickvint-wardrobe-rewrite-widget");
+    const host = page.locator(".quickvint-wardrobe-rewrite-host");
     await expect(widget).toBeVisible();
     const opening = await widget.boundingBox();
     const openingMotion = await widget.evaluate((element) => {
@@ -6933,13 +6911,8 @@ test.describe("own wardrobe rewrite widget", () => {
     expect(openingMotion.running).toBe(true);
     expect(openingMotion.scale).toBeLessThan(0.6);
     await page.waitForTimeout(500);
-    const expanded = await widget.boundingBox();
-    expect(expanded.width).toBeGreaterThan(opening.width);
-  });
-
-  test("uses a prominent minimize control", async ({ page }) => {
-    await openWardrobeHarness(page);
-    await waitForWardrobeMotionToFinish(page);
+    const before = await widget.boundingBox();
+    expect(before.width).toBeGreaterThan(opening.width);
 
     const minimize = page.getByRole("button", {
       name: "Minimize rewrite listings",
@@ -6948,18 +6921,7 @@ test.describe("own wardrobe rewrite widget", () => {
     expect(box.width).toBeGreaterThanOrEqual(40);
     expect(box.height).toBeGreaterThanOrEqual(40);
     await expect(minimize.locator("svg")).toBeVisible();
-  });
-
-  test("glides through intermediate geometry when collapsed and expanded", async ({
-    page,
-  }) => {
-    await openWardrobeHarness(page);
-    await waitForWardrobeMotionToFinish(page);
-
-    const widget = page.locator("#quickvint-wardrobe-rewrite-widget");
-    const host = page.locator(".quickvint-wardrobe-rewrite-host");
-    const before = await widget.boundingBox();
-    await page.getByRole("button", { name: "Minimize rewrite listings" }).click();
+    await minimize.click();
     await page.waitForTimeout(100);
     const collapsedMidpoint = await widget.boundingBox();
     const collapseMotion = await page.evaluate(() => ({
@@ -7505,9 +7467,7 @@ test.describe("own wardrobe rewrite widget", () => {
       "0 listings available",
     );
     await expect(page.locator(".quickvint-wardrobe-rewrite-cta")).toBeEnabled();
-  });
 
-  test("shows signed-out wardrobe availability copy", async ({ page }) => {
     await openWardrobeHarness(page, { signedIn: false });
     await expect(page.locator(".quickvint-wardrobe-rewrite-capacity")).toHaveText(
       "Sign in to check availability",
@@ -7570,14 +7530,12 @@ test.describe("own wardrobe rewrite widget", () => {
     ).toBe(0);
   });
 
-  for (const viewport of [
-    { name: "wide", width: 1440, sideBySide: true, compactCopy: false },
-    { name: "medium", width: 900, sideBySide: false, compactCopy: false },
-    { name: "narrow", width: 390, sideBySide: false, compactCopy: true },
-  ]) {
-    test(`stays legible on ${viewport.name} profiles with badges`, async ({
-      page,
-    }) => {
+  test("stays legible across profile viewports with badges", async ({ page }) => {
+    for (const viewport of [
+      { width: 1440, sideBySide: true, compactCopy: false },
+      { width: 900, sideBySide: false, compactCopy: false },
+      { width: 390, sideBySide: false, compactCopy: true },
+    ]) {
       await page.setViewportSize({ width: viewport.width, height: 900 });
       await openWardrobeHarness(page, { extraBadges: true });
 
@@ -7614,21 +7572,21 @@ test.describe("own wardrobe rewrite widget", () => {
       );
       if (viewport.compactCopy) await expect(supportingCopy).toBeHidden();
       else await expect(supportingCopy).toBeVisible();
-    });
-  }
+    }
+  });
 
-  for (const scenario of [
-    { name: "another member", currentUserId: "123" },
-    { name: "unreadable user state", currentUserId: null },
-    { name: "signed out", login: true },
-    { name: "followable profile", follow: true },
-  ]) {
-    test(`does not show the rewrite widget for ${scenario.name}`, async ({
-      page,
-    }) => {
+  test("hides the rewrite widget outside an authenticated own profile", async ({
+    page,
+  }) => {
+    for (const scenario of [
+      { currentUserId: "123" },
+      { currentUserId: null },
+      { login: true },
+      { follow: true },
+    ]) {
       await openWardrobeHarness(page, scenario);
 
       await expect(page.locator("#quickvint-wardrobe-rewrite-widget")).toHaveCount(0);
-    });
-  }
+    }
+  });
 });
