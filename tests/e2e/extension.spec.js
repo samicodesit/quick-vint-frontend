@@ -1826,6 +1826,7 @@ test.describe("AutoLister extension smoke flows", () => {
                     },
                   ],
                   count: 1,
+                  expectedCount: 2,
                   complete: false,
                 },
               }),
