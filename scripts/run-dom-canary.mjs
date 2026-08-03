@@ -1,4 +1,4 @@
-import { readFileSync, mkdirSync, writeFileSync } from "node:fs";
+import { readFileSync, mkdirSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { chromium } from "@playwright/test";
@@ -39,9 +39,6 @@ export function getConfig(env = process.env) {
     executablePath: env.DOM_CANARY_BROWSER_EXECUTABLE || "",
     profileDirectory: env.DOM_CANARY_PROFILE_DIRECTORY || "",
     extensionPath: env.DOM_CANARY_EXTENSION_PATH || extensionPath,
-    outputDir:
-      env.AUTOLISTER_LIVE_OUTPUT_DIR ||
-      path.resolve(path.dirname(scriptPath), "../tmp/real-browser/listing-create"),
   };
 }
 
@@ -88,8 +85,9 @@ export function classifyCanaryFailure(currentUrl = "") {
     : { reason: "selector_timeout" };
 }
 
-export function getProcessExitCode(payload) {
-  return payload.status === "passed" ? 0 : 1;
+export function getProcessExitCode(payload, env = process.env) {
+  if (payload.status === "passed") return 0;
+  return env.DOM_CANARY_EXIT_ZERO_ON_REPORTED_FAILURE === "1" ? 0 : 1;
 }
 
 async function collectDomState(page) {
@@ -153,7 +151,6 @@ async function postPayload(config, payload) {
 
 export async function runDomCanary(config = getConfig()) {
   mkdirSync(config.profileDir, { recursive: true });
-  mkdirSync(config.outputDir, { recursive: true });
   const extensionVersion = getExtensionVersion();
   const launchOptions = {
     channel: config.executablePath ? undefined : config.channel,
@@ -226,17 +223,10 @@ export async function runDomCanary(config = getConfig()) {
       },
       selectors,
     });
-    await page
-      .screenshot({ path: path.join(config.outputDir, "failure.png"), fullPage: true })
-      .catch(() => {});
   } finally {
     await context.close();
   }
 
-  writeFileSync(
-    path.join(config.outputDir, "diagnostics.json"),
-    `${JSON.stringify(payload, null, 2)}\n`,
-  );
   if (config.postResult) {
     await postPayload(config, payload);
   }

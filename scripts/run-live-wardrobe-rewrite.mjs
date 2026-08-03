@@ -7,10 +7,7 @@ const scriptDir = path.dirname(fileURLToPath(import.meta.url));
 const extensionPath = String(
   process.env.AUTOLISTER_LIVE_EXTENSION || path.resolve(scriptDir, ".."),
 ).trim();
-const outputDir = path.resolve(
-  process.env.AUTOLISTER_LIVE_OUTPUT_DIR ||
-    path.resolve(scriptDir, "../tmp/real-browser/wardrobe-rewrite"),
-);
+const outputDir = path.resolve(scriptDir, "../tmp/live-wardrobe-rewrite");
 const profileDir = String(
   process.env.DOM_CANARY_PROFILE_DIR || process.env.AUTOLISTER_LIVE_USER_DATA || "",
 ).trim();

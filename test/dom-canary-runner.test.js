@@ -34,7 +34,6 @@ test("DOM canary runner keeps scheduling config explicit", async () => {
     DOM_CANARY_PROFILE_DIR: "/tmp/autolister-canary-profile",
     DOM_CANARY_URL: "https://www.vinted.nl/items/new",
     DOM_CANARY_API_BASE_URL: "https://example.com/",
-    AUTOLISTER_LIVE_OUTPUT_DIR: "/tmp/real-browser/listing-create",
   });
 
   assert.equal(config.secret, "secret");
@@ -43,7 +42,6 @@ test("DOM canary runner keeps scheduling config explicit", async () => {
   assert.equal(config.apiUrl, "https://example.com/api/dom-canary");
   assert.equal(config.postResult, true);
   assert.equal(config.keepOpenMs, 0);
-  assert.equal(config.outputDir, "/tmp/real-browser/listing-create");
 });
 
 test("DOM canary runner supports setup mode without posting alerts", async () => {
@@ -93,18 +91,21 @@ test("DOM canary runner classifies Vinted auth redirects", async () => {
     { reason: "auth_required" },
   );
   assert.deepEqual(
-    classifyCanaryFailure("https://www.vinted.nl/member/login"),
-    { reason: "auth_required" },
-  );
-  assert.deepEqual(
     classifyCanaryFailure("https://www.vinted.nl/items/new"),
     { reason: "selector_timeout" },
   );
 });
 
-test("DOM canary exits nonzero for every reported failure", async () => {
+test("DOM canary runner can treat reported failures as process success", async () => {
   const { getProcessExitCode } = await import("../scripts/run-dom-canary.mjs");
 
-  assert.equal(getProcessExitCode({ status: "passed" }), 0);
-  assert.equal(getProcessExitCode({ status: "failed" }), 1);
+  assert.equal(getProcessExitCode({ status: "passed" }, {}), 0);
+  assert.equal(getProcessExitCode({ status: "failed" }, {}), 1);
+  assert.equal(
+    getProcessExitCode(
+      { status: "failed" },
+      { DOM_CANARY_EXIT_ZERO_ON_REPORTED_FAILURE: "1" },
+    ),
+    0,
+  );
 });

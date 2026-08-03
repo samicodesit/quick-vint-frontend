@@ -37,13 +37,8 @@ Do not rely on unit/static tests alone for upload or generation behavior.
 
 ## Real-Browser Checks
 
-Do not run live checks for ordinary verification. After `npm test`, use the
-smallest named live check only when the user explicitly asks for real/live
-testing or the change requires current external Vinted DOM, authentication, or
-production-integration proof that fixtures cannot provide:
-
-- `npm run test:live -- listing-create` verifies current selectors on the real authenticated Vinted create page using the dedicated canary profile.
-- `npm run test:live -- wardrobe-rewrite` verifies the real public wardrobe DOM and production generation through the documented hybrid boundary; it consumes one generation credit.
-
-Read `docs/real-browser-testing.md` first. All ordinary checks are headless,
-use Chrome for Testing, never control normal Chrome, and never save a listing.
+Live checks are opt-in. For current authenticated Vinted create-page selectors,
+reuse the latest scheduled DOM-canary production `log-detail`; do not launch a
+duplicate browser flow. For the separate public-wardrobe/production-generation
+hybrid, use `npm run test:live:wardrobe` (one credit). Read
+`docs/real-browser-testing.md` first. Never automate CAPTCHA or save a listing.

@@ -4,7 +4,7 @@ Use the shared instructions in [Real-Browser Testing](real-browser-testing.md)
 and run:
 
 ```bash
-npm run test:live -- wardrobe-rewrite
+npm run test:live:wardrobe
 ```
 
 This check consumes one production generation credit. It uses real public
