@@ -37,7 +37,10 @@ Do not rely on unit/static tests alone for upload or generation behavior.
 
 ## Real-Browser Checks
 
-After `npm test`, choose the smallest named live check:
+Do not run live checks for ordinary verification. After `npm test`, use the
+smallest named live check only when the user explicitly asks for real/live
+testing or the change requires current external Vinted DOM, authentication, or
+production-integration proof that fixtures cannot provide:
 
 - `npm run test:live -- listing-create` verifies current selectors on the real authenticated Vinted create page using the dedicated canary profile.
 - `npm run test:live -- wardrobe-rewrite` verifies the real public wardrobe DOM and production generation through the documented hybrid boundary; it consumes one generation credit.

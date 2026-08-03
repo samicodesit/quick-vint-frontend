@@ -23,11 +23,14 @@ For upload/generation incidents, verify the relevant E2E coverage in `tests/e2e/
 
 See `docs/testing-strategy.md` for the frontend test map.
 
-For any agent-driven live browser check, read `docs/real-browser-testing.md`.
-Use the checked-in named Chrome-for-Testing runner without waiting for the user
-to name a browser method. Never use normal Chrome, automate Vinted CAPTCHA, or
-save a listing. `listing-create` is the real authenticated Vinted/daily-canary
-check; `wardrobe-rewrite` has the documented public/hybrid boundary.
+Default to `npm test`; do not invoke live Vinted checks for ordinary testing.
+Use `docs/real-browser-testing.md` only when the user explicitly requests a
+real/live browser check or the task specifically needs current external Vinted
+DOM, authentication, or production-integration proof that fixtures cannot
+provide. Before an agent-triggered live run, state why it is needed. Never use
+normal Chrome, automate Vinted CAPTCHA, or save a listing. `listing-create` is
+the real authenticated Vinted/daily-canary check; `wardrobe-rewrite` has the
+documented public/hybrid boundary and consumes one generation credit.
 
 ## Chrome Web Store Releases
 

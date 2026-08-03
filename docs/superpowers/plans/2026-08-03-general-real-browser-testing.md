@@ -17,6 +17,9 @@
 - Never click a Vinted save, submit, buy, delete, publish, or message control.
 - Keep `/api/dom-canary` payloads backward compatible and keep tokens out of output, screenshots, git, and result payloads.
 - Do not deploy or push during this work.
+- Default to `npm test`; invoke a live check only on explicit user request or
+  when current external Vinted DOM, authentication, or production integration
+  is necessary evidence that fixtures cannot provide.
 
 ---
 

@@ -11,6 +11,9 @@ clear machine-readable evidence.
 
 This replaces duplicated browser bootstrapping. It does not replace the local
 Playwright suite, automate CAPTCHA, or make irreversible changes on Vinted.
+The local suite remains the default. Live checks run only on explicit user
+request or when current external Vinted DOM, authentication, or production
+integration is necessary evidence that fixtures cannot provide.
 
 ## Approach
 

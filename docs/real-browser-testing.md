@@ -4,6 +4,13 @@ This is the canonical runbook for any agent-driven browser check against live
 Vinted. Use the checked-in commands without inventing another Chrome/profile
 flow.
 
+These checks are opt-in. Default to `npm test` for ordinary verification. Run a
+live check only when the user explicitly requests real/live browser testing or
+the work specifically depends on current external Vinted DOM, authentication,
+or production integration that fixtures cannot prove. State that reason before
+starting. A generic request to "test" does not authorize a live check or use of
+a generation credit.
+
 ## Choose the smallest check
 
 | Need | Command | Real Vinted boundary | Browser profile | Cost |
