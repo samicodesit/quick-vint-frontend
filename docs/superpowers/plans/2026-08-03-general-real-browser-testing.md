@@ -119,43 +119,48 @@ git commit -m "Add named real browser check dispatcher"
 **Files:**
 - Create: `scripts/run-real-browser.ps1`
 - Delete: `scripts/run-live-wardrobe-rewrite.ps1`
-- Modify: `test/real-browser-runner.test.js`
+- Create: `test/real-browser-wrapper.test.ps1`
 - Modify: `package.json`
 
 **Interfaces:**
 - Consumes: `-Check listing-create|wardrobe-rewrite`, optional `-Setup`, `-ChromePath`, `-SessionFile`, `-VintedOrigin`, `-CanaryRoot`, and `-EnvFile`.
 - Produces: the environment expected by both existing Node checks and the exact child exit code.
 
-- [ ] **Step 1: Add failing wrapper-contract tests**
+- [ ] **Step 1: Add a failing executable wrapper-contract test**
 
-Append a test that reads `scripts/run-real-browser.ps1` and asserts all of the
-following exact contracts:
+Create a PowerShell test that invokes the wrapper's no-browser `-Describe`
+mode and checks its returned JSON:
 
-```js
-test("Windows wrapper isolates Chrome and selects profile mode", () => {
-  const source = readFileSync(
-    path.resolve(__dirname, "../scripts/run-real-browser.ps1"),
-    "utf8",
-  );
-  assert.match(source, /ValidateSet\("listing-create", "wardrobe-rewrite"\)/);
-  assert.match(source, /AutoListerDomCanary/);
-  assert.match(source, /ChromeUserData/);
-  assert.match(source, /AutoListerRealBrowser-/);
-  assert.match(source, /run-real-browser\.mjs/);
-  assert.match(source, /exit \$exitCode/);
-  assert.doesNotMatch(source, /Google\\Chrome\\User Data/);
-  assert.doesNotMatch(source, /Stop-Process/);
-});
+```powershell
+$listing = & $wrapper -Check listing-create -Describe | ConvertFrom-Json
+if ($listing.profileMode -ne "canary") { throw "listing-create profile mode" }
+if (-not $listing.headless) { throw "listing-create should be headless" }
+if ($listing.profileDir -notlike "*AutoListerDomCanary*ChromeUserData") {
+  throw "listing-create must use the dedicated profile"
+}
+if ($listing.profileDir -like "*Google*Chrome*User Data*") {
+  throw "normal Chrome profile selected"
+}
+
+$wardrobe = & $wrapper -Check wardrobe-rewrite -Describe | ConvertFrom-Json
+if ($wardrobe.profileMode -ne "disposable") { throw "wardrobe profile mode" }
+
+$setupRejected = $false
+try { & $wrapper -Check wardrobe-rewrite -Setup -Describe } catch {
+  $setupRejected = $true
+}
+if (-not $setupRejected) { throw "wardrobe setup must be rejected" }
 ```
-
-Add `node:fs` and `node:path` imports at the top of the CommonJS test file.
 
 - [ ] **Step 2: Run the focused test and confirm the missing-file failure**
 
-Run: `node --test test/real-browser-runner.test.js`
+Run:
 
-Expected: the existing dispatcher tests pass and the wrapper test fails with
-`ENOENT`.
+```bash
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$(wslpath -w test/real-browser-wrapper.test.ps1)"
+```
+
+Expected: FAIL because `scripts/run-real-browser.ps1` does not exist.
 
 - [ ] **Step 3: Implement `scripts/run-real-browser.ps1`**
 
@@ -168,6 +173,7 @@ param(
   [ValidateSet("listing-create", "wardrobe-rewrite")]
   [string]$Check,
   [switch]$Setup,
+  [switch]$Describe,
   [string]$ChromePath = "",
   [string]$SessionFile = "\\wsl.localhost\Ubuntu\tmp\autolister-live-session.json",
   [string]$VintedOrigin = "https://www.vinted.nl",
@@ -187,6 +193,9 @@ param(
 - Use `$CanaryRoot\ChromeUserData` for `listing-create` and the temporary
   root's `ChromeUserData` for `wardrobe-rewrite`.
 - Reject `-Setup` with `wardrobe-rewrite`.
+- For `-Describe`, emit JSON containing `check`, `profileMode`, `profileDir`,
+  and `headless`, then exit before loading secrets, copying files, installing
+  Chrome, or launching Node.
 - Require `$SessionFile` only for `wardrobe-rewrite`.
 - Set `DOM_CANARY_PROFILE_DIR`, `DOM_CANARY_EXTENSION_PATH`,
   `DOM_CANARY_BROWSER_EXECUTABLE`, `DOM_CANARY_URL` to
@@ -225,6 +234,7 @@ Run:
 ```bash
 node --test test/real-browser-runner.test.js
 node -e 'JSON.parse(require("node:fs").readFileSync("package.json", "utf8"))'
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$(wslpath -w test/real-browser-wrapper.test.ps1)"
 ```
 
 Expected: all focused tests pass and the JSON command exits 0.
@@ -232,7 +242,7 @@ Expected: all focused tests pass and the JSON command exits 0.
 - [ ] **Step 6: Commit the shared wrapper**
 
 ```bash
-git add package.json scripts/run-real-browser.ps1 scripts/run-live-wardrobe-rewrite.ps1 test/real-browser-runner.test.js
+git add package.json scripts/run-real-browser.ps1 scripts/run-live-wardrobe-rewrite.ps1 test/real-browser-wrapper.test.ps1 docs/superpowers/plans/2026-08-03-general-real-browser-testing.md
 git commit -m "Unify real browser test bootstrap"
 ```
 
