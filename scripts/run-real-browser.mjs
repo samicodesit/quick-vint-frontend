@@ -29,6 +29,10 @@ export function resolveRealBrowserCheck(name) {
   return check;
 }
 
+export function describeRealBrowserCheck(name) {
+  return JSON.stringify(resolveRealBrowserCheck(name));
+}
+
 export function runRealBrowser(name, { spawn = spawnSync, env = process.env } = {}) {
   const check = resolveRealBrowserCheck(name);
   const result = spawn(process.execPath, [path.join(scriptDir, check.script)], {
@@ -41,7 +45,11 @@ export function runRealBrowser(name, { spawn = spawnSync, env = process.env } = 
 
 if (process.argv[1] && path.resolve(process.argv[1]) === scriptPath) {
   try {
-    process.exitCode = runRealBrowser(process.argv[2]);
+    if (process.argv[3] === "--describe") {
+      console.log(describeRealBrowserCheck(process.argv[2]));
+    } else {
+      process.exitCode = runRealBrowser(process.argv[2]);
+    }
   } catch (error) {
     console.error(error?.message || error);
     process.exitCode = 1;

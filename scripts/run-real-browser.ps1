@@ -1,6 +1,5 @@
 param(
   [Parameter(Mandatory = $true)]
-  [ValidateSet("listing-create", "wardrobe-rewrite")]
   [string]$Check,
   [switch]$Setup,
   [switch]$Describe,
@@ -13,7 +12,11 @@ param(
 
 $ErrorActionPreference = "Stop"
 $repoPath = Split-Path $PSScriptRoot -Parent
-$profileMode = if ($Check -eq "listing-create") { "canary" } else { "disposable" }
+$dispatcher = Join-Path $PSScriptRoot "run-real-browser.mjs"
+$definitionJson = node $dispatcher $Check --describe
+if ($LASTEXITCODE -ne 0) { throw "Unknown real-browser check: $Check" }
+$definition = $definitionJson | ConvertFrom-Json
+$profileMode = $definition.profileMode
 $tempRoot = Join-Path $env:TEMP ("AutoListerRealBrowser-" + [guid]::NewGuid().ToString("N"))
 $profileDir = if ($profileMode -eq "canary") {
   Join-Path $CanaryRoot "ChromeUserData"
@@ -21,7 +24,7 @@ $profileDir = if ($profileMode -eq "canary") {
   Join-Path $tempRoot "ChromeUserData"
 }
 
-if ($Setup -and $Check -ne "listing-create") {
+if ($Setup -and $profileMode -ne "canary") {
   throw "Setup is only available for the listing-create canary profile."
 }
 
@@ -91,7 +94,7 @@ $extensionDir = Join-Path $tempRoot "Extension"
 $exitCode = 1
 
 try {
-  if ($Check -eq "wardrobe-rewrite" -and -not (Test-Path -LiteralPath $SessionFile)) {
+  if ($definition.requiresSession -and -not (Test-Path -LiteralPath $SessionFile)) {
     throw "Live test session not found: $SessionFile"
   }
 
@@ -121,7 +124,7 @@ try {
     Remove-Item Env:\DOM_CANARY_KEEP_OPEN_MS -ErrorAction SilentlyContinue
   }
 
-  node (Join-Path $PSScriptRoot "run-real-browser.mjs") $Check
+  node $dispatcher $Check
   $exitCode = $LASTEXITCODE
 } finally {
   if (Test-Path -LiteralPath $tempRoot) {

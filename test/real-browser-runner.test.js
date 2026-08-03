@@ -37,3 +37,16 @@ test("returns the selected child check exit code", async () => {
 
   assert.equal(runRealBrowser("listing-create", { spawn }), 7);
 });
+
+test("describes a check for the shared Windows wrapper", async () => {
+  const { describeRealBrowserCheck } = await import(
+    "../scripts/run-real-browser.mjs"
+  );
+
+  assert.deepEqual(JSON.parse(describeRealBrowserCheck("listing-create")), {
+    name: "listing-create",
+    script: "run-dom-canary.mjs",
+    profileMode: "canary",
+    requiresSession: false,
+  });
+});
