@@ -345,41 +345,37 @@ git commit -m "Record real browser test diagnostics"
 
 **Files:**
 - Modify: `scripts/install-dom-canary-task.ps1`
-- Create: `test/dom-canary-installer.test.js`
+- Create: `test/dom-canary-installer.test.ps1`
 
 **Interfaces:**
 - Consumes: the checked-in `scripts/run-real-browser.ps1`, dedicated canary root, repository path, environment file, and Vinted URL.
 - Produces: a scheduled task whose action waits for `listing-create` and returns its exact exit code.
 
-- [ ] **Step 1: Write the failing installer contract test**
+- [ ] **Step 1: Write a failing executable installer contract test**
 
-```js
-const assert = require("node:assert/strict");
-const { readFileSync } = require("node:fs");
-const path = require("node:path");
-const test = require("node:test");
+Create a temporary fake repository whose `scripts/run-real-browser.ps1`
+captures its arguments and exits 7. Run the installer with `-NoRegister`, then
+execute the generated runner and assert:
 
-test("daily canary invokes the shared check and never personal Chrome", () => {
-  const source = readFileSync(
-    path.resolve(__dirname, "../scripts/install-dom-canary-task.ps1"),
-    "utf8",
-  );
-  assert.match(source, /run-real-browser\.ps1/);
-  assert.match(source, /-Check listing-create/);
-  assert.match(source, /exit `\$LASTEXITCODE/);
-  assert.doesNotMatch(source, /Google\\Chrome\\User Data/);
-  assert.doesNotMatch(source, /Stop-Process/);
-  assert.doesNotMatch(source, /Start-Process -FilePath `\$chromePath/);
-  assert.doesNotMatch(source, /SeedProfile/);
-});
+```powershell
+if ($LASTEXITCODE -ne 7) { throw "scheduled runner hid child failure" }
+$capture = Get-Content -Raw $capturePath | ConvertFrom-Json
+if ($capture.Check -ne "listing-create") { throw "wrong daily check" }
+if ($capture.CanaryRoot -ne $canaryRoot) { throw "wrong dedicated root" }
 ```
+
+Always remove the temporary root in `finally`.
 
 - [ ] **Step 2: Run the installer test and confirm the legacy behavior fails it**
 
-Run: `node --test test/dom-canary-installer.test.js`
+Run:
 
-Expected: FAIL because the installer still includes the personal Chrome
-profile, process termination, and immediate browser launch.
+```bash
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$(wslpath -w test/dom-canary-installer.test.ps1)"
+```
+
+Expected: FAIL because the legacy installer does not accept `-NoRegister` and
+does not generate the shared-wrapper runner.
 
 - [ ] **Step 3: Simplify the installer-generated runner**
 
@@ -402,15 +398,18 @@ exit `$LASTEXITCODE
 
 The scheduled task action continues to invoke that generated runner. Keep the
 24-hour default interval, wake/start-when-available settings, and 20-minute
-execution limit. Print the dedicated setup command after installation; do not
-run headed setup automatically.
+execution limit. Add `-NoRegister` to write the runner and skip only
+`Register-ScheduledTask`; this makes the real runner executable in isolation.
+Print the dedicated setup command after installation; do not run headed setup
+automatically.
 
 - [ ] **Step 4: Run focused installer and canary tests**
 
 Run:
 
 ```bash
-node --test test/dom-canary-installer.test.js test/dom-canary-runner.test.js test/real-browser-runner.test.js
+node --test test/dom-canary-runner.test.js test/real-browser-runner.test.js
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$(wslpath -w test/dom-canary-installer.test.ps1)"
 ```
 
 Expected: all focused tests pass.
@@ -418,7 +417,7 @@ Expected: all focused tests pass.
 - [ ] **Step 5: Commit the scheduled-task migration**
 
 ```bash
-git add scripts/install-dom-canary-task.ps1 test/dom-canary-installer.test.js
+git add scripts/install-dom-canary-task.ps1 test/dom-canary-installer.test.ps1 docs/superpowers/plans/2026-08-03-general-real-browser-testing.md
 git commit -m "Run daily canary through headless test harness"
 ```
 
@@ -511,7 +510,8 @@ git commit -m "Document reusable real browser testing"
 Run:
 
 ```bash
-node --test test/dom-canary-installer.test.js test/dom-canary-runner.test.js test/real-browser-runner.test.js test/live-test-session.test.js
+node --test test/dom-canary-runner.test.js test/real-browser-runner.test.js test/live-test-session.test.js
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$(wslpath -w test/dom-canary-installer.test.ps1)"
 npm test
 npm run build:prod
 ```
@@ -558,7 +558,7 @@ deployment or push commit exists.
 Stage only the files repaired because of failed verification and commit them:
 
 ```bash
-git add package.json AGENTS.md docs/real-browser-testing.md docs/live-wardrobe-rewrite-testing.md docs/testing-strategy.md scripts/run-real-browser.mjs scripts/run-real-browser.ps1 scripts/run-live-wardrobe-rewrite.ps1 scripts/run-live-wardrobe-rewrite.mjs scripts/run-dom-canary.mjs scripts/install-dom-canary-task.ps1 test/real-browser-runner.test.js test/dom-canary-runner.test.js test/dom-canary-installer.test.js
+git add package.json AGENTS.md docs/real-browser-testing.md docs/live-wardrobe-rewrite-testing.md docs/testing-strategy.md scripts/run-real-browser.mjs scripts/run-real-browser.ps1 scripts/run-live-wardrobe-rewrite.ps1 scripts/run-live-wardrobe-rewrite.mjs scripts/run-dom-canary.mjs scripts/install-dom-canary-task.ps1 test/real-browser-runner.test.js test/real-browser-wrapper.test.ps1 test/dom-canary-runner.test.js test/dom-canary-installer.test.ps1
 git commit -m "Fix real browser verification regressions"
 ```
 
