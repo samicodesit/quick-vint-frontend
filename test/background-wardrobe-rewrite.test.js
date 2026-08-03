@@ -182,13 +182,13 @@ async function runBackground(options = {}) {
   };
 }
 
-test("wardrobe rewrite validates its request and opens an inactive edit tab", async () => {
+test("wardrobe rewrite validates its request and opens an active edit tab", async () => {
   const harness = await runBackground({ holdRuns: true });
   const response = await harness.sendRuntimeMessage(rewriteMessage());
 
   assert.equal(response.ok, true);
   assert.deepEqual(harness.createdTabs.map(({ url, active }) => ({ url, active })), [
-    { url: "https://www.vinted.nl/items/42/edit", active: false },
+    { url: "https://www.vinted.nl/items/42/edit", active: true },
   ]);
   assert.equal(harness.duplicatedTabs.length, 0);
   assert.equal(harness.sentToWorkTab.some(({ message }) => message.type === "RUN_BATCH_ITEM"), false);

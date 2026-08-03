@@ -320,11 +320,11 @@ try {
   };
   await screenshot(workPage, "05-review-suggestions");
 
-  await workPage.getByRole("button", { name: "Apply generated title" }).click();
+  await workPage.getByRole("button", { name: "Use this title" }).click();
   diagnostics.checks.review.titleApplied = (await title.inputValue()) !== originals.title;
-  await workPage.getByRole("button", { name: "Undo generated title" }).click();
+  await workPage.getByRole("button", { name: "Undo" }).click();
   diagnostics.checks.review.titleUndone = (await title.inputValue()) === originals.title;
-  await workPage.getByRole("button", { name: "Reject generated description" }).click();
+  await workPage.getByRole("button", { name: "Discard suggestion" }).click();
   diagnostics.checks.review.descriptionRejected =
     (await description.inputValue()) === originals.description;
   diagnostics.checks.review.remainingCards =

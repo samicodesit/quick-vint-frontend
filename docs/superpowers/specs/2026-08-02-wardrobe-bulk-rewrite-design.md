@@ -213,11 +213,11 @@ generation in that tab.
 
 Do not change either field during generation. Insert two independent prefixed
 suggestion cards, one adjacent to the title field and one adjacent to the
-description field. Each card shows the generated text and has accessible Apply
-and Reject buttons.
+description field. Each card shows the suggested text and has accessible Use
+and Discard buttons.
 
-- Apply sets only that field and changes its card to an Undo state.
-- Reject removes only that suggestion and leaves the field untouched.
+- Use sets only that field and changes its card to a compact Undo state.
+- Discard removes only that suggestion and leaves the field untouched.
 - Undo restores that field's captured original value and leaves the other field
   unchanged.
 
@@ -252,8 +252,8 @@ capacity responses. Cover:
 - crisp enabled CTA, focus treatment, and unchanged widget dimensions;
 - preference validation, Back, Continue, and selection instruction;
 - active/Hidden eligibility, Sold exclusion, malformed-card rejection, dynamic
-  infinite-scroll decoration, maximum selection, keyboard selection, attention
-  pulse, reduced motion, and cleanup;
+  infinite-scroll decoration, maximum selection, keyboard selection, scroll
+  reveal, reduced motion, and cleanup;
 - scroll offset, sticky toolbar, language initialization/persistence, Start and
   Cancel, responsive layout, and no horizontal overflow;
 - fresh capacity enforcement and exact start-message payload;
@@ -261,7 +261,7 @@ capacity responses. Cover:
 - sequential validated edit tabs, readiness polling, progress, and stop-on-error;
 - replace mode field updates and independent Undo;
 - review mode untouched fields, simultaneous suggestion cards, independent
-  Apply/Reject, and Undo; and
+  Use/Discard, and Undo; and
 - unchanged existing manual generation and photo batch behavior.
 
 Run focused wardrobe tests after each slice, then `npm test`,

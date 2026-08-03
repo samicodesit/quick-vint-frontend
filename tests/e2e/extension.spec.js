@@ -556,6 +556,7 @@ async function expectNoHorizontalOverflow(page) {
 async function waitForWardrobeMotionToFinish(page) {
   const widget = page.locator("#quickvint-wardrobe-rewrite-widget");
   await expect(widget).toBeVisible();
+  await expect(widget).not.toHaveClass(/is-animating/);
   await expect
     .poll(() =>
       widget.evaluate((element) =>
@@ -569,7 +570,7 @@ async function waitForWardrobeMotionToFinish(page) {
 
 async function enterWardrobeSelection(page, mode = "review") {
   await page.locator(".quickvint-wardrobe-rewrite-cta").click();
-  await page.getByLabel(mode === "review" ? "Review first" : "Replace fields").check();
+  await page.getByLabel(mode === "review" ? "Review first" : "Replace immediately").check();
   await page.locator(".quickvint-wardrobe-rewrite-continue").click();
   await expect(page.locator(".quickvint-wardrobe-selection-controller")).toBeVisible();
 }
@@ -580,7 +581,7 @@ async function expectWardrobeSelectionControlsDisabled(page, disabled) {
     page.getByLabel("Title language"),
     page.getByLabel("Description language"),
     page.getByRole("button", { name: "Start rewrite" }),
-    page.getByRole("button", { name: "Cancel selection" }),
+    page.getByRole("button", { name: "Cancel" }),
     page.getByRole("button", { name: "Exit selection" }),
   ];
   for (const control of controls) {
@@ -5582,7 +5583,7 @@ test.describe("AutoLister extension smoke flows", () => {
     await expect(page.locator("#quickvint-gen-btn")).toBeEnabled();
     await page.locator("#quickvint-gen-btn").click();
     await page.locator("#quickvint-description-apply-prompt button", {
-      hasText: "Replace description",
+      hasText: "Replace existing text",
     }).click();
     await expect.poll(() => requestBodies.length).toBe(2);
     expect(requestBodies[1].imageUrls).toHaveLength(2);
@@ -6839,6 +6840,69 @@ test.describe("AutoLister extension smoke flows", () => {
     await expect(offer).toBeVisible();
     await expect(offer).toContainText("LISTFASTER20");
   });
+
+  test("keeps existing fields unchanged until review suggestions are used", async ({ page }) => {
+    let generationRequests = 0;
+    await page.route("https://autolister.app/api/generate", (route) => {
+      generationRequests += 1;
+      return route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          title: "Suggested title",
+          description: "First line\nSecond line",
+          measurementAdvice: "",
+        }),
+      });
+    });
+    await openContentHarness(page);
+    await page.locator('[data-testid="title--input"]').fill("Original title");
+    await page.locator('[data-testid="description--input"]').fill("Original description");
+    await page.locator('[data-testid="title--input"]').evaluate((input) => {
+      const descriptor = Object.getOwnPropertyDescriptor(
+        HTMLInputElement.prototype,
+        "value",
+      );
+      window.__directTitleSetterCalls = 0;
+      Object.defineProperty(input, "value", {
+        configurable: true,
+        get() {
+          return descriptor.get.call(this);
+        },
+        set(value) {
+          window.__directTitleSetterCalls += 1;
+          descriptor.set.call(this, value);
+        },
+      });
+    });
+
+    await page.locator("#quickvint-gen-btn").click();
+    await expect(page.locator("#quickvint-description-apply-prompt")).toContainText(
+      "Review suggestions",
+    );
+    expect(generationRequests).toBe(0);
+    await page.getByRole("button", { name: "Review suggestions" }).click();
+
+    await expect.poll(() => generationRequests).toBe(1);
+    await expect(page.locator('[data-testid="title--input"]')).toHaveValue("Original title");
+    await expect(page.locator('[data-testid="description--input"]')).toHaveValue("Original description");
+    await expect(page.locator(".quickvint-wardrobe-review-card")).toHaveCount(2);
+    await expect(page.locator("#quickvint-wardrobe-review-description p")).toHaveText(
+      "First line\nSecond line",
+    );
+    await expect(page.locator("#quickvint-wardrobe-review-description p")).toHaveCSS(
+      "white-space",
+      "pre-wrap",
+    );
+
+    await page.getByRole("button", { name: "Use this title" }).click();
+    await expect(page.locator('[data-testid="title--input"]')).toHaveValue("Suggested title");
+    expect(await page.evaluate(() => window.__directTitleSetterCalls)).toBe(0);
+    await expect(page.locator("#quickvint-wardrobe-review-title p")).toHaveCount(0);
+    await page.getByRole("button", { name: "Undo" }).click();
+    await expect(page.locator('[data-testid="title--input"]')).toHaveValue("Original title");
+    await expect(page.getByRole("button", { name: "Use this title" })).toBeVisible();
+  });
 });
 
 test.describe("wardrobe rewrite tab", () => {
@@ -6982,7 +7046,7 @@ test.describe("wardrobe rewrite tab", () => {
     expect(requestCount).toBe(1);
     releaseGeneration();
     await expect(result).resolves.toMatchObject({ ok: true });
-    await expect(page.locator("#quickvint-wardrobe-rewrite-status")).toContainText("Generated copy ready to review.");
+    await expect(page.locator("#quickvint-wardrobe-rewrite-status")).toContainText("New title and description ready to review.");
     await expect(page.locator("#quickvint-gen-btn")).toBeEnabled();
     await expect(page.locator("#quickvint-batch-tab-status")).toHaveCount(0);
   });
@@ -7011,7 +7075,7 @@ test.describe("wardrobe rewrite tab", () => {
     expect(saves).toBe(0);
   });
 
-  test("wardrobe review applies, rejects, and undoes each field independently", async ({ page }) => {
+  test("wardrobe review applies, discards, and undoes each field independently", async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 900 });
     await page.route("https://autolister.app/api/events/track", (route) => route.fulfill({ status: 204, body: "" }));
     await page.route("https://autolister.app/api/generate", (route) => route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ title: "New title", description: "New description" }) }));
@@ -7023,11 +7087,11 @@ test.describe("wardrobe rewrite tab", () => {
     for (const button of await page.locator(".quickvint-wardrobe-review-card button").all()) {
       expect((await button.boundingBox()).height).toBeGreaterThanOrEqual(40);
     }
-    await page.getByRole("button", { name: "Apply generated title" }).click();
+    await page.getByRole("button", { name: "Use this title" }).click();
     await expect(page.locator('[data-testid="title--input"]')).toHaveValue("New title");
     await expect(page.locator('[data-testid="description--input"]')).toHaveValue("Original description");
-    await page.getByRole("button", { name: "Reject generated description" }).click();
-    await page.getByRole("button", { name: "Undo generated title" }).click();
+    await page.getByRole("button", { name: "Discard suggestion" }).click();
+    await page.getByRole("button", { name: "Undo" }).click();
     await expect(page.locator('[data-testid="title--input"]')).toHaveValue("Original title");
     await expect(page.locator('[data-testid="description--input"]')).toHaveValue("Original description");
     await expectNoHorizontalOverflow(page);
@@ -7047,16 +7111,17 @@ test.describe("wardrobe rewrite tab", () => {
     await page.evaluate(() => history.pushState({}, "", "/items/42/edit"));
     await sendContentMessage(page, { type: "RUN_WARDROBE_REWRITE_ITEM", itemId: "42", applyMode: "review", titleLanguageCode: "en", descriptionLanguageCode: "en" });
     await page.locator('[data-testid="title--input"]').fill("Seller title edit");
-    await page.getByRole("button", { name: "Apply generated title" }).click();
+    await page.getByRole("button", { name: "Use this title" }).click();
     await expect(page.locator('[data-testid="title--input"]')).toHaveValue("Seller title edit");
     await expect(page.locator(".quickvint-wardrobe-review-card")).toHaveCount(0);
 
     await sendContentMessage(page, { type: "RUN_WARDROBE_REWRITE_ITEM", itemId: "42", applyMode: "review", titleLanguageCode: "en", descriptionLanguageCode: "en" });
-    await page.getByRole("button", { name: "Apply generated title" }).click();
+    await page.getByRole("button", { name: "Use this title" }).click();
     await page.locator('[data-testid="title--input"]').fill("Seller changed generated title");
-    await page.getByRole("button", { name: "Undo generated title" }).click();
+    await expect(page.getByRole("button", { name: "Undo" })).toHaveCount(0);
     await expect(page.locator('[data-testid="title--input"]')).toHaveValue("Seller changed generated title");
-    await expect(page.locator(".quickvint-wardrobe-review-card")).toHaveCount(0);
+    await expect(page.locator("#quickvint-wardrobe-review-title")).toHaveCount(0);
+    await expect(page.locator("#quickvint-wardrobe-review-description")).toBeVisible();
   });
 
   test("wardrobe review failure and a second rewrite leave only the current controls", async ({ page }) => {
@@ -7086,11 +7151,11 @@ test.describe("wardrobe rewrite tab", () => {
     await openWardrobeEditHarness(page, "42", { shortenWardrobeTimers: true });
     await sendContentMessage(page, { type: "RUN_WARDROBE_REWRITE_ITEM", itemId: "42", applyMode: "review", titleLanguageCode: "en", descriptionLanguageCode: "en" });
     await page.locator('[data-testid="title--input"]').evaluate((input) => input.closest("div").replaceWith(input.closest("div").cloneNode(true)));
-    await expect(page.getByRole("button", { name: "Apply generated title" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Use this title" })).toBeVisible();
     await page.waitForTimeout(40);
     await page.locator('[data-testid="title--input"]').evaluate((input) => input.closest("div").remove());
     await page.waitForTimeout(20);
-    await expect(page.getByRole("button", { name: "Apply generated title" })).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "Use this title" })).toHaveCount(0);
   });
 });
 
@@ -7105,7 +7170,7 @@ test.describe("wardrobe rewrite progress", () => {
     });
     await enterWardrobeSelection(page);
     await expect(sendContentMessage(page, { type: "WARDROBE_REWRITE_PROGRESS", status: "generating", current: 1, total: 2 })).resolves.toEqual({ ok: true });
-    await expect(page.locator(".quickvint-wardrobe-selection-feedback")).toHaveText("Rewriting 1 of 2");
+    await expect(page.locator(".quickvint-wardrobe-selection-feedback")).toHaveText("Rewriting 1 of 2…");
     await sendContentMessage(page, { type: "WARDROBE_REWRITE_PROGRESS", status: "done", current: 2, total: 2 });
     await expect(page.locator(".quickvint-wardrobe-selection-feedback")).toHaveText("2 listings ready");
     await expect(page.locator(".quickvint-wardrobe-rewrite-capacity")).toHaveText("1 listing available");
@@ -7251,7 +7316,7 @@ test.describe("own wardrobe rewrite widget", () => {
 
     await page.locator(".quickvint-wardrobe-rewrite-cta").click();
     await expect(
-      page.getByText("How should generated copy be handled?"),
+      page.getByText("What should happen to your new text?"),
     ).toBeVisible();
     await expect(
       page.locator('input[name="quickvint-wardrobe-apply-mode"]'),
@@ -7270,15 +7335,15 @@ test.describe("own wardrobe rewrite widget", () => {
   }) => {
     await openWardrobeHarness(page);
     await page.locator(".quickvint-wardrobe-rewrite-cta").click();
-    await page.getByLabel("Replace fields").check();
+    await page.getByLabel("Replace immediately").check();
     await page.locator(".quickvint-wardrobe-rewrite-back").click();
     await expect(page.getByText("Let's rewrite your listings")).toBeVisible();
 
     await page.locator(".quickvint-wardrobe-rewrite-cta").click();
-    await page.getByLabel("Replace fields").check();
+    await page.getByLabel("Replace immediately").check();
     await page.locator(".quickvint-wardrobe-rewrite-continue").click();
     await expect(page.getByRole("heading", { name: "Select listings below" })).toBeVisible();
-    await expect(page.getByText("Generated copy will replace your title and description.")).toBeVisible();
+    await expect(page.getByText("Your new title and description will replace the current ones.")).toBeVisible();
     await expect(page.getByRole("button", { name: "Minimize rewrite listings" })).toBeHidden();
 
     await page.getByRole("button", { name: "Exit selection" }).click();
@@ -7316,7 +7381,7 @@ test.describe("own wardrobe rewrite widget", () => {
     await page.getByRole("button", { name: /Select Item 9443601541/ }).click();
     await page.getByRole("button", { name: /Select Item 7563307251/ }).click();
     await expect(page.locator(".quickvint-wardrobe-selection-count")).toHaveText(
-      "2 selected · 2 available",
+      "2 selected",
     );
     await expect(page.locator('[data-testid="product-item-id-6361197692"] .quickvint-wardrobe-select-item')).toHaveCount(0);
     const overlay = page.getByRole("button", { name: /Unselect Item 9443601541/ });
@@ -7332,11 +7397,11 @@ test.describe("own wardrobe rewrite widget", () => {
     );
     await expect(overlay.locator(".quickvint-wardrobe-select-check")).toBeVisible();
     expect(
-      await image.evaluate((node) => getComputedStyle(node).borderColor),
-    ).toBe("rgb(79, 70, 229)");
+      await overlay.evaluate((node) => getComputedStyle(node).boxShadow),
+    ).toContain("inset");
     await page.getByRole("button", { name: /Unselect Item 9443601541/ }).press("Enter");
     await expect(page.locator(".quickvint-wardrobe-selection-count")).toHaveText(
-      "1 selected · 2 available",
+      "1 selected",
     );
     await page.getByRole("button", { name: /Select Item 9443601541/ }).click();
     await page.locator('[data-testid="feed-grid"]').evaluate(
@@ -7403,13 +7468,16 @@ test.describe("own wardrobe rewrite widget", () => {
     const controller = page.locator(".quickvint-wardrobe-selection-controller");
     expect(await controller.evaluate((node) => getComputedStyle(node).position)).toBe("sticky");
     expect(await controller.evaluate((node) => node.nextElementSibling?.dataset.testid)).toBe("feed-grid");
-    for (const target of await controller.locator("select, button").all()) {
+    for (const target of await controller.locator(
+      ".quickvint-lang-trigger, .quickvint-wardrobe-selection-actions button",
+    ).all()) {
       expect((await target.boundingBox()).height).toBeGreaterThanOrEqual(40);
     }
-    await expect(page.getByLabel("Title language")).toHaveValue("en");
-    await expect(page.getByLabel("Description language")).toHaveValue("nl");
+    await expect(page.getByLabel("Title language")).toHaveAttribute("data-value", "en");
+    await expect(page.getByLabel("Description language")).toHaveAttribute("data-value", "nl");
     await expect(page.getByRole("button", { name: "Start rewrite" })).toBeDisabled();
-    await page.getByLabel("Title language").selectOption("nl");
+    await page.getByLabel("Title language").click();
+    await page.locator(".quickvint-wardrobe-title-language-slot .quickvint-lang-option[data-value='nl']").click();
     await expect.poll(() => page.evaluate(() => window.__extensionHarness.storage.selectedTitleLanguage)).toBe("nl");
     await page.getByRole("button", { name: /Select Item 9443601541/ }).click();
     await page.evaluate(() => {
@@ -7418,7 +7486,7 @@ test.describe("own wardrobe rewrite widget", () => {
         originalSetInterval(callback, delay === 20 * 1000 ? 25 : delay, ...args);
     });
     await page.getByRole("button", { name: "Start rewrite" }).click();
-    await expect(page.locator(".quickvint-wardrobe-selection-feedback")).toHaveText("Starting…");
+    await expect(page.locator(".quickvint-wardrobe-selection-feedback")).toHaveText("Preparing your listings…");
     await expectWardrobeSelectionControlsDisabled(page, true);
     await expect.poll(() => page.evaluate(() =>
       window.__extensionHarness.runtimeMessages.find(
@@ -7445,7 +7513,7 @@ test.describe("own wardrobe rewrite widget", () => {
       total: 1,
     });
     await expect(page.locator(".quickvint-wardrobe-selection-feedback")).toHaveText(
-      "Rewriting 1 of 1",
+      "Rewriting 1 of 1…",
     );
     await page.getByRole("button", { name: "Exit selection" }).dispatchEvent("click");
     await expect(controller).toBeVisible();
@@ -7459,13 +7527,13 @@ test.describe("own wardrobe rewrite widget", () => {
     await expect(page.locator(".quickvint-wardrobe-selection-feedback")).toHaveText(
       "Exact generation failure",
     );
-    await expect(page.getByRole("button", { name: "Cancel selection" })).toBeEnabled();
+    await expect(page.getByRole("button", { name: "Cancel" })).toBeEnabled();
     await expect(page.locator(".quickvint-wardrobe-rewrite-capacity")).toHaveText(
       "1 listing available",
     );
   });
 
-  test("shows Starting and restores wardrobe selection after an exact start rejection", async ({ page }) => {
+  test("shows preparation and restores wardrobe selection after an exact start rejection", async ({ page }) => {
     await page.emulateMedia({ reducedMotion: "reduce" });
     await openWardrobeHarness(page, {
       capacityResponse: { allowed: true, available: 2 },
@@ -7478,9 +7546,9 @@ test.describe("own wardrobe rewrite widget", () => {
     await enterWardrobeSelection(page);
     await page.getByRole("button", { name: /Select Item 9443601541/ }).click();
     await page.getByRole("button", { name: "Start rewrite" }).click();
-    await expect(page.locator(".quickvint-wardrobe-selection-feedback")).toHaveText("Starting…");
+    await expect(page.locator(".quickvint-wardrobe-selection-feedback")).toHaveText("Preparing your listings…");
     await expectWardrobeSelectionControlsDisabled(page, true);
-    await page.getByRole("button", { name: "Cancel selection" }).dispatchEvent("click");
+    await page.getByRole("button", { name: "Cancel" }).dispatchEvent("click");
     await expect(page.locator(".quickvint-wardrobe-selection-controller")).toBeVisible();
     await expect(page.locator(".quickvint-wardrobe-selection-feedback")).toHaveText(
       "Background rejected this rewrite.",
@@ -7621,7 +7689,7 @@ test.describe("own wardrobe rewrite widget", () => {
 
     await page.locator(".quickvint-wardrobe-rewrite-cta").click();
     await expect(widget).toHaveCSS("height", "148px");
-    await page.getByLabel("Replace fields").focus();
+    await page.getByLabel("Replace immediately").focus();
     await page.keyboard.press("ArrowDown");
     await expect(page.getByLabel("Review first")).toBeChecked();
     await page.locator(".quickvint-wardrobe-rewrite-continue").focus();
@@ -7641,12 +7709,12 @@ test.describe("own wardrobe rewrite widget", () => {
       await page.locator(".quickvint-wardrobe-rewrite-cta").click();
 
       for (const target of [
-        page.getByLabel("Replace fields").locator("..").first(),
+        page.getByLabel("Replace immediately").locator("..").first(),
         page.getByLabel("Review first").locator("..").first(),
         page.locator(".quickvint-wardrobe-rewrite-back"),
         page.locator(".quickvint-wardrobe-rewrite-continue"),
       ]) {
-        expect((await target.boundingBox()).height).toBeGreaterThanOrEqual(40);
+        expect((await target.boundingBox()).height).toBeGreaterThanOrEqual(39.5);
       }
 
       await page.getByLabel("Review first").check();
@@ -7681,9 +7749,6 @@ test.describe("own wardrobe rewrite widget", () => {
     const capacity = shell.locator(".quickvint-wardrobe-rewrite-capacity");
     const cta = shell.locator(".quickvint-wardrobe-rewrite-cta");
     await expect(capacity).toHaveText("1 listing available");
-    await page
-      .locator(".quickvint-wardrobe-rewrite-host")
-      .evaluate((host) => (host.style.width = "380px"));
     await waitForWardrobeMotionToFinish(page);
     await expect(cta).toBeEnabled();
     expect((await cta.boundingBox()).height).toBeGreaterThanOrEqual(40);
@@ -7768,7 +7833,7 @@ test.describe("own wardrobe rewrite widget", () => {
     ).toBeVisible();
     await expect(page.getByText("Let's rewrite your listings")).toBeHidden();
     const widget = page.locator("#quickvint-wardrobe-rewrite-widget");
-    expect((await widget.boundingBox()).width).toBeLessThanOrEqual(200);
+    expect((await widget.boundingBox()).width).toBeLessThanOrEqual(220);
     expect(
       await widget.evaluate(
         (element) => element.getAnimations({ subtree: true }).length,

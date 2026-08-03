@@ -506,9 +506,9 @@ function duplicateTab(tabId) {
   });
 }
 
-function createInactiveTab(url) {
+function createActiveTab(url) {
   return new Promise((resolve, reject) => {
-    chrome.tabs.create({ url, active: false }, (tab) => {
+    chrome.tabs.create({ url, active: true }, (tab) => {
       const error = chrome.runtime.lastError;
       if (error || !tab?.id) {
         reject(new Error(error?.message || "Could not open Vinted edit tab."));
@@ -907,7 +907,7 @@ async function runWardrobeRewriteJob(job) {
         itemId: item.id,
       });
 
-      const workTab = await createInactiveTab(item.editUrl);
+      const workTab = await createActiveTab(item.editUrl);
       await waitForTabComplete(workTab.id);
       await waitForWardrobeRewriteTabReady(workTab.id, item.id);
 

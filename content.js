@@ -31,6 +31,7 @@
   let wardrobeRewriteScheduled = false;
   let wardrobeRewriteCapacity = null;
   let wardrobeRewriteCapacityLoading = false;
+  let wardrobeRewriteCapacityPrefetch = null;
   let wardrobeRewriteApplyMode = null;
   let wardrobeRewriteWidget = null;
   let wardrobeRewriteSelectedItems = new Map();
@@ -41,7 +42,6 @@
   let wardrobeSelectionOwnershipTimer = null;
   let wardrobeSelectionPathname = null;
   let wardrobeSelectionShell = null;
-  let wardrobeSelectionPulseTimeout = null;
   let wardrobeSelectionCapacity = 0;
   let wardrobeSelectionJobStatus = "idle";
   let wardrobeRewriteOutputCleanup = null;
@@ -4315,7 +4315,7 @@
       }
 
       #quickvint-batch-tab-status {
-        position: static;
+        position: relative;
         display: inline-flex;
         align-items: center;
         gap: 9px;
@@ -4324,11 +4324,14 @@
         min-height: 42px;
         margin: 8px 0 10px;
         padding: 10px 13px;
-        border: 1px solid rgba(79, 70, 229, 0.18);
+        overflow: hidden;
+        border: 1px solid #dfe1ff;
         border-radius: 12px;
-        background: rgba(255, 255, 255, 0.97);
-        color: #111827;
-        box-shadow: 0 16px 42px rgba(15, 23, 42, 0.18), 0 8px 18px rgba(79, 70, 229, 0.12);
+        background:
+          radial-gradient(circle at 94% 10%, rgba(45, 212, 191, .16), transparent 30%),
+          linear-gradient(135deg, #ffffff 30%, #f4f3ff 100%);
+        color: #312e81;
+        box-shadow: 0 8px 22px rgba(55, 48, 163, .10);
         font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
         font-size: 13px;
         font-weight: 780;
@@ -4364,12 +4367,31 @@
         animation: quickvintSpin 760ms linear infinite;
       }
 
+      #quickvint-batch-tab-status.loading::after {
+        position: absolute;
+        right: 100%;
+        bottom: 0;
+        width: 38%;
+        height: 3px;
+        border-radius: 999px;
+        background: linear-gradient(90deg, transparent, #4f46e5, #2dd4bf, transparent);
+        content: "";
+        animation: quickvintWardrobeRewriteProgress 1.7s ease-in-out infinite;
+      }
+
       #quickvint-batch-tab-status.success .batch-tab-status-icon {
         background: #16a34a;
       }
 
       #quickvint-batch-tab-status.error .batch-tab-status-icon {
         background: #dc2626;
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        #quickvint-batch-tab-status.loading .batch-tab-status-icon,
+        #quickvint-batch-tab-status.loading::after {
+          animation: none;
+        }
       }
 
       .quickvint-lang-field {
@@ -7661,6 +7683,177 @@
         overflow-wrap: anywhere;
       }
 
+      #${WARDROBE_REWRITE_STATUS_ID} {
+        position: relative;
+        display: flex;
+        min-height: 54px;
+        align-items: center;
+        gap: 11px;
+        overflow: hidden;
+        padding: 14px 16px;
+        border-color: #dfe1ff;
+        background:
+          radial-gradient(circle at 94% 10%, rgba(45, 212, 191, .16), transparent 30%),
+          linear-gradient(135deg, #ffffff 30%, #f4f3ff 100%);
+        box-shadow: 0 8px 22px rgba(55, 48, 163, .10);
+        color: #312e81;
+      }
+
+      #${WARDROBE_REWRITE_STATUS_ID}::before {
+        box-sizing: border-box;
+        flex: 0 0 20px;
+        width: 20px;
+        height: 20px;
+        border-radius: 50%;
+        content: "";
+      }
+
+      #${WARDROBE_REWRITE_STATUS_ID}.loading::before {
+        border: 2px solid rgba(79, 70, 229, .2);
+        border-top-color: #4f46e5;
+        animation: quickvintSpin 760ms linear infinite;
+      }
+
+      #${WARDROBE_REWRITE_STATUS_ID}.loading::after {
+        position: absolute;
+        right: 100%;
+        bottom: 0;
+        width: 38%;
+        height: 3px;
+        border-radius: 999px;
+        background: linear-gradient(90deg, transparent, #4f46e5, #2dd4bf, transparent);
+        content: "";
+        animation: quickvintWardrobeRewriteProgress 1.7s ease-in-out infinite;
+      }
+
+      #${WARDROBE_REWRITE_STATUS_ID}.success::before,
+      #${WARDROBE_REWRITE_STATUS_ID}.error::before {
+        display: grid;
+        place-items: center;
+        color: #ffffff;
+        font-size: 13px;
+        font-weight: 900;
+      }
+
+      #${WARDROBE_REWRITE_STATUS_ID}.success::before {
+        background: #16a34a;
+        content: "✓";
+      }
+
+      #${WARDROBE_REWRITE_STATUS_ID}.error::before {
+        background: #dc2626;
+        content: "!";
+      }
+
+      @keyframes quickvintWardrobeRewriteProgress {
+        to { transform: translateX(365%); }
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        #${WARDROBE_REWRITE_STATUS_ID}.loading::before,
+        #${WARDROBE_REWRITE_STATUS_ID}.loading::after {
+          animation: none;
+        }
+      }
+
+      .quickvint-wardrobe-review-card h3 {
+        margin: 0 0 8px;
+        color: #19164d;
+        font-size: 13px;
+        font-weight: 800;
+      }
+
+      .quickvint-wardrobe-review-card {
+        width: min(calc(100% - 24px), 760px);
+        margin-right: 12px;
+        margin-left: 12px;
+      }
+
+      .quickvint-wardrobe-review-card p {
+        box-sizing: border-box;
+        display: block;
+        width: 100%;
+        margin: 0;
+        padding: 11px 12px;
+        border: 1px solid #e3e4f7;
+        border-radius: 8px;
+        background: #ffffff;
+        line-height: 1.55;
+        white-space: pre-wrap;
+      }
+
+      .quickvint-wardrobe-review-card:not(.quickvint-wardrobe-review-applied) .quickvint-wardrobe-actions button:first-child {
+        border-color: #4f46e5;
+        background: #4f46e5;
+        color: #ffffff;
+      }
+
+      .quickvint-wardrobe-review-card:not(.quickvint-wardrobe-review-applied) .quickvint-wardrobe-actions button {
+        transition: background-color 150ms ease, border-color 150ms ease, box-shadow 150ms ease, transform 150ms ease;
+      }
+
+      .quickvint-wardrobe-review-card:not(.quickvint-wardrobe-review-applied) .quickvint-wardrobe-actions button:first-child:hover {
+        border-color: #4338ca;
+        background: #4338ca;
+        box-shadow: 0 6px 14px rgba(79, 70, 229, .22);
+        transform: translateY(-1px);
+      }
+
+      .quickvint-wardrobe-review-card:not(.quickvint-wardrobe-review-applied) .quickvint-wardrobe-actions button:last-child:hover {
+        border-color: #8b83ff;
+        background: #f5f3ff;
+      }
+
+      .quickvint-wardrobe-review-card:not(.quickvint-wardrobe-review-applied) .quickvint-wardrobe-actions button:active {
+        box-shadow: none;
+        transform: translateY(0);
+      }
+
+      .quickvint-wardrobe-review-applied {
+        display: flex;
+        min-height: 46px;
+        align-items: center;
+        gap: 12px;
+        padding: 9px 12px;
+        background:
+          radial-gradient(circle at 94% 10%, rgba(45, 212, 191, .14), transparent 32%),
+          linear-gradient(135deg, #ffffff, #f4f3ff);
+      }
+
+      .quickvint-wardrobe-applied-label {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        color: #166534;
+        font-weight: 750;
+      }
+
+      .quickvint-wardrobe-applied-label::before {
+        display: grid;
+        width: 19px;
+        height: 19px;
+        place-items: center;
+        border-radius: 50%;
+        background: #16a34a;
+        color: #ffffff;
+        content: "✓";
+        font-size: 12px;
+        font-weight: 900;
+      }
+
+      .quickvint-wardrobe-review-card.quickvint-wardrobe-review-applied .quickvint-wardrobe-actions {
+        margin: 0 0 0 auto;
+      }
+
+      .quickvint-wardrobe-review-applied .quickvint-wardrobe-actions button {
+        min-height: 32px;
+        padding: 0 4px;
+        border: 0;
+        background: transparent;
+        color: #4338ca;
+        text-decoration: underline;
+      }
+
       #${WARDROBE_REWRITE_RESULT_ID} .quickvint-wardrobe-actions,
       .quickvint-wardrobe-review-card .quickvint-wardrobe-actions {
         display: flex;
@@ -9639,16 +9832,37 @@
       }
 
       .quickvint-wardrobe-rewrite-shell {
+        position: relative;
         min-width: 0;
+        padding-top: 13px;
       }
 
       .quickvint-wardrobe-rewrite-capacity {
-        min-height: 32px;
-        margin: 0 0 8px;
+        position: absolute;
+        top: 0;
+        left: 50%;
+        z-index: 4;
+        display: inline-flex;
+        min-height: 26px;
+        align-items: center;
+        justify-content: center;
+        margin: 0;
+        padding: 4px 11px;
+        transform: translateX(-50%);
+        border: 1px solid #dfe1ff;
+        border-radius: 999px;
+        background: #fff;
+        box-shadow: 0 5px 14px rgba(55, 48, 163, .12);
         color: #4b4a68;
         font-size: 12px;
         font-weight: 700;
         line-height: 1.3;
+        text-align: center;
+        white-space: nowrap;
+      }
+
+      .quickvint-wardrobe-rewrite-capacity[hidden] {
+        display: none;
       }
 
       .quickvint-wardrobe-rewrite-capacity-retry {
@@ -9669,36 +9883,123 @@
         display: flex;
         flex-wrap: wrap;
         align-items: center;
-        gap: 8px 12px;
+        gap: 10px 18px;
         margin: 0 0 12px;
-        padding: 12px;
+        padding: 10px 12px;
         border: 1px solid #dfe1ff;
-        border-radius: 12px;
-        background: #fff;
+        border-radius: 14px;
+        background:
+          radial-gradient(circle at 94% 10%, rgba(45, 212, 191, .16), transparent 27%),
+          radial-gradient(circle at 83% 130%, rgba(79, 70, 229, .09), transparent 32%),
+          linear-gradient(135deg, rgba(255, 255, 255, .98) 30%, rgba(244, 243, 255, .98) 100%);
         box-shadow: 0 8px 20px rgba(55, 48, 163, .12);
         color: #19164d;
         font: 600 13px/1.3 Arial, sans-serif;
       }
 
-      .quickvint-wardrobe-selection-controller label {
-        display: inline-flex;
-        align-items: center;
-        gap: 5px;
+      .quickvint-wardrobe-selection-controller.quickvint-wardrobe-selection-pending {
+        opacity: 0;
       }
 
-      .quickvint-wardrobe-selection-controller select,
-      .quickvint-wardrobe-selection-controller button {
+      .quickvint-wardrobe-selection-count {
+        padding: 6px 18px 6px 2px;
+        border-right: 1px solid #e7e7f5;
+        font-weight: 800;
+        white-space: nowrap;
+      }
+
+      .quickvint-wardrobe-selection-languages,
+      .quickvint-wardrobe-selection-language,
+      .quickvint-wardrobe-selection-actions {
+        display: flex;
+        align-items: center;
+      }
+
+      .quickvint-wardrobe-selection-languages {
+        gap: 14px;
+      }
+
+      .quickvint-wardrobe-selection-language {
+        gap: 7px;
+      }
+
+      .quickvint-wardrobe-selection-language > span {
+        color: #555272;
+        font-size: 12px;
+        font-weight: 700;
+      }
+
+      .quickvint-wardrobe-selection-controller .quickvint-lang-field {
+        display: inline-flex;
+      }
+
+      .quickvint-wardrobe-selection-controller .quickvint-lang-trigger {
+        justify-content: center;
+        width: 48px;
+        height: 40px;
+        padding: 0 8px;
+        border-color: #d7d5ff;
+        background: #fafaff;
+      }
+
+      .quickvint-wardrobe-selection-controller .quickvint-lang-trigger span {
+        display: none;
+      }
+
+      .quickvint-wardrobe-selection-controller .quickvint-lang-trigger::before {
+        display: none;
+      }
+
+      .quickvint-wardrobe-selection-controller .quickvint-lang-trigger img {
+        width: 20px;
+        height: 14px;
+      }
+
+      .quickvint-wardrobe-selection-controller .quickvint-lang-trigger:hover,
+      .quickvint-wardrobe-selection-controller .quickvint-lang-trigger:focus-visible {
+        border-color: #8b83ff;
+        background: #f5f3ff;
+      }
+
+      .quickvint-wardrobe-selection-actions {
+        gap: 8px;
+        margin-left: auto;
+      }
+
+      .quickvint-wardrobe-selection-actions button {
         min-height: 40px;
-        border: 1px solid #c7c5ff;
-        border-radius: 7px;
-        background: #fff;
+        padding: 0 15px;
+        border: 1px solid #d7d5ff;
+        border-radius: 9px;
+        background: #ffffff;
         color: #3730a3;
         font: inherit;
+        cursor: pointer;
+        transition: background-color 150ms ease, border-color 150ms ease, box-shadow 150ms ease, transform 150ms ease;
       }
 
-      .quickvint-wardrobe-selection-controller button {
-        padding: 0 10px;
-        cursor: pointer;
+      .quickvint-wardrobe-selection-start:not(:disabled) {
+        border-color: #4f46e5;
+        background: #4f46e5;
+        color: #ffffff;
+        box-shadow: 0 5px 12px rgba(79, 70, 229, .2);
+      }
+
+      .quickvint-wardrobe-selection-start:not(:disabled):hover {
+        border-color: #4338ca;
+        background: #4338ca;
+        box-shadow: 0 8px 17px rgba(79, 70, 229, .26);
+        transform: translateY(-1px);
+      }
+
+      .quickvint-wardrobe-selection-cancel:not(:disabled):hover {
+        border-color: #8b83ff;
+        background: #f5f3ff;
+      }
+
+      .quickvint-wardrobe-selection-actions button:not(:disabled):active {
+        box-shadow: none;
+        transform: translateY(0);
       }
 
       .quickvint-wardrobe-selection-controller button:disabled {
@@ -9707,58 +10008,135 @@
       }
 
       .quickvint-wardrobe-selection-feedback {
+        position: relative;
+        display: flex;
         flex-basis: 100%;
+        min-height: 38px;
+        align-items: center;
+        gap: 9px;
         margin: 0;
-        color: #a13a24;
+        padding: 8px 11px;
+        border: 1px solid #dfe1ff;
+        border-radius: 9px;
+        background:
+          radial-gradient(circle at 94% 10%, rgba(45, 212, 191, .12), transparent 32%),
+          linear-gradient(135deg, rgba(255, 255, 255, .92), rgba(244, 243, 255, .92));
+        color: #3730a3;
+      }
+
+      .quickvint-wardrobe-selection-feedback:empty {
+        display: none;
+      }
+
+      .quickvint-wardrobe-selection-feedback::before {
+        display: grid;
+        box-sizing: border-box;
+        flex: 0 0 18px;
+        width: 18px;
+        height: 18px;
+        place-items: center;
+        border-radius: 50%;
+        font-size: 12px;
+        font-weight: 900;
+      }
+
+      .quickvint-wardrobe-selection-feedback[data-state="loading"]::before {
+        border: 2px solid rgba(79, 70, 229, .2);
+        border-top-color: #4f46e5;
+        content: "";
+        animation: quickvintSpin 760ms linear infinite;
+      }
+
+      .quickvint-wardrobe-selection-feedback[data-state="success"]::before {
+        background: #16a34a;
+        color: #ffffff;
+        content: "✓";
+      }
+
+      .quickvint-wardrobe-selection-feedback[data-state="error"] {
+        border-color: #fecaca;
+        color: #991b1b;
+      }
+
+      .quickvint-wardrobe-selection-feedback[data-state="error"]::before {
+        background: #dc2626;
+        color: #ffffff;
+        content: "!";
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        .quickvint-wardrobe-selection-feedback[data-state="loading"]::before {
+          animation: none;
+        }
+      }
+
+      @media (max-width: 760px) {
+        .quickvint-wardrobe-selection-controller {
+          gap: 10px 12px;
+        }
+
+        .quickvint-wardrobe-selection-count {
+          flex: 1 1 auto;
+        }
+
+        .quickvint-wardrobe-selection-actions {
+          flex-basis: 100%;
+          justify-content: flex-end;
+        }
       }
 
       .quickvint-wardrobe-selection-item {
         position: relative;
-        border: 2px solid #4f46e5;
-        border-radius: 10px;
+        border-radius: 8px;
       }
 
       .quickvint-wardrobe-select-item {
         position: absolute;
-        inset: -2px;
+        inset: 0;
         z-index: 2;
         display: flex;
         align-items: flex-start;
         justify-content: flex-end;
-        padding: 8px;
+        padding: 9px;
         border: 0;
         border-radius: inherit;
         background: transparent;
+        box-shadow: inset 0 0 0 2px rgba(79, 70, 229, .72);
         cursor: pointer;
+        transition: background-color 160ms ease, box-shadow 160ms ease;
+      }
+
+      .quickvint-wardrobe-select-item:hover {
+        background: rgba(79, 70, 229, .06);
+        box-shadow: inset 0 0 0 2px #5b4ff5;
+      }
+
+      .quickvint-wardrobe-item-selected .quickvint-wardrobe-select-item {
+        background: rgba(79, 70, 229, .09);
+        box-shadow: inset 0 0 0 3px #5b4ff5;
       }
 
       .quickvint-wardrobe-select-check {
         display: grid;
-        width: 36px;
-        height: 36px;
+        width: 28px;
+        height: 28px;
         place-items: center;
-        border: 2px solid #4f46e5;
+        border: 2px solid #5b4ff5;
         border-radius: 50%;
-        background: #fff;
-        color: #3730a3;
-        font-weight: 800;
+        background: rgba(255, 255, 255, .96);
+        box-shadow: 0 2px 8px rgba(17, 24, 39, .16);
+        color: transparent;
+        font-size: 16px;
+        font-weight: 900;
+        line-height: 1;
+        transition: border-color 160ms ease, background-color 160ms ease, transform 160ms ease;
       }
 
       .quickvint-wardrobe-selection-item.quickvint-wardrobe-item-selected .quickvint-wardrobe-select-check {
+        border-color: #5b4ff5;
         background: #4f46e5;
         color: #fff;
-      }
-
-      .quickvint-wardrobe-selection-item.quickvint-wardrobe-attention {
-        animation: quickvint-wardrobe-attention .7s ease-out 1;
-      }
-
-      @keyframes quickvint-wardrobe-attention {
-        50% { transform: scale(1.15); }
-      }
-
-      @media (prefers-reduced-motion: reduce) {
-        .quickvint-wardrobe-selection-item.quickvint-wardrobe-attention { animation: none; }
+        transform: scale(1.04);
       }
 
       #${WARDROBE_REWRITE_WIDGET_ID} {
@@ -9834,13 +10212,36 @@
         line-height: 1.35;
       }
 
+      #${WARDROBE_REWRITE_WIDGET_ID} .quickvint-wardrobe-rewrite-intro {
+        display: flex;
+        height: 100%;
+        flex-direction: column;
+        align-items: flex-start;
+      }
+
       #${WARDROBE_REWRITE_WIDGET_ID} .quickvint-wardrobe-rewrite-preference,
       #${WARDROBE_REWRITE_WIDGET_ID} .quickvint-wardrobe-rewrite-instruction {
         height: 100%;
-        padding: 13px 48px 12px 21px;
+        padding: 18px 54px 16px 22px;
+      }
+
+      #${WARDROBE_REWRITE_WIDGET_ID} .quickvint-wardrobe-rewrite-preference {
+        display: flex;
+        flex-direction: column;
+        justify-content: space-between;
+      }
+
+      #${WARDROBE_REWRITE_WIDGET_ID} .quickvint-wardrobe-rewrite-instruction {
+        display: flex;
+        flex-direction: column;
+        align-items: flex-start;
       }
 
       #${WARDROBE_REWRITE_WIDGET_ID} .quickvint-wardrobe-rewrite-preference fieldset {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        column-gap: 9px;
+        row-gap: 14px;
         min-width: 0;
         margin: 0;
         padding: 0;
@@ -9848,46 +10249,148 @@
       }
 
       #${WARDROBE_REWRITE_WIDGET_ID} .quickvint-wardrobe-rewrite-preference legend {
-        margin-bottom: 4px;
+        grid-column: 1 / -1;
+        margin-bottom: 0;
         color: #19164d;
-        font-size: 16px;
+        font-size: 17px;
         font-weight: 700;
         line-height: 1.15;
       }
 
       #${WARDROBE_REWRITE_WIDGET_ID} .quickvint-wardrobe-rewrite-preference label {
         display: inline-flex;
-        width: calc(50% - 3px);
-        height: 40px;
+        width: auto;
+        height: 44px;
         align-items: center;
         margin: 0;
+        padding: 0 12px;
+        border: 1px solid #d8d7f5;
+        border-radius: 10px;
+        background: rgba(255, 255, 255, .82);
         color: #4b4a68;
         font-size: 12px;
-        font-weight: 650;
+        font-weight: 700;
+        cursor: pointer;
+      }
+
+      #${WARDROBE_REWRITE_WIDGET_ID} .quickvint-wardrobe-rewrite-preference label:has(input:checked) {
+        border-color: #6d63ee;
+        background: #eeecff;
+        color: #312e81;
       }
 
       #${WARDROBE_REWRITE_WIDGET_ID} .quickvint-wardrobe-rewrite-preference input {
+        margin: 0 8px 0 0;
         accent-color: #4f46e5;
+      }
+
+      #${WARDROBE_REWRITE_WIDGET_ID} .quickvint-wardrobe-rewrite-option-replace {
+        border-color: #ead7b3;
+      }
+
+      #${WARDROBE_REWRITE_WIDGET_ID} .quickvint-wardrobe-rewrite-option-replace:has(input:checked) {
+        border-color: #d97706;
+        background: #fff7ed;
+        color: #7c2d12;
+      }
+
+      #${WARDROBE_REWRITE_WIDGET_ID} .quickvint-wardrobe-rewrite-option-replace input {
+        accent-color: #d97706;
+      }
+
+      #${WARDROBE_REWRITE_WIDGET_ID} .quickvint-wardrobe-rewrite-info {
+        position: relative;
+        display: grid;
+        width: 20px;
+        height: 20px;
+        place-items: center;
+        margin-left: auto;
+        border: 0;
+        border-radius: 50%;
+        background: #fff7ed;
+        box-shadow: inset 0 0 0 1px #f1b86b;
+        color: #a94f08;
+        cursor: help;
+      }
+
+      #${WARDROBE_REWRITE_WIDGET_ID} .quickvint-wardrobe-rewrite-info svg {
+        width: 14px;
+        height: 14px;
+        fill: none;
+        stroke: currentColor;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+        stroke-width: 2;
+      }
+
+      #${WARDROBE_REWRITE_WIDGET_ID} .quickvint-wardrobe-rewrite-info::after {
+        position: absolute;
+        top: calc(100% + 7px);
+        right: -7px;
+        z-index: 20;
+        width: 205px;
+        padding: 8px 10px;
+        border-radius: 8px;
+        background: #27234f;
+        box-shadow: 0 8px 20px rgba(25, 22, 77, .22);
+        color: #ffffff;
+        content: attr(data-tooltip);
+        font-size: 11px;
+        font-weight: 600;
+        line-height: 1.35;
+        opacity: 0;
+        pointer-events: none;
+        text-align: left;
+        transform: translateY(-3px);
+        transition: opacity 100ms ease, transform 100ms ease;
+        white-space: normal;
+      }
+
+      #${WARDROBE_REWRITE_WIDGET_ID} .quickvint-wardrobe-rewrite-info:hover::after,
+      #${WARDROBE_REWRITE_WIDGET_ID} .quickvint-wardrobe-rewrite-info:focus-visible::after {
+        opacity: 1;
+        transform: translateY(0);
+      }
+
+      #${WARDROBE_REWRITE_WIDGET_ID} .quickvint-wardrobe-rewrite-info:focus-visible {
+        outline: 2px solid rgba(217, 119, 6, .35);
+        outline-offset: 2px;
+      }
+
+      #${WARDROBE_REWRITE_WIDGET_ID} .quickvint-wardrobe-rewrite-actions {
+        display: flex;
+        justify-content: flex-end;
+        gap: 10px;
+        margin-top: 0;
       }
 
       #${WARDROBE_REWRITE_WIDGET_ID} .quickvint-wardrobe-rewrite-preference button,
       #${WARDROBE_REWRITE_WIDGET_ID} .quickvint-wardrobe-rewrite-instruction button {
         height: 40px;
-        margin-top: 4px;
-        padding: 0 10px;
+        margin: 0;
+        padding: 0 16px;
         border: 0;
-        border-radius: 8px;
+        border-radius: 9px;
         background: #4f46e5;
+        box-shadow: 0 6px 14px rgba(79, 70, 229, .18);
         color: #fff;
         cursor: pointer;
-        font-size: 12px;
-        font-weight: 760;
+        font-family: Arial, sans-serif;
+        font-size: 13px;
+        font-weight: 700;
+        letter-spacing: .01em;
       }
 
       #${WARDROBE_REWRITE_WIDGET_ID} .quickvint-wardrobe-rewrite-back {
-        margin-right: 6px;
-        background: #e7e6ff !important;
-        color: #3730a3 !important;
+        min-width: 84px;
+        border: 1px solid #d8d7f5 !important;
+        background: #fff !important;
+        box-shadow: none !important;
+        color: #4338ca !important;
+      }
+
+      #${WARDROBE_REWRITE_WIDGET_ID} .quickvint-wardrobe-rewrite-continue {
+        min-width: 112px;
       }
 
       #${WARDROBE_REWRITE_WIDGET_ID} .quickvint-wardrobe-rewrite-continue:disabled {
@@ -9896,18 +10399,33 @@
       }
 
       #${WARDROBE_REWRITE_WIDGET_ID} .quickvint-wardrobe-rewrite-instruction h2 {
-        margin-top: 2px;
+        max-width: none;
+        margin: 0 0 7px;
       }
 
       #${WARDROBE_REWRITE_WIDGET_ID} .quickvint-wardrobe-rewrite-mode-copy {
+        max-width: 330px;
         margin: 0;
         color: #686783;
         font-size: 12px;
         line-height: 1.35;
       }
 
+      #${WARDROBE_REWRITE_WIDGET_ID} .quickvint-wardrobe-rewrite-exit {
+        min-width: 112px;
+        margin-top: auto !important;
+        border: 1px solid #d8d7f5 !important;
+        background: #ffffff !important;
+        box-shadow: none !important;
+        color: #4338ca !important;
+      }
+
       #${WARDROBE_REWRITE_WIDGET_ID}.quickvint-wardrobe-rewrite-step-active .quickvint-wardrobe-rewrite-character {
         display: none;
+      }
+
+      #${WARDROBE_REWRITE_WIDGET_ID}.quickvint-wardrobe-rewrite-step-active .quickvint-wardrobe-rewrite-expanded {
+        padding: 0;
       }
 
       #${WARDROBE_REWRITE_WIDGET_ID} button {
@@ -9919,16 +10437,34 @@
       }
 
       #${WARDROBE_REWRITE_WIDGET_ID} .quickvint-wardrobe-rewrite-cta {
-        height: 40px;
-        padding: 0 13px;
+        min-width: 158px;
+        height: 42px;
+        margin-top: auto;
+        padding: 0 16px;
         border: 0;
         border-radius: 9px;
         background: #4f46e5;
         box-shadow: 0 7px 16px rgba(79, 70, 229, .22);
         color: #fff;
         cursor: pointer;
-        font-size: 12px;
-        font-weight: 760;
+        font-family: Arial, sans-serif;
+        font-size: 13px;
+        font-weight: 700;
+        letter-spacing: .012em;
+        line-height: 1;
+        transition: background-color 160ms ease, box-shadow 160ms ease, transform 160ms ease;
+        white-space: nowrap;
+      }
+
+      #${WARDROBE_REWRITE_WIDGET_ID} .quickvint-wardrobe-rewrite-cta:not(:disabled):hover {
+        background: #4338ca;
+        box-shadow: 0 10px 20px rgba(79, 70, 229, .28);
+        transform: translateY(-1px);
+      }
+
+      #${WARDROBE_REWRITE_WIDGET_ID} .quickvint-wardrobe-rewrite-cta:not(:disabled):active {
+        box-shadow: 0 5px 12px rgba(79, 70, 229, .2);
+        transform: translateY(0);
       }
 
       #${WARDROBE_REWRITE_WIDGET_ID} .quickvint-wardrobe-rewrite-cta:focus-visible,
@@ -9963,6 +10499,7 @@
         color: #3730a3;
         box-shadow: 0 5px 14px rgba(49, 46, 129, .18);
         cursor: pointer;
+        transition: background-color 160ms ease, box-shadow 160ms ease, transform 160ms ease;
       }
 
       #${WARDROBE_REWRITE_WIDGET_ID} .quickvint-wardrobe-rewrite-minimize svg {
@@ -9974,8 +10511,10 @@
 
       #${WARDROBE_REWRITE_WIDGET_ID} .quickvint-wardrobe-rewrite-minimize:hover,
       #${WARDROBE_REWRITE_WIDGET_ID} .quickvint-wardrobe-rewrite-minimize:focus-visible {
-        background: #fff;
+        background: #f5f3ff;
+        box-shadow: 0 8px 18px rgba(49, 46, 129, .22);
         color: #312e81;
+        transform: translateY(-1px);
       }
 
       #${WARDROBE_REWRITE_WIDGET_ID} .quickvint-wardrobe-rewrite-minimize:focus-visible,
@@ -9991,14 +10530,16 @@
         width: 100%;
         height: 100%;
         align-items: center;
-        gap: 8px;
-        padding: 4px 10px 4px 5px;
+        gap: 10px;
+        padding: 4px 13px 4px 6px;
         border: 0;
         background: transparent;
         color: #312e81;
         cursor: pointer;
-        font-size: 13px;
-        font-weight: 750;
+        font-family: Arial, sans-serif;
+        font-size: 14px;
+        font-weight: 700;
+        letter-spacing: .01em;
         opacity: 0;
         visibility: hidden;
         white-space: nowrap;
@@ -10017,8 +10558,8 @@
       }
 
       #${WARDROBE_REWRITE_WIDGET_ID}.is-collapsed {
-        width: 196px;
-        height: 50px;
+        width: 220px;
+        height: 52px;
         border-radius: 999px;
         box-shadow: 0 8px 22px rgba(55, 48, 163, .10);
       }
@@ -10055,7 +10596,7 @@
         }
 
         .quickvint-wardrobe-rewrite-host:has(#${WARDROBE_REWRITE_WIDGET_ID}.is-collapsed) .quickvint-wardrobe-rewrite-shell {
-          width: 196px;
+          width: 220px;
         }
 
         .quickvint-wardrobe-rewrite-host > .web_ui__Cell__content {
@@ -10068,9 +10609,13 @@
           display: block !important;
         }
 
-        #${WARDROBE_REWRITE_WIDGET_ID} {
+        .quickvint-wardrobe-rewrite-shell {
           max-width: 520px;
           margin: 16px 0 0 auto;
+        }
+
+        #${WARDROBE_REWRITE_WIDGET_ID} {
+          margin: 0;
         }
       }
 
@@ -10086,22 +10631,23 @@
 
         #${WARDROBE_REWRITE_WIDGET_ID} .quickvint-wardrobe-rewrite-preference,
         #${WARDROBE_REWRITE_WIDGET_ID} .quickvint-wardrobe-rewrite-instruction {
-          padding: 10px 48px 8px 17px;
+          padding: 14px 48px 12px 17px;
         }
 
         #${WARDROBE_REWRITE_WIDGET_ID} .quickvint-wardrobe-rewrite-preference legend {
-          margin-bottom: 2px;
+          margin-bottom: 0;
           font-size: 14px;
         }
 
         #${WARDROBE_REWRITE_WIDGET_ID} .quickvint-wardrobe-rewrite-preference label {
+          height: 40px;
           margin: 0;
+          padding: 0 9px;
         }
 
         #${WARDROBE_REWRITE_WIDGET_ID} .quickvint-wardrobe-rewrite-preference button,
         #${WARDROBE_REWRITE_WIDGET_ID} .quickvint-wardrobe-rewrite-instruction button {
           height: 40px;
-          margin-top: 4px;
         }
 
         #${WARDROBE_REWRITE_WIDGET_ID} h2 {
@@ -10115,10 +10661,10 @@
         }
 
         #${WARDROBE_REWRITE_WIDGET_ID} .quickvint-wardrobe-rewrite-cta {
-          height: 40px;
-          margin-top: 10px;
-          padding: 0 11px;
-          font-size: 11px;
+          min-width: 150px;
+          height: 42px;
+          padding: 0 14px;
+          font-size: 12px;
         }
 
         #${WARDROBE_REWRITE_WIDGET_ID} .quickvint-wardrobe-rewrite-character {
@@ -11697,11 +12243,15 @@
   }
 
   function setNativeInputValue(input, value) {
+    const prototype = input instanceof HTMLTextAreaElement
+      ? HTMLTextAreaElement.prototype
+      : HTMLInputElement.prototype;
     const setter = Object.getOwnPropertyDescriptor(
-      HTMLInputElement.prototype,
+      prototype,
       "value",
     )?.set;
-    setter?.call(input, value);
+    if (setter) setter.call(input, value);
+    else input.value = value;
     input.dispatchEvent(new Event("input", { bubbles: true }));
     input.dispatchEvent(new Event("change", { bubbles: true }));
   }
@@ -11912,10 +12462,10 @@
     return showFloatingPrompt({
       type: "description_apply",
       anchorInput: descInput,
-      title: "Update existing description?",
+      title: "How should we handle your current text?",
       actions: [
-        { choice: "replace", label: "Replace description", primary: true },
-        { choice: "add", label: "Add below" },
+        { choice: "replace", label: "Replace existing text", primary: true },
+        { choice: "review", label: "Review suggestions" },
         { choice: "cancel", label: "Cancel" },
       ],
     });
@@ -11959,16 +12509,7 @@
     });
   }
 
-  function applyGeneratedDescription(descInput, generatedDescription, applyChoice) {
-    const currentDescription = descInput.value || "";
-    if (applyChoice === "add" && currentDescription.trim()) {
-      setDescriptionValue(
-        descInput,
-        `${currentDescription.trimEnd()}\n\n${generatedDescription}`,
-      );
-      return;
-    }
-
+  function applyGeneratedDescription(descInput, generatedDescription) {
     setDescriptionValue(descInput, generatedDescription);
   }
 
@@ -16128,9 +16669,7 @@
 
   function setListingFieldValue(field, value) {
     if (!field) return;
-    field.value = String(value || "");
-    field.dispatchEvent(new Event("input", { bubbles: true }));
-    field.dispatchEvent(new Event("change", { bubbles: true }));
+    setNativeInputValue(field, String(value || ""));
   }
 
   function isWardrobeRewriteTabReady(itemId) {
@@ -16152,6 +16691,7 @@
     if (state.observer) state.observer.disconnect();
     if (state.timer) clearTimeout(state.timer);
     if (state.routeTimer) clearInterval(state.routeTimer);
+    for (const cleanup of [...(state.inputCleanups || [])]) cleanup();
     window.removeEventListener("pagehide", state.pagehide);
     if (removeUi) {
       document.getElementById(WARDROBE_REWRITE_STATUS_ID)?.remove();
@@ -16168,7 +16708,7 @@
   function isWardrobeRewriteOutputRouteCurrent(state) {
     return (
       window.location.pathname === state.expectedPathname &&
-      window.location.pathname === `/items/${state.itemId}/edit`
+      (!state.itemId || window.location.pathname === `/items/${state.itemId}/edit`)
     );
   }
 
@@ -16217,9 +16757,9 @@
     if (!anchor?.parentElement) return;
     const result = document.createElement("section");
     result.id = WARDROBE_REWRITE_RESULT_ID;
-    result.setAttribute("aria-label", "Generated wardrobe rewrite");
+    result.setAttribute("aria-label", "Listing rewrite result");
     const summary = document.createElement("span");
-    summary.textContent = "Generated title and description applied.";
+    summary.textContent = "New title and description applied.";
     const actions = document.createElement("div");
     actions.className = "quickvint-wardrobe-actions";
     for (const fieldName of ["title", "description"]) {
@@ -16261,29 +16801,50 @@
     const card = document.createElement("section");
     card.id = cardId;
     card.className = "quickvint-wardrobe-review-card";
-    card.setAttribute("aria-label", `Generated ${fieldName}`);
+    card.setAttribute("aria-label", `Suggested ${fieldName}`);
+    const heading = document.createElement("h3");
+    heading.textContent = `Suggested ${fieldName}`;
     const copy = document.createElement("p");
     copy.textContent = state.generated[fieldName];
     const actions = document.createElement("div");
     actions.className = "quickvint-wardrobe-actions";
     if (state.status[fieldName] === "applied") {
+      card.classList.add("quickvint-wardrobe-review-applied");
+      const applied = document.createElement("span");
+      applied.className = "quickvint-wardrobe-applied-label";
+      applied.textContent = "Suggestion applied";
+      const onInput = () => {
+        if (field.value === state.generated[fieldName]) return;
+        cleanupInput();
+        state.status[fieldName] = "done";
+        card.remove();
+        if (isWardrobeRewriteOutputResolved(state)) finishWardrobeRewriteOutput(state);
+      };
+      const cleanupInput = () => {
+        field.removeEventListener("input", onInput);
+        state.inputCleanups.delete(cleanupInput);
+      };
+      field.addEventListener("input", onInput);
+      state.inputCleanups.add(cleanupInput);
       actions.append(
-        createWardrobeButton(`Undo generated ${fieldName}`, () => {
-          const field = getWardrobeRewriteActionField(
+        createWardrobeButton("Undo", () => {
+          const actionField = getWardrobeRewriteActionField(
             state,
             fieldName,
             state.generated[fieldName],
           );
-          if (!field) return;
-          setListingFieldValue(field, state.originals[fieldName]);
-          state.status[fieldName] = "done";
+          if (!actionField) return;
+          cleanupInput();
+          setListingFieldValue(actionField, state.originals[fieldName]);
+          state.status[fieldName] = "active";
           card.remove();
-          if (isWardrobeRewriteOutputResolved(state)) finishWardrobeRewriteOutput(state);
+          attachWardrobeReviewOutput(state, fieldName);
         }),
       );
+      card.append(applied, actions);
     } else {
       actions.append(
-        createWardrobeButton(`Apply generated ${fieldName}`, () => {
+        createWardrobeButton(`Use this ${fieldName}`, () => {
           const field = getWardrobeRewriteActionField(
             state,
             fieldName,
@@ -16295,14 +16856,14 @@
           card.remove();
           attachWardrobeReviewOutput(state, fieldName);
         }),
-        createWardrobeButton(`Reject generated ${fieldName}`, () => {
+        createWardrobeButton("Discard suggestion", () => {
           state.status[fieldName] = "done";
           card.remove();
           if (isWardrobeRewriteOutputResolved(state)) finishWardrobeRewriteOutput(state);
         }),
       );
+      card.append(heading, copy, actions);
     }
-    card.append(copy, actions);
     wrapper.parentElement.insertBefore(card, wrapper.nextSibling);
   }
 
@@ -16328,6 +16889,7 @@
       timer: null,
       routeTimer: null,
       pagehide: null,
+      inputCleanups: new Set(),
       cleanup: null,
     };
     state.cleanup = (_reason) => finishWardrobeRewriteOutput(state, true);
@@ -16349,7 +16911,7 @@
     startWardrobeRewriteOutput("replace", originals, generated, route);
   }
 
-  function renderWardrobeReviewSuggestions(originals, generated, route) {
+  function renderListingReviewSuggestions(originals, generated, route) {
     startWardrobeRewriteOutput("review", originals, generated, route);
   }
 
@@ -16397,10 +16959,10 @@
         setListingFieldValue(title, output.title);
         setListingFieldValue(description, output.description);
         renderWardrobeReplaceUndo(originals, output, route);
-        showWardrobeRewriteStatus("Generated copy applied. Review before saving.", "success");
+        showWardrobeRewriteStatus("New title and description applied. Review before saving.", "success");
       } else {
-        renderWardrobeReviewSuggestions(originals, output, route);
-        showWardrobeRewriteStatus("Generated copy ready to review.", "success");
+        renderListingReviewSuggestions(originals, output, route);
+        showWardrobeRewriteStatus("New title and description ready to review.", "success");
       }
       return { ok: true, offers: generated.offers || [] };
     } catch (error) {
@@ -16419,17 +16981,22 @@
     const terminal = ["done", "failed"].includes(message.status);
     const controller = document.querySelector(".quickvint-wardrobe-selection-controller");
     if (controller) {
-      const feedback = controller.querySelector(".quickvint-wardrobe-selection-feedback");
       const current = Math.max(0, Number(message.current || 0));
       const total = Math.max(current, Number(message.total || 0));
-      if (feedback) {
-        feedback.textContent = message.message ||
+      setWardrobeSelectionFeedback(
+        controller,
+        message.message ||
           (message.status === "done"
             ? `${total} listing${total === 1 ? "" : "s"} ready`
             : message.status === "failed"
-              ? "Wardrobe rewrite stopped."
-              : `Rewriting ${current} of ${total}`);
-      }
+              ? "Could not finish rewriting these listings."
+              : `Rewriting ${current} of ${total}…`),
+        message.status === "done"
+          ? "success"
+          : message.status === "failed"
+            ? "error"
+            : "loading",
+      );
     }
     if (terminal) {
       stopTabJobHeartbeat();
@@ -16441,6 +17008,11 @@
           capacity,
         ),
       );
+      setTimeout(() => {
+        if (wardrobeSelectionController !== controller) return;
+        stopWardrobeSelection();
+        setWardrobeRewriteStep("intro");
+      }, message.status === "done" ? 1400 : 2400);
     }
   }
 
@@ -16577,6 +17149,20 @@
       throw new Error("Please upload at least one image.");
     }
 
+    const reviewOriginals =
+      applyGeneratedOutput && descriptionApplyChoice === "review"
+        ? {
+            title: document.querySelector(SELECTORS.title)?.value || "",
+            description: document.querySelector(SELECTORS.description)?.value || "",
+          }
+        : null;
+    const reviewRoute = reviewOriginals
+      ? {
+          pathname: window.location.pathname,
+          itemId: window.location.pathname.match(/^\/items\/(\d+)\/edit$/)?.[1] || null,
+        }
+      : null;
+
     if (manageButtonState) {
       const imageSourceSummary =
         summarizeImageSourcesForTelemetry(imageSourceTelemetry);
@@ -16601,6 +17187,7 @@
     if (activeGenerationOutputEditCleanup) {
       activeGenerationOutputEditCleanup("new_generation");
     }
+    wardrobeRewriteOutputCleanup?.("new_generation");
     updateButtonUI();
 
     try {
@@ -16937,23 +17524,36 @@
       const descInput = document.querySelector(SELECTORS.description);
 
       if (applyGeneratedOutput) {
-        if (titleInput) setListingFieldValue(titleInput, title);
-        if (descInput) {
-          applyGeneratedDescription(descInput, description, descriptionApplyChoice);
-        }
+        if (reviewOriginals) {
+          if (
+            window.location.pathname !== reviewRoute.pathname ||
+            titleInput?.value !== reviewOriginals.title ||
+            descInput?.value !== reviewOriginals.description
+          ) {
+            throw new Error("This listing changed while suggestions were being prepared.");
+          }
+          renderListingReviewSuggestions(
+            reviewOriginals,
+            { title, description },
+            reviewRoute,
+          );
+        } else {
+          if (titleInput) setListingFieldValue(titleInput, title);
+          if (descInput) applyGeneratedDescription(descInput, description);
 
-        startGenerationOutputEditTracking({
-          generationAttemptId,
-          mode,
-          photoCount: imageUrls.length,
-          titleLanguageCode,
-          descriptionLanguageCode,
-          descriptionApplyChoice,
-          generatedTitle: title,
-          generatedDescription: description,
-          appliedTitle: titleInput?.value || "",
-          appliedDescription: descInput?.value || "",
-        });
+          startGenerationOutputEditTracking({
+            generationAttemptId,
+            mode,
+            photoCount: imageUrls.length,
+            titleLanguageCode,
+            descriptionLanguageCode,
+            descriptionApplyChoice,
+            generatedTitle: title,
+            generatedDescription: description,
+            appliedTitle: titleInput?.value || "",
+            appliedDescription: descInput?.value || "",
+          });
+        }
 
         if (manageButtonState) setButtonSuccessState();
       }
@@ -17218,16 +17818,37 @@
     }
   }
 
+  function animateWardrobeRewriteCapacity(badge, delay = 0) {
+    if (!badge || window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+      return;
+    }
+    badge.animate(
+      [
+        { opacity: 0, transform: "translate(-50%, 8px) scale(.96)" },
+        { opacity: 1, transform: "translate(-50%, 0) scale(1)" },
+      ],
+      {
+        duration: 420,
+        delay,
+        easing: "cubic-bezier(.22, 1, .36, 1)",
+        fill: "backwards",
+      },
+    );
+  }
+
   function renderWardrobeRewriteCapacity(shell, state) {
     const badge = shell?.querySelector(".quickvint-wardrobe-rewrite-capacity");
     const cta = shell?.querySelector(".quickvint-wardrobe-rewrite-cta");
     if (!badge || !cta) return;
 
+    const wasHidden = badge.hidden;
     badge.replaceChildren();
+    badge.hidden =
+      wardrobeRewriteCapacityLoading || isAuthenticated === null;
     if (isAuthenticated === false) {
       badge.textContent = "Sign in to check availability";
     } else if (wardrobeRewriteCapacityLoading || isAuthenticated === null) {
-      badge.textContent = "Checking availability…";
+      badge.textContent = "";
     } else if (state?.error) {
       badge.append("Availability unavailable");
       const retry = document.createElement("button");
@@ -17244,6 +17865,7 @@
       const available = state?.available || 0;
       badge.textContent = `${available} listing${available === 1 ? "" : "s"} available`;
     }
+    if (wasHidden && !badge.hidden) animateWardrobeRewriteCapacity(badge);
 
     cta.disabled =
       isAuthenticated === null ||
@@ -17264,6 +17886,14 @@
   function setWardrobeRewriteStep(step) {
     const widget = wardrobeRewriteWidget;
     if (!widget || !["intro", "preference", "selection"].includes(step)) return;
+    const incoming = widget.querySelector(
+      step === "intro"
+        ? ".quickvint-wardrobe-rewrite-intro"
+        : step === "preference"
+          ? ".quickvint-wardrobe-rewrite-preference"
+          : ".quickvint-wardrobe-rewrite-instruction",
+    );
+    const shouldAnimate = incoming.hidden;
     widget.querySelector(".quickvint-wardrobe-rewrite-intro").hidden = step !== "intro";
     widget.querySelector(".quickvint-wardrobe-rewrite-preference").hidden = step !== "preference";
     widget.querySelector(".quickvint-wardrobe-rewrite-instruction").hidden = step !== "selection";
@@ -17281,6 +17911,18 @@
       if (selected) selected.checked = true;
       widget.querySelector(".quickvint-wardrobe-rewrite-continue").disabled =
         !wardrobeRewriteApplyMode;
+    }
+    if (
+      shouldAnimate &&
+      !window.matchMedia("(prefers-reduced-motion: reduce)").matches
+    ) {
+      incoming.animate(
+        [
+          { opacity: 0, transform: "translateY(6px)" },
+          { opacity: 1, transform: "translateY(0)" },
+        ],
+        { duration: 220, easing: "cubic-bezier(.22, 1, .36, 1)" },
+      );
     }
   }
 
@@ -17315,6 +17957,14 @@
     return ["starting", "active"].includes(wardrobeSelectionJobStatus);
   }
 
+  function setWardrobeSelectionFeedback(controller, message, state = "") {
+    const feedback = controller?.querySelector(".quickvint-wardrobe-selection-feedback");
+    if (!feedback) return;
+    feedback.textContent = message || "";
+    if (state) feedback.dataset.state = state;
+    else delete feedback.dataset.state;
+  }
+
   function updateWardrobeSelection() {
     const selectedCount = wardrobeRewriteSelectedItems.size;
     const atCapacity = selectedCount >= wardrobeSelectionCapacity;
@@ -17327,7 +17977,7 @@
         `${selected ? "Unselect" : "Select"} ${button.dataset.wardrobeTitle}`,
       );
       const check = button.querySelector(".quickvint-wardrobe-select-check");
-      const label = selected ? "✓" : "+";
+      const label = selected ? "✓" : "";
       if (check?.textContent !== label) check.textContent = label;
       button.disabled = locked || (!selected && atCapacity);
       button.closest(".quickvint-wardrobe-selection-item")?.classList.toggle(
@@ -17339,7 +17989,7 @@
       ".quickvint-wardrobe-selection-count",
     );
     if (count) {
-      count.textContent = `${selectedCount} selected · ${wardrobeSelectionCapacity} available`;
+      count.textContent = `${selectedCount} selected`;
     }
     const start = wardrobeSelectionController?.querySelector(
       ".quickvint-wardrobe-selection-start",
@@ -17350,8 +18000,9 @@
         selectedCount === 0 ||
         selectedCount > wardrobeSelectionCapacity;
     }
-    for (const select of wardrobeSelectionController?.querySelectorAll("select") || []) {
-      select.disabled = isWardrobeSelectionLocked();
+    for (const trigger of
+      wardrobeSelectionController?.querySelectorAll(".quickvint-lang-trigger") || []) {
+      trigger.disabled = isWardrobeSelectionLocked();
     }
     const cancel = wardrobeSelectionController?.querySelector(
       ".quickvint-wardrobe-selection-cancel",
@@ -17372,7 +18023,7 @@
       const button = document.createElement("button");
       button.type = "button";
       button.className = "quickvint-wardrobe-select-item";
-      button.innerHTML = '<span class="quickvint-wardrobe-select-check" aria-hidden="true">+</span>';
+      button.innerHTML = '<span class="quickvint-wardrobe-select-check" aria-hidden="true"></span>';
       button.dataset.wardrobeId = card.id;
       button.dataset.wardrobeTitle = card.image.querySelector("img")?.alt || `Item ${card.id}`;
       button.addEventListener("click", (event) => {
@@ -17400,8 +18051,6 @@
     }
     if (wardrobeSelectionOwnershipTimer) clearInterval(wardrobeSelectionOwnershipTimer);
     wardrobeSelectionOwnershipTimer = null;
-    if (wardrobeSelectionPulseTimeout) clearTimeout(wardrobeSelectionPulseTimeout);
-    wardrobeSelectionPulseTimeout = null;
     wardrobeSelectionController?.remove();
     wardrobeSelectionController = null;
     for (const node of document.querySelectorAll(".quickvint-wardrobe-select-item")) node.remove();
@@ -17432,26 +18081,40 @@
     const grid = wardrobeSelectionGrid;
     if (!grid) return;
     const controller = document.createElement("section");
-    controller.className = "quickvint-wardrobe-selection-controller";
+    controller.className =
+      "quickvint-wardrobe-selection-controller quickvint-wardrobe-selection-pending";
     controller.setAttribute("aria-label", "Rewrite selected listings");
     controller.innerHTML = `
       <span class="quickvint-wardrobe-selection-count" role="status" aria-live="polite"></span>
-      <label>Title language <select aria-label="Title language" class="quickvint-wardrobe-title-language"></select></label>
-      <label>Description language <select aria-label="Description language" class="quickvint-wardrobe-description-language"></select></label>
-      <button type="button" class="quickvint-wardrobe-selection-start">Start rewrite</button>
-      <button type="button" class="quickvint-wardrobe-selection-cancel">Cancel selection</button>
+      <div class="quickvint-wardrobe-selection-languages">
+        <div class="quickvint-wardrobe-selection-language"><span>Title</span><span class="quickvint-wardrobe-title-language-slot"></span></div>
+        <div class="quickvint-wardrobe-selection-language"><span>Description</span><span class="quickvint-wardrobe-description-language-slot"></span></div>
+      </div>
+      <div class="quickvint-wardrobe-selection-actions">
+        <button type="button" class="quickvint-wardrobe-selection-cancel">Cancel</button>
+        <button type="button" class="quickvint-wardrobe-selection-start">Start rewrite</button>
+      </div>
       <p class="quickvint-wardrobe-selection-feedback" aria-live="polite"></p>`;
-    for (const select of controller.querySelectorAll("select")) {
-      for (const language of LANGUAGE_OPTIONS) {
-        select.add(new Option(language.name, language.code));
-      }
-    }
+    const titleLanguageField = createInlineLanguageField(
+      "Title",
+      "Title language",
+      "quickvint-wardrobe-title-language",
+      "selectedTitleLanguage",
+    );
+    const descriptionLanguageField = createInlineLanguageField(
+      "Description",
+      "Description language",
+      "quickvint-wardrobe-description-language",
+      "selectedDescriptionLanguage",
+    );
+    controller.querySelector(".quickvint-wardrobe-title-language-slot").append(titleLanguageField);
+    controller
+      .querySelector(".quickvint-wardrobe-description-language-slot")
+      .append(descriptionLanguageField);
     grid.before(controller);
     wardrobeSelectionController = controller;
-    const titleLanguage = controller.querySelector(".quickvint-wardrobe-title-language");
-    const descriptionLanguage = controller.querySelector(
-      ".quickvint-wardrobe-description-language",
-    );
+    const titleLanguage = titleLanguageField.querySelector(".quickvint-lang-trigger");
+    const descriptionLanguage = descriptionLanguageField.querySelector(".quickvint-lang-trigger");
     const storage = await chrome.storage.local.get([
       "selectedLanguage",
       "selectedTitleLanguage",
@@ -17459,14 +18122,8 @@
     ]);
     if (wardrobeSelectionController !== controller) return;
     const profile = resolveLanguageProfile(storage);
-    titleLanguage.value = profile.titleLanguageCode;
-    descriptionLanguage.value = profile.descriptionLanguageCode;
-    titleLanguage.addEventListener("change", () =>
-      chrome.storage.local.set({ selectedTitleLanguage: titleLanguage.value }),
-    );
-    descriptionLanguage.addEventListener("change", () =>
-      chrome.storage.local.set({ selectedDescriptionLanguage: descriptionLanguage.value }),
-    );
+    updateInlineLanguageControl(titleLanguage, profile.titleLanguageCode);
+    updateInlineLanguageControl(descriptionLanguage, profile.descriptionLanguageCode);
     controller.querySelector(".quickvint-wardrobe-selection-cancel").addEventListener("click", () => {
       if (isWardrobeSelectionLocked()) return;
       stopWardrobeSelection();
@@ -17475,7 +18132,7 @@
     controller.querySelector(".quickvint-wardrobe-selection-start").addEventListener("click", async () => {
       if (wardrobeSelectionJobStatus !== "idle") return;
       wardrobeSelectionJobStatus = "starting";
-      controller.querySelector(".quickvint-wardrobe-selection-feedback").textContent = "Starting…";
+      setWardrobeSelectionFeedback(controller, "Preparing your listings…", "loading");
       updateWardrobeSelection();
       const capacity = await loadWardrobeRewriteCapacity();
       if (wardrobeSelectionController !== controller) return;
@@ -17487,8 +18144,11 @@
           nextTier: capacity.nextTier,
           error: capacity.message,
         });
-        controller.querySelector(".quickvint-wardrobe-selection-feedback").textContent =
-          capacity.error || limitMessage.message || capacity.message;
+        setWardrobeSelectionFeedback(
+          controller,
+          capacity.error || limitMessage.message || capacity.message,
+          "error",
+        );
         updateWardrobeSelection();
         if (capacity.error) showToast(capacity.error, "error");
         else await showBatchCapacityBlocked(capacity);
@@ -17497,8 +18157,11 @@
       wardrobeSelectionCapacity = capacity.available;
       if (wardrobeRewriteSelectedItems.size > wardrobeSelectionCapacity) {
         wardrobeSelectionJobStatus = "idle";
-        controller.querySelector(".quickvint-wardrobe-selection-feedback").textContent =
-          `Deselect to the new maximum of ${wardrobeSelectionCapacity}.`;
+        setWardrobeSelectionFeedback(
+          controller,
+          `Deselect to the new maximum of ${wardrobeSelectionCapacity}.`,
+          "error",
+        );
         updateWardrobeSelection();
         return;
       }
@@ -17506,15 +18169,18 @@
         type: "START_WARDROBE_REWRITE",
         items: [...wardrobeRewriteSelectedItems.values()].map(({ id, editUrl }) => ({ id, editUrl })),
         applyMode: wardrobeRewriteApplyMode,
-        titleLanguageCode: titleLanguage.value,
-        descriptionLanguageCode: descriptionLanguage.value,
+        titleLanguageCode: titleLanguage.dataset.value,
+        descriptionLanguageCode: descriptionLanguage.dataset.value,
       });
       if (wardrobeSelectionController !== controller) return;
       if (!response?.ok) {
         stopTabJobHeartbeat();
         wardrobeSelectionJobStatus = "idle";
-        controller.querySelector(".quickvint-wardrobe-selection-feedback").textContent =
-          response?.error || "Could not start wardrobe rewrite.";
+        setWardrobeSelectionFeedback(
+          controller,
+          response?.error || "Could not start wardrobe rewrite.",
+          "error",
+        );
         updateWardrobeSelection();
         return;
       }
@@ -17530,13 +18196,14 @@
       updateWardrobeSelection();
     });
     updateWardrobeSelection();
+    return controller;
   }
 
-  function startWardrobeSelection() {
+  async function startWardrobeSelection() {
     stopWardrobeSelection();
     const copy = wardrobeRewriteApplyMode === "replace"
-      ? "Generated copy will replace your title and description."
-      : "Generated copy will be shown for review before changing fields.";
+      ? "Your new title and description will replace the current ones."
+      : "You’ll review the new title and description before anything changes.";
     const modeCopy = wardrobeRewriteWidget?.querySelector(
       ".quickvint-wardrobe-rewrite-mode-copy",
     );
@@ -17555,7 +18222,8 @@
     if (!wardrobeSelectionGrid) return;
     wardrobeSelectionCapacity = Math.max(0, wardrobeRewriteCapacity?.available || 0);
     decorateWardrobeListingCards();
-    renderWardrobeSelectionController();
+    const controller = await renderWardrobeSelectionController();
+    if (!controller) return;
     wardrobeSelectionObserver = new MutationObserver(decorateWardrobeListingCards);
     wardrobeSelectionObserver.observe(wardrobeSelectionGrid, { childList: true, subtree: true });
     wardrobeSelectionPagehide = stopWardrobeSelection;
@@ -17568,19 +18236,39 @@
         stopWardrobeSelectionForOwnershipChange();
       }
     }, 250);
-    const firstButton = wardrobeSelectionGrid.querySelector(".quickvint-wardrobe-select-item");
     const firstItem = wardrobeSelectionGrid.querySelector('[data-testid="grid-item"]');
     const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-    if (firstButton && !reduceMotion) {
-      firstButton.parentElement?.classList.add("quickvint-wardrobe-attention");
-      wardrobeSelectionPulseTimeout = setTimeout(
-        () => firstButton.parentElement?.classList.remove("quickvint-wardrobe-attention"),
-        700,
+    const revealController = () => {
+      if (!controller.isConnected) return;
+      controller.classList.remove("quickvint-wardrobe-selection-pending");
+      if (reduceMotion) return;
+      controller.animate(
+        [
+          { opacity: 0, transform: "translateY(-10px)" },
+          { opacity: 1, transform: "translateY(0)" },
+        ],
+        { duration: 320, easing: "cubic-bezier(.22, 1, .36, 1)" },
       );
-    }
+    };
     if (firstItem) {
       const top = firstItem.getBoundingClientRect().top + scrollY - 96;
-      window.scrollTo({ top: Math.max(0, top), behavior: reduceMotion ? "auto" : "smooth" });
+      const targetTop = Math.max(0, top);
+      if (!reduceMotion && Math.abs(scrollY - targetTop) > 4) {
+        let fallback;
+        const revealAfterScroll = () => {
+          window.removeEventListener("scrollend", revealAfterScroll);
+          clearTimeout(fallback);
+          revealController();
+        };
+        window.addEventListener("scrollend", revealAfterScroll, { once: true });
+        fallback = setTimeout(revealAfterScroll, 900);
+        window.scrollTo({ top: targetTop, behavior: "smooth" });
+      } else {
+        window.scrollTo({ top: targetTop, behavior: "auto" });
+        revealController();
+      }
+    } else {
+      revealController();
     }
   }
 
@@ -17615,6 +18303,9 @@
     if (!ready) {
       if (wardrobeRewriteScheduled) return false;
       wardrobeRewriteScheduled = true;
+      if (isAuthenticated !== false) {
+        wardrobeRewriteCapacityPrefetch = loadWardrobeRewriteCapacity();
+      }
       chrome.storage.local.get(
         { [WARDROBE_REWRITE_COLLAPSED_KEY]: false },
         (storage) => {
@@ -17648,7 +18339,7 @@
     widget.innerHTML = `
       <div class="quickvint-wardrobe-rewrite-expanded">
         <button type="button" class="quickvint-wardrobe-rewrite-minimize" aria-label="Minimize rewrite listings" title="Minimize">
-          <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M6 12h12" stroke-linecap="round" /></svg>
+          <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m7 14 5-5 5 5" stroke-linecap="round" stroke-linejoin="round" /></svg>
         </button>
         <div class="quickvint-wardrobe-rewrite-intro">
           <p class="quickvint-wardrobe-rewrite-brand">AutoLister AI</p>
@@ -17658,12 +18349,14 @@
         </div>
         <form class="quickvint-wardrobe-rewrite-preference" hidden>
           <fieldset>
-            <legend>How should generated copy be handled?</legend>
-            <label><input type="radio" name="quickvint-wardrobe-apply-mode" value="replace"> Replace fields</label>
+            <legend>What should happen to your new text?</legend>
             <label><input type="radio" name="quickvint-wardrobe-apply-mode" value="review"> Review first</label>
+            <label class="quickvint-wardrobe-rewrite-option-replace"><input type="radio" name="quickvint-wardrobe-apply-mode" value="replace"> Replace immediately <span class="quickvint-wardrobe-rewrite-info" tabindex="0" data-tooltip="You’ll lose your current title and description. The new versions will replace them." aria-label="You’ll lose your current title and description. The new versions will replace them."><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9" /><path d="M12 11v5" /><path d="M12 8h.01" /></svg></span></label>
           </fieldset>
-          <button type="button" class="quickvint-wardrobe-rewrite-back">Back</button>
-          <button type="submit" class="quickvint-wardrobe-rewrite-continue" disabled>Continue</button>
+          <div class="quickvint-wardrobe-rewrite-actions">
+            <button type="button" class="quickvint-wardrobe-rewrite-back">Back</button>
+            <button type="submit" class="quickvint-wardrobe-rewrite-continue" disabled>Continue</button>
+          </div>
         </form>
         <div class="quickvint-wardrobe-rewrite-instruction" hidden>
           <h2>Select listings below</h2>
@@ -17699,7 +18392,9 @@
     shell.appendChild(widget);
     host.appendChild(shell);
     if (isAuthenticated !== false) {
-      const request = loadWardrobeRewriteCapacity();
+      const request =
+        wardrobeRewriteCapacityPrefetch || loadWardrobeRewriteCapacity();
+      wardrobeRewriteCapacityPrefetch = null;
       renderWardrobeRewriteCapacity(shell, wardrobeRewriteCapacity);
       request.then((capacity) =>
         renderWardrobeRewriteCapacity(shell, capacity),
@@ -17719,7 +18414,7 @@
       }
       const viewportWidth = document.documentElement.clientWidth;
       const width = widget.classList.contains("is-collapsed")
-        ? Math.min(196, viewportWidth - 32)
+        ? Math.min(220, viewportWidth - 32)
         : viewportWidth - 32;
       const currentMargin = Number.parseFloat(widget.style.marginLeft) || 0;
       const naturalLeft = widget.getBoundingClientRect().left - currentMargin;
@@ -17827,6 +18522,8 @@
     setCollapsed(true, false);
     if (!initialCollapsed) {
       setCollapsed(false, false, true, initialHostHeight);
+      const badge = shell.querySelector(".quickvint-wardrobe-rewrite-capacity");
+      if (!badge.hidden) animateWardrobeRewriteCapacity(badge);
     }
     widget.classList.remove("quickvint-wardrobe-rewrite-pending");
     window.addEventListener("resize", fitToViewport);

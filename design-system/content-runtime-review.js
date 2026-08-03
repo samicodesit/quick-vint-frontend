@@ -394,9 +394,9 @@
           desc?.value === "My original description." &&
           doc.querySelector('[data-testid="title--input"]')?.value === "" &&
           doc.defaultView.__generateCallCount === 0 &&
-          /Update existing description/.test(prompt?.textContent || "") &&
-          /Replace/.test(prompt?.textContent || "") &&
-          /Add below/.test(prompt?.textContent || "") &&
+          /How should we handle your current text/.test(prompt?.textContent || "") &&
+          /Replace existing text/.test(prompt?.textContent || "") &&
+          /Review suggestions/.test(prompt?.textContent || "") &&
           /Cancel/.test(prompt?.textContent || "")
         );
       },
@@ -421,20 +421,21 @@
       },
     },
     {
-      id: "existing-description-add",
-      title: "Existing description: add below",
-      note: "Generated text appends only after the user chooses add below.",
+      id: "existing-description-review",
+      title: "Existing text: review suggestions",
+      note: "Generated title and description stay separate until the user reviews them.",
       height: 540,
       auth: true,
-      action: "generate-existing-add",
+      action: "generate-existing-review",
       hasImages: true,
       initialDescription: "My original description.",
       verify(doc) {
         const desc = doc.querySelector('[data-testid="description--input"]');
         return (
           doc.defaultView.__generateCallCount === 1 &&
-          desc?.value ===
-            "My original description.\n\nLight blue denim jacket in good condition. Easy to style and ready for everyday wear." &&
+          desc?.value === "My original description." &&
+          doc.querySelector('[data-testid="title--input"]')?.value === "" &&
+          doc.querySelectorAll(".quickvint-wardrobe-review-card").length === 2 &&
           !doc.getElementById("quickvint-description-apply-prompt")
         );
       },
@@ -1266,14 +1267,14 @@
         }
         if (
           scenario.action === "generate-existing-replace" ||
-          scenario.action === "generate-existing-add" ||
+          scenario.action === "generate-existing-review" ||
           scenario.action === "generate-existing-cancel"
         ) {
           generate?.click();
           const buttonSelector =
             scenario.action === "generate-existing-replace"
               ? "[data-quickvint-prompt-action='0']"
-              : scenario.action === "generate-existing-add"
+              : scenario.action === "generate-existing-review"
                 ? "[data-quickvint-prompt-action='1']"
                 : "[data-quickvint-prompt-action='2']";
           const clickWhenReady = (attempt = 0) => {
