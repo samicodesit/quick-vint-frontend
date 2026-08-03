@@ -1018,7 +1018,7 @@
   };
   const WAND_ICON_SVG = `<svg fill="#ffffff" viewBox="0 0 512 512" version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink"> <path d="M454.321,219.727l-38.766-51.947l20.815-61.385c2.046-6.032,0.489-12.704-4.015-17.208 c-4.504-4.504-11.175-6.061-17.208-4.015l-61.384,20.815l-51.951-38.766c-5.103-3.809-11.929-4.392-17.605-1.499 c-5.676,2.893-9.217,8.755-9.136,15.125l0.829,64.815l-52.923,37.426c-5.201,3.678-7.863,9.989-6.867,16.282 c0.996,6.291,5.479,11.471,11.561,13.363l43.844,13.63L14.443,483.432c-6.535,6.534-6.535,17.131,0,23.666s17.131,6.535,23.666,0 l257.073-257.072l13.629,43.843c2.172,6.986,8.638,11.768,15.984,11.768c5.375,0,10.494-2.595,13.66-7.072l37.426-52.923 l64.815,0.828c6.322,0.051,12.233-3.462,15.125-9.136S458.131,224.833,454.321,219.727z"></path> <polygon points="173.373,67.274 160.014,42.848 146.656,67.274 122.23,80.632 146.656,93.992 160.014,118.417 173.373,93.992 197.799,80.632 "></polygon> <polygon points="362.946,384.489 352.14,364.731 341.335,384.489 321.577,395.294 341.335,406.1 352.14,425.856 362.946,406.1 382.703,395.294 "></polygon> <polygon points="378.142,19.757 367.337,0 356.531,19.757 336.774,30.563 356.531,41.369 367.337,61.126 378.142,41.369 397.9,30.563 "></polygon> <polygon points="490.635,142.513 484.167,130.689 477.701,142.513 465.876,148.979 477.701,155.446 484.167,167.27 490.635,155.446 502.458,148.979 "></polygon> <polygon points="492.626,294.117 465.876,301.951 439.128,294.117 446.962,320.865 439.128,347.615 465.876,339.781 492.626,347.615 484.791,320.865 "></polygon> </svg>`;
   /*!
-   * LDRS Mirage loader, adapted from https://github.com/GriffinJohnston/ldrs
+   * LDRS Mirage and Treadmill loaders, adapted from https://github.com/GriffinJohnston/ldrs
    * Copyright (c) 2022 Griffin Johnston. MIT License.
    * Permission is hereby granted, free of charge, to any person obtaining a copy
    * of this software and associated documentation files (the "Software"), to deal
@@ -1029,6 +1029,9 @@
    */
   function mirageLoaderSvg(filterId) {
     return `<span class="quickvint-mirage" aria-hidden="true"><svg viewBox="0 0 30 6.9" role="presentation" focusable="false" style="filter:url(#${filterId})" xmlns="http://www.w3.org/2000/svg"><circle class="dot" cx="0" cy="3.45" r="3.45"/><circle class="dot" cx="0" cy="3.45" r="3.45"/><circle class="dot" cx="0" cy="3.45" r="3.45"/><circle class="dot" cx="0" cy="3.45" r="3.45"/><circle class="dot" cx="0" cy="3.45" r="3.45"/><defs><filter id="${filterId}"><feGaussianBlur in="SourceGraphic" stdDeviation="1.5" result="blur"/><feColorMatrix in="blur" mode="matrix" values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 18 -7" result="ooze"/><feBlend in="SourceGraphic" in2="ooze"/></filter></defs></svg></span>`;
+  }
+  function treadmillLoaderHtml() {
+    return '<span class="quickvint-treadmill" aria-hidden="true"><span class="quickvint-treadmill-track"><span class="quickvint-treadmill-cube"></span></span></span>';
   }
   const PHONE_ICON_SVG = `<svg fill="#ffffff" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M17 1.01L7 1c-1.1 0-2 .9-2 2v18c0 1.1.9 2 2 2h10c1.1 0 2-.9 2-2V3c0-1.1-.9-1.99-2-1.99zM17 19H7V5h10v14z"/></svg>`;
   const BATCH_ICON_SVG = `<svg data-icon="upload" fill="none" viewBox="0 0 24 24" stroke="#ffffff" stroke-width="2" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5m-13.5-9L12 3m0 0 4.5 4.5M12 3v13.5"/></svg>`;
@@ -8889,6 +8892,100 @@
         gap: 12px;
       }
 
+      #${BATCH_MODAL_ID} .batch-phone-receiving {
+        display: flex;
+        flex: 1 1 auto;
+        min-height: 278px;
+        align-items: center;
+        justify-content: center;
+        text-align: center;
+      }
+
+      #${BATCH_MODAL_ID} .batch-phone-receiving-content {
+        display: flex;
+        width: min(260px, 100%);
+        flex-direction: column;
+        align-items: center;
+      }
+
+      #${BATCH_MODAL_ID} .batch-phone-receiving .batch-wait-title {
+        font-size: 18px;
+      }
+
+      #${BATCH_MODAL_ID} .batch-phone-receiving .batch-wait-copy {
+        margin-top: 6px;
+        font-size: 13px;
+      }
+
+      #${BATCH_MODAL_ID} .quickvint-treadmill {
+        --quickvint-treadmill-size: 76px;
+        --quickvint-treadmill-cube: calc(var(--quickvint-treadmill-size) * .2);
+        display: inline-flex;
+        width: var(--quickvint-treadmill-size);
+        height: calc(var(--quickvint-treadmill-size) * .59);
+        margin-bottom: 18px;
+        align-items: center;
+        justify-content: center;
+        color: #4f46e5;
+        flex-shrink: 0;
+      }
+
+      #${BATCH_MODAL_ID} .quickvint-treadmill-track {
+        display: flex;
+        width: 100%;
+        height: calc(100% - var(--quickvint-treadmill-cube) / 2);
+        padding-bottom: calc(var(--quickvint-treadmill-cube) / 2);
+        align-items: flex-end;
+        justify-content: center;
+      }
+
+      #${BATCH_MODAL_ID} .quickvint-treadmill-cube {
+        --quickvint-treadmill-height: calc(var(--quickvint-treadmill-size) * .8);
+        display: flex;
+        width: var(--quickvint-treadmill-cube);
+        height: var(--quickvint-treadmill-height);
+        align-items: center;
+        transform: rotate(-90deg);
+        transform-origin: center bottom;
+        animation: quickvintTreadmillMove 1.25s linear infinite;
+      }
+
+      #${BATCH_MODAL_ID} .quickvint-treadmill-cube::after {
+        width: var(--quickvint-treadmill-cube);
+        height: var(--quickvint-treadmill-cube);
+        border-radius: 25%;
+        background: currentColor;
+        content: "";
+        transform-origin: center left;
+        animation: quickvintTreadmillMorph 1.25s linear infinite;
+      }
+
+      @keyframes quickvintTreadmillMove {
+        0%, 100% { transform: rotate(-90deg); }
+        50% { transform: rotate(90deg); }
+        50.001% { transform: translateX(var(--quickvint-treadmill-height)) rotate(-90deg); }
+      }
+
+      @keyframes quickvintTreadmillMorph {
+        15% { transform: scaleX(1.2) scaleY(.8); }
+        30%, 50% { transform: scaleX(1); }
+        55% { transform: scaleX(.8) scaleY(1.2); }
+        65%, 80% { transform: scaleX(1); }
+        90%, 95% { transform: scaleX(.65) scaleY(1.3); }
+      }
+
+      #${BATCH_MODAL_ID} .batch-phone-receiving.is-stale .quickvint-treadmill-cube,
+      #${BATCH_MODAL_ID} .batch-phone-receiving.is-stale .quickvint-treadmill-cube::after {
+        animation-play-state: paused;
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        #${BATCH_MODAL_ID} .quickvint-treadmill-cube,
+        #${BATCH_MODAL_ID} .quickvint-treadmill-cube::after {
+          animation-play-state: paused;
+        }
+      }
+
       #${BATCH_MODAL_ID} .batch-source-panel {
         min-width: 0;
         min-height: 278px;
@@ -8974,12 +9071,6 @@
         border-color: #818cf8;
         background: #f5f7ff;
         box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
-      }
-
-      #${BATCH_MODAL_ID} .batch-source-computer.is-phone-locked .batch-computer-dropzone {
-        border-style: solid;
-        background: #f8fafc;
-        cursor: default;
       }
 
       #${BATCH_MODAL_ID} .batch-computer-files-input {
@@ -13960,23 +14051,21 @@
     const panel = document.querySelector(
       `#${BATCH_MODAL_ID} .batch-source-computer`,
     );
-    if (!panel) return;
+    const grid = panel?.closest(".batch-source-grid");
+    const sourceCopy = grid?.querySelector(".batch-source-copy");
+    if (!grid || !sourceCopy) return;
     batchInputSource = "phone";
-    panel.classList.add("is-phone-locked");
-    document
-      .querySelector(`#${BATCH_MODAL_ID} .batch-source-phone .batch-qr`)
-      ?.remove();
-    panel
-      .querySelectorAll(
-        ".batch-choose-files, .batch-choose-folder, .batch-computer-files-input, .batch-computer-folder-input",
-      )
-      .forEach((control) => {
-        control.disabled = true;
-      });
-    const dropzone = panel.querySelector(".batch-computer-dropzone");
-    dropzone?.setAttribute("aria-disabled", "true");
-    const title = dropzone?.querySelector("strong");
-    if (title) title.textContent = "Receiving from phone";
+
+    const receiving = document.createElement("section");
+    receiving.className = "batch-phone-receiving batch-wait-panel";
+    receiving.setAttribute("role", "status");
+    receiving.setAttribute("aria-live", "polite");
+    receiving.setAttribute("aria-busy", "true");
+    receiving.innerHTML = `<div class="batch-phone-receiving-content">${treadmillLoaderHtml()}</div>`;
+    receiving
+      .querySelector(".batch-phone-receiving-content")
+      ?.appendChild(sourceCopy);
+    grid.replaceWith(receiving);
   }
 
   function lockBatchPhoneControlsForComputer() {
@@ -14130,6 +14219,14 @@
       !batchIsComplete &&
       batchExpectedCount > 0 &&
       receivedCount === batchExpectedCount;
+    const receiving = document.querySelector(
+      `#${BATCH_MODAL_ID} .batch-phone-receiving`,
+    );
+    receiving?.classList.toggle("is-stale", isStale);
+    receiving?.setAttribute(
+      "aria-busy",
+      String(!batchIsComplete && !isStale),
+    );
 
     if (status) {
       status.classList.toggle("done", batchIsComplete && receivedCount > 0);

@@ -10,7 +10,7 @@ Use the MIT-licensed LDRS Treadmill loader from <https://github.com/GriffinJohns
 
 The loader is exclusive to phone-photo transfer. The existing Mirage loader remains exclusive to AI generation.
 
-- Bounding box: 112px wide by 24px high at every supported viewport.
+- Bounding box: 76px wide by 45px high at every supported viewport, preserving the source loader's `1:0.59` aspect ratio.
 - Color: the existing AutoLister purple.
 - Placement: centered above the status title in a content stack no wider than 260px.
 - Reduced motion: pause the animation while retaining a visible static transfer indicator.
@@ -40,6 +40,10 @@ The modal title remains `Batch upload`, and Cancel remains in the footer. The ce
 
 Reuse the current batch polling state and `renderBatchUploadStrip` status calculations. Add only the minimal markup/CSS switch needed when `batchInputSource === "phone"`; do not create a second upload flow or duplicate state calculations.
 
+## Phone Row Completion
+
+On the v2 phone page, keep the remove × while a photo is pending or failed. In the existing successful-upload branch, replace that row's disabled × with a green ✓ and change its accessible label to `Photo uploaded`. Reuse `item.done`; do not add requests, polling, or another completion state.
+
 ## Verification
 
 Browser coverage must verify:
@@ -50,3 +54,4 @@ Browser coverage must verify:
 - Finalizing and stale messages still render correctly.
 - Completion still opens the grouping gallery.
 - Reduced-motion mode leaves a visible, non-animated indicator.
+- A successfully uploaded phone row shows the green check while pending and failed rows retain the remove ×.

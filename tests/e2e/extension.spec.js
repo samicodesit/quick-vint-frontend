@@ -1840,14 +1840,42 @@ test.describe("AutoLister extension smoke flows", () => {
 
     await chooseBatchUpload(page);
     const modal = page.locator("#quickvint-batch-modal");
+    await expect(modal.locator(".batch-source-grid")).toHaveCount(0);
+    await expect(modal.locator(".batch-phone-receiving")).toBeVisible();
     await expect(modal.locator(".batch-wait-title")).toContainText(
       "Receiving 1 photo",
     );
-    await expect(modal.locator(".batch-choose-files")).toBeDisabled();
-    await expect(modal.locator(".batch-choose-folder")).toBeDisabled();
-    await expect(modal.locator(".batch-computer-dropzone")).toContainText(
-      "Receiving from phone",
+    await expect(modal.locator(".batch-wait-copy")).toHaveText(
+      "Keep the phone page open.",
     );
+    await expect(modal.locator(".batch-choose-files")).toHaveCount(0);
+    const loader = modal.locator(".quickvint-treadmill");
+    const loaderBox = await loader.boundingBox();
+    expect(loaderBox.width).toBeGreaterThanOrEqual(75);
+    expect(loaderBox.width).toBeLessThanOrEqual(77);
+    expect(loaderBox.height).toBeGreaterThanOrEqual(44);
+    expect(loaderBox.height).toBeLessThanOrEqual(46);
+    expect(
+      await loader.locator(".quickvint-treadmill-cube").evaluate((cube) => [
+        getComputedStyle(cube).animationName,
+        getComputedStyle(cube, "::after").animationName,
+      ]),
+    ).toEqual(["quickvintTreadmillMove", "quickvintTreadmillMorph"]);
+
+    await page.evaluate(() => {
+      const staleNow = Date.now() + 16000;
+      Date.now = () => staleNow;
+    });
+    await expect(modal.locator(".batch-wait-title")).toContainText("Check phone");
+    await expect(modal.locator(".batch-wait-copy")).toHaveText(
+      "Reopen the phone page, then leave it visible.",
+    );
+    expect(
+      await loader.locator(".quickvint-treadmill-cube").evaluate((cube) => [
+        getComputedStyle(cube).animationPlayState,
+        getComputedStyle(cube, "::after").animationPlayState,
+      ]),
+    ).toEqual(["paused", "paused"]);
   });
 
   test("ignores a delayed phone poll after computer upload starts", async ({
@@ -4588,6 +4616,8 @@ test.describe("AutoLister extension smoke flows", () => {
   test("protects an expected phone batch before the first photo arrives", async ({
     page,
   }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.emulateMedia({ reducedMotion: "reduce" });
     await openContentHarness(
       page,
       { allowed: true, available: 40 },
@@ -4644,12 +4674,15 @@ test.describe("AutoLister extension smoke flows", () => {
     await expect(modal.locator(".batch-wait-copy")).toHaveText(
       "Keep the phone page open.",
     );
-    await expect(modal.locator(".batch-choose-files")).toBeDisabled();
-    await expect(modal.locator(".batch-choose-folder")).toBeDisabled();
-    await expect(modal.locator(".batch-computer-dropzone")).toHaveAttribute(
-      "aria-disabled",
-      "true",
-    );
+    await expect(modal.locator(".batch-source-grid")).toHaveCount(0);
+    await expect(modal.locator(".batch-phone-receiving")).toBeVisible();
+    await expect(modal.locator(".batch-choose-files")).toHaveCount(0);
+    expect(
+      await modal.locator(".quickvint-treadmill-cube").evaluate((cube) => [
+        getComputedStyle(cube).animationPlayState,
+        getComputedStyle(cube, "::after").animationPlayState,
+      ]),
+    ).toEqual(["paused", "paused"]);
     await modal.locator(".batch-close").click();
 
     await expect(modal).toBeVisible();
