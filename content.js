@@ -1090,6 +1090,7 @@
   let lastPhoneUploadBlockedTrackKey = null;
   let lastPhoneUploadReadyTrackKey = null;
   let isPhoneUploadGenerateInFlight = false;
+  let isPhoneUploadLockInFlight = false;
   let phoneUploadPreviewUrls = [];
   let displayedPhoneUploadPreviewCount = 0;
   let phoneUploadPreviewTimer = null;
@@ -12888,18 +12889,83 @@
     return modal;
   }
 
-  function requestCloseModal() {
-    if (isPhoneUploadGenerateInFlight) {
-      showToast("Generation is running. Wait a moment.", "info");
+  async function lockPhoneUploadSession() {
+    const state = lastPhoneUploadState;
+    const expectedCount = Number(state?.expectedCount || 0);
+    if (!state?.sessionId || expectedCount <= 0) return false;
+    if (state.complete === true) return true;
+
+    let response = null;
+    for (let attempt = 0; attempt < 8; attempt += 1) {
+      response = await sendMessage({
+        type: "PROXY_FETCH",
+        url: `${PHONE_UPLOAD_API}?action=complete&v=2&sessionId=${state.sessionId}&expectedCount=${expectedCount}`,
+        options: {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            expectedCount,
+            orders: Array.from({ length: expectedCount }, (_, order) => order),
+          }),
+        },
+      });
+      const settling =
+        response?.status === 202 ||
+        response?.data?.settling === true;
+      if (response?.ok && response?.data?.complete !== false) break;
+      if (!settling || attempt === 7) {
+        throw new Error(
+          response?.data?.error || "Could not finish the phone upload.",
+        );
+      }
+      await new Promise((resolve) => setTimeout(resolve, 900));
+    }
+
+    state.complete = true;
+    state.updatedAt = Date.now();
+    markPhoneUploadCapturedReadyForGeneration();
+    return true;
+  }
+
+  function setPhoneUploadModalActionsDisabled(disabled) {
+    document
+      .querySelectorAll(`#${MODAL_ID} .close-x, #${MODAL_ID} .close-btn, #${MODAL_ID} .generate-btn`)
+      .forEach((button) => {
+        button.disabled = disabled;
+      });
+  }
+
+  async function requestCloseModal() {
+    if (isPhoneUploadGenerateInFlight || isPhoneUploadLockInFlight) {
+      showToast("Finishing your photos. Wait a moment.", "info");
       return false;
     }
+    const incompleteUpload = getIncompletePhoneUploadState();
     if (
-      getIncompletePhoneUploadState() &&
+      incompleteUpload &&
       !window.confirm("Stop receiving photos? Photos already added will stay.")
     ) {
       return false;
     }
-    closeModal({ cancelUpload: Boolean(getIncompletePhoneUploadState()) });
+    if (incompleteUpload) {
+      closeModal({ cancelUpload: true });
+      return true;
+    }
+
+    if (getPhoneUploadCapturedReadyCount() > 0) {
+      isPhoneUploadLockInFlight = true;
+      setPhoneUploadModalActionsDisabled(true);
+      try {
+        await lockPhoneUploadSession();
+      } catch (error) {
+        showToast(error?.message || "Could not finish the phone upload.", "error");
+        setPhoneUploadModalActionsDisabled(false);
+        return false;
+      } finally {
+        isPhoneUploadLockInFlight = false;
+      }
+    }
+    closeModal();
     return true;
   }
 
@@ -12945,6 +13011,8 @@
         restoreGenerateButton();
         return;
       }
+
+      await lockPhoneUploadSession();
 
       await generateCurrentListing({
         descriptionApplyChoice,
@@ -13160,12 +13228,15 @@
           (a, b) => Number(a.order || 0) - Number(b.order || 0),
         );
         const expectedCount = Number(data?.expectedCount ?? data?.count ?? 0);
-        const exactComplete =
-          data?.complete === true &&
-          expectedCount > 0 &&
+        const waveReady =
+          expectedCount > downloadedFiles.size &&
           remoteFiles.length === expectedCount;
-        if (remoteFiles.length > 0 && exactComplete) {
-          const newRemoteFiles = remoteFiles.filter((file) => {
+        if (remoteFiles.length > 0 && waveReady) {
+          const signedWave = await getSignedPhoneUploadWave(
+            sessionId,
+            downloadedFiles.size,
+          );
+          const newRemoteFiles = signedWave.filter((file) => {
             const fileKey = getPhoneUploadFileKey(file);
             return (
               fileKey &&
@@ -13315,6 +13386,24 @@
   function getPhoneUploadPhotoFiles(files) {
     if (!Array.isArray(files)) return [];
     return files.filter((file) => !isPhoneUploadSessionMarkerFile(file));
+  }
+
+  async function getSignedPhoneUploadWave(sessionId, fromOrder) {
+    const response = await sendMessage({
+      type: "PROXY_FETCH",
+      url: `${PHONE_UPLOAD_API}?sessionId=${sessionId}&v=2&includeUrls=1&fromOrder=${fromOrder}&t=${Date.now()}`,
+      options: { method: "GET" },
+    });
+    if (!response?.ok) {
+      throw new Error("Could not prepare received phone photos.");
+    }
+    const data =
+      typeof response.data === "string"
+        ? JSON.parse(response.data)
+        : response.data;
+    return getPhoneUploadPhotoFiles(data?.files).sort(
+      (a, b) => Number(a.order || 0) - Number(b.order || 0),
+    );
   }
 
   async function downloadPhoneUploadFile(remoteFile) {

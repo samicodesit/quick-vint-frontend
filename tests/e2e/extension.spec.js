@@ -4497,7 +4497,7 @@ test.describe("AutoLister extension smoke flows", () => {
     );
   });
 
-  test("atomic phone handoff injects nothing partial and exactly once when complete", async ({
+  test("appends completed phone upload waves before the desktop lock", async ({
     page,
   }) => {
     await openContentHarness(
@@ -4507,8 +4507,9 @@ test.describe("AutoLister extension smoke flows", () => {
     );
     await page.evaluate((dataUrl) => {
       const originalSendMessage = window.chrome.runtime.sendMessage;
-      window.__phoneComplete = false;
+      window.__phoneExpected = 2;
       window.__phoneInputChanges = [];
+      window.__phoneApiRequests = [];
       document
         .querySelector('[data-testid="add-photos-input"]')
         .addEventListener("change", (event) => {
@@ -4523,27 +4524,54 @@ test.describe("AutoLister extension smoke flows", () => {
             setTimeout(() => callback?.({ ok: true, status: 201, data: {} }), 0);
             return;
           }
+          if (url.searchParams.get("action") === "complete") {
+            window.__phoneApiRequests.push(url.search);
+            setTimeout(
+              () =>
+                callback?.({
+                  ok: true,
+                  status: 200,
+                  data: {
+                    complete: true,
+                    status: "complete",
+                    expectedCount: window.__phoneExpected,
+                  },
+                }),
+              0,
+            );
+            return;
+          }
           if (url.hostname === "storage.test") {
             setTimeout(() => callback?.({ ok: true, data: dataUrl }), 0);
             return;
           }
           if (url.pathname.endsWith("/api/phone-upload")) {
-            const count = window.__phoneComplete ? 3 : 2;
+            const fromOrder = Number(url.searchParams.get("fromOrder") || 0);
+            const includeUrls = url.searchParams.get("includeUrls") === "1";
+            window.__phoneApiRequests.push(url.search);
+            const allFiles = Array.from(
+              { length: window.__phoneExpected },
+              (_, index) => ({
+                name: `${String(index).padStart(6, "0")}-phone-${index + 1}.jpg`,
+                path: `session/phone-${index + 1}.jpg`,
+                order: index,
+                ...(includeUrls
+                  ? { url: `https://storage.test/phone-${index + 1}.jpg` }
+                  : {}),
+              }),
+            );
             setTimeout(
               () =>
                 callback?.({
                   ok: true,
                   data: {
-                    files: Array.from({ length: count }, (_, index) => ({
-                      name: `${String(index).padStart(6, "0")}-phone-${index + 1}.jpg`,
-                      path: `session/phone-${index + 1}.jpg`,
-                      url: `https://storage.test/phone-${index + 1}.jpg`,
-                      order: index,
-                    })),
-                    count,
-                    expectedCount: 3,
-                    complete: window.__phoneComplete,
-                    status: window.__phoneComplete ? "complete" : "uploading",
+                    files: includeUrls
+                      ? allFiles.filter((file) => file.order >= fromOrder)
+                      : allFiles,
+                    count: window.__phoneExpected,
+                    expectedCount: window.__phoneExpected,
+                    complete: false,
+                    status: "uploading",
                   },
                 }),
               0,
@@ -4556,18 +4584,40 @@ test.describe("AutoLister extension smoke flows", () => {
     }, tinyPngDataUrl);
 
     await chooseSinglePhoneUpload(page);
-    await expect(page.locator("#quickvint-phone-modal .status")).toContainText("2/3");
-    await page.waitForTimeout(100);
-    expect(await page.evaluate(() => window.__phoneInputChanges)).toEqual([]);
+    await expect
+      .poll(() => page.evaluate(() => window.__phoneInputChanges))
+      .toEqual([["000000-phone-1.jpg", "000001-phone-2.jpg"]]);
 
     await page.evaluate(() => {
-      window.__phoneComplete = true;
+      window.__phoneExpected = 3;
     });
     await expect
       .poll(() => page.evaluate(() => window.__phoneInputChanges))
       .toEqual([
-        ["000000-phone-1.jpg", "000001-phone-2.jpg", "000002-phone-3.jpg"],
+        ["000000-phone-1.jpg", "000001-phone-2.jpg"],
+        ["000002-phone-3.jpg"],
       ]);
+
+    expect(
+      await page.evaluate(() =>
+        window.__phoneApiRequests.filter((search) =>
+          search.includes("includeUrls=1"),
+        ),
+      ),
+    ).toEqual([
+      expect.stringContaining("fromOrder=0"),
+      expect.stringContaining("fromOrder=2"),
+    ]);
+
+    await page.locator("#quickvint-phone-modal .close-btn").click();
+    await expect(page.locator("#quickvint-phone-modal")).toHaveCount(0);
+    expect(
+      await page.evaluate(() =>
+        window.__phoneApiRequests.filter((search) =>
+          search.includes("action=complete"),
+        ),
+      ),
+    ).toHaveLength(1);
   });
 
   test("Scott upload keeps a 33-photo batch open beyond five client minutes", async ({
