@@ -13,11 +13,13 @@ async function runBackgroundHandoff(
   options = {},
 ) {
   const storageData = { ...(options.initialStorage || {}) };
+  const createdTabs = [];
   const removedTabs = [];
   const timers = [];
   const timerCalls = [];
   let externalListener;
   let internalListener;
+  let installedListener;
   let setSessionArgs = null;
   let verifyOtpArgs = null;
   const setSessionResult = options.setSessionResult || {
@@ -87,11 +89,15 @@ async function runBackgroundHandoff(
   const chrome = {
     runtime: {
       lastError: null,
-      getManifest: () => ({ version: "1.0.0" }),
+      getManifest: () => ({ version: options.manifestVersion || "1.0.0" }),
       setUninstallURL(_url, callback) {
         callback?.();
       },
-      onInstalled: { addListener() {} },
+      onInstalled: {
+        addListener(listener) {
+          installedListener = listener;
+        },
+      },
       onMessageExternal: {
         addListener(listener) {
           externalListener = listener;
@@ -124,7 +130,9 @@ async function runBackgroundHandoff(
       },
     },
     tabs: {
-      create() {},
+      create(details) {
+        createdTabs.push(details);
+      },
       remove(tabId) {
         removedTabs.push(tabId);
       },
@@ -182,11 +190,49 @@ async function runBackgroundHandoff(
     setSessionArgs,
     verifyOtpArgs,
     getVerifyOtpArgs: () => verifyOtpArgs,
+    createdTabs,
+    installedListener,
     removedTabs,
     timers: timerCalls,
     internalListener,
   };
 }
+
+test("background opens release pages only for their explicit install reason and version", async (t) => {
+  await t.test("fresh install keeps the welcome page", async () => {
+    const harness = await runBackgroundHandoff(
+      { type: "PING" },
+      undefined,
+      { manifestVersion: "1.4.0" },
+    );
+    harness.installedListener({ reason: "install" });
+    assert.deepEqual(JSON.parse(JSON.stringify(harness.createdTabs)), [
+      { url: "https://autolister.app/welcome" },
+    ]);
+  });
+
+  await t.test("update to 1.4.0 opens the dedicated page", async () => {
+    const harness = await runBackgroundHandoff(
+      { type: "PING" },
+      undefined,
+      { manifestVersion: "1.4.0" },
+    );
+    harness.installedListener({ reason: "update", previousVersion: "1.3.70" });
+    assert.deepEqual(JSON.parse(JSON.stringify(harness.createdTabs)), [
+      { url: "https://autolister.app/updates/1-4-0" },
+    ]);
+  });
+
+  await t.test("another update opens no announcement page", async () => {
+    const harness = await runBackgroundHandoff(
+      { type: "PING" },
+      undefined,
+      { manifestVersion: "1.4.1" },
+    );
+    harness.installedListener({ reason: "update", previousVersion: "1.4.0" });
+    assert.deepEqual(JSON.parse(JSON.stringify(harness.createdTabs)), []);
+  });
+});
 
 async function runBackgroundMessage(message, options = {}) {
   const harness = await runBackgroundHandoff(
