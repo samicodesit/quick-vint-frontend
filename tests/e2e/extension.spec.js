@@ -3390,6 +3390,7 @@ test.describe("AutoLister extension smoke flows", () => {
     await page.evaluate(() => {
       const originalSendMessage = window.chrome.runtime.sendMessage;
       window.__batchListRequests = 0;
+      window.__batchSignedListRequests = 0;
       window.chrome.runtime.sendMessage = (message, callback) => {
         if (message?.type === "PROXY_FETCH") {
           const url = String(message.url || "");
@@ -3399,7 +3400,8 @@ test.describe("AutoLister extension smoke flows", () => {
               return;
             }
             window.__batchListRequests += 1;
-            const suffix = window.__batchListRequests === 1 ? "old" : "fresh";
+            const includeUrls = url.includes("includeUrls=1");
+            if (includeUrls) window.__batchSignedListRequests += 1;
             setTimeout(
               () =>
                 callback?.({
@@ -3409,15 +3411,20 @@ test.describe("AutoLister extension smoke flows", () => {
                       {
                         name: "phone-1.jpg",
                         path: "session/phone-1.jpg",
-                        url: `https://storage.test/${suffix}-phone-1.jpg`,
+                        ...(includeUrls
+                          ? { url: "https://storage.test/fresh-phone-1.jpg" }
+                          : {}),
                       },
                       {
                         name: "phone-2.jpg",
                         path: "session/phone-2.jpg",
-                        url: `https://storage.test/${suffix}-phone-2.jpg`,
+                        ...(includeUrls
+                          ? { url: "https://storage.test/fresh-phone-2.jpg" }
+                          : {}),
                       },
                     ],
                     count: 2,
+                    expectedCount: 2,
                     complete: true,
                   },
                 }),
@@ -3476,10 +3483,10 @@ test.describe("AutoLister extension smoke flows", () => {
       ),
     );
     expect(batchStart.groups[0].map((file) => file.url)).toEqual([
-      "https://storage.test/old-phone-1.jpg",
-      "https://storage.test/old-phone-2.jpg",
+      "https://storage.test/fresh-phone-1.jpg",
+      "https://storage.test/fresh-phone-2.jpg",
     ]);
-    expect(await page.evaluate(() => window.__batchListRequests)).toBe(1);
+    expect(await page.evaluate(() => window.__batchSignedListRequests)).toBe(1);
   });
 
   test("refreshes stale batch signed URLs before start", async ({ page }) => {
@@ -3502,7 +3509,7 @@ test.describe("AutoLister extension smoke flows", () => {
       const originalNow = Date.now.bind(Date);
       window.__batchFakeNow = originalNow();
       Date.now = () => window.__batchFakeNow;
-      window.__batchListRequests = 0;
+      window.__batchSignedListRequests = 0;
       window.chrome.runtime.sendMessage = (message, callback) => {
         if (message?.type === "PROXY_FETCH") {
           const url = String(message.url || "");
@@ -3511,8 +3518,17 @@ test.describe("AutoLister extension smoke flows", () => {
               setTimeout(() => callback?.({ ok: true, data: {} }), 0);
               return;
             }
-            window.__batchListRequests += 1;
-            const suffix = window.__batchListRequests === 1 ? "old" : "fresh";
+            if (url.includes("action=complete")) {
+              setTimeout(
+                () => callback?.({ ok: true, data: { complete: true } }),
+                0,
+              );
+              return;
+            }
+            const includeUrls = url.includes("includeUrls=1");
+            if (includeUrls) window.__batchSignedListRequests += 1;
+            const suffix =
+              window.__batchSignedListRequests === 1 ? "old" : "fresh";
             setTimeout(
               () =>
                 callback?.({
@@ -3522,15 +3538,20 @@ test.describe("AutoLister extension smoke flows", () => {
                       {
                         name: "phone-1.jpg",
                         path: "session/phone-1.jpg",
-                        url: `https://storage.test/${suffix}-phone-1.jpg`,
+                        ...(includeUrls
+                          ? { url: `https://storage.test/${suffix}-phone-1.jpg` }
+                          : {}),
                       },
                       {
                         name: "phone-2.jpg",
                         path: "session/phone-2.jpg",
-                        url: `https://storage.test/${suffix}-phone-2.jpg`,
+                        ...(includeUrls
+                          ? { url: `https://storage.test/${suffix}-phone-2.jpg` }
+                          : {}),
                       },
                     ],
                     count: 2,
+                    expectedCount: 2,
                     complete: true,
                   },
                 }),
@@ -3584,7 +3605,7 @@ test.describe("AutoLister extension smoke flows", () => {
       "https://storage.test/fresh-phone-1.jpg",
       "https://storage.test/fresh-phone-2.jpg",
     ]);
-    expect(await page.evaluate(() => window.__batchListRequests)).toBe(2);
+    expect(await page.evaluate(() => window.__batchSignedListRequests)).toBe(2);
   });
 
   test("uploads manual captured files to temp storage for generation", async ({
@@ -4689,6 +4710,120 @@ test.describe("AutoLister extension smoke flows", () => {
     await expect(
       page.locator("#quickvint-batch-modal .batch-gallery .batch-photo"),
     ).toHaveCount(33);
+  });
+
+  test("appends phone waves to batch grouping before generation locks them", async ({
+    page,
+  }) => {
+    await openContentHarness(
+      page,
+      { allowed: true, available: 40 },
+      { emptyListing: true, shortenPhoneUploadPoll: true },
+    );
+    await page.evaluate(() => {
+      const originalSendMessage = window.chrome.runtime.sendMessage;
+      window.__batchExpected = 2;
+      window.__batchApiRequests = [];
+      window.chrome.runtime.sendMessage = (message, callback) => {
+        if (message?.type === "PROXY_FETCH") {
+          const url = new URL(message.url);
+          if (url.searchParams.get("action") === "open") {
+            setTimeout(() => callback?.({ ok: true, status: 201, data: {} }), 0);
+            return;
+          }
+          if (url.searchParams.get("action") === "complete") {
+            window.__batchApiRequests.push(url.search);
+            setTimeout(
+              () =>
+                callback?.({
+                  ok: true,
+                  status: 200,
+                  data: {
+                    complete: true,
+                    status: "complete",
+                    expectedCount: window.__batchExpected,
+                  },
+                }),
+              0,
+            );
+            return;
+          }
+          if (url.pathname.endsWith("/api/phone-upload")) {
+            const includeUrls = url.searchParams.get("includeUrls") === "1";
+            const fromOrder = Number(url.searchParams.get("fromOrder") || 0);
+            window.__batchApiRequests.push(url.search);
+            const files = Array.from(
+              { length: window.__batchExpected },
+              (_, order) => ({
+                name: `${String(order).padStart(6, "0")}-upload.jpg`,
+                path: `batch/${String(order).padStart(6, "0")}-upload.jpg`,
+                order,
+                ...(includeUrls
+                  ? { url: `https://storage.test/batch-${order}.jpg` }
+                  : {}),
+              }),
+            );
+            setTimeout(
+              () =>
+                callback?.({
+                  ok: true,
+                  status: 200,
+                  data: {
+                    files: includeUrls
+                      ? files.filter((file) => file.order >= fromOrder)
+                      : files,
+                    count: window.__batchExpected,
+                    expectedCount: window.__batchExpected,
+                    complete: false,
+                    status: "uploading",
+                  },
+                }),
+              0,
+            );
+            return;
+          }
+        }
+        originalSendMessage(message, callback);
+      };
+    });
+
+    await chooseBatchUpload(page);
+    const modal = page.locator("#quickvint-batch-modal");
+    await expect(modal.locator(".batch-gallery .batch-photo")).toHaveCount(2);
+    await modal.locator(".batch-gallery .batch-photo").nth(0).click();
+    await modal.locator(".batch-gallery .batch-photo").nth(1).click();
+    await modal.locator(".batch-mark-group").click();
+    await expect(modal.locator(".batch-item-card")).toHaveCount(1);
+
+    await page.evaluate(() => {
+      window.__batchExpected = 3;
+    });
+    await expect(modal.locator(".batch-gallery .batch-photo")).toHaveCount(3);
+    await expect(modal.locator(".batch-item-card")).toHaveCount(1);
+    await expect(modal.locator(".batch-photo-wrap:not([hidden]) .batch-photo")).toHaveCount(1);
+    expect(
+      await page.evaluate(() =>
+        window.__batchApiRequests.filter((search) =>
+          search.includes("includeUrls=1"),
+        ),
+      ),
+    ).toEqual([
+      expect.stringContaining("fromOrder=0"),
+      expect.stringContaining("fromOrder=2"),
+    ]);
+
+    await modal.locator(".batch-photo-wrap:not([hidden]) .batch-photo").click();
+    await modal.locator(".batch-mark-group").click();
+    await modal.locator(".batch-start").click();
+    await expect
+      .poll(() =>
+        page.evaluate(() =>
+          window.__batchApiRequests.filter((search) =>
+            search.includes("action=complete"),
+          ).length,
+        ),
+      )
+      .toBe(1);
   });
 
   test("protects an expected phone batch before the first photo arrives", async ({

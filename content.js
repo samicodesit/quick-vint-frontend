@@ -1102,6 +1102,8 @@
   let batchPollInterval = null;
   let batchRemoteFiles = [];
   let batchRemoteFileKeys = new Set();
+  let batchDiscardedFileKeys = new Set();
+  let batchFetchedCount = 0;
   let batchMarkedGroups = [];
   let batchSelectedPhotoKeys = new Set();
   let batchIsComplete = false;
@@ -12889,17 +12891,13 @@
     return modal;
   }
 
-  async function lockPhoneUploadSession() {
-    const state = lastPhoneUploadState;
-    const expectedCount = Number(state?.expectedCount || 0);
-    if (!state?.sessionId || expectedCount <= 0) return false;
-    if (state.complete === true) return true;
-
+  async function completePhoneUploadSession(sessionId, expectedCount) {
+    if (!sessionId || expectedCount <= 0) return false;
     let response = null;
     for (let attempt = 0; attempt < 8; attempt += 1) {
       response = await sendMessage({
         type: "PROXY_FETCH",
-        url: `${PHONE_UPLOAD_API}?action=complete&v=2&sessionId=${state.sessionId}&expectedCount=${expectedCount}`,
+        url: `${PHONE_UPLOAD_API}?action=complete&v=2&sessionId=${sessionId}&expectedCount=${expectedCount}`,
         options: {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -12920,6 +12918,17 @@
       }
       await new Promise((resolve) => setTimeout(resolve, 900));
     }
+
+    return true;
+  }
+
+  async function lockPhoneUploadSession() {
+    const state = lastPhoneUploadState;
+    const expectedCount = Number(state?.expectedCount || 0);
+    if (!state?.sessionId || expectedCount <= 0) return false;
+    if (state.complete === true) return true;
+
+    await completePhoneUploadSession(state.sessionId, expectedCount);
 
     state.complete = true;
     state.updatedAt = Date.now();
@@ -13773,6 +13782,8 @@
     batchUploadSessionId = null;
     batchRemoteFiles = [];
     batchRemoteFileKeys = new Set();
+    batchDiscardedFileKeys = new Set();
+    batchFetchedCount = 0;
     batchMarkedGroups = [];
     batchSelectedPhotoKeys = new Set();
     batchIsComplete = false;
@@ -14328,6 +14339,7 @@
       batchRemoteFileKeys = new Set(
         remoteFiles.map(getPhoneUploadFileKey).filter(Boolean),
       );
+      batchFetchedCount = remoteFiles.length;
       batchLastFileCount = remoteFiles.length;
       batchLastFileChangeAt = Date.now();
       batchSignedUrlsListedAt = Date.now();
@@ -14386,7 +14398,7 @@
     const copy = document.querySelector(`#${BATCH_MODAL_ID} .batch-wait-copy`);
     if (!title || !copy) return;
 
-    const receivedCount = batchRemoteFiles.length;
+    const receivedCount = Math.max(batchLastFileCount, batchRemoteFiles.length);
     const isStale =
       !batchIsComplete &&
       receivedCount > 0 &&
@@ -14821,6 +14833,37 @@
     updateBatchGroupingControls();
   }
 
+  function appendBatchGroupingFiles(files) {
+    const galleryGrid = document.querySelector(
+      `#${BATCH_MODAL_ID} .batch-gallery-grid`,
+    );
+    if (!galleryGrid) return;
+
+    const markedKeys = getMarkedBatchPhotoKeys();
+    const fragment = document.createDocumentFragment();
+    files.forEach((file) => {
+      const key = getPhoneUploadFileKey(file);
+      if (!key || batchPhotoTileByKey.has(key)) return;
+      const index = getBatchFileIndexByKey(key);
+      const tile = createBatchPhotoElement(
+        file,
+        index,
+        batchMarkedGroups.length + 1,
+        {
+          badgeText: `#${index + 1}`,
+          marked: markedKeys.has(key),
+          selected: batchSelectedPhotoKeys.has(key),
+          onClick: () => toggleBatchPhotoSelection(key),
+          onDiscard: () => discardBatchPhoto(key),
+        },
+      );
+      batchPhotoTileByKey.set(key, tile.querySelector(".batch-photo"));
+      fragment.appendChild(tile);
+    });
+    galleryGrid.appendChild(fragment);
+    updateBatchGroupingControls();
+  }
+
   function getMarkedBatchPhotoKeys() {
     return new Set(batchMarkedGroups.flatMap((group) => group.keys));
   }
@@ -14852,6 +14895,7 @@
     steadyBatchReviewLayout();
     batchRemoteFiles.splice(index, 1);
     batchRemoteFileKeys.delete(key);
+    batchDiscardedFileKeys.add(key);
     batchSelectedPhotoKeys.delete(key);
     batchLastFileCount = batchRemoteFiles.length;
     batchLastFileChangeAt = Date.now();
@@ -15160,12 +15204,15 @@
       const effectiveCount =
         available === null ? groups.length : Math.min(groups.length, available);
       const startLabel = startButton.querySelector(".label");
-      if (startLabel) startLabel.textContent = batchCapacityLoading
-        ? "Checking availability..."
-        : available !== null && groups.length > 0 && available < groups.length && available > 0
-          ? `Generate first ${available} of ${groups.length}`
-          : `Generate ${effectiveCount} listing${effectiveCount === 1 ? "" : "s"}`;
+      if (startLabel) startLabel.textContent = !batchIsComplete
+        ? "Adding photos…"
+        : batchCapacityLoading
+          ? "Checking availability..."
+          : available !== null && groups.length > 0 && available < groups.length && available > 0
+            ? `Generate first ${available} of ${groups.length}`
+            : `Generate ${effectiveCount} listing${effectiveCount === 1 ? "" : "s"}`;
       startButton.disabled =
+        !batchIsComplete ||
         batchCapacityLoading ||
         groups.length === 0 ||
         remainingCount > 0 ||
@@ -15382,7 +15429,7 @@
   async function refreshBatchRemoteFilesForGeneration(sessionId) {
     const response = await sendMessage({
       type: "PROXY_FETCH",
-      url: `${PHONE_UPLOAD_API}?sessionId=${sessionId}&v=2&t=${Date.now()}`,
+      url: `${PHONE_UPLOAD_API}?sessionId=${sessionId}&v=2&includeUrls=1&fromOrder=0&t=${Date.now()}`,
       options: { method: "GET" },
     });
     if (!response?.ok) {
@@ -15395,7 +15442,9 @@
         : response.data;
     const files = Array.isArray(data?.files)
       ? normalizeBatchRemoteFiles(data.files).filter(
-          (file) => !isPhoneUploadSessionMarkerFile(file),
+          (file) =>
+            !isPhoneUploadSessionMarkerFile(file) &&
+            !batchDiscardedFileKeys.has(getPhoneUploadFileKey(file)),
         )
       : [];
     const refreshedKeys = new Set(files.map(getPhoneUploadFileKey).filter(Boolean));
@@ -15409,7 +15458,10 @@
 
     batchRemoteFiles = files;
     batchRemoteFileKeys = refreshedKeys;
-    batchIsComplete = data?.complete === true;
+    batchFetchedCount = Number(data?.count || files.length);
+    batchIsComplete =
+      Number(data?.expectedCount || 0) > 0 &&
+      Number(data?.count || 0) === Number(data?.expectedCount || 0);
     batchSignedUrlsListedAt = Date.now();
   }
 
@@ -15463,6 +15515,21 @@
     }
   }
 
+  function renderBatchAppendStatus(receivedCount, expectedCount) {
+    const modal = document.getElementById(BATCH_MODAL_ID);
+    const subtitle = modal?.querySelector(".batch-subtitle");
+    if (!modal?.classList.contains("organizing") || !subtitle) return;
+    const ready =
+      batchIsComplete &&
+      expectedCount > 0 &&
+      receivedCount === expectedCount;
+    subtitle.hidden = ready;
+    subtitle.textContent = ready
+      ? ""
+      : `Adding ${receivedCount} of ${expectedCount} photos from phone…`;
+    updateBatchGroupingControls();
+  }
+
   function startBatchPolling(sessionId) {
     if (batchPollInterval) {
       clearInterval(batchPollInterval);
@@ -15488,7 +15555,7 @@
           typeof response.data === "string"
             ? JSON.parse(response.data)
             : response.data;
-        const files = Array.isArray(data.files)
+        const metadataFiles = Array.isArray(data.files)
           ? normalizeBatchRemoteFiles(data.files)
           : [];
         const expectedCount = Number(data.expectedCount ?? data.count ?? 0);
@@ -15496,50 +15563,64 @@
         if (batchExpectedCount && !batchInputSource) {
           lockBatchComputerControlsForPhone();
         }
-        if (files.length) {
-          batchSignedUrlsListedAt = Date.now();
-        }
-        const wasComplete = batchIsComplete;
         batchIsComplete =
-          data.complete === true &&
           expectedCount > 0 &&
-          files.length === expectedCount;
-        let added = false;
-
-        files.forEach((file) => {
-          const key = getPhoneUploadFileKey(file);
-          if (!key || batchRemoteFileKeys.has(key)) return;
-          batchRemoteFileKeys.add(key);
-          batchRemoteFiles.push(file);
-          added = true;
-        });
-
-        if (batchIsComplete) {
-          batchRemoteFiles = files;
-          batchRemoteFileKeys = new Set(files.map(getPhoneUploadFileKey).filter(Boolean));
-        } else if (added) {
-          batchRemoteFiles = normalizeBatchRemoteFiles(batchRemoteFiles);
-        }
-
-        if (batchRemoteFiles.length !== batchLastFileCount) {
-          batchLastFileCount = batchRemoteFiles.length;
+          metadataFiles.length === expectedCount &&
+          batchFetchedCount === expectedCount;
+        if (metadataFiles.length !== batchLastFileCount) {
+          batchLastFileCount = metadataFiles.length;
           batchLastFileChangeAt = Date.now();
         }
+        const newFiles = [];
+        if (
+          expectedCount > batchFetchedCount &&
+          metadataFiles.length === expectedCount
+        ) {
+          const waveStart = batchFetchedCount;
+          const signedWave = await getSignedPhoneUploadWave(
+            sessionId,
+            waveStart,
+          );
+          if (
+            signedWave.length !== expectedCount - waveStart ||
+            signedWave.some((file) => !file.url)
+          ) {
+            throw new Error("Could not prepare every received batch photo.");
+          }
+          batchFetchedCount = expectedCount;
+          signedWave.forEach((file) => {
+            const key = getPhoneUploadFileKey(file);
+            if (
+              !key ||
+              batchRemoteFileKeys.has(key) ||
+              batchDiscardedFileKeys.has(key)
+            ) {
+              return;
+            }
+            batchRemoteFileKeys.add(key);
+            batchRemoteFiles.push(file);
+            newFiles.push(file);
+          });
+          batchRemoteFiles = normalizeBatchRemoteFiles(batchRemoteFiles);
+          batchSignedUrlsListedAt = Date.now();
+          batchIsComplete = true;
+        }
 
-        preloadBatchImages(files);
+        preloadBatchImages(newFiles);
 
         const openedGrouping = maybeAutoOpenBatchGrouping();
+
+        if (!openedGrouping && newFiles.length > 0) {
+          appendBatchGroupingFiles(newFiles);
+        }
 
         if (!openedGrouping) {
           refreshBatchWaitingState();
         }
-
-        if (batchIsComplete && batchPollInterval) {
-          clearInterval(batchPollInterval);
-          batchPollInterval = null;
-        }
+        renderBatchAppendStatus(metadataFiles.length, batchExpectedCount);
       } catch (err) {
         console.error("Batch polling error:", err);
+        refreshBatchWaitingState();
       } finally {
         isBatchPollInFlight = false;
       }
@@ -15625,6 +15706,22 @@
         `Generating first ${available} listing${available === 1 ? "" : "s"}.`,
         "info",
       );
+    }
+
+    if (!batchIsComplete) {
+      restoreStartButton();
+      showToast("Phone photos are still being added.", "info");
+      return;
+    }
+    try {
+      await completePhoneUploadSession(
+        batchUploadSessionId,
+        batchExpectedCount,
+      );
+    } catch (error) {
+      restoreStartButton();
+      showToast(error?.message || "Could not finish the phone upload.", "error");
+      return;
     }
 
     if (batchPollInterval) {
