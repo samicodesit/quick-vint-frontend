@@ -13963,6 +13963,9 @@
     if (!panel) return;
     batchInputSource = "phone";
     panel.classList.add("is-phone-locked");
+    document
+      .querySelector(`#${BATCH_MODAL_ID} .batch-source-phone .batch-qr`)
+      ?.remove();
     panel
       .querySelectorAll(
         ".batch-choose-files, .batch-choose-folder, .batch-computer-files-input, .batch-computer-folder-input",

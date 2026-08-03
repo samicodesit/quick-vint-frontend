@@ -4636,6 +4636,7 @@ test.describe("AutoLister extension smoke flows", () => {
       .toBeGreaterThan(0);
 
     const modal = page.locator("#quickvint-batch-modal");
+    await expect(modal.locator(".batch-qr")).toHaveCount(0);
     await expect(modal.locator(".batch-wait-title")).toHaveText(
       "Receiving 0 of 33 photos",
     );
