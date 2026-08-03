@@ -11844,6 +11844,7 @@
     trigger.id = selectId;
     trigger.type = "button";
     trigger.className = "quickvint-lang-trigger";
+    trigger.dataset.storageKey = storageKey;
     trigger.setAttribute("aria-label", title);
     trigger.addEventListener("click", (event) => {
       event.preventDefault();
@@ -11987,29 +11988,23 @@
     );
   }
 
-  function syncInlineLanguageControls(root = document) {
-    chrome.storage.local.get(
-      ["selectedLanguage", "selectedTitleLanguage", "selectedDescriptionLanguage"],
-      (storage) => {
-        const languagePreferences = resolveListingLanguagePreferences(storage);
-        const titleTrigger = root.querySelector(`#${TITLE_LANGUAGE_SELECT_ID}`);
-        const descriptionTrigger = root.querySelector(
-          `#${DESCRIPTION_LANGUAGE_SELECT_ID}`,
-        );
-        if (titleTrigger) {
-          updateInlineLanguageControl(
-            titleTrigger,
-            languagePreferences.titleLanguageCode,
-          );
-        }
-        if (descriptionTrigger) {
-          updateInlineLanguageControl(
-            descriptionTrigger,
-            languagePreferences.descriptionLanguageCode,
-          );
-        }
-      },
-    );
+  async function syncInlineLanguageControls(root = document) {
+    const storage = await chrome.storage.local.get([
+      "selectedLanguage",
+      "selectedTitleLanguage",
+      "selectedDescriptionLanguage",
+    ]);
+    const languagePreferences = resolveListingLanguagePreferences(storage);
+    for (const trigger of root.querySelectorAll(
+      ".quickvint-lang-trigger[data-storage-key]",
+    )) {
+      updateInlineLanguageControl(
+        trigger,
+        trigger.dataset.storageKey === "selectedTitleLanguage"
+          ? languagePreferences.titleLanguageCode
+          : languagePreferences.descriptionLanguageCode,
+      );
+    }
   }
 
   function createSignInComponent() {
@@ -18132,15 +18127,8 @@
     wardrobeSelectionController = controller;
     const titleLanguage = titleLanguageField.querySelector(".quickvint-lang-trigger");
     const descriptionLanguage = descriptionLanguageField.querySelector(".quickvint-lang-trigger");
-    const storage = await chrome.storage.local.get([
-      "selectedLanguage",
-      "selectedTitleLanguage",
-      "selectedDescriptionLanguage",
-    ]);
+    await syncInlineLanguageControls(controller);
     if (wardrobeSelectionController !== controller) return;
-    const profile = resolveLanguageProfile(storage);
-    updateInlineLanguageControl(titleLanguage, profile.titleLanguageCode);
-    updateInlineLanguageControl(descriptionLanguage, profile.descriptionLanguageCode);
     controller.querySelector(".quickvint-wardrobe-selection-cancel").addEventListener("click", () => {
       if (isWardrobeSelectionLocked()) return;
       stopWardrobeSelection();

@@ -142,12 +142,14 @@ function installChromeHarness(page, capacityResponse = null, initialStorage = {}
     };
     const runtimeMessages = [];
     const runtimeListeners = [];
+    const storageListeners = [];
     const openedWindows = [];
 
     window.__extensionHarness = {
       storage,
       runtimeMessages,
       runtimeListeners,
+      storageListeners,
       openedWindows,
     };
     window.__AUTOLISTER_TEST_HOOKS__ = {};
@@ -254,12 +256,21 @@ function installChromeHarness(page, capacityResponse = null, initialStorage = {}
             return Promise.resolve(result);
           },
           set: (values, callback) => {
+            const changes = Object.fromEntries(
+              Object.entries(values).map(([key, newValue]) => [
+                key,
+                { oldValue: storage[key], newValue },
+              ]),
+            );
             Object.assign(storage, values);
-            setTimeout(() => callback?.(), 0);
+            setTimeout(() => {
+              storageListeners.forEach((listener) => listener(changes, "local"));
+              callback?.();
+            }, 0);
             return Promise.resolve();
           },
         },
-        onChanged: { addListener: () => {} },
+        onChanged: { addListener: (listener) => storageListeners.push(listener) },
       },
     };
   }, { capacity: capacityResponse, initialStorage });
@@ -7580,6 +7591,14 @@ test.describe("own wardrobe rewrite widget", () => {
     }
     await expect(page.getByLabel("Title language")).toHaveAttribute("data-value", "en");
     await expect(page.getByLabel("Description language")).toHaveAttribute("data-value", "nl");
+    await page.evaluate(() =>
+      chrome.storage.local.set({
+        selectedTitleLanguage: "de",
+        selectedDescriptionLanguage: "fr",
+      }),
+    );
+    await expect(page.getByLabel("Title language")).toHaveAttribute("data-value", "de");
+    await expect(page.getByLabel("Description language")).toHaveAttribute("data-value", "fr");
     await expect(page.getByRole("button", { name: "Start rewrite" })).toBeDisabled();
     await page.getByLabel("Title language").click();
     await page.locator(".quickvint-wardrobe-title-language-slot .quickvint-lang-option[data-value='nl']").click();
@@ -7604,7 +7623,7 @@ test.describe("own wardrobe rewrite widget", () => {
       ],
       applyMode: "review",
       titleLanguageCode: "nl",
-      descriptionLanguageCode: "nl",
+      descriptionLanguageCode: "fr",
     });
     await expect.poll(() => page.evaluate(() =>
       window.__extensionHarness.runtimeMessages.some(
