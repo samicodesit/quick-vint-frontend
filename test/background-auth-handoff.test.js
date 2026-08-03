@@ -63,7 +63,9 @@ async function runBackgroundHandoff(
           }
         );
       },
-      refreshSession: async () => ({ data: { session: null }, error: null }),
+      refreshSession:
+        options.refreshSession ||
+        (async () => ({ data: { session: null }, error: null })),
       onAuthStateChange() {},
     },
     from() {
@@ -169,7 +171,9 @@ async function runBackgroundHandoff(
   );
   await new Promise((resolve) => setImmediate(resolve));
 
-  timers.splice(0).forEach(({ callback }) => callback());
+  if (options.runScheduledTimers !== false) {
+    timers.splice(0).forEach(({ callback }) => callback());
+  }
   await new Promise((resolve) => setImmediate(resolve));
 
   return {
@@ -336,4 +340,107 @@ test("background proxy preserves structured API errors", async () => {
     data: { status: "expired", error: "Upload session expired" },
     error: "Upload session expired",
   });
+});
+
+test("capacity waits for an in-flight token refresh", async () => {
+  let releaseRefresh;
+  let refreshCalls = 0;
+  const authorizationHeaders = [];
+  const oldSession = {
+    access_token: "expired-access",
+    refresh_token: "refresh-token",
+    expires_at: 1,
+    user: { id: "user-1", email: "seller@example.com" },
+  };
+  const freshSession = {
+    ...oldSession,
+    access_token: "fresh-access",
+    expires_at: 2000000000,
+  };
+  const harness = await runBackgroundHandoff(
+    { type: "PING" },
+    { origin: "https://autolister.app", url: "https://autolister.app/auth/callback" },
+    {
+      initialStorage: { supabaseSession: oldSession },
+      refreshSession: async () => {
+        refreshCalls += 1;
+        return new Promise((resolve) => {
+          releaseRefresh = () => resolve({ data: { session: freshSession }, error: null });
+        });
+      },
+      fetch: async (_url, options) => {
+        authorizationHeaders.push(options.headers.Authorization);
+        const authorized = options.headers.Authorization === "Bearer fresh-access";
+        return {
+          ok: authorized,
+          status: authorized ? 200 : 401,
+          json: async () =>
+            authorized
+              ? { allowed: true, available: 5 }
+              : { error: "Invalid token" },
+        };
+      },
+    },
+  );
+
+  const responsePromise = new Promise((resolve) =>
+    harness.internalListener({ type: "GET_BATCH_CAPACITY" }, {}, resolve),
+  );
+  await new Promise((resolve) => setImmediate(resolve));
+  releaseRefresh();
+
+  assert.deepEqual(JSON.parse(JSON.stringify(await responsePromise)), {
+    ok: true,
+    capacity: { allowed: true, available: 5 },
+  });
+  assert.equal(refreshCalls, 1);
+  assert.deepEqual(authorizationHeaders, ["Bearer fresh-access"]);
+});
+
+test("capacity refreshes and retries once after a 401", async () => {
+  const authorizationHeaders = [];
+  const oldSession = {
+    access_token: "rejected-access",
+    refresh_token: "refresh-token",
+    expires_at: 2000000000,
+    user: { id: "user-1", email: "seller@example.com" },
+  };
+  const { response } = await runBackgroundMessage(
+    { type: "GET_BATCH_CAPACITY" },
+    {
+      initialStorage: { supabaseSession: oldSession },
+      runScheduledTimers: false,
+      refreshSession: async () => ({
+        data: {
+          session: {
+            ...oldSession,
+            access_token: "fresh-access",
+            expires_at: 2000000100,
+          },
+        },
+        error: null,
+      }),
+      fetch: async (_url, options) => {
+        authorizationHeaders.push(options.headers.Authorization);
+        const authorized = options.headers.Authorization === "Bearer fresh-access";
+        return {
+          ok: authorized,
+          status: authorized ? 200 : 401,
+          json: async () =>
+            authorized
+              ? { allowed: true, available: 5 }
+              : { error: "Invalid token" },
+        };
+      },
+    },
+  );
+
+  assert.deepEqual(JSON.parse(JSON.stringify(response)), {
+    ok: true,
+    capacity: { allowed: true, available: 5 },
+  });
+  assert.deepEqual(authorizationHeaders, [
+    "Bearer rejected-access",
+    "Bearer fresh-access",
+  ]);
 });

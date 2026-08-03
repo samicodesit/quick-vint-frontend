@@ -2288,6 +2288,14 @@
       };
     }
 
+    if (code === "auth_required") {
+      return {
+        message: limitData.error || "Please sign in again before generating.",
+        actionText: null,
+        paywall: false,
+      };
+    }
+
     if (code === "account_paused") {
       return {
         title: "Account paused",
@@ -15517,6 +15525,9 @@
       : {
           allowed: false,
           available: 0,
+          reason:
+            response?.reason ||
+            (response?.status === 401 ? "auth_required" : "service_unavailable"),
           message:
             response?.error ||
             "Could not check how many listings are available.",

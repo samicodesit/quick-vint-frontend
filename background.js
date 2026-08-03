@@ -87,7 +87,7 @@ const SUPPORTED_LANGUAGE_CODES = new Set([
 
 // --- STATE ---
 const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-let isRefreshingToken = false;
+let tokenRefreshPromise = null;
 let tokenRefreshTimeout = null;
 let activeTabJob = null;
 
@@ -149,48 +149,52 @@ function scheduleTokenRefresh(session) {
  * @returns {Promise<object|null>} The new session object or null on failure.
  */
 async function refreshTokenWithRetry(maxRetries = 3) {
-  if (isRefreshingToken) return;
-  isRefreshingToken = true;
+  if (tokenRefreshPromise) return tokenRefreshPromise;
+  tokenRefreshPromise = (async () => {
+    try {
+      const session = await getStoredSession();
+      if (!session?.refresh_token) return null;
 
-  try {
-    const session = await getStoredSession();
-    if (!session?.refresh_token) return null;
-
-    await supabaseClient.auth.setSession({
-      access_token: session.access_token,
-      refresh_token: session.refresh_token,
-    });
-
-    for (let attempt = 1; attempt <= maxRetries; attempt++) {
-      const { data, error } = await supabaseClient.auth.refreshSession({
+      await supabaseClient.auth.setSession({
+        access_token: session.access_token,
         refresh_token: session.refresh_token,
       });
 
-      if (!error && data.session) {
-        await setStoredSession(data.session);
-        return data.session;
-      }
+      for (let attempt = 1; attempt <= maxRetries; attempt++) {
+        const { data, error } = await supabaseClient.auth.refreshSession({
+          refresh_token: session.refresh_token,
+        });
 
-      console.warn(`Token refresh attempt ${attempt} failed:`, error?.message);
-      if (
-        error?.message?.includes("Invalid Refresh Token") ||
-        error?.message?.includes("refresh_token_not_found")
-      ) {
-        await handleSignOut({ clearAccountEmail: false });
-        return null;
-      }
+        if (!error && data.session) {
+          await setStoredSession(data.session);
+          return data.session;
+        }
 
-      if (attempt < maxRetries) {
-        await new Promise((res) => setTimeout(res, 1000 * 2 ** attempt));
+        console.warn(`Token refresh attempt ${attempt} failed:`, error?.message);
+        if (
+          error?.message?.includes("Invalid Refresh Token") ||
+          error?.message?.includes("refresh_token_not_found")
+        ) {
+          await handleSignOut({ clearAccountEmail: false });
+          return null;
+        }
+
+        if (attempt < maxRetries) {
+          await new Promise((res) => setTimeout(res, 1000 * 2 ** attempt));
+        }
       }
+      console.error("Token refresh failed after all retries.");
+      return null;
+    } catch (error) {
+      console.error("Unexpected error during token refresh:", error);
+      return null;
     }
-    console.error("Token refresh failed after all retries.");
-    return null;
-  } catch (error) {
-    console.error("Unexpected error during token refresh:", error);
-    return null;
+  })();
+
+  try {
+    return await tokenRefreshPromise;
   } finally {
-    isRefreshingToken = false;
+    tokenRefreshPromise = null;
   }
 }
 
@@ -1013,25 +1017,37 @@ async function startWardrobeRewrite(message, sender) {
 }
 
 async function getBatchCapacity() {
-  const session = await ensureValidToken();
+  let session = await ensureValidToken();
   if (!session?.access_token) {
-    return { ok: false, error: "Please sign in again before generating." };
+    return {
+      ok: false,
+      status: 401,
+      reason: "auth_required",
+      error: "Please sign in again before generating.",
+    };
   }
 
   try {
-    const response = await fetch(`${API_BASE}/api/user/batch-capacity`, {
-      method: "GET",
-      headers: {
-        Authorization: `Bearer ${session.access_token}`,
-        "X-Autolister-Extension-Version": chrome.runtime.getManifest().version,
-      },
-    });
+    let response;
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      response = await fetch(`${API_BASE}/api/user/batch-capacity`, {
+        method: "GET",
+        headers: {
+          Authorization: `Bearer ${session.access_token}`,
+          "X-Autolister-Extension-Version": chrome.runtime.getManifest().version,
+        },
+      });
+      if (response.status !== 401 || attempt === 1) break;
+      session = await refreshTokenWithRetry();
+      if (!session?.access_token) break;
+    }
     const payload = await response.json().catch(() => ({}));
 
     if (!response.ok) {
       return {
         ok: false,
         status: response.status,
+        reason: response.status === 401 ? "auth_required" : "service_unavailable",
         error: payload.error || "Could not check generation capacity.",
       };
     }
@@ -1041,6 +1057,7 @@ async function getBatchCapacity() {
     console.error("[Background] Batch capacity exception:", err);
     return {
       ok: false,
+      reason: "service_unavailable",
       error: "Connection issue. Please try again.",
     };
   }

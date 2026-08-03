@@ -184,7 +184,11 @@ function installChromeHarness(page, capacityResponse = null, initialStorage = {}
           } else if (message?.type === "GET_BATCH_CAPACITY") {
             if (capacityQueue.length) currentCapacity = capacityQueue.shift();
             response = currentCapacity?.runtimeError
-              ? { ok: false, error: currentCapacity.runtimeError }
+              ? {
+                  ok: false,
+                  status: currentCapacity.runtimeStatus,
+                  error: currentCapacity.runtimeError,
+                }
               : { ok: true, capacity: currentCapacity };
           } else if (message?.type === "START_WARDROBE_REWRITE") {
             response = storage.__startWardrobeResponse || { ok: true };
@@ -417,7 +421,7 @@ async function openWardrobeEditHarness(page, itemId = "42", options = {}) {
       const originalSetTimeout = window.setTimeout.bind(window);
       const originalSetInterval = window.setInterval.bind(window);
       window.setTimeout = (callback, delay, ...args) =>
-        originalSetTimeout(callback, delay === 5 * 60 * 1000 ? 25 : delay, ...args);
+        originalSetTimeout(callback, delay === 5 * 60 * 1000 ? 200 : delay, ...args);
       window.setInterval = (callback, delay, ...args) =>
         originalSetInterval(callback, delay === 20 * 1000 ? 25 : delay, ...args);
     });
@@ -6447,6 +6451,21 @@ test.describe("AutoLister extension smoke flows", () => {
     );
   });
 
+  test("does not turn an expired capacity token into a paywall", async ({ page }) => {
+    await openContentHarness(page, {
+      runtimeStatus: 401,
+      runtimeError: "Please sign in again before generating.",
+    });
+
+    await page.locator("#quickvint-phone-btn").click();
+
+    await expect(page.locator("#quickvint-upload-choice-modal")).toHaveCount(0);
+    await expect(page.locator("#quickvint-toast.paywall")).not.toBeVisible();
+    await expect(page.locator("#quickvint-toast.error")).toContainText(
+      "Please sign in again before generating.",
+    );
+  });
+
   test("does not interrupt an in-progress listing with the return-visit limit offer", async ({
     page,
   }) => {
@@ -7268,7 +7287,7 @@ test.describe("wardrobe rewrite tab", () => {
     await sendContentMessage(page, { type: "RUN_WARDROBE_REWRITE_ITEM", itemId: "42", applyMode: "review", titleLanguageCode: "en", descriptionLanguageCode: "en" });
     await page.locator('[data-testid="title--input"]').evaluate((input) => input.closest("div").replaceWith(input.closest("div").cloneNode(true)));
     await expect(page.getByRole("button", { name: "Use this title" })).toBeVisible();
-    await page.waitForTimeout(40);
+    await page.waitForTimeout(250);
     await page.locator('[data-testid="title--input"]').evaluate((input) => input.closest("div").remove());
     await page.waitForTimeout(20);
     await expect(page.getByRole("button", { name: "Use this title" })).toHaveCount(0);
