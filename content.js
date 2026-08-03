@@ -14126,6 +14126,10 @@
       !batchIsComplete &&
       receivedCount > 0 &&
       Date.now() - batchLastFileChangeAt > BATCH_UPLOAD_STALE_MS;
+    const isFinalizing =
+      !batchIsComplete &&
+      batchExpectedCount > 0 &&
+      receivedCount === batchExpectedCount;
 
     if (status) {
       status.classList.toggle("done", batchIsComplete && receivedCount > 0);
@@ -14152,9 +14156,13 @@
         ? `<span class="batch-count-number">${receivedCount}</span> photo${receivedCount === 1 ? "" : "s"} ready`
         : "No photos received";
     } else if (receivedCount) {
-      title.innerHTML = isStale
-        ? `Check phone (<span class="batch-count-number">${receivedCount}</span> received)`
-        : `Receiving <span class="batch-count-number">${receivedCount}</span> photo${receivedCount === 1 ? "" : "s"}<span class="waiting-dots" aria-hidden="true"><span>.</span><span>.</span><span>.</span></span>`;
+      if (isStale) {
+        title.innerHTML = `Check phone (<span class="batch-count-number">${receivedCount}</span> received)`;
+      } else if (isFinalizing) {
+        title.textContent = `Finalizing ${receivedCount} photo${receivedCount === 1 ? "" : "s"}…`;
+      } else {
+        title.innerHTML = `Receiving <span class="batch-count-number">${receivedCount}</span> photo${receivedCount === 1 ? "" : "s"}<span class="waiting-dots" aria-hidden="true"><span>.</span><span>.</span><span>.</span></span>`;
+      }
     } else if (batchExpectedCount) {
       title.textContent = `Receiving 0 of ${batchExpectedCount} photos`;
     } else {
@@ -14171,6 +14179,8 @@
       : receivedCount
         ? isStale
           ? "Reopen the phone page, then leave it visible."
+          : isFinalizing
+            ? "Preparing your gallery."
           : "Keep the phone page open."
         : batchExpectedCount
           ? "Keep the phone page open."

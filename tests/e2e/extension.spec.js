@@ -4657,6 +4657,61 @@ test.describe("AutoLister extension smoke flows", () => {
     ]);
   });
 
+  test("shows finalizing while every expected phone photo awaits completion", async ({
+    page,
+  }) => {
+    await openContentHarness(
+      page,
+      { allowed: true, available: 40 },
+      { emptyListing: true, shortenPhoneUploadPoll: true },
+    );
+    await page.evaluate(() => {
+      const originalSendMessage = window.chrome.runtime.sendMessage;
+      window.chrome.runtime.sendMessage = (message, callback) => {
+        if (message?.type === "PROXY_FETCH") {
+          const url = new URL(message.url);
+          if (url.searchParams.get("action") === "open") {
+            setTimeout(() => callback?.({ ok: true, status: 201, data: {} }), 0);
+            return;
+          }
+          if (url.pathname.endsWith("/api/phone-upload")) {
+            setTimeout(
+              () =>
+                callback?.({
+                  ok: true,
+                  data: {
+                    files: Array.from({ length: 3 }, (_, order) => ({
+                      name: `${String(order).padStart(6, "0")}-upload.jpg`,
+                      path: `session/${String(order).padStart(6, "0")}-upload.jpg`,
+                      order,
+                    })),
+                    count: 3,
+                    expectedCount: 3,
+                    complete: false,
+                    status: "uploading",
+                  },
+                }),
+              0,
+            );
+            return;
+          }
+        }
+        originalSendMessage(message, callback);
+      };
+    });
+
+    await chooseBatchUpload(page);
+
+    const modal = page.locator("#quickvint-batch-modal");
+    await expect(modal.locator(".batch-wait-title")).toHaveText(
+      "Finalizing 3 photos…",
+    );
+    await expect(modal.locator(".batch-wait-copy")).toHaveText(
+      "Preparing your gallery.",
+    );
+    await expect(modal.locator(".batch-gallery")).toHaveCount(0);
+  });
+
   test("expired phone session explains the loss and offers a new upload", async ({
     page,
   }) => {
