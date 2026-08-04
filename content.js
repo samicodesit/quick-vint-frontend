@@ -32,6 +32,7 @@
   let wardrobeRewriteCapacity = null;
   let wardrobeRewriteCapacityLoading = false;
   let wardrobeRewriteCapacityPrefetch = null;
+  let wardrobeRewriteCapacityRequestId = 0;
   let wardrobeRewriteApplyMode = null;
   let wardrobeRewriteWidget = null;
   let wardrobeRewriteSelectedItems = new Map();
@@ -88,6 +89,12 @@
   const STARTER_DAILY_LIMIT_CLOSE_DELAY_MS = 650;
   const LIMIT_FOLLOWUP_RETURN_DELAY_MS = 250;
   const STARTER_DAILY_LIMIT_RETURN_DELAY_MS = 250;
+  const PAYWALL_ALLOWED_CODES = new Set([
+    "free_lifetime_limit",
+    "daily_limit",
+    "monthly_limit",
+    "account_paused",
+  ]);
   const USER_USAGE_SNAPSHOT_STORAGE_KEY = "quickvintUserUsageSnapshot";
   const OPEN_SETTINGS_ON_NEXT_POPUP_KEY = "quickvintOpenSettingsOnNextPopup";
   const EMOJI_SEQUENCE_REGEX =
@@ -1609,6 +1616,18 @@
     limitCode,
     currentTier,
   }) {
+    if (!PAYWALL_ALLOWED_CODES.has(limitCode)) {
+      trackGrowthEvent("paywall_suppressed", {
+        title: title || null,
+        limitCode: limitCode || null,
+      });
+      showToast(
+        message || "Could not verify availability. Please try again.",
+        "error",
+      );
+      return;
+    }
+
     removeDescriptionApplyPrompt();
     if (activeLimitFollowupOfferCleanup) {
       activeLimitFollowupOfferCleanup("cancel");
@@ -2471,7 +2490,7 @@
       };
     }
 
-    if (nextPlan) {
+    if (nextPlan && (code === "daily_limit" || code === "monthly_limit")) {
       const titleText =
         code === "monthly_limit" ? "Monthly limit reached" : "Daily limit reached";
       const nextTierOptions =
@@ -2502,16 +2521,9 @@
     return {
       message:
         limitData.error ||
-        "Pick the option that fits your next listings.",
-      actionText: "Compare all plans",
-      options: [
-        planOption("starter", { featured: true }),
-        planOption("pro"),
-        planOption("business"),
-      ],
-      trustNote: "Secure checkout by Stripe. Cancel anytime.",
-      paywall: true,
-      title: "Usage limit reached",
+        "Could not verify availability. Please try again.",
+      actionText: null,
+      paywall: false,
     };
   }
 
@@ -4057,10 +4069,7 @@
     chrome.storage.local.get("supabaseSession", ({ supabaseSession }) => {
       isAuthenticated = !!supabaseSession?.access_token;
       updateButtonUI();
-      renderWardrobeRewriteCapacity(
-        document.querySelector(".quickvint-wardrobe-rewrite-shell"),
-        wardrobeRewriteCapacity,
-      );
+      refreshWardrobeRewriteCapacity();
     });
   }
 
@@ -4068,10 +4077,7 @@
     if (changes.supabaseSession) {
       isAuthenticated = !!changes.supabaseSession.newValue?.access_token;
       updateButtonUI();
-      renderWardrobeRewriteCapacity(
-        document.querySelector(".quickvint-wardrobe-rewrite-shell"),
-        wardrobeRewriteCapacity,
-      );
+      refreshWardrobeRewriteCapacity();
     }
     if (
       changes.selectedLanguage ||
@@ -16012,18 +16018,47 @@
 
   async function fetchBatchGenerationCapacity() {
     const response = await sendMessage({ type: "GET_BATCH_CAPACITY" });
-    return response?.ok
-      ? response.capacity
-      : {
-          allowed: false,
-          available: 0,
-          reason:
-            response?.reason ||
-            (response?.status === 401 ? "auth_required" : "service_unavailable"),
-          message:
-            response?.error ||
-            "Could not check how many listings are available.",
-        };
+    if (!response?.ok) {
+      const error =
+        response?.error || "Could not check how many listings are available.";
+      return {
+        allowed: false,
+        available: 0,
+        reason:
+          response?.reason ||
+          (response?.status === 401 ? "auth_required" : "service_unavailable"),
+        status: response?.status || null,
+        message: error,
+        error,
+      };
+    }
+
+    const capacity = response.capacity;
+    const allowed = capacity?.allowed === true;
+    const available = Math.max(
+      0,
+      Math.floor(Number(capacity?.available || 0)),
+    );
+    if (
+      !capacity ||
+      typeof capacity.allowed !== "boolean" ||
+      (allowed && available === 0)
+    ) {
+      const error = "Could not verify availability. Please try again.";
+      return {
+        allowed: false,
+        available: 0,
+        reason: "service_unavailable",
+        message: error,
+        error,
+      };
+    }
+
+    return {
+      ...capacity,
+      allowed,
+      available: allowed ? available : 0,
+    };
   }
 
   async function refreshBatchGenerationCapacity() {
@@ -16436,7 +16471,7 @@
       code: capacity.reason,
       currentTier: capacity.tier,
       nextTier: capacity.nextTier,
-      error: capacity.message,
+      error: capacity.message || capacity.error,
     });
 
     if (limitMessage.paywall && pricingUrl) {
@@ -18305,32 +18340,47 @@
   }
 
   async function loadWardrobeRewriteCapacity() {
+    const requestId = ++wardrobeRewriteCapacityRequestId;
     wardrobeRewriteCapacityLoading = true;
     wardrobeRewriteCapacity = null;
+    let capacity;
     try {
-      const response = await sendMessage({ type: "GET_BATCH_CAPACITY" });
-      if (!response?.ok) throw new Error(response?.error || "Availability unavailable");
-      const capacity = response.capacity || {};
-      const error = capacity.error ? String(capacity.error) : null;
-      wardrobeRewriteCapacity = {
-        allowed: Boolean(capacity.allowed),
-        available: Math.max(0, Math.floor(Number(capacity.available || 0))),
-        message: String(capacity.message || error || ""),
-        reason: capacity.reason || null,
-        tier: capacity.tier || null,
-        error,
-      };
-      return wardrobeRewriteCapacity;
+      capacity = await fetchBatchGenerationCapacity();
     } catch (error) {
-      wardrobeRewriteCapacity = {
+      capacity = {
         allowed: false,
         available: 0,
+        reason: "service_unavailable",
         error: error?.message || "Availability unavailable",
       };
-      return wardrobeRewriteCapacity;
     } finally {
-      wardrobeRewriteCapacityLoading = false;
+      if (requestId === wardrobeRewriteCapacityRequestId) {
+        wardrobeRewriteCapacity = capacity;
+        wardrobeRewriteCapacityLoading = false;
+      }
     }
+    return capacity;
+  }
+
+  function refreshWardrobeRewriteCapacity(
+    shell = document.querySelector(".quickvint-wardrobe-rewrite-shell"),
+  ) {
+    if (isAuthenticated !== true) {
+      wardrobeRewriteCapacityRequestId += 1;
+      wardrobeRewriteCapacityLoading = false;
+      wardrobeRewriteCapacity = null;
+      wardrobeRewriteCapacityPrefetch = null;
+      renderWardrobeRewriteCapacity(shell, wardrobeRewriteCapacity);
+      return Promise.resolve(null);
+    }
+    if (!shell) return Promise.resolve(null);
+
+    const request = loadWardrobeRewriteCapacity();
+    renderWardrobeRewriteCapacity(shell, wardrobeRewriteCapacity);
+    return request.then(() => {
+      renderWardrobeRewriteCapacity(shell, wardrobeRewriteCapacity);
+      return wardrobeRewriteCapacity;
+    });
   }
 
   function animateWardrobeRewriteCapacity(badge, delay = 0) {
@@ -18357,6 +18407,18 @@
     if (!badge || !cta) return;
 
     const wasHidden = badge.hidden;
+    const hasVerifiedCapacity = Boolean(
+      state?.allowed && Number(state.available) > 0,
+    );
+    const hasConfirmedBlock = Boolean(
+      state && !state.allowed && PAYWALL_ALLOWED_CODES.has(state.reason),
+    );
+    const hasCapacityError = Boolean(
+      isAuthenticated === true &&
+        !wardrobeRewriteCapacityLoading &&
+        !hasVerifiedCapacity &&
+        !hasConfirmedBlock,
+    );
     badge.replaceChildren();
     badge.hidden =
       wardrobeRewriteCapacityLoading || isAuthenticated === null;
@@ -18364,17 +18426,13 @@
       badge.textContent = "Sign in to check availability";
     } else if (wardrobeRewriteCapacityLoading || isAuthenticated === null) {
       badge.textContent = "";
-    } else if (state?.error) {
+    } else if (hasCapacityError) {
       badge.append("Availability unavailable");
       const retry = document.createElement("button");
       retry.type = "button";
       retry.className = "quickvint-wardrobe-rewrite-capacity-retry";
       retry.textContent = "Retry";
-      retry.addEventListener("click", async () => {
-        const request = loadWardrobeRewriteCapacity();
-        renderWardrobeRewriteCapacity(shell, wardrobeRewriteCapacity);
-        renderWardrobeRewriteCapacity(shell, await request);
-      });
+      retry.addEventListener("click", () => refreshWardrobeRewriteCapacity(shell));
       badge.append(retry);
     } else {
       const available = state?.available || 0;
@@ -18384,7 +18442,9 @@
 
     cta.disabled =
       isAuthenticated === null ||
-      (isAuthenticated !== false && wardrobeRewriteCapacityLoading);
+      (isAuthenticated === true &&
+        (wardrobeRewriteCapacityLoading ||
+          (!hasVerifiedCapacity && !hasConfirmedBlock)));
     cta.onclick = async () => {
       if (isAuthenticated === false) return openSignInPopup("wardrobe_rewrite_cta");
       if (!wardrobeRewriteCapacity?.allowed || !wardrobeRewriteCapacity.available) {
@@ -18811,7 +18871,7 @@
     if (!ready) {
       if (wardrobeRewriteScheduled) return false;
       wardrobeRewriteScheduled = true;
-      if (isAuthenticated !== false) {
+      if (isAuthenticated === true) {
         wardrobeRewriteCapacityPrefetch = loadWardrobeRewriteCapacity();
       }
       chrome.storage.local.get(
@@ -18899,14 +18959,12 @@
     });
     shell.appendChild(widget);
     host.appendChild(shell);
-    if (isAuthenticated !== false) {
+    if (isAuthenticated === true) {
       const request =
         wardrobeRewriteCapacityPrefetch || loadWardrobeRewriteCapacity();
       wardrobeRewriteCapacityPrefetch = null;
       renderWardrobeRewriteCapacity(shell, wardrobeRewriteCapacity);
-      request.then((capacity) =>
-        renderWardrobeRewriteCapacity(shell, capacity),
-      );
+      request.then(() => renderWardrobeRewriteCapacity(shell, wardrobeRewriteCapacity));
     } else {
       renderWardrobeRewriteCapacity(shell, wardrobeRewriteCapacity);
     }

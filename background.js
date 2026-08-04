@@ -54,7 +54,11 @@ chrome.runtime.onInstalled.addListener((details) => {
   const extensionVersion = chrome.runtime.getManifest().version;
   if (details.reason === "install") {
     chrome.tabs.create({ url: "https://autolister.app/welcome" });
-  } else if (details.reason === "update" && extensionVersion === "1.4.0") {
+  } else if (
+    details.reason === "update" &&
+    (extensionVersion === "1.4.0" ||
+      (extensionVersion === "1.4.1" && details.previousVersion !== "1.4.0"))
+  ) {
     chrome.tabs.create({ url: "https://autolister.app/updates/1-4-0" });
   }
 });

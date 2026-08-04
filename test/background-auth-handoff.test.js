@@ -223,13 +223,35 @@ test("background opens release pages only for their explicit install reason and 
     ]);
   });
 
-  await t.test("another update opens no announcement page", async () => {
+  await t.test("a direct update from 1.3 to 1.4.1 still opens the 1.4 page", async () => {
+    const harness = await runBackgroundHandoff(
+      { type: "PING" },
+      undefined,
+      { manifestVersion: "1.4.1" },
+    );
+    harness.installedListener({ reason: "update", previousVersion: "1.3.70" });
+    assert.deepEqual(JSON.parse(JSON.stringify(harness.createdTabs)), [
+      { url: "https://autolister.app/updates/1-4-0" },
+    ]);
+  });
+
+  await t.test("update from 1.4.0 to 1.4.1 does not repeat the page", async () => {
     const harness = await runBackgroundHandoff(
       { type: "PING" },
       undefined,
       { manifestVersion: "1.4.1" },
     );
     harness.installedListener({ reason: "update", previousVersion: "1.4.0" });
+    assert.deepEqual(JSON.parse(JSON.stringify(harness.createdTabs)), []);
+  });
+
+  await t.test("later versions do not inherit the 1.4 announcement", async () => {
+    const harness = await runBackgroundHandoff(
+      { type: "PING" },
+      undefined,
+      { manifestVersion: "1.4.2" },
+    );
+    harness.installedListener({ reason: "update", previousVersion: "1.3.70" });
     assert.deepEqual(JSON.parse(JSON.stringify(harness.createdTabs)), []);
   });
 });

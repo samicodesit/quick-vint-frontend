@@ -6466,6 +6466,22 @@ test.describe("AutoLister extension smoke flows", () => {
     );
   });
 
+  test("does not turn unknown capacity into a paywall", async ({ page }) => {
+    await openContentHarness(page, {
+      allowed: false,
+      available: 0,
+      message: "Could not verify listing availability.",
+    });
+
+    await page.locator("#quickvint-phone-btn").click();
+
+    await expect(page.locator("#quickvint-upload-choice-modal")).toHaveCount(0);
+    await expect(page.locator("#quickvint-toast.paywall")).not.toBeVisible();
+    await expect(page.locator("#quickvint-toast.error")).toContainText(
+      "Could not verify listing availability.",
+    );
+  });
+
   test("does not interrupt an in-progress listing with the return-visit limit offer", async ({
     page,
   }) => {
@@ -7735,15 +7751,19 @@ test.describe("own wardrobe rewrite widget", () => {
     await openWardrobeHarness(page, {
       capacityResponse: [
         { allowed: true, available: 2 },
-        { allowed: true, available: 0 },
+        { allowed: true, available: 1 },
       ],
-      wardrobeItems: wardrobeItemFixture({ id: "9443601541" }),
+      wardrobeItems: [
+        wardrobeItemFixture({ id: "9443601541" }),
+        wardrobeItemFixture({ id: "7563307251" }),
+      ].join(""),
     });
     await enterWardrobeSelection(page);
     await page.getByRole("button", { name: /Select Item 9443601541/ }).click();
+    await page.getByRole("button", { name: /Select Item 7563307251/ }).click();
     await page.getByRole("button", { name: "Start rewrite" }).click();
     await expect(page.locator(".quickvint-wardrobe-selection-feedback")).toHaveText(
-      "Deselect to the new maximum of 0.",
+      "Deselect to the new maximum of 1.",
     );
     expect(
       await page.evaluate(() =>
@@ -7917,14 +7937,72 @@ test.describe("own wardrobe rewrite widget", () => {
 
   test("shows zero and signed-out wardrobe availability states", async ({ page }) => {
     await openWardrobeHarness(page, { capacityResponse: { allowed: true, available: 0 } });
-    await expect(page.locator(".quickvint-wardrobe-rewrite-capacity")).toHaveText(
-      "0 listings available",
+    await expect(page.locator(".quickvint-wardrobe-rewrite-capacity")).toContainText(
+      "Availability unavailable",
     );
-    await expect(page.locator(".quickvint-wardrobe-rewrite-cta")).toBeEnabled();
+    await expect(page.locator(".quickvint-wardrobe-rewrite-cta")).toBeDisabled();
 
     await openWardrobeHarness(page, { signedIn: false });
     await expect(page.locator(".quickvint-wardrobe-rewrite-capacity")).toHaveText(
       "Sign in to check availability",
+    );
+  });
+
+  test("refreshes wardrobe capacity after sign-in without showing a paywall", async ({
+    page,
+  }) => {
+    await openWardrobeHarness(page, {
+      signedIn: false,
+      capacityResponse: { allowed: true, available: 5 },
+    });
+    expect(await getCapacityRequestCount(page)).toBe(0);
+
+    await page.evaluate(() =>
+      chrome.storage.local.set({
+        supabaseSession: {
+          access_token: "signed-in-token",
+          user: { id: "test-user", email: "seller@example.com" },
+        },
+      }),
+    );
+
+    await expect.poll(() => getCapacityRequestCount(page)).toBe(1);
+    await expect(page.locator(".quickvint-wardrobe-rewrite-capacity")).toHaveText(
+      "5 listings available",
+    );
+    await expect(page.locator(".quickvint-wardrobe-rewrite-cta")).toBeEnabled();
+    await page.locator(".quickvint-wardrobe-rewrite-cta").click();
+    await expect(page.getByText("What should happen to your new text?")).toBeVisible();
+    await expect(page.locator("#quickvint-toast.paywall")).not.toBeVisible();
+  });
+
+  test("keeps the newest wardrobe capacity when an older request finishes late", async ({
+    page,
+  }) => {
+    await openWardrobeHarness(page, {
+      capacityResponse: [
+        { runtimeError: "Old connection failure.", delayMs: 120 },
+        { allowed: true, available: 7 },
+      ],
+    });
+    await expect.poll(() => getCapacityRequestCount(page)).toBe(1);
+
+    await page.evaluate(() =>
+      chrome.storage.local.set({
+        supabaseSession: {
+          access_token: "newer-token",
+          user: { id: "test-user", email: "seller@example.com" },
+        },
+      }),
+    );
+
+    await expect.poll(() => getCapacityRequestCount(page)).toBe(2);
+    await expect(page.locator(".quickvint-wardrobe-rewrite-capacity")).toHaveText(
+      "7 listings available",
+    );
+    await page.waitForTimeout(160);
+    await expect(page.locator(".quickvint-wardrobe-rewrite-capacity")).toHaveText(
+      "7 listings available",
     );
   });
 
