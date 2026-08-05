@@ -30,6 +30,27 @@
 
   const scenarios = [
     {
+      id: "batch-review-prompt",
+      title: "Successful batch review prompt",
+      note: "Review request shown in the final generated tab after a successful batch.",
+      height: 680,
+      auth: true,
+      action: "show-batch-review",
+      hasImages: true,
+      verify(doc) {
+        const modal = doc.getElementById("quickvint-batch-review-modal");
+        const text = modal?.textContent || "";
+        return (
+          modal?.getAttribute("role") === "dialog" &&
+          /Batch complete/.test(text) &&
+          /Impressive, isn’t it\?/.test(text) &&
+          /You just created 8 listings in one go\./.test(text) &&
+          /Share your experience/.test(text) &&
+          /Not now/.test(text)
+        );
+      },
+    },
+    {
       id: "signed-out",
       title: "Signed out controls",
       note: "Real sign-in state from content.js.",
@@ -1137,6 +1158,7 @@
       const scenario = ${JSON.stringify(scenario)};
       const storage = ${JSON.stringify(storage)};
       const listeners = [];
+      const runtimeListeners = [];
       const nativeSetTimeout = window.setTimeout.bind(window);
 
       window.setTimeout = (callback, delay, ...args) => {
@@ -1198,7 +1220,7 @@
           },
           onMessage: {
             addListener(listener) {
-              listeners.push(listener);
+              runtimeListeners.push(listener);
             },
           },
           sendMessage(message, callback) {
@@ -1254,6 +1276,16 @@
 
       window.__runScenario = () => {
         const generate = document.getElementById("quickvint-gen-btn");
+        if (scenario.action === "show-batch-review") {
+          runtimeListeners.forEach((listener) =>
+            listener(
+              { type: "SHOW_BATCH_REVIEW_PROMPT", total: 8, force: true },
+              {},
+              () => {},
+            ),
+          );
+          return;
+        }
         if (scenario.action === "open-title-language") {
           document.getElementById("quickvint-title-language-select")?.click();
           return;

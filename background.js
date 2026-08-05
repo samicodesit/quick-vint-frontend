@@ -667,6 +667,7 @@ async function cleanupBatchUploadSession(sessionId) {
 async function runBatchGenerationJob(job) {
   const { groups } = job;
   let activeItemIndex = 0;
+  let lastWorkTabId = null;
   const offersByCampaign = new Map();
 
   notifyBatchProgress(job, {
@@ -715,6 +716,7 @@ async function runBatchGenerationJob(job) {
           result?.error || `Listing ${index + 1} could not be generated.`,
         );
       }
+      lastWorkTabId = workTab.id;
 
       if (Array.isArray(result.offers)) {
         result.offers.forEach((offer) => {
@@ -750,6 +752,14 @@ async function runBatchGenerationJob(job) {
       total: groups.length,
       offers: Array.from(offersByCampaign.values()),
     });
+    if (lastWorkTabId) {
+      sendTabMessage(lastWorkTabId, {
+        type: "SHOW_BATCH_REVIEW_PROMPT",
+        total: groups.length,
+      }).catch((error) =>
+        console.debug("Batch review prompt unavailable:", error),
+      );
+    }
   } catch (err) {
     console.error("[Background] Batch generation failed:", err);
     notifyBatchProgress(job, {

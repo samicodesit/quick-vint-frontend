@@ -48,6 +48,7 @@
   let activeTabJobHeartbeat = null;
   const DESCRIPTION_APPLY_PROMPT_ID = "quickvint-description-apply-prompt";
   const LIMIT_FOLLOWUP_MODAL_ID = "quickvint-limit-followup-modal";
+  const BATCH_REVIEW_MODAL_ID = "quickvint-batch-review-modal";
   const TITLE_LANGUAGE_SELECT_ID = "quickvint-title-language-select";
   const DESCRIPTION_LANGUAGE_SELECT_ID = "quickvint-description-language-select";
   const MODAL_ID = "quickvint-phone-modal";
@@ -74,6 +75,10 @@
   const OFFER_LAST_SHOWN_KEY_PREFIX = "quickvintOfferLastShown";
   const LIMIT_PAYWALL_SEEN_KEY_PREFIX = "quickvintLimitPaywallSeen";
   const OFFER_SHOW_COOLDOWN_MS = 7 * 24 * 60 * 60 * 1000;
+  const BATCH_REVIEW_STATE_KEY_PREFIX = "quickvintBatchReviewPrompt";
+  const BATCH_REVIEW_SNOOZE_MS = 7 * 24 * 60 * 60 * 1000;
+  const CHROME_STORE_REVIEW_URL =
+    "https://chromewebstore.google.com/detail/autolister-ai-vinted-desc/mommklhpammnlojjobejddmidmdcalcl/reviews";
   const FREE_LIMIT_OFFER_COPY_KEY = "free_limit";
   const STARTER_DAILY_LIMIT_OFFER_COPY_KEY = "starter_daily_limit";
   const STARTER_DAILY_PRO_CAMPAIGN_KEY = "starter_daily_pro_offer_v1";
@@ -1126,6 +1131,7 @@
   let eventQueue = [];
   let eventFlushTimer = null;
   let batchTabStatusTimer = null;
+  let batchReviewPromptHandledThisPage = false;
   let emojiToggleSyncTimer = null;
   let hashtagsToggleSyncTimer = null;
   let descriptionFooterSyncTimer = null;
@@ -2118,6 +2124,115 @@
   async function getPerUserStorageKey(prefix, suffix = "") {
     const userId = await getProfileUserId();
     return suffix ? `${prefix}:${userId}:${suffix}` : `${prefix}:${userId}`;
+  }
+
+  async function showBatchReviewPrompt({ total = 0, force = false } = {}) {
+    if (
+      document.getElementById(BATCH_REVIEW_MODAL_ID) ||
+      (!force && batchReviewPromptHandledThisPage)
+    ) {
+      return false;
+    }
+
+    const stateKey = await getPerUserStorageKey(BATCH_REVIEW_STATE_KEY_PREFIX);
+    const stored = await chrome.storage.local.get(stateKey);
+    const state = stored[stateKey] || {};
+    if (
+      !force &&
+      (state.reviewOpened ||
+        Date.now() - Number(state.snoozedAt || 0) < BATCH_REVIEW_SNOOZE_MS)
+    ) {
+      return false;
+    }
+
+    const listingCount = Math.max(1, Number(total) || 1);
+    const previousFocus = document.activeElement;
+    const modal = document.createElement("div");
+    modal.id = BATCH_REVIEW_MODAL_ID;
+    modal.setAttribute("role", "dialog");
+    modal.setAttribute("aria-modal", "true");
+    modal.setAttribute("aria-labelledby", "quickvint-batch-review-title");
+    modal.innerHTML = `
+      <div class="quickvint-batch-review-card">
+        <button type="button" class="quickvint-batch-review-close" aria-label="Not now">&times;</button>
+        <div class="quickvint-batch-review-visual" aria-hidden="true">
+          <span class="quickvint-batch-review-sheet sheet-back"><i></i><i></i></span>
+          <span class="quickvint-batch-review-sheet sheet-middle"><i></i><i></i></span>
+          <span class="quickvint-batch-review-sheet sheet-front"><b>✓</b><i></i><i></i></span>
+        </div>
+        <div class="quickvint-batch-review-kicker"><span>✓</span> Batch complete</div>
+        <h2 id="quickvint-batch-review-title">Impressive, isn’t it?</h2>
+        <p>You just created ${listingCount} listing${listingCount === 1 ? "" : "s"} in one go. If AutoLister saved you time, an honest review helps other Vinted sellers discover it.</p>
+        <div class="quickvint-batch-review-actions">
+          <a class="quickvint-batch-review-primary" href="${CHROME_STORE_REVIEW_URL}" target="_blank" rel="noopener noreferrer">
+            <span>Share your experience</span>
+          </a>
+          <button type="button" class="quickvint-batch-review-secondary">Not now</button>
+        </div>
+      </div>
+    `;
+
+    let closing = false;
+    const finish = async (reviewOpened) => {
+      if (closing) return;
+      closing = true;
+      batchReviewPromptHandledThisPage = true;
+      document.removeEventListener("keydown", onKeyDown);
+      modal.classList.add("is-closing");
+      const nextState = reviewOpened
+        ? { reviewOpened: true }
+        : { snoozedAt: Date.now() };
+      chrome.storage.local.set({ [stateKey]: nextState }).catch(() => {});
+      trackGrowthEvent(
+        reviewOpened
+          ? "batch_review_prompt_opened"
+          : "batch_review_prompt_snoozed",
+        { total: listingCount },
+      );
+      setTimeout(() => {
+        modal.remove();
+        if (previousFocus instanceof HTMLElement) previousFocus.focus();
+      }, 150);
+    };
+
+    const onKeyDown = (event) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        finish(false);
+        return;
+      }
+      if (event.key !== "Tab") return;
+      const focusable = [...modal.querySelectorAll("a, button")];
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last?.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first?.focus();
+      }
+    };
+
+    modal
+      .querySelector(".quickvint-batch-review-primary")
+      ?.addEventListener("click", () => finish(true));
+    modal
+      .querySelectorAll(
+        ".quickvint-batch-review-close, .quickvint-batch-review-secondary",
+      )
+      .forEach((button) =>
+        button.addEventListener("click", () => finish(false)),
+      );
+    modal.addEventListener("click", (event) => {
+      if (event.target === modal) finish(false);
+    });
+    document.addEventListener("keydown", onKeyDown);
+    document.body.appendChild(modal);
+    requestAnimationFrame(() => modal.classList.add("is-visible"));
+    modal.querySelector(".quickvint-batch-review-primary")?.focus();
+    trackGrowthEvent("batch_review_prompt_shown", { total: listingCount });
+    return true;
   }
 
   async function isOfferLocallyDismissed(offer) {
@@ -3995,6 +4110,15 @@
             error: err.message || "Batch item failed.",
           });
         });
+      return true;
+    }
+
+    if (message?.type === "SHOW_BATCH_REVIEW_PROMPT") {
+      showBatchReviewPrompt(message)
+        .then((shown) => sendResponse({ ok: true, shown }))
+        .catch((error) =>
+          sendResponse({ ok: false, error: error?.message || "Prompt unavailable." }),
+        );
       return true;
     }
 
@@ -7954,6 +8078,374 @@
 
       #${DESCRIPTION_APPLY_PROMPT_ID} button:hover {
         filter: brightness(0.98);
+      }
+
+      #${BATCH_REVIEW_MODAL_ID} {
+        position: fixed;
+        inset: 0;
+        z-index: 2147483647;
+        display: grid;
+        place-items: center;
+        padding: 20px;
+        background: rgba(20, 18, 45, 0.54);
+        backdrop-filter: blur(7px);
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        opacity: 0;
+        transition: opacity 180ms ease;
+      }
+
+      #${BATCH_REVIEW_MODAL_ID},
+      #${BATCH_REVIEW_MODAL_ID} * {
+        box-sizing: border-box;
+      }
+
+      #${BATCH_REVIEW_MODAL_ID}.is-visible {
+        opacity: 1;
+      }
+
+      #${BATCH_REVIEW_MODAL_ID}.is-closing {
+        opacity: 0;
+      }
+
+      #${BATCH_REVIEW_MODAL_ID} .quickvint-batch-review-card {
+        position: relative;
+        width: min(480px, calc(100vw - 32px));
+        overflow: hidden;
+        padding: 0 32px 28px;
+        border: 1px solid rgba(255, 255, 255, 0.88);
+        border-radius: 24px;
+        background: #ffffff;
+        color: #17162b;
+        box-shadow:
+          0 32px 90px rgba(20, 18, 45, 0.32),
+          0 8px 26px rgba(58, 49, 151, 0.18);
+        transform: translateY(12px) scale(0.97);
+        transition: transform 260ms cubic-bezier(.2, .9, .25, 1.15);
+      }
+
+      #${BATCH_REVIEW_MODAL_ID}.is-visible .quickvint-batch-review-card {
+        transform: translateY(0) scale(1);
+      }
+
+      #${BATCH_REVIEW_MODAL_ID}.is-closing .quickvint-batch-review-card {
+        transform: translateY(8px) scale(0.98);
+      }
+
+      #${BATCH_REVIEW_MODAL_ID} .quickvint-batch-review-close {
+        position: absolute;
+        z-index: 2;
+        top: 14px;
+        right: 14px;
+        display: grid;
+        width: 36px;
+        height: 36px;
+        place-items: center;
+        padding: 0;
+        border: 1px solid rgba(255, 255, 255, 0.2);
+        border-radius: 50%;
+        background: rgba(255, 255, 255, 0.12);
+        color: #ffffff;
+        font: 400 25px/1 Arial, sans-serif;
+        cursor: pointer;
+        transition: background 160ms ease, transform 160ms ease;
+      }
+
+      #${BATCH_REVIEW_MODAL_ID} .quickvint-batch-review-close:hover {
+        background: rgba(255, 255, 255, 0.22);
+        transform: rotate(4deg);
+      }
+
+      #${BATCH_REVIEW_MODAL_ID} .quickvint-batch-review-visual {
+        position: relative;
+        height: 158px;
+        margin: 0 -32px 26px;
+        overflow: hidden;
+        background:
+          radial-gradient(circle at 18% 16%, rgba(189, 244, 220, 0.28), transparent 28%),
+          radial-gradient(circle at 82% 82%, rgba(174, 165, 255, 0.34), transparent 32%),
+          linear-gradient(135deg, #282260 0%, #5648d8 58%, #7769f7 100%);
+      }
+
+      #${BATCH_REVIEW_MODAL_ID} .quickvint-batch-review-visual::before,
+      #${BATCH_REVIEW_MODAL_ID} .quickvint-batch-review-visual::after {
+        content: "";
+        position: absolute;
+        width: 5px;
+        height: 5px;
+        border-radius: 50%;
+        background: #bdf4dc;
+        box-shadow:
+          58px 22px 0 -1px #ffffff,
+          320px 18px 0 #d9d4ff,
+          372px 92px 0 -1px #ffffff,
+          28px 104px 0 #aaa1ff;
+      }
+
+      #${BATCH_REVIEW_MODAL_ID} .quickvint-batch-review-visual::before {
+        top: 22px;
+        left: 28px;
+      }
+
+      #${BATCH_REVIEW_MODAL_ID} .quickvint-batch-review-sheet {
+        position: absolute;
+        top: 31px;
+        left: 50%;
+        display: block;
+        width: 108px;
+        height: 92px;
+        padding: 20px 16px;
+        border: 1px solid rgba(255, 255, 255, 0.8);
+        border-radius: 14px;
+        background: #ffffff;
+        box-shadow: 0 18px 38px rgba(15, 12, 48, 0.26);
+      }
+
+      #${BATCH_REVIEW_MODAL_ID} .quickvint-batch-review-sheet i {
+        display: block;
+        width: 52px;
+        height: 7px;
+        margin-top: 10px;
+        border-radius: 999px;
+        background: #e9e7f8;
+      }
+
+      #${BATCH_REVIEW_MODAL_ID} .quickvint-batch-review-sheet i + i {
+        width: 72px;
+        background: #f1f0f8;
+      }
+
+      #${BATCH_REVIEW_MODAL_ID} .sheet-back {
+        transform: translateX(-94px) rotate(-12deg) scale(0.88);
+        opacity: 0.58;
+      }
+
+      #${BATCH_REVIEW_MODAL_ID}.is-visible .sheet-back {
+        animation: quickvint-batch-sheet-back 520ms 80ms cubic-bezier(.2, .85, .25, 1.15) both;
+      }
+
+      #${BATCH_REVIEW_MODAL_ID} .sheet-middle {
+        transform: translateX(-14px) rotate(10deg) scale(0.94);
+        opacity: 0.82;
+      }
+
+      #${BATCH_REVIEW_MODAL_ID}.is-visible .sheet-middle {
+        animation: quickvint-batch-sheet-middle 540ms 140ms cubic-bezier(.2, .85, .25, 1.15) both;
+      }
+
+      #${BATCH_REVIEW_MODAL_ID} .sheet-front {
+        transform: translateX(-54px) rotate(-1deg);
+      }
+
+      #${BATCH_REVIEW_MODAL_ID}.is-visible .sheet-front {
+        animation: quickvint-batch-sheet-front 560ms 210ms cubic-bezier(.2, .9, .25, 1.2) both;
+      }
+
+      #${BATCH_REVIEW_MODAL_ID} .sheet-front b {
+        display: grid;
+        width: 29px;
+        height: 29px;
+        place-items: center;
+        border-radius: 9px;
+        background: #bdf4dc;
+        color: #166a4a;
+        font-size: 16px;
+      }
+
+      #${BATCH_REVIEW_MODAL_ID}.is-visible .sheet-front b {
+        animation: quickvint-batch-check-pop 420ms 540ms cubic-bezier(.2, .9, .25, 1.35) both;
+      }
+
+      #${BATCH_REVIEW_MODAL_ID} .sheet-front i {
+        position: absolute;
+        top: 20px;
+        left: 55px;
+        width: 34px;
+        background: #dcd8ff;
+      }
+
+      #${BATCH_REVIEW_MODAL_ID} .sheet-front i + i {
+        top: 39px;
+        width: 42px;
+      }
+
+      #${BATCH_REVIEW_MODAL_ID} .quickvint-batch-review-kicker {
+        display: inline-flex;
+        align-items: center;
+        gap: 7px;
+        margin-bottom: 11px;
+        color: #5548d5;
+        font-size: 12px;
+        font-weight: 800;
+        letter-spacing: 0.075em;
+        text-transform: uppercase;
+      }
+
+      #${BATCH_REVIEW_MODAL_ID} .quickvint-batch-review-kicker span {
+        display: grid;
+        width: 20px;
+        height: 20px;
+        place-items: center;
+        border-radius: 50%;
+        background: #e0f8ed;
+        color: #147454;
+        font-size: 11px;
+      }
+
+      #${BATCH_REVIEW_MODAL_ID} h2 {
+        margin: 0 0 12px;
+        color: #17162b;
+        font-size: clamp(27px, 5vw, 34px);
+        font-weight: 850;
+        letter-spacing: -0.045em;
+        line-height: 1.05;
+      }
+
+      #${BATCH_REVIEW_MODAL_ID} p {
+        margin: 0;
+        color: #5f5c73;
+        font-size: 15px;
+        font-weight: 500;
+        line-height: 1.58;
+      }
+
+      #${BATCH_REVIEW_MODAL_ID} .quickvint-batch-review-actions {
+        display: grid;
+        grid-template-columns: 1fr;
+        gap: 5px;
+        margin-top: 24px;
+      }
+
+      #${BATCH_REVIEW_MODAL_ID} .quickvint-batch-review-primary,
+      #${BATCH_REVIEW_MODAL_ID} .quickvint-batch-review-secondary {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 13px;
+        font: inherit;
+        font-size: 14px;
+        font-weight: 800;
+        cursor: pointer;
+        transition: transform 160ms ease, box-shadow 160ms ease, background 160ms ease;
+      }
+
+      #${BATCH_REVIEW_MODAL_ID} .quickvint-batch-review-primary {
+        position: relative;
+        min-height: 56px;
+        overflow: hidden;
+        padding: 0 20px;
+        border: 1px solid #29235c;
+        background: #29235c;
+        color: #ffffff;
+        font-size: 16px;
+        text-decoration: none;
+        box-shadow: 0 10px 24px rgba(41, 35, 92, 0.22);
+      }
+
+      #${BATCH_REVIEW_MODAL_ID} .quickvint-batch-review-primary::before {
+        content: "";
+        position: absolute;
+        inset: -30% auto -30% -45%;
+        width: 32%;
+        background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
+        transform: skewX(-20deg);
+        transition: left 520ms cubic-bezier(.2, .8, .2, 1);
+      }
+
+      #${BATCH_REVIEW_MODAL_ID} .quickvint-batch-review-primary span {
+        position: relative;
+        z-index: 1;
+      }
+
+      #${BATCH_REVIEW_MODAL_ID} .quickvint-batch-review-secondary {
+        min-height: 38px;
+        padding: 0 14px;
+        border: 0;
+        background: transparent;
+        color: #747086;
+      }
+
+      #${BATCH_REVIEW_MODAL_ID} .quickvint-batch-review-primary:hover {
+        transform: translateY(-1px);
+      }
+
+      #${BATCH_REVIEW_MODAL_ID} .quickvint-batch-review-primary:hover {
+        background: #332b70;
+        box-shadow: 0 13px 28px rgba(41, 35, 92, 0.3);
+      }
+
+      #${BATCH_REVIEW_MODAL_ID} .quickvint-batch-review-primary:hover::before {
+        left: 115%;
+      }
+
+      #${BATCH_REVIEW_MODAL_ID} .quickvint-batch-review-secondary:hover {
+        background: transparent;
+        color: #29235c;
+        text-decoration: underline;
+        text-underline-offset: 3px;
+      }
+
+      @keyframes quickvint-batch-sheet-back {
+        from { opacity: 0; transform: translateX(-128px) translateY(18px) rotate(-22deg) scale(0.72); }
+        to { opacity: 0.58; transform: translateX(-94px) rotate(-12deg) scale(0.88); }
+      }
+
+      @keyframes quickvint-batch-sheet-middle {
+        from { opacity: 0; transform: translateX(22px) translateY(18px) rotate(20deg) scale(0.74); }
+        to { opacity: 0.82; transform: translateX(-14px) rotate(10deg) scale(0.94); }
+      }
+
+      @keyframes quickvint-batch-sheet-front {
+        from { opacity: 0; transform: translateX(-54px) translateY(24px) rotate(-1deg) scale(0.78); }
+        to { opacity: 1; transform: translateX(-54px) rotate(-1deg) scale(1); }
+      }
+
+      @keyframes quickvint-batch-check-pop {
+        from { opacity: 0; transform: scale(0.35) rotate(-18deg); }
+        to { opacity: 1; transform: scale(1) rotate(0); }
+      }
+
+      #${BATCH_REVIEW_MODAL_ID} :is(a, button):focus-visible {
+        outline: 3px solid rgba(110, 97, 238, 0.28);
+        outline-offset: 3px;
+      }
+
+      @media (max-width: 520px) {
+        #${BATCH_REVIEW_MODAL_ID} {
+          align-items: end;
+          padding: 12px;
+        }
+
+        #${BATCH_REVIEW_MODAL_ID} .quickvint-batch-review-card {
+          width: 100%;
+          padding-right: 24px;
+          padding-left: 24px;
+          border-radius: 22px;
+        }
+
+        #${BATCH_REVIEW_MODAL_ID} .quickvint-batch-review-visual {
+          height: 138px;
+          margin-right: -24px;
+          margin-left: -24px;
+        }
+
+        #${BATCH_REVIEW_MODAL_ID} .quickvint-batch-review-sheet {
+          top: 22px;
+        }
+
+        #${BATCH_REVIEW_MODAL_ID} .quickvint-batch-review-actions {
+          grid-template-columns: 1fr;
+        }
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        #${BATCH_REVIEW_MODAL_ID},
+        #${BATCH_REVIEW_MODAL_ID} .quickvint-batch-review-card,
+        #${BATCH_REVIEW_MODAL_ID} :is(a, button),
+        #${BATCH_REVIEW_MODAL_ID} .quickvint-batch-review-sheet,
+        #${BATCH_REVIEW_MODAL_ID} .sheet-front b {
+          animation: none !important;
+          transition: none !important;
+        }
       }
 
       #${LIMIT_FOLLOWUP_MODAL_ID} {
