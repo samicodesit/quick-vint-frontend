@@ -198,7 +198,7 @@ async function runBackgroundHandoff(
   };
 }
 
-test("background opens release pages only for their explicit install reason and version", async (t) => {
+test("background opens onboarding only for fresh installs", async (t) => {
   await t.test("fresh install keeps the welcome page", async () => {
     const harness = await runBackgroundHandoff(
       { type: "PING" },
@@ -211,41 +211,7 @@ test("background opens release pages only for their explicit install reason and 
     ]);
   });
 
-  await t.test("update to 1.4.0 opens the dedicated page", async () => {
-    const harness = await runBackgroundHandoff(
-      { type: "PING" },
-      undefined,
-      { manifestVersion: "1.4.0" },
-    );
-    harness.installedListener({ reason: "update", previousVersion: "1.3.70" });
-    assert.deepEqual(JSON.parse(JSON.stringify(harness.createdTabs)), [
-      { url: "https://autolister.app/updates/1-4-0" },
-    ]);
-  });
-
-  await t.test("a direct update from 1.3 to 1.4.1 still opens the 1.4 page", async () => {
-    const harness = await runBackgroundHandoff(
-      { type: "PING" },
-      undefined,
-      { manifestVersion: "1.4.1" },
-    );
-    harness.installedListener({ reason: "update", previousVersion: "1.3.70" });
-    assert.deepEqual(JSON.parse(JSON.stringify(harness.createdTabs)), [
-      { url: "https://autolister.app/updates/1-4-0" },
-    ]);
-  });
-
-  await t.test("update from 1.4.0 to 1.4.1 does not repeat the page", async () => {
-    const harness = await runBackgroundHandoff(
-      { type: "PING" },
-      undefined,
-      { manifestVersion: "1.4.1" },
-    );
-    harness.installedListener({ reason: "update", previousVersion: "1.4.0" });
-    assert.deepEqual(JSON.parse(JSON.stringify(harness.createdTabs)), []);
-  });
-
-  await t.test("later versions do not inherit the 1.4 announcement", async () => {
+  await t.test("updates do not open a tab", async () => {
     const harness = await runBackgroundHandoff(
       { type: "PING" },
       undefined,
