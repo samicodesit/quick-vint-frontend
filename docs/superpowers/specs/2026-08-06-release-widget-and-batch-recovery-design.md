@@ -34,10 +34,11 @@ chrome without covering the welcome content.
   3. **More room while listing** — Collapse the AutoLister tools whenever you
      want a cleaner page.
 
-Closing the opened widget stores a release-specific dismissal in local storage.
-It remains dismissed on later welcome-page visits. Opening without closing does
-not dismiss it. Reuse the existing welcome-page styling and localization
-structure; add no dependency, API, or database state.
+Opening the widget immediately stores a release-specific seen value in local
+storage. It remains visible for the current page so the user can read and close
+it, but it does not return on later welcome-page visits in the same browser
+profile. Closing also stores the same value. Reuse the existing welcome-page
+styling and localization structure; add no dependency, API, or database state.
 
 ## Batch guidance
 
