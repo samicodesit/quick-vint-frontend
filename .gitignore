@@ -9,3 +9,4 @@ test-results/
 playwright-report/
 tmp/
 CHROME_WEB_STORE_PENDING_VERSION
+.superpowers/
