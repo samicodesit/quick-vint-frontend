@@ -62,12 +62,20 @@ recovery modal. Generated listing tabs must not become batch controllers.
 When an interruption is detected:
 
 1. The original controller tab shows the existing recovery modal.
-2. A generated batch tab shows a compact `Batch interrupted` prompt with a
-   `Return to batch` action.
+2. A generated batch tab shows a centered modal over a dimmed page so the
+   interruption cannot be missed. It uses a slim indigo top accent, a small
+   exclamation badge aligned beside the heading, and a dismissible close
+   button. The approved copy is exactly:
+   - Heading: `Your batch was interrupted`
+   - Body: `Your progress was saved. Return to the batch to continue with the remaining items.`
+   - Action: `Return to batch`
 3. The action focuses the original controller tab.
 4. If the original tab no longer exists, the extension opens a fresh Vinted
    create tab, rebinds the saved recovery to it, and shows the recovery modal
    there.
+
+Closing the centered modal only dismisses it on that generated tab. It does
+not discard the saved batch or change the recovery state.
 
 The extension validates the saved batch and calling tab before focusing or
 rebinding anything. It never overwrites a generated listing or clicks Vinted
@@ -88,8 +96,9 @@ completion state but never shows that review prompt.
 - Listing widget: new/edit routes, opened, dismissed, and already-seen cases.
 - Batch review: clean success shows the prompt; interrupted, failed-then-resumed,
   and worker-restarted success do not.
-- Recovery routing: source tab present, source tab backgrounded, source tab
-  closed, unrelated tab, expired recovery, and repeated clicks.
-- Real browser flow: interrupt after item 1 of 2, see the nudge on the generated
+- Recovery routing: centered interruption modal, dismissal without discarding,
+  source tab present, source tab backgrounded, source tab closed, unrelated
+  tab, expired recovery, and repeated clicks.
+- Real browser flow: interrupt after item 1 of 2, see the modal on the generated
   tab, return to or recreate the controller, resume item 2, and verify zero
   Save/Publish clicks.
