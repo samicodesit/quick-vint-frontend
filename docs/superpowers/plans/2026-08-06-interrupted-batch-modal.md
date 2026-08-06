@@ -33,7 +33,7 @@
 - Consumes: existing `SHOW_BATCH_RECOVERY_NUDGE` content message and `FOCUS_BATCH_RECOVERY` runtime request.
 - Produces: one deduplicated `#quickvint-batch-recovery-nudge` viewport overlay whose primary button runs the existing focus request.
 
-- [ ] **Step 1: Strengthen the focused browser test so the old corner nudge fails**
+- [x] **Step 1: Strengthen the focused browser test so the old corner nudge fails**
 
 Update `returns an interrupted work tab to its batch controller` to assert:
 
@@ -67,7 +67,7 @@ await expect.poll(() => page.evaluate(() =>
 )).toBe(true);
 ```
 
-- [ ] **Step 2: Run the focused test and confirm it fails against the old nudge**
+- [x] **Step 2: Run the focused test and confirm it fails against the old nudge**
 
 Run:
 
@@ -77,7 +77,7 @@ npx playwright test tests/e2e/extension.spec.js -g "returns an interrupted work 
 
 Expected: failure because the old nudge has neither the approved heading/body nor a Close button and is not a full-viewport overlay.
 
-- [ ] **Step 3: Replace the nudge markup with the approved modal**
+- [x] **Step 3: Replace the nudge markup with the approved modal**
 
 Keep `BATCH_RECOVERY_NUDGE_ID` and the current primary-button handler. Change `showBatchRecoveryNudge()` to render an overlay containing:
 
@@ -105,11 +105,11 @@ nudge.querySelector(".quickvint-batch-recovery-close")
 
 Select the primary button by `.quickvint-batch-recovery-return`, preserve its existing disabled/`Opening…`/error behavior, append the overlay, then focus the Close button.
 
-- [ ] **Step 4: Replace the corner CSS with the approved centered treatment**
+- [x] **Step 4: Replace the corner CSS with the approved centered treatment**
 
 Style the outer ID as `position: fixed; inset: 0; display: grid; place-items: center; padding: 24px; background: rgba(35, 33, 63, .48);` with the existing maximum z-index. Style the inner panel at `width: min(430px, 100%)`, white, 18px radius, slim indigo gradient accent, strong shadow, and the approved spacing. Keep a visible `:focus-visible` outline and responsive text wrapping; do not add animation or another UI component.
 
-- [ ] **Step 5: Update the existing components-preview verification**
+- [x] **Step 5: Update the existing components-preview verification**
 
 Change the `batch-recovery-nudge` scenario verification to require the approved heading, body, and action:
 
@@ -123,7 +123,7 @@ return (
 
 Keep the scenario action and ID unchanged so the preview continues exercising the real content-script component.
 
-- [ ] **Step 6: Run the focused checks**
+- [x] **Step 6: Run the focused checks**
 
 Run:
 
@@ -134,7 +134,7 @@ npx playwright test tests/e2e/extension.spec.js -g "returns an interrupted work 
 
 Expected: syntax check exits 0 and the focused Playwright test passes.
 
-- [ ] **Step 7: Commit the implementation**
+- [x] **Step 7: Commit the implementation**
 
 ```bash
 git add content.js design-system/content-runtime-review.js tests/e2e/extension.spec.js

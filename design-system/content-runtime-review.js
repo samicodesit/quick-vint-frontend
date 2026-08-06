@@ -34,14 +34,16 @@
       title: "Interrupted batch return",
       note: "Shown on the generated listing tab; the button returns to the original batch tab.",
       height: 680,
+      exactHeight: true,
+      frameWidth: 1100,
       auth: true,
       action: "show-batch-recovery-nudge",
       hasImages: true,
       verify(doc) {
         const nudge = doc.getElementById("quickvint-batch-recovery-nudge");
         return (
-          /Batch interrupted/.test(nudge?.textContent || "") &&
-          /Continue after the last finished listing\./.test(nudge?.textContent || "") &&
+          /Your batch was interrupted/.test(nudge?.textContent || "") &&
+          /Your progress was saved\. Return to the batch to continue with the remaining items\./.test(nudge?.textContent || "") &&
           /Return to batch/.test(nudge?.textContent || "")
         );
       },
@@ -737,6 +739,7 @@
   }
 
   function getScenarioFrameHeight(scenario) {
+    if (scenario.exactHeight) return scenario.height;
     return Math.max(scenario.height || 0, 1180);
   }
 

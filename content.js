@@ -11705,52 +11705,121 @@
 
       #${BATCH_RECOVERY_NUDGE_ID} {
         position: fixed;
-        right: 22px;
-        bottom: 22px;
+        inset: 0;
         z-index: 2147483001;
-        display: flex;
-        align-items: center;
-        gap: 14px;
-        max-width: calc(100vw - 32px);
-        padding: 13px 14px 13px 16px;
-        border: 1px solid #dddaf8;
-        border-radius: 14px;
-        background: #fff;
-        box-shadow: 0 16px 42px rgba(31, 28, 90, .18);
+        display: grid;
+        place-items: center;
+        box-sizing: border-box;
+        padding: 24px;
+        background: rgba(35, 33, 63, .48);
         color: #29265d;
         font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
       }
 
-      #${BATCH_RECOVERY_NUDGE_ID} strong,
-      #${BATCH_RECOVERY_NUDGE_ID} span {
-        display: block;
+      #${BATCH_RECOVERY_NUDGE_ID} .quickvint-batch-recovery-dialog {
+        position: relative;
+        width: min(430px, 100%);
+        overflow: hidden;
+        border: 1px solid rgba(91, 82, 223, .18);
+        border-radius: 18px;
+        background: #fff;
+        box-shadow: 0 26px 80px rgba(24, 21, 67, .34);
       }
 
-      #${BATCH_RECOVERY_NUDGE_ID} strong {
-        font-size: 13px;
+      #${BATCH_RECOVERY_NUDGE_ID} .quickvint-batch-recovery-accent {
+        height: 5px;
+        background: linear-gradient(90deg, #5b52df, #7168ed);
       }
 
-      #${BATCH_RECOVERY_NUDGE_ID} span {
-        margin-top: 2px;
-        color: #777493;
-        font-size: 11px;
-      }
-
-      #${BATCH_RECOVERY_NUDGE_ID} button {
-        flex: 0 0 auto;
-        min-height: 34px;
-        padding: 0 12px;
+      #${BATCH_RECOVERY_NUDGE_ID} .quickvint-batch-recovery-close {
+        position: absolute;
+        top: 17px;
+        right: 16px;
+        width: 32px;
+        height: 32px;
+        padding: 0;
         border: 0;
         border-radius: 9px;
-        background: #5b52df;
-        color: #fff;
+        background: #f5f4fa;
+        color: #65627c;
         cursor: pointer;
-        font: 700 12px/1 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        font: 400 20px/1 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
       }
 
-      #${BATCH_RECOVERY_NUDGE_ID} button:disabled {
+      #${BATCH_RECOVERY_NUDGE_ID} .quickvint-batch-recovery-content {
+        padding: 34px 30px 28px;
+      }
+
+      #${BATCH_RECOVERY_NUDGE_ID} .quickvint-batch-recovery-heading {
+        display: flex;
+        align-items: center;
+        gap: 11px;
+        margin-right: 20px;
+      }
+
+      #${BATCH_RECOVERY_NUDGE_ID} .quickvint-batch-recovery-heading > span {
+        display: grid;
+        flex: 0 0 28px;
+        width: 28px;
+        height: 28px;
+        place-items: center;
+        border-radius: 9px;
+        background: #eeecff;
+        color: #5b52df;
+        font-size: 17px;
+        font-weight: 800;
+      }
+
+      #${BATCH_RECOVERY_NUDGE_ID} h2 {
+        margin: 0;
+        color: #29265d;
+        font-size: 23px;
+        line-height: 1.25;
+      }
+
+      #${BATCH_RECOVERY_NUDGE_ID} p {
+        margin: 11px 0 0;
+        color: #68667f;
+        font-size: 15px;
+        line-height: 1.55;
+      }
+
+      #${BATCH_RECOVERY_NUDGE_ID} .quickvint-batch-recovery-return {
+        width: 100%;
+        min-height: 46px;
+        margin-top: 23px;
+        padding: 0 18px;
+        border: 0;
+        border-radius: 11px;
+        background: #5b52df;
+        box-shadow: 0 8px 20px rgba(91, 82, 223, .24);
+        color: #fff;
+        cursor: pointer;
+        font: 700 15px/1 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      }
+
+      #${BATCH_RECOVERY_NUDGE_ID} button:focus-visible {
+        outline: 3px solid rgba(79, 70, 229, .32);
+        outline-offset: 3px;
+      }
+
+      #${BATCH_RECOVERY_NUDGE_ID} .quickvint-batch-recovery-return:disabled {
         cursor: wait;
         opacity: .65;
+      }
+
+      @media (max-width: 480px) {
+        #${BATCH_RECOVERY_NUDGE_ID} {
+          padding: 16px;
+        }
+
+        #${BATCH_RECOVERY_NUDGE_ID} .quickvint-batch-recovery-content {
+          padding: 30px 22px 24px;
+        }
+
+        #${BATCH_RECOVERY_NUDGE_ID} h2 {
+          font-size: 20px;
+        }
       }
     `;
     document.head.appendChild(style);
@@ -17798,15 +17867,23 @@
     document.getElementById(RELEASE_UPDATE_WIDGET_ID)?.remove();
     const nudge = document.createElement("aside");
     nudge.id = BATCH_RECOVERY_NUDGE_ID;
-    nudge.setAttribute("aria-live", "polite");
     nudge.innerHTML = `
-      <div>
-        <strong>Batch interrupted</strong>
-        <span>Continue after the last finished listing.</span>
+      <div class="quickvint-batch-recovery-dialog" role="alertdialog" aria-modal="true" aria-labelledby="quickvint-batch-recovery-title">
+        <div class="quickvint-batch-recovery-accent"></div>
+        <button class="quickvint-batch-recovery-close" type="button" aria-label="Close">×</button>
+        <div class="quickvint-batch-recovery-content">
+          <div class="quickvint-batch-recovery-heading">
+            <span aria-hidden="true">!</span>
+            <h2 id="quickvint-batch-recovery-title">Your batch was interrupted</h2>
+          </div>
+          <p>Your progress was saved. Return to the batch to continue with the remaining items.</p>
+          <button class="quickvint-batch-recovery-return" type="button">Return to batch</button>
+        </div>
       </div>
-      <button type="button">Return to batch</button>
     `;
-    const button = nudge.querySelector("button");
+    const closeButton = nudge.querySelector(".quickvint-batch-recovery-close");
+    closeButton?.addEventListener("click", () => nudge.remove());
+    const button = nudge.querySelector(".quickvint-batch-recovery-return");
     button.addEventListener("click", async () => {
       button.disabled = true;
       button.textContent = "Opening…";
@@ -17820,6 +17897,7 @@
       showToast(response?.error || "Could not return to the batch.", "error");
     });
     document.body.appendChild(nudge);
+    closeButton?.focus({ preventScroll: true });
     return true;
   }
 

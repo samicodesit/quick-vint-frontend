@@ -897,16 +897,31 @@ test.describe("AutoLister extension smoke flows", () => {
 
     await sendContentMessage(page, { type: "SHOW_BATCH_RECOVERY_NUDGE" });
     await sendContentMessage(page, { type: "SHOW_BATCH_RECOVERY_NUDGE" });
-    const nudge = page.locator("#quickvint-batch-recovery-nudge");
-    await expect(nudge).toHaveCount(1);
-    await expect(nudge).toContainText("Batch interrupted");
-    await nudge.getByRole("button", { name: "Return to batch" }).click();
+    const overlay = page.locator("#quickvint-batch-recovery-nudge");
+    await expect(overlay).toHaveCount(1);
+    await expect(overlay.getByRole("heading", { name: "Your batch was interrupted" })).toBeVisible();
+    await expect(overlay).toContainText(
+      "Your progress was saved. Return to the batch to continue with the remaining items.",
+    );
+    await expect(overlay).toHaveCSS("position", "fixed");
+    await expect(overlay).toHaveCSS("inset", "0px");
+
+    await overlay.getByRole("button", { name: "Close" }).click();
+    await expect(overlay).toHaveCount(0);
+    await expect.poll(() => page.evaluate(() =>
+      window.__extensionHarness.runtimeMessages.some(
+        (message) => message.type === "DISCARD_BATCH_RECOVERY",
+      ),
+    )).toBe(false);
+
+    await sendContentMessage(page, { type: "SHOW_BATCH_RECOVERY_NUDGE" });
+    await page.getByRole("button", { name: "Return to batch" }).click();
     await expect.poll(() => page.evaluate(() =>
       window.__extensionHarness.runtimeMessages.some(
         (message) => message.type === "FOCUS_BATCH_RECOVERY",
       ),
     )).toBe(true);
-    await expect(nudge).toHaveCount(0);
+    await expect(overlay).toHaveCount(0);
   });
 
   test("shows the saved completed count and resumes only the remainder", async ({ page }) => {
