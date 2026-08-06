@@ -1130,6 +1130,7 @@
   let batchSignedUrlsListedAt = 0;
   let batchProgressGroups = [];
   let batchProgressStatus = null;
+  let batchProgressContext = {};
   let batchGenerationCapacity = null;
   let batchCapacityLoading = false;
   let batchInputSource = null;
@@ -1346,6 +1347,7 @@
       fetch(`${API_BASE}/api/events/track`, {
         method: "POST",
         headers,
+        keepalive: true,
         body: JSON.stringify({
           events: queuedEvents.map((item) =>
             buildEventPayload(
@@ -10270,9 +10272,25 @@
 
         .quickvint-primary-tools {
           display: grid;
-          grid-template-columns: repeat(2, minmax(0, 1fr)) 44px 40px;
+          grid-template-columns: minmax(0, 1fr) 44px 40px;
           width: 100%;
           gap: 6px;
+        }
+
+        #${BTN_ID} {
+          grid-column: 1 / -1;
+        }
+
+        #${PHONE_BTN_ID} {
+          grid-column: 1;
+        }
+
+        #${REPORT_BTN_ID} {
+          grid-column: 2;
+        }
+
+        .quickvint-tools-collapse {
+          grid-column: 3;
         }
 
         #${BTN_ID},
@@ -10281,6 +10299,20 @@
           min-width: 0;
           min-height: 44px;
           padding: 10px 6px;
+        }
+
+        #${PHONE_BTN_ID} .quickvint-source-options {
+          gap: 6px;
+        }
+
+        #${PHONE_BTN_ID} .quickvint-source-option {
+          gap: 3px;
+          font-size: 12px;
+        }
+
+        #${PHONE_BTN_ID} .quickvint-source-option .icon {
+          width: 14px;
+          height: 14px;
         }
 
         #${REPORT_BTN_ID} {
@@ -17135,18 +17167,29 @@
     }
 
     batchProgressGroups = groupsWithKeys;
+    batchProgressContext = {
+      inputSource: batchInputSource === "computer" ? "computer" : "phone",
+      createdAt: Date.now(),
+    };
     renderBatchProgress({ status: "queued", current: 0, total: groups.length });
     restoreStartButton();
-    trackGrowthEvent("batch_start", {
-      groupCount: groups.length,
-      available,
-    });
 
     const response = await sendMessage({
       type: "START_BATCH_GENERATION",
       sessionId: batchUploadSessionId,
       inputSource: batchInputSource === "computer" ? "computer" : "phone",
       groups,
+    });
+    trackGrowthEvent("batch_start", {
+      ...getBatchDiagnosticContext({
+        batchId: response?.batchId,
+        inputSource: response?.inputSource || batchProgressContext.inputSource,
+        reason: response?.ok ? "started" : "start_rejected",
+        current: 0,
+        total: groups.length,
+      }),
+      groupCount: groups.length,
+      available,
     });
 
     if (!response?.ok) {
@@ -17156,6 +17199,7 @@
         current: 0,
         total: groups.length,
         message: response?.error || "Could not start batch generation.",
+        reason: "start_rejected",
       });
     } else {
       startTabJobHeartbeat("batch", (message, recovery) => {
@@ -17168,6 +17212,7 @@
           current: 0,
           total: batchProgressGroups.length,
           message,
+          reason: "heartbeat_unavailable",
         });
       });
     }
@@ -17284,18 +17329,54 @@
     return Math.max(0, current - 1);
   }
 
-  function renderBatchProgress({ status, current = 0, total = 0, message = "", delayMs = 0 }) {
+  function getBatchDiagnosticContext(details = {}) {
+    for (const key of ["batchId", "inputSource", "reason", "createdAt"]) {
+      if (details[key] !== undefined && details[key] !== null) {
+        batchProgressContext[key] = details[key];
+      }
+    }
+    const createdAt = Number(batchProgressContext.createdAt || 0);
+    return {
+      batchId: batchProgressContext.batchId || null,
+      inputSource: batchProgressContext.inputSource || null,
+      reason: batchProgressContext.reason || null,
+      completedCount: Math.max(0, Number(details.current || 0)),
+      total: Math.max(0, Number(details.total || 0)),
+      recoveryAgeMs: createdAt ? Math.max(0, Date.now() - createdAt) : null,
+    };
+  }
+
+  function renderBatchProgress({
+    status,
+    current = 0,
+    total = 0,
+    message = "",
+    delayMs = 0,
+    batchId,
+    inputSource,
+    reason,
+    createdAt,
+  }) {
     const body = getBatchBody();
     if (!body) return;
 
+    const diagnostics = getBatchDiagnosticContext({
+      batchId,
+      inputSource,
+      reason,
+      createdAt,
+      current,
+      total,
+    });
     const previousStatus = batchProgressStatus;
     batchProgressStatus = status;
     if (previousStatus !== status && ["done", "failed", "paused"].includes(status)) {
       trackGrowthEvent(status === "done" ? "batch_done" : status === "paused" ? "batch_paused" : "batch_failed", {
+        ...diagnostics,
         current,
-        total,
         message: message || null,
       });
+      void flushGrowthEvents();
     }
     const modal = document.getElementById(BATCH_MODAL_ID);
     modal?.classList.remove("organizing");
@@ -17446,12 +17527,23 @@
       current: Math.max(0, Number(recovery.completedCount || 0)),
       total: Math.max(0, Number(recovery.total || recovery.groups.length)),
       message: recovery.message || "",
+      batchId: recovery.batchId,
+      inputSource: recovery.inputSource,
+      reason: recovery.reason,
+      createdAt: recovery.createdAt,
     });
     if (trackedBatchRecoveryId !== recovery.batchId && recovery.status !== "running") {
       trackedBatchRecoveryId = recovery.batchId;
       trackGrowthEvent("batch_recovery_available", {
+        ...getBatchDiagnosticContext({
+          batchId: recovery.batchId,
+          inputSource: recovery.inputSource,
+          reason: recovery.reason,
+          createdAt: recovery.createdAt,
+          current: recovery.completedCount,
+          total: recovery.total || recovery.groups.length,
+        }),
         completedCount: Math.max(0, Number(recovery.completedCount || 0)),
-        total: Math.max(0, Number(recovery.total || recovery.groups.length)),
         status: recovery.status,
       });
     }
@@ -17463,6 +17555,7 @@
           current: 0,
           total: batchProgressGroups.length,
           message,
+          reason: "heartbeat_unavailable",
         });
       });
     }
@@ -17484,16 +17577,25 @@
       `#${BATCH_MODAL_ID} .batch-progress-card.done`,
     ).length;
     trackGrowthEvent("batch_resume", {
+      ...getBatchDiagnosticContext({
+        current: completedCount,
+        total: batchProgressGroups.length,
+      }),
       completedCount,
-      total: batchProgressGroups.length,
     });
     const restoreButton = setActionButtonLoading(button, "Resuming");
     const response = await sendMessage({ type: "RESUME_BATCH_GENERATION" });
     restoreButton();
     if (!response?.ok) {
       trackGrowthEvent("batch_resume_failed", {
+        ...getBatchDiagnosticContext({
+          batchId: response?.batchId,
+          inputSource: response?.inputSource,
+          reason: response?.expired ? "recovery_files_expired" : "resume_failed",
+          current: completedCount,
+          total: batchProgressGroups.length,
+        }),
         completedCount,
-        total: batchProgressGroups.length,
         expired: Boolean(response?.expired),
         message: response?.error || null,
       });
@@ -17504,12 +17606,18 @@
         ).length,
         total: batchProgressGroups.length,
         message: response?.error || "Could not resume this batch.",
+        reason: response?.expired ? "recovery_files_expired" : "resume_failed",
       });
       return;
     }
     trackGrowthEvent("batch_resume_started", {
+      ...getBatchDiagnosticContext({
+        batchId: response.batchId,
+        inputSource: response.inputSource,
+        current: response.completedCount || completedCount,
+        total: response.total || batchProgressGroups.length,
+      }),
       completedCount: Number(response.completedCount || completedCount),
-      total: Number(response.total || batchProgressGroups.length),
     });
     if (response.done) {
       showBatchRecovery(response.recovery);
@@ -17522,6 +17630,7 @@
         current: 0,
         total: batchProgressGroups.length,
         message,
+        reason: "heartbeat_unavailable",
       });
     });
   }

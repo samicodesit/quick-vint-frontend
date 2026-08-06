@@ -1,19 +1,33 @@
 # Real Vinted Browser Evidence
 
-This is the canonical runbook for agents that need proof against current Vinted.
-Live checks are opt-in: ordinary `test` requests mean `npm test`, not Vinted.
+This is the canonical index for proof against current Vinted. Live checks are
+opt-in: ordinary `test` requests mean `npm test`, not Vinted.
+
+## Canonical real workflow test
+
+For real user-flow behavior, use
+[`real-batch-recovery-testing.md`](real-batch-recovery-testing.md). It runs the
+actual unpacked extension on the real Vinted create page, calls the production
+generation flow, kills the real MV3 service worker after checkpoint `1/2`, and
+proves recovery to `2/2`. Its dedicated Chrome profile is manually authenticated
+once and then preserved. The runner never copies cookies or auth sessions, never
+automates CAPTCHA, and never clicks Save or Publish.
+
+The daily DOM canary remains authoritative for current selector/injection health,
+but it is not a real batch, generation, interruption, or recovery test.
 
 ## Pick the existing proof
 
 | Need | Use | Boundary |
 |---|---|---|
+| Real batch upload, generation, worker interruption, and resume | `scripts/run-live-batch-recovery.ps1` | real Vinted, production API, persistent manual auth, two mini-model test credits |
 | Extension regression | `npm test` | deterministic fixtures |
 | Current authenticated create-page selectors and injection | latest daily DOM-canary `log-detail` | real `https://www.vinted.nl/items/new` |
 | Wardrobe/relisting plus production generation | `npm run test:live:wardrobe` | real public wardrobe/item/image; synthetic owner and edit fixture |
 
-Do not create another listing-page browser runner. The daily Windows task already
-owns authenticated Vinted access. Reuse its production result unless the user
-explicitly asks to launch a fresh real-browser run.
+Do not create a competing batch runner. Extend the persistent real batch runner
+when another real create-page workflow or failure mode needs proof. Reuse the
+daily canary only when selector/injection evidence is sufficient.
 
 ## Authoritative daily canary
 

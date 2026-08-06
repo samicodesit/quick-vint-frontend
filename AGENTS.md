@@ -25,8 +25,12 @@ See `docs/testing-strategy.md` for the frontend test map.
 
 Default to `npm test`; live Vinted checks are opt-in. For current authenticated
 create-page selectors/injection, follow `docs/real-browser-testing.md` and reuse
-the latest daily canary production `log-detail`; do not invent or launch another
-browser flow. Only trigger the installed daily task when the user explicitly asks.
+the latest daily canary production `log-detail`. For real create-page workflow,
+generation, interruption, or recovery proof, use the canonical persistent runner
+in `docs/real-batch-recovery-testing.md`; do not substitute the selector-only
+canary or invent a competing runner. The runner uses a blank profile on first use,
+normal manual authentication, and preserved later logins—never copy cookies or
+inject sessions. Only trigger either real flow when the user explicitly asks.
 The separate `npm run test:live:wardrobe` hybrid check is also opt-in, disposable,
 and consumes one production generation credit. Never automate CAPTCHA or save a
 Vinted listing.

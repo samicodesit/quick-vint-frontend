@@ -204,6 +204,10 @@ test("batch checkpoint survives a worker restart and resumes only unfinished lis
     holdBatchRuns: true,
     completeDuplicateTabs: true,
   });
+  assert.deepEqual({ ...await firstWorker.sendRuntimeMessage({ type: "GET_RUNTIME_INFO" }) }, {
+    ok: true,
+    batchDiagnosticsVersion: 1,
+  });
   const started = await firstWorker.sendRuntimeMessage({
     type: "START_BATCH_GENERATION",
     sessionId: "batch-1",
@@ -214,6 +218,8 @@ test("batch checkpoint survives a worker restart and resumes only unfinished lis
   assert.equal(started.ok, true);
   assert.equal(firstWorker.storageData.quickvintBatchRecovery.completedCount, 0);
   const batchId = firstWorker.storageData.quickvintBatchRecovery.batchId;
+  assert.equal(started.batchId, batchId);
+  assert.equal(started.inputSource, "phone");
 
   const restartedWorker = await runBackground({
     holdBatchRuns: true,
@@ -235,12 +241,17 @@ test("batch checkpoint survives a worker restart and resumes only unfinished lis
   assert.equal(heartbeat.active, false);
   assert.equal(heartbeat.recoverable, true);
   assert.equal(heartbeat.recovery.completedCount, 1);
+  assert.equal(heartbeat.recovery.batchId, batchId);
+  assert.equal(heartbeat.recovery.reason, "service_worker_restarted");
+  assert.equal(heartbeat.recovery.inputSource, "phone");
 
   const resumed = await restartedWorker.sendRuntimeMessage({
     type: "RESUME_BATCH_GENERATION",
   });
   await flush();
   assert.equal(resumed.ok, true);
+  assert.equal(resumed.batchId, batchId);
+  assert.equal(resumed.inputSource, "phone");
   assert.equal(restartedWorker.sentToWorkTab.length, 1);
   assert.equal(restartedWorker.sentToWorkTab[0].message.itemIndex, 2);
   assert.equal(restartedWorker.sentToWorkTab[0].message.files[0].url, "https://signed.test/2");

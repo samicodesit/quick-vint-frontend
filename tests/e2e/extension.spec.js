@@ -381,6 +381,21 @@ async function openContentHarness(page, capacityResponse = null, options = {}) {
       };
     });
   }
+  if (options.captureEventFetches) {
+    await page.evaluate(() => {
+      const originalFetch = window.fetch.bind(window);
+      window.__eventFetches = [];
+      window.fetch = (url, requestOptions = {}) => {
+        if (String(url).includes("/api/events/track")) {
+          window.__eventFetches.push({
+            body: requestOptions.body,
+            keepalive: requestOptions.keepalive,
+          });
+        }
+        return originalFetch(url, requestOptions);
+      };
+    });
+  }
   await page.addScriptTag({ path: languageDefaultsPath });
   await page.addScriptTag({ path: qrCodePath });
   await page.addScriptTag({ path: contentScriptPath });
@@ -884,6 +899,57 @@ test.describe("AutoLister extension smoke flows", () => {
     )).toBe(true);
   });
 
+  test("flushes terminal recovery logs with stable diagnostic context", async ({ page }) => {
+    await page.route("https://autolister.app/api/events/track", (route) =>
+      route.fulfill({ status: 204, body: "" }),
+    );
+    await openContentHarness(page, null, {
+      captureEventFetches: true,
+      initialStorage: {
+        __batchRecovery: {
+          batchId: "batch-observability",
+          sessionId: "saved-session",
+          inputSource: "computer",
+          groups: [[{ name: "one.jpg", path: "saved/one.jpg", url: tinyPngDataUrl }]],
+          completedCount: 0,
+          total: 1,
+          status: "paused",
+          reason: "service_worker_restarted",
+          createdAt: Date.now() - 5000,
+        },
+      },
+    });
+
+    await page.evaluate(() => {
+      for (const listener of window.__extensionHarness.runtimeListeners) {
+        listener({
+          type: "BATCH_PROGRESS",
+          status: "done",
+          current: 1,
+          total: 1,
+          batchId: "batch-observability",
+          inputSource: "computer",
+          reason: "completed",
+          createdAt: Date.now() - 5000,
+        }, {}, () => {});
+      }
+    });
+    await page.waitForTimeout(100);
+
+    const eventFetches = await page.evaluate(() => window.__eventFetches);
+    const events = eventFetches.flatMap(({ body }) => JSON.parse(body).events);
+    const done = events.find((event) => event.event === "batch_done");
+    expect(done?.context).toMatchObject({
+      batchId: "batch-observability",
+      inputSource: "computer",
+      reason: "completed",
+      completedCount: 1,
+      total: 1,
+    });
+    expect(done.context.recoveryAgeMs).toBeGreaterThanOrEqual(5000);
+    expect(eventFetches.every((request) => request.keepalive === true)).toBe(true);
+  });
+
   test("does not expose listing-tools collapse UI while signed out", async ({ page }) => {
     await openContentHarness(page, null, {
       expectAuthenticated: false,
@@ -1177,7 +1243,6 @@ test.describe("AutoLister extension smoke flows", () => {
       primaryBox.x + primaryBox.width + 1,
     );
     await expectNoHorizontalOverflow(page);
-
     await page.locator("#quickvint-report-btn").click();
     await expect(page.locator("#quickvint-report-modal")).toBeVisible();
     await expectInsideViewport(page, "#quickvint-report-modal .quickvint-report-card");

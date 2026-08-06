@@ -1,5 +1,5 @@
 // Real Vinted batch recovery test. Never clicks Save or Publish.
-import { readFileSync, writeFileSync } from "node:fs";
+import { writeFileSync } from "node:fs";
 import { chromium } from "@playwright/test";
 
 const required = (name) => {
@@ -14,7 +14,6 @@ const browserExecutable = required("AUTOLISTER_REAL_BATCH_BROWSER");
 const outputFile = required("AUTOLISTER_REAL_BATCH_OUTPUT");
 const imageOne = required("AUTOLISTER_REAL_BATCH_IMAGE_ONE");
 const imageTwo = required("AUTOLISTER_REAL_BATCH_IMAGE_TWO");
-const sessionFile = String(process.env.AUTOLISTER_REAL_BATCH_SESSION || "").trim();
 const profileDirectory = String(process.env.AUTOLISTER_REAL_BATCH_PROFILE || "Default").trim();
 const recoveryOnly = process.env.AUTOLISTER_REAL_BATCH_RECOVERY_ONLY === "1";
 const origin = "https://www.vinted.nl";
@@ -50,6 +49,16 @@ const workerHasRecoveryCode = await worker.evaluate(async () =>
     .includes('case "QUICKVINT_TAB_JOB_HEARTBEAT"')
 );
 if (!workerHasRecoveryCode) throw new Error("Chrome loaded a stale extension worker.");
+const extensionId = await worker.evaluate(() => chrome.runtime.id);
+const preflightPage = await context.newPage();
+await preflightPage.goto(`chrome-extension://${extensionId}/popup.html`);
+const runtimeInfo = await preflightPage.evaluate(() =>
+  chrome.runtime.sendMessage({ type: "GET_RUNTIME_INFO" })
+);
+await preflightPage.close();
+if (runtimeInfo?.batchDiagnosticsVersion !== 1) {
+  throw new Error("Chrome is executing a stale extension worker.");
+}
 
 async function getCurrentWorker() {
   const current = context.serviceWorkers().find((candidate) => candidate.url().endsWith("/background.js"));
@@ -81,19 +90,19 @@ const readExtensionSession = () => worker.evaluate(async () => {
 });
 
 let extensionSession = await readExtensionSession();
-if (!extensionSession.hasToken && sessionFile) {
-  const session = JSON.parse(readFileSync(sessionFile, "utf8"));
-  await worker.evaluate(
-    async (value) => chrome.storage.local.set({
-      supabaseSession: value,
-      accountEmail: value.user?.email || null,
-    }),
-    session,
-  );
-  await new Promise((resolve) => setTimeout(resolve, 500));
-  extensionSession = await readExtensionSession();
+if (!extensionSession.hasToken) {
+  const extensionId = await worker.evaluate(() => chrome.runtime.id);
+  const signInPage = await context.newPage();
+  await signInPage.goto(`chrome-extension://${extensionId}/popup.html`);
+  console.log("ACTION REQUIRED: Sign into the AutoLister extension in this browser.");
+  const deadline = Date.now() + 300000;
+  while (!extensionSession.hasToken && Date.now() < deadline) {
+    await new Promise((resolve) => setTimeout(resolve, 500));
+    extensionSession = await readExtensionSession();
+  }
+  await signInPage.close().catch(() => {});
 }
-if (!extensionSession.hasToken) throw new Error("The isolated extension has no session.");
+if (!extensionSession.hasToken) throw new Error("AutoLister sign-in was not completed within five minutes.");
 diagnostics.extensionAccount = extensionSession.email || null;
 diagnostics.staleRecoveryDiscarded = await worker.evaluate(async () => {
   const key = "quickvintBatchRecovery";
