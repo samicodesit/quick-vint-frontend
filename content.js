@@ -17,6 +17,8 @@
   const DESCRIPTION_LENGTH_TOGGLE_ID = "quickvint-description-length-toggle";
   const DESCRIPTION_LENGTH_STORAGE_KEY = "descriptionLength";
   const LISTING_TOOLS_COLLAPSED_KEY = "quickvintListingToolsCollapsed";
+  const RELEASE_UPDATE_WIDGET_ID = "quickvint-release-update-widget";
+  const RELEASE_UPDATE_SEEN_KEY = "quickvintReleaseUpdateSeen:2026-08-06";
   const OUTPUT_SHAPE_TOGGLE_ID = "quickvint-output-shape-toggle";
   const OUTPUT_SHAPE_STORAGE_KEY = "useBulletPoints";
   const HASHTAGS_STORAGE_KEY = "useHashtags";
@@ -48,9 +50,11 @@
   let wardrobeSelectionJobStatus = "idle";
   let wardrobeRewriteOutputCleanup = null;
   let activeTabJobHeartbeat = null;
+  let releaseUpdateCheckStarted = false;
   const DESCRIPTION_APPLY_PROMPT_ID = "quickvint-description-apply-prompt";
   const LIMIT_FOLLOWUP_MODAL_ID = "quickvint-limit-followup-modal";
   const BATCH_REVIEW_MODAL_ID = "quickvint-batch-review-modal";
+  const BATCH_RECOVERY_NUDGE_ID = "quickvint-batch-recovery-nudge";
   const TITLE_LANGUAGE_SELECT_ID = "quickvint-title-language-select";
   const DESCRIPTION_LANGUAGE_SELECT_ID = "quickvint-description-language-select";
   const MODAL_ID = "quickvint-phone-modal";
@@ -4160,6 +4164,17 @@
       return true;
     }
 
+    if (message?.type === "SHOW_BATCH_RECOVERY_NUDGE") {
+      showBatchRecoveryNudge();
+      sendResponse({ ok: true });
+      return false;
+    }
+
+    if (message?.type === "SHOW_BATCH_RECOVERY") {
+      sendResponse({ ok: true, shown: showBatchRecovery(message.recovery) });
+      return false;
+    }
+
     if (message?.type === "BATCH_PROGRESS") {
       handleBatchProgress(message);
       sendResponse({ ok: true });
@@ -4552,6 +4567,19 @@
         color: #ffffff;
         font-size: 12px;
         font-weight: 900;
+      }
+
+      #quickvint-batch-tab-status .batch-tab-status-copy {
+        display: flex;
+        min-width: 0;
+        flex-direction: column;
+        gap: 3px;
+      }
+
+      #quickvint-batch-tab-status .batch-tab-status-guidance {
+        color: #777493;
+        font-size: 10px;
+        font-weight: 650;
       }
 
       #quickvint-batch-tab-status.loading .batch-tab-status-icon {
@@ -11522,6 +11550,208 @@
           transition: none !important;
         }
       }
+
+      #${RELEASE_UPDATE_WIDGET_ID} {
+        position: fixed;
+        right: 22px;
+        bottom: 22px;
+        z-index: 2147483000;
+        width: min(310px, calc(100vw - 32px));
+        color: #29265d;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      }
+
+      #${RELEASE_UPDATE_WIDGET_ID} button {
+        font: inherit;
+      }
+
+      #${RELEASE_UPDATE_WIDGET_ID} .quickvint-update-trigger {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        margin-left: auto;
+        padding: 10px 13px 10px 17px;
+        border: 1px solid rgba(79, 70, 229, .2);
+        border-radius: 999px;
+        background: linear-gradient(120deg, #efedff, #eefdfa);
+        box-shadow: 0 12px 32px rgba(65, 55, 166, .16);
+        color: #29265d;
+        cursor: pointer;
+        text-align: left;
+      }
+
+      #${RELEASE_UPDATE_WIDGET_ID} .quickvint-update-trigger::before {
+        width: 4px;
+        height: 31px;
+        border-radius: 4px;
+        background: linear-gradient(#4f46e5, #2dd4bf);
+        content: "";
+      }
+
+      #${RELEASE_UPDATE_WIDGET_ID} .quickvint-update-trigger-copy {
+        display: flex;
+        flex-direction: column;
+        gap: 3px;
+      }
+
+      #${RELEASE_UPDATE_WIDGET_ID} .quickvint-update-trigger strong {
+        font-size: 13px;
+        line-height: 1.1;
+      }
+
+      #${RELEASE_UPDATE_WIDGET_ID} .quickvint-update-trigger small {
+        color: #5149c9;
+        font-size: 9px;
+        font-weight: 750;
+        letter-spacing: .02em;
+      }
+
+      #${RELEASE_UPDATE_WIDGET_ID} .quickvint-update-chevron {
+        color: #5a55a2;
+        font-size: 17px;
+      }
+
+      #${RELEASE_UPDATE_WIDGET_ID} .quickvint-update-panel {
+        overflow: hidden;
+        border: 1px solid rgba(79, 70, 229, .15);
+        border-radius: 18px;
+        background: rgba(255, 255, 255, .98);
+        box-shadow: 0 22px 55px rgba(31, 28, 90, .18);
+      }
+
+      #${RELEASE_UPDATE_WIDGET_ID} .quickvint-update-header {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        padding: 17px 17px 13px;
+        border-top: 3px solid #635bdf;
+        background: linear-gradient(120deg, #f4f3ff, #effdfa);
+      }
+
+      #${RELEASE_UPDATE_WIDGET_ID} .quickvint-update-kicker,
+      #${RELEASE_UPDATE_WIDGET_ID} .quickvint-update-date {
+        color: #625db0;
+        font-size: 10px;
+        font-weight: 750;
+      }
+
+      #${RELEASE_UPDATE_WIDGET_ID} h2 {
+        margin: 2px 0 1px;
+        color: #29265d;
+        font-size: 18px;
+        line-height: 1.2;
+      }
+
+      #${RELEASE_UPDATE_WIDGET_ID} .quickvint-update-close {
+        display: grid;
+        width: 28px;
+        height: 28px;
+        place-items: center;
+        border: 0;
+        border-radius: 50%;
+        background: rgba(255, 255, 255, .85);
+        color: #625e87;
+        cursor: pointer;
+        font-size: 18px;
+      }
+
+      #${RELEASE_UPDATE_WIDGET_ID} .quickvint-update-notes {
+        display: grid;
+        gap: 14px;
+        padding: 15px 17px 18px;
+      }
+
+      #${RELEASE_UPDATE_WIDGET_ID} .quickvint-update-note {
+        position: relative;
+        padding-left: 17px;
+      }
+
+      #${RELEASE_UPDATE_WIDGET_ID} .quickvint-update-note::before {
+        position: absolute;
+        top: 6px;
+        left: 0;
+        width: 5px;
+        height: 5px;
+        border-radius: 50%;
+        background: #5b52df;
+        content: "";
+      }
+
+      #${RELEASE_UPDATE_WIDGET_ID} h3 {
+        margin: 0;
+        color: #2b2859;
+        font-size: 13px;
+        line-height: 1.35;
+      }
+
+      #${RELEASE_UPDATE_WIDGET_ID} p {
+        margin: 2px 0 0;
+        color: #72708d;
+        font-size: 12px;
+        line-height: 1.4;
+      }
+
+      #${RELEASE_UPDATE_WIDGET_ID} button:focus-visible {
+        outline: 3px solid rgba(79, 70, 229, .3);
+        outline-offset: 3px;
+      }
+
+      @media (max-width: 640px) {
+        #${RELEASE_UPDATE_WIDGET_ID} {
+          right: 16px;
+          bottom: 16px;
+        }
+      }
+
+      #${BATCH_RECOVERY_NUDGE_ID} {
+        position: fixed;
+        right: 22px;
+        bottom: 22px;
+        z-index: 2147483001;
+        display: flex;
+        align-items: center;
+        gap: 14px;
+        max-width: calc(100vw - 32px);
+        padding: 13px 14px 13px 16px;
+        border: 1px solid #dddaf8;
+        border-radius: 14px;
+        background: #fff;
+        box-shadow: 0 16px 42px rgba(31, 28, 90, .18);
+        color: #29265d;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      }
+
+      #${BATCH_RECOVERY_NUDGE_ID} strong,
+      #${BATCH_RECOVERY_NUDGE_ID} span {
+        display: block;
+      }
+
+      #${BATCH_RECOVERY_NUDGE_ID} strong {
+        font-size: 13px;
+      }
+
+      #${BATCH_RECOVERY_NUDGE_ID} span {
+        margin-top: 2px;
+        color: #777493;
+        font-size: 11px;
+      }
+
+      #${BATCH_RECOVERY_NUDGE_ID} button {
+        flex: 0 0 auto;
+        min-height: 34px;
+        padding: 0 12px;
+        border: 0;
+        border-radius: 9px;
+        background: #5b52df;
+        color: #fff;
+        cursor: pointer;
+        font: 700 12px/1 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      }
+
+      #${BATCH_RECOVERY_NUDGE_ID} button:disabled {
+        cursor: wait;
+        opacity: .65;
+      }
     `;
     document.head.appendChild(style);
   }
@@ -17517,6 +17747,7 @@
 
   function showBatchRecovery(recovery) {
     if (!recovery?.sessionId || !Array.isArray(recovery.groups)) return false;
+    document.getElementById(BATCH_RECOVERY_NUDGE_ID)?.remove();
     batchUploadSessionId = recovery.sessionId;
     batchInputSource = recovery.inputSource === "computer" ? "computer" : "phone";
     batchProgressGroups = normalizeBatchRecoveryGroups(recovery.groups);
@@ -17562,14 +17793,45 @@
     return true;
   }
 
+  function showBatchRecoveryNudge() {
+    if (document.getElementById(BATCH_RECOVERY_NUDGE_ID)) return true;
+    document.getElementById(RELEASE_UPDATE_WIDGET_ID)?.remove();
+    const nudge = document.createElement("aside");
+    nudge.id = BATCH_RECOVERY_NUDGE_ID;
+    nudge.setAttribute("aria-live", "polite");
+    nudge.innerHTML = `
+      <div>
+        <strong>Batch interrupted</strong>
+        <span>Continue after the last finished listing.</span>
+      </div>
+      <button type="button">Return to batch</button>
+    `;
+    const button = nudge.querySelector("button");
+    button.addEventListener("click", async () => {
+      button.disabled = true;
+      button.textContent = "Opening…";
+      const response = await sendMessage({ type: "FOCUS_BATCH_RECOVERY" });
+      if (response?.ok) {
+        nudge.remove();
+        return;
+      }
+      button.disabled = false;
+      button.textContent = "Return to batch";
+      showToast(response?.error || "Could not return to the batch.", "error");
+    });
+    document.body.appendChild(nudge);
+    return true;
+  }
+
   async function getSavedBatchRecovery() {
     const response = await sendMessage({ type: "GET_BATCH_RECOVERY" });
-    return response?.ok ? response.recovery || null : null;
+    return response?.ok ? response : null;
   }
 
   async function maybeShowSavedBatchRecovery() {
-    const recovery = await getSavedBatchRecovery();
-    return recovery ? showBatchRecovery(recovery) : false;
+    const result = await getSavedBatchRecovery();
+    if (result?.nudge) return showBatchRecoveryNudge();
+    return result?.recovery ? showBatchRecovery(result.recovery) : false;
   }
 
   async function resumeSavedBatch(button) {
@@ -17742,7 +18004,10 @@
     status.className = state;
     status.innerHTML = `
       <span class="batch-tab-status-icon" aria-hidden="true">${iconText}</span>
-      <span>${escapeHtml(message)}</span>
+      <span class="batch-tab-status-copy">
+        <span>${escapeHtml(message)}</span>
+        ${state === "loading" ? '<span class="batch-tab-status-guidance">Keep Chrome open</span>' : ""}
+      </span>
     `;
 
     requestAnimationFrame(() => {
@@ -18859,9 +19124,80 @@
     );
   }
 
+  function isListingEditorPage() {
+    return window.location.pathname === "/items/new" || isListingEditPage();
+  }
+
+  async function maybeShowReleaseUpdate() {
+    if (!isListingEditorPage() || releaseUpdateCheckStarted) return;
+    releaseUpdateCheckStarted = true;
+
+    let storage;
+    try {
+      storage = await chrome.storage.local.get({ [RELEASE_UPDATE_SEEN_KEY]: false });
+    } catch {
+      return;
+    }
+    if (storage[RELEASE_UPDATE_SEEN_KEY] || !isListingEditorPage()) return;
+
+    const widget = document.createElement("aside");
+    widget.id = RELEASE_UPDATE_WIDGET_ID;
+    widget.setAttribute("aria-label", "AutoLister update");
+    widget.innerHTML = `
+      <button type="button" class="quickvint-update-trigger" aria-expanded="false">
+        <span class="quickvint-update-trigger-copy">
+          <strong>AutoLister AI</strong>
+          <small>UPDATE · 6 AUG 2026</small>
+        </span>
+        <span class="quickvint-update-chevron" aria-hidden="true">›</span>
+      </button>
+      <section class="quickvint-update-panel" hidden>
+        <header class="quickvint-update-header">
+          <div>
+            <div class="quickvint-update-kicker">AutoLister AI</div>
+            <h2>What’s new</h2>
+            <div class="quickvint-update-date">6 August 2026</div>
+          </div>
+          <button type="button" class="quickvint-update-close" aria-label="Dismiss update">×</button>
+        </header>
+        <div class="quickvint-update-notes">
+          <article class="quickvint-update-note">
+            <h3>Continue an interrupted batch</h3>
+            <p>If Chrome stops it, pick up after the last finished listing.</p>
+          </article>
+          <article class="quickvint-update-note">
+            <h3>Phone and computer together</h3>
+            <p>Choose either upload method from the same button.</p>
+          </article>
+          <article class="quickvint-update-note">
+            <h3>More room while listing</h3>
+            <p>Collapse AutoLister tools for a cleaner page.</p>
+          </article>
+        </div>
+      </section>
+    `;
+
+    const trigger = widget.querySelector(".quickvint-update-trigger");
+    const panel = widget.querySelector(".quickvint-update-panel");
+    const markSeen = () =>
+      chrome.storage.local.set({ [RELEASE_UPDATE_SEEN_KEY]: true }).catch(() => {});
+    trigger.addEventListener("click", () => {
+      markSeen();
+      trigger.hidden = true;
+      trigger.setAttribute("aria-expanded", "true");
+      panel.hidden = false;
+    });
+    widget.querySelector(".quickvint-update-close").addEventListener("click", () => {
+      markSeen();
+      widget.remove();
+    });
+    document.body.appendChild(widget);
+  }
+
   // --- INJECTION & OBSERVATION LOGIC ---
 
   function injectButton() {
+    maybeShowReleaseUpdate();
     const existingBtn = document.getElementById(BTN_ID);
     if (existingBtn) {
       generateBtn = existingBtn;
@@ -19802,6 +20138,7 @@
 
   function init() {
     injectStylesheet();
+    maybeShowReleaseUpdate();
     bindPromptUploadFileCapture();
     bindLimitFollowupResumeListeners();
     maybeRecoverDomCanaryLogin();

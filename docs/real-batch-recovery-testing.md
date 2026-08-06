@@ -22,12 +22,19 @@ The runner does not copy another Chrome profile, cookies, or auth sessions and
 does not inject authentication. If either login expires, complete the normal
 sign-in again in the test browser.
 
+Each run gives only its copied unpacked extension a higher fourth version
+component (for example `1.4.3.7`) for unambiguous test diagnostics. It clears
+only the dedicated profile's disposable service-worker script cache and binds
+to the newly started worker; cookies and extension local storage remain
+untouched.
+
 The run consumes two test-account credits. Production pins this dedicated test
 account to `gpt-5.4-mini`; normal customer generations keep the production model.
 
 Structured results are written to
 `/tmp/autolister-real-batch-result.json`. A passing result has `"ok": true`, a
 nonzero recovery prompt delay, `"1/2 ready"` before resume, two complete work
-tabs, and `"saveOrPublishClicks": 0`.
+tabs, `"automaticNudge": true`, `"returnedToController": true`, and
+`"saveOrPublishClicks": 0`.
 
 Do not automate CAPTCHA or click Vinted Save/Publish.

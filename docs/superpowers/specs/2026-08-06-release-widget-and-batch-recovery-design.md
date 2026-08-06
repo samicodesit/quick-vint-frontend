@@ -2,14 +2,14 @@
 
 ## Goal
 
-Ship the current extension release with a small welcome-page update widget,
+Ship the current extension release with a small update widget on Vinted listing pages,
 cleaner batch guidance, recovery routing that leads users back to the correct
 tab, and review prompts only for batches that completed without interruption.
 
-## Welcome-page update widget
+## Listing-page update widget
 
-The localized `/welcome/{lang}` page shows a compact release pill near the page
-chrome without covering the welcome content.
+The extension shows a compact release pill on Vinted `/items/new` and
+`/items/{id}/edit` pages without covering the listing form.
 
 ### Closed state
 
@@ -34,11 +34,11 @@ chrome without covering the welcome content.
   3. **More room while listing** — Collapse the AutoLister tools whenever you
      want a cleaner page.
 
-Opening the widget immediately stores a release-specific seen value in local
-storage. It remains visible for the current page so the user can read and close
-it, but it does not return on later welcome-page visits in the same browser
-profile. Closing also stores the same value. Reuse the existing welcome-page
-styling and localization structure; add no dependency, API, or database state.
+Opening the widget immediately stores a release-specific seen value in Chrome
+extension storage. It remains visible for the current page so the user can read
+and close it, but it does not return on later Vinted listing pages in the same
+browser profile. Closing stores the same value. Add no dependency, API, or
+database state.
 
 ## Batch guidance
 
@@ -85,8 +85,7 @@ completion state but never shows that review prompt.
 
 ## Verification
 
-- Welcome widget: closed, opened, dismissed, refreshed, desktop, mobile, and
-  local-storage-unavailable cases.
+- Listing widget: new/edit routes, opened, dismissed, and already-seen cases.
 - Batch review: clean success shows the prompt; interrupted, failed-then-resumed,
   and worker-restarted success do not.
 - Recovery routing: source tab present, source tab backgrounded, source tab

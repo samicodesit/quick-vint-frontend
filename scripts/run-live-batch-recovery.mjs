@@ -46,17 +46,26 @@ let worker =
 
 const workerHasRecoveryCode = await worker.evaluate(async () =>
   (await (await fetch(chrome.runtime.getURL("background.js"))).text())
-    .includes('case "QUICKVINT_TAB_JOB_HEARTBEAT"')
+    .includes('batchDiagnosticsVersion: 2')
 );
 if (!workerHasRecoveryCode) throw new Error("Chrome loaded a stale extension worker.");
 const extensionId = await worker.evaluate(() => chrome.runtime.id);
 const preflightPage = await context.newPage();
 await preflightPage.goto(`chrome-extension://${extensionId}/popup.html`);
-const runtimeInfo = await preflightPage.evaluate(() =>
+let runtimeInfo = await preflightPage.evaluate(() =>
   chrome.runtime.sendMessage({ type: "GET_RUNTIME_INFO" })
 );
+if (runtimeInfo?.batchDiagnosticsVersion !== 2) {
+  const nextWorker = context.waitForEvent("serviceworker", { timeout: 30000 });
+  await stopExtensionWorker(preflightPage);
+  const nextRuntimeInfo = preflightPage.evaluate(() =>
+    chrome.runtime.sendMessage({ type: "GET_RUNTIME_INFO" })
+  );
+  worker = await nextWorker;
+  runtimeInfo = await nextRuntimeInfo;
+}
 await preflightPage.close();
-if (runtimeInfo?.batchDiagnosticsVersion !== 1) {
+if (runtimeInfo?.batchDiagnosticsVersion !== 2) {
   throw new Error("Chrome is executing a stale extension worker.");
 }
 
@@ -154,9 +163,14 @@ async function prepareTwoItemBatch(page) {
     await modal.locator(".batch-mark-group").click();
     await page.waitForTimeout(220);
   }
-  await modal.locator(".batch-start").waitFor({ state: "visible", timeout: 30000 });
-  if (await modal.locator(".batch-start").isDisabled()) {
-    throw new Error("Real batch start button remained disabled.");
+  const start = modal.locator(".batch-start");
+  await start.waitFor({ state: "visible", timeout: 30000 });
+  const capacityDeadline = Date.now() + 30000;
+  while (await start.isDisabled() && Date.now() < capacityDeadline) {
+    await page.waitForTimeout(200);
+  }
+  if (await start.isDisabled()) {
+    throw new Error(`Real batch start button remained disabled: ${(await modal.innerText()).replace(/\s+/g, " ").trim()}`);
   }
   return modal;
 }
@@ -202,6 +216,7 @@ async function closeOtherVintedCreatePages(keep) {
 }
 
 try {
+  await closeOtherVintedCreatePages(null);
   if (!recoveryOnly) {
     const normalSource = await openRealCreatePage();
     const normalModal = await prepareTwoItemBatch(normalSource);
@@ -229,6 +244,16 @@ try {
     }
     throw new Error("The first real recovery-batch item did not checkpoint.");
   })();
+  const recoveryWorkPage = context.pages().filter((page) => {
+    if (page === recoverySource) return false;
+    try {
+      const url = new URL(page.url());
+      return url.origin === origin && url.pathname === "/items/new";
+    } catch {
+      return false;
+    }
+  }).at(-1);
+  if (!recoveryWorkPage) throw new Error("The first recovery work tab was not found.");
   const reloadWorker = await getCurrentWorker();
   diagnostics.recovery.beforeReload = await reloadWorker.evaluate(async () => {
     const recovery = (await chrome.storage.local.get("quickvintBatchRecovery")).quickvintBatchRecovery;
@@ -238,6 +263,8 @@ try {
       total: recovery.groups?.length,
       status: recovery.status,
       sourceTabId: recovery.sourceTabId,
+      currentWorkTabId: recovery.currentWorkTabId,
+      lastCompletedWorkTabId: recovery.lastCompletedWorkTabId,
     } : null;
   });
   diagnostics.recovery.workerStoppedAt = new Date().toISOString();
@@ -254,6 +281,8 @@ try {
       total: recovery.groups?.length,
       status: recovery.status,
       sourceTabId: recovery.sourceTabId,
+      currentWorkTabId: recovery.currentWorkTabId,
+      lastCompletedWorkTabId: recovery.lastCompletedWorkTabId,
     } : null;
   });
   await recoverySource.locator("#quickvint-batch-modal .batch-title").filter({
@@ -271,6 +300,36 @@ try {
   diagnostics.recovery.pausedReadyText = await recoverySource
     .locator("#quickvint-batch-modal .batch-subtitle")
     .innerText();
+  const workPages = context.pages().filter((page) => page !== recoverySource && page.url().startsWith(origin));
+  diagnostics.recovery.workPageUrls = workPages.map((page) => page.url());
+  let nudgePage = null;
+  for (const page of workPages) {
+    if (await page.locator("#quickvint-batch-recovery-nudge").isVisible().catch(() => false)) {
+      nudgePage = page;
+      break;
+    }
+  }
+  diagnostics.recovery.automaticNudge = Boolean(nudgePage);
+  diagnostics.recovery.routing = await (await getCurrentWorker()).evaluate(async () => {
+    const recovery = (await chrome.storage.local.get("quickvintBatchRecovery")).quickvintBatchRecovery;
+    const tabs = await chrome.tabs.query({});
+    const targetTab = tabs.find((tab) => tab.id === recovery?.lastCompletedWorkTabId) || null;
+    return {
+      recovery: recovery ? {
+        status: recovery.status,
+        sourceTabId: recovery.sourceTabId,
+        currentWorkTabId: recovery.currentWorkTabId,
+        lastCompletedWorkTabId: recovery.lastCompletedWorkTabId,
+      } : null,
+      targetTab: targetTab ? { id: targetTab.id, url: targetTab.url, status: targetTab.status } : null,
+    };
+  });
+  if (!nudgePage) throw new Error("Recovery nudge did not reach any generated work tab.");
+  await nudgePage.bringToFront();
+  const recoveryNudge = nudgePage.locator("#quickvint-batch-recovery-nudge");
+  await recoveryNudge.getByRole("button", { name: "Return to batch" }).click();
+  await recoverySource.waitForFunction(() => document.hasFocus(), null, { timeout: 10000 });
+  diagnostics.recovery.returnedToController = true;
   await recoverySource.getByRole("button", { name: /Resume \d+ remaining/ }).click();
   diagnostics.recovery.workTabs = await collectReadyWorkPages(recoverySource, 2);
   diagnostics.recovery.readyText = await recoverySource

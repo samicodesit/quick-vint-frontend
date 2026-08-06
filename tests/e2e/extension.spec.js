@@ -138,6 +138,7 @@ function installChromeHarness(page, capacityResponse = null, initialStorage = {}
       useBulletPoints: true,
       descriptionLength: "long",
       useHashtags: true,
+      "quickvintReleaseUpdateSeen:2026-08-06": true,
       ...initialStorage,
     };
     const runtimeMessages = [];
@@ -865,6 +866,49 @@ async function openImageCompressionHarness(page, proxyResponse) {
 }
 
 test.describe("AutoLister extension smoke flows", () => {
+  test("shows the dated update once on listing pages", async ({ page }) => {
+    await openContentHarness(page, null, {
+      pageUrl: "https://www.vinted.nl/items/new",
+      initialStorage: { "quickvintReleaseUpdateSeen:2026-08-06": false },
+    });
+
+    const widget = page.locator("#quickvint-release-update-widget");
+    await expect(widget.getByRole("button", { name: /AutoLister AI/i })).toBeVisible();
+    await widget.getByRole("button", { name: /AutoLister AI/i }).click();
+    await expect(widget.getByRole("heading", { name: "What’s new" })).toBeVisible();
+    await expect.poll(() => page.evaluate(() =>
+      window.__extensionHarness.storage["quickvintReleaseUpdateSeen:2026-08-06"],
+    )).toBe(true);
+    await widget.getByRole("button", { name: "Dismiss update" }).click();
+    await expect(widget).toHaveCount(0);
+
+    await openContentHarness(page, null, {
+      pageUrl: "https://www.vinted.nl/items/42/edit",
+      initialStorage: { "quickvintReleaseUpdateSeen:2026-08-06": true },
+    });
+    await expect(page.locator("#quickvint-release-update-widget")).toHaveCount(0);
+  });
+
+  test("returns an interrupted work tab to its batch controller", async ({ page }) => {
+    await openContentHarness(page, null, {
+      pageUrl: "https://www.vinted.nl/items/42/edit",
+      initialStorage: { "quickvintReleaseUpdateSeen:2026-08-06": true },
+    });
+
+    await sendContentMessage(page, { type: "SHOW_BATCH_RECOVERY_NUDGE" });
+    await sendContentMessage(page, { type: "SHOW_BATCH_RECOVERY_NUDGE" });
+    const nudge = page.locator("#quickvint-batch-recovery-nudge");
+    await expect(nudge).toHaveCount(1);
+    await expect(nudge).toContainText("Batch interrupted");
+    await nudge.getByRole("button", { name: "Return to batch" }).click();
+    await expect.poll(() => page.evaluate(() =>
+      window.__extensionHarness.runtimeMessages.some(
+        (message) => message.type === "FOCUS_BATCH_RECOVERY",
+      ),
+    )).toBe(true);
+    await expect(nudge).toHaveCount(0);
+  });
+
   test("shows the saved completed count and resumes only the remainder", async ({ page }) => {
     const file = (order) => ({
       name: `00000${order}-upload.jpg`,
@@ -2957,8 +3001,12 @@ test.describe("AutoLister extension smoke flows", () => {
     let listRequests = 0;
     let capacityRequests = 0;
     let releaseBatchCapacity;
+    let releaseGenerate;
     const batchCapacityMayFinish = new Promise((resolve) => {
       releaseBatchCapacity = resolve;
+    });
+    const generateMayFinish = new Promise((resolve) => {
+      releaseGenerate = resolve;
     });
     try {
       await serviceWorker.evaluate(() =>
@@ -3008,8 +3056,9 @@ test.describe("AutoLister extension smoke flows", () => {
       await context.route("https://autolister.app/api/events/track", (route) =>
         route.fulfill({ status: 204, body: "" }),
       );
-      await context.route("https://autolister.app/api/generate", (route) => {
+      await context.route("https://autolister.app/api/generate", async (route) => {
         requestBodies.push(route.request().postDataJSON());
+        await generateMayFinish;
         return route.fulfill({
           status: 200,
           contentType: "application/json",
@@ -3099,6 +3148,9 @@ test.describe("AutoLister extension smoke flows", () => {
       await expect(
         workPage.locator('[data-testid="add-photos-input"]'),
       ).toHaveCount(1);
+      await expect(
+        workPage.locator("#quickvint-batch-tab-status .batch-tab-status-guidance"),
+      ).toHaveText("Keep Chrome open");
       expect(requestBodies[0].imageUrls).toEqual([
         "https://storage.test/batch-real-1.jpg",
         "https://storage.test/batch-real-2.jpg",
@@ -3107,9 +3159,14 @@ test.describe("AutoLister extension smoke flows", () => {
         capturedUploadSource: "phone_upload_batch",
         generationPayloadSource: "phone_upload_storage_url",
       });
+      releaseGenerate();
       await expect.poll(() => cleanupRequests.length).toBe(1);
+      await expect(
+        workPage.locator("#quickvint-batch-tab-status .batch-tab-status-guidance"),
+      ).toHaveCount(0);
       expect(listRequests).toBeGreaterThanOrEqual(1);
     } finally {
+      releaseGenerate?.();
       await context.close();
     }
   });

@@ -23,6 +23,8 @@ async function runBackground(options = {}) {
   const duplicatedTabs = [];
   const sentToWorkTab = [];
   const sourceProgress = [];
+  const sentTabMessages = [];
+  const updatedTabs = [];
   const removedTabs = [];
   const storageData = options.storageData || {
     supabaseSession: {
@@ -32,13 +34,15 @@ async function runBackground(options = {}) {
       user: { id: "user-1", email: "seller@example.com" },
     },
   };
-  const tabs = new Map([[sourceTab.id, { ...sourceTab, status: "complete" }]]);
+  const tabs = new Map(options.missingSourceTab
+    ? []
+    : [[sourceTab.id, { ...sourceTab, status: "complete" }]]);
   const runResolvers = [];
   const capacityResolvers = [];
   const pingCounts = new Map();
   const settleDelays = [];
   let listener;
-  let nextTabId = 100;
+  let nextTabId = options.nextTabId || 100;
 
   const chrome = {
     runtime: {
@@ -76,11 +80,17 @@ async function runBackground(options = {}) {
         if (options.completeDuplicateTabs) tabs.set(tab.id, tab);
         callback?.(tab);
       },
-      update(_tabId, _details, callback) { callback?.(); },
+      update(tabId, details, callback) {
+        updatedTabs.push({ tabId, details });
+        const tab = tabs.get(tabId);
+        if (tab) Object.assign(tab, details);
+        callback?.(tab);
+      },
       get(tabId, callback) { callback(tabs.get(tabId)); },
       remove(tabId, callback) { removedTabs.push(tabId); callback?.(); },
       onUpdated: { addListener() {}, removeListener() {} },
       sendMessage(tabId, message, callback) {
+        sentTabMessages.push({ tabId, message });
         if (tabId === sourceTab.id && message.type === "WARDROBE_REWRITE_PROGRESS") {
           sourceProgress.push(message);
           return;
@@ -104,10 +114,17 @@ async function runBackground(options = {}) {
         }
         if (message.type === "RUN_BATCH_ITEM") {
           sentToWorkTab.push({ tabId, message });
+          if (options.failBatchRun) {
+            callback?.({ ok: false, error: "generation failed" });
+            return;
+          }
           if (options.holdBatchRuns) {
             runResolvers.push(() => callback?.({ ok: true }));
             return;
           }
+        }
+        if (message.type === "SHOW_BATCH_REVIEW_PROMPT") {
+          sentToWorkTab.push({ tabId, message });
         }
         callback?.({ ok: true });
       },
@@ -176,6 +193,8 @@ async function runBackground(options = {}) {
     createdTabs,
     duplicatedTabs,
     sentToWorkTab,
+    sentTabMessages,
+    updatedTabs,
     sourceProgress,
     storageData,
     removedTabs,
@@ -206,7 +225,7 @@ test("batch checkpoint survives a worker restart and resumes only unfinished lis
   });
   assert.deepEqual({ ...await firstWorker.sendRuntimeMessage({ type: "GET_RUNTIME_INFO" }) }, {
     ok: true,
-    batchDiagnosticsVersion: 1,
+    batchDiagnosticsVersion: 2,
   });
   const started = await firstWorker.sendRuntimeMessage({
     type: "START_BATCH_GENERATION",
@@ -244,6 +263,21 @@ test("batch checkpoint survives a worker restart and resumes only unfinished lis
   assert.equal(heartbeat.recovery.batchId, batchId);
   assert.equal(heartbeat.recovery.reason, "service_worker_restarted");
   assert.equal(heartbeat.recovery.inputSource, "phone");
+  assert.equal(heartbeat.recovery.hadIssues, true);
+
+  const focused = await restartedWorker.sendRuntimeMessage({
+    type: "FOCUS_BATCH_RECOVERY",
+  }, { tab: { id: 100, url: sourceTab.url } });
+  assert.deepEqual({ ...focused }, {
+    ok: true,
+    sourceTabId: sourceTab.id,
+    recreated: false,
+  });
+  assert.equal(restartedWorker.updatedTabs.at(-1).tabId, sourceTab.id);
+  assert.equal(restartedWorker.updatedTabs.at(-1).details.active, true);
+  assert.equal((await restartedWorker.sendRuntimeMessage({
+    type: "FOCUS_BATCH_RECOVERY",
+  }, { tab: { id: 999, url: sourceTab.url } })).ok, false);
 
   const resumed = await restartedWorker.sendRuntimeMessage({
     type: "RESUME_BATCH_GENERATION",
@@ -255,6 +289,89 @@ test("batch checkpoint survives a worker restart and resumes only unfinished lis
   assert.equal(restartedWorker.sentToWorkTab.length, 1);
   assert.equal(restartedWorker.sentToWorkTab[0].message.itemIndex, 2);
   assert.equal(restartedWorker.sentToWorkTab[0].message.files[0].url, "https://signed.test/2");
+  restartedWorker.resolveRun();
+  await flush();
+  assert.equal(
+    restartedWorker.sentToWorkTab.some(({ message }) => message.type === "SHOW_BATCH_REVIEW_PROMPT"),
+    false,
+  );
+});
+
+test("a saved batch recreates its missing controller only from its own work tab", async () => {
+  const recovery = {
+    version: 1,
+    kind: "batch",
+    batchId: "batch-recreate",
+    sourceTabId: 7,
+    sessionId: "session-recreate",
+    inputSource: "computer",
+    groups: [[{ name: "photo.jpg", path: "photo.jpg", url: "https://signed.test/photo" }]],
+    completedCount: 0,
+    currentItemIndex: 1,
+    currentWorkTabId: 100,
+    lastCompletedWorkTabId: null,
+    status: "paused",
+    reason: "service_worker_restarted",
+    hadIssues: true,
+    createdAt: Date.now(),
+    updatedAt: Date.now(),
+    expiresAt: Date.now() + 60000,
+  };
+  const harness = await runBackground({
+    missingSourceTab: true,
+    nextTabId: 200,
+    storageData: { quickvintBatchRecovery: recovery },
+  });
+  const response = await harness.sendRuntimeMessage({
+    type: "FOCUS_BATCH_RECOVERY",
+  }, { tab: { id: 100, url: "https://www.vinted.nl/items/new" } });
+
+  assert.deepEqual({ ...response }, { ok: true, sourceTabId: 200, recreated: true });
+  assert.equal(harness.createdTabs.at(-1).url, "https://www.vinted.nl/items/new");
+  assert.equal(harness.createdTabs.at(-1).active, true);
+  assert.equal(harness.storageData.quickvintBatchRecovery.sourceTabId, 200);
+  assert.equal(
+    harness.sentTabMessages.some(({ tabId, message }) =>
+      tabId === 200 && message.type === "SHOW_BATCH_RECOVERY"),
+    true,
+  );
+});
+
+test("only a clean batch sends the final review prompt", async () => {
+  const clean = await runBackground({ completeDuplicateTabs: true });
+  assert.equal((await clean.sendRuntimeMessage({
+    type: "START_BATCH_GENERATION",
+    sessionId: "batch-clean",
+    groups: [["photo"]],
+  })).ok, true);
+  for (let attempt = 0; attempt < 10 && !clean.sentToWorkTab.some(
+    ({ message }) => message.type === "SHOW_BATCH_REVIEW_PROMPT",
+  ); attempt += 1) {
+    await flush();
+  }
+  assert.equal(
+    clean.sentToWorkTab.some(({ message }) => message.type === "SHOW_BATCH_REVIEW_PROMPT"),
+    true,
+  );
+
+  const failed = await runBackground({ completeDuplicateTabs: true, failBatchRun: true });
+  assert.equal((await failed.sendRuntimeMessage({
+    type: "START_BATCH_GENERATION",
+    sessionId: "batch-failed",
+    groups: [["photo"]],
+  })).ok, true);
+  await flush();
+  assert.equal(failed.storageData.quickvintBatchRecovery.hadIssues, true);
+  assert.equal(failed.storageData.quickvintBatchRecovery.currentWorkTabId, 100);
+  assert.equal(
+    failed.sentTabMessages.some(({ tabId, message }) =>
+      tabId === 100 && message.type === "SHOW_BATCH_RECOVERY_NUDGE"),
+    true,
+  );
+  assert.equal(
+    failed.sentToWorkTab.some(({ message }) => message.type === "SHOW_BATCH_REVIEW_PROMPT"),
+    false,
+  );
 });
 
 test("wardrobe rewrite validates its request and opens an active edit tab", async () => {

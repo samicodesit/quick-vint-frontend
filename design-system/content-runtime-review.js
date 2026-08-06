@@ -30,6 +30,23 @@
 
   const scenarios = [
     {
+      id: "batch-recovery-nudge",
+      title: "Interrupted batch return",
+      note: "Shown on the generated listing tab; the button returns to the original batch tab.",
+      height: 680,
+      auth: true,
+      action: "show-batch-recovery-nudge",
+      hasImages: true,
+      verify(doc) {
+        const nudge = doc.getElementById("quickvint-batch-recovery-nudge");
+        return (
+          /Batch interrupted/.test(nudge?.textContent || "") &&
+          /Continue after the last finished listing\./.test(nudge?.textContent || "") &&
+          /Return to batch/.test(nudge?.textContent || "")
+        );
+      },
+    },
+    {
       id: "batch-review-prompt",
       title: "Successful batch review prompt",
       note: "Review request shown in the final generated tab after a successful batch.",
@@ -1233,6 +1250,9 @@
                 ? { ok: true, url: "https://checkout.stripe.test/session" }
                 : { ok: false, error: "Please sign in again before checkout." };
             }
+            if (message && message.type === "FOCUS_BATCH_RECOVERY") {
+              response = { ok: true, sourceTabId: 7, recreated: false };
+            }
             if (callback) callback(response);
             return Promise.resolve(response);
           },
@@ -1276,6 +1296,12 @@
 
       window.__runScenario = () => {
         const generate = document.getElementById("quickvint-gen-btn");
+        if (scenario.action === "show-batch-recovery-nudge") {
+          runtimeListeners.forEach((listener) =>
+            listener({ type: "SHOW_BATCH_RECOVERY_NUDGE" }, {}, () => {}),
+          );
+          return;
+        }
         if (scenario.action === "show-batch-review") {
           runtimeListeners.forEach((listener) =>
             listener(

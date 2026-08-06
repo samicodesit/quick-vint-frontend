@@ -574,6 +574,26 @@ function sendTabMessage(tabId, message) {
   });
 }
 
+function getTabIfPresent(tabId) {
+  return new Promise((resolve) => {
+    if (!Number.isInteger(tabId)) return resolve(null);
+    chrome.tabs.get(tabId, (tab) => {
+      const error = chrome.runtime.lastError;
+      resolve(error ? null : tab || null);
+    });
+  });
+}
+
+function activateTab(tabId) {
+  return new Promise((resolve, reject) => {
+    chrome.tabs.update(tabId, { active: true }, (tab) => {
+      const error = chrome.runtime.lastError;
+      if (error || !tab) reject(new Error(error?.message || "Could not open the batch tab."));
+      else resolve(tab);
+    });
+  });
+}
+
 async function waitForBatchTabReady(tabId, timeoutMs = 30000) {
   const startedAt = Date.now();
   let lastError = null;
@@ -627,6 +647,20 @@ function notifyBatchProgress(job, payload) {
   });
 }
 
+function getBatchWorkTabIds(job) {
+  return [...new Set([job?.currentWorkTabId, job?.lastCompletedWorkTabId])]
+    .filter((tabId) => Number.isInteger(tabId) && tabId !== job?.sourceTabId);
+}
+
+async function notifyBatchRecoveryNudge(job) {
+  await Promise.allSettled(getBatchWorkTabIds(job).map((tabId) =>
+    sendTabMessage(tabId, {
+      type: "SHOW_BATCH_RECOVERY_NUDGE",
+      batchId: job.batchId,
+    }),
+  ));
+}
+
 function notifyWardrobeRewriteProgress(job, payload) {
   if (!job?.sourceTabId) return;
   chrome.tabs.sendMessage(job.sourceTabId, {
@@ -669,9 +703,13 @@ async function persistBatchRecovery(job, updates = {}) {
     currentWorkTabId: Number.isInteger(job.currentWorkTabId)
       ? job.currentWorkTabId
       : null,
+    lastCompletedWorkTabId: Number.isInteger(job.lastCompletedWorkTabId)
+      ? job.lastCompletedWorkTabId
+      : null,
     status: job.status || "running",
     message: job.message || null,
     reason: job.reason || null,
+    hadIssues: job.hadIssues === true,
     createdAt: Number(job.createdAt || Date.now()),
     updatedAt: Date.now(),
     expiresAt: Number(job.expiresAt || Date.now() + BATCH_RECOVERY_TTL_MS),
@@ -693,6 +731,7 @@ function publicBatchRecovery(job) {
     status: job.status,
     message: job.message || null,
     reason: job.reason || null,
+    hadIssues: job.hadIssues === true,
     createdAt: job.createdAt,
     updatedAt: job.updatedAt,
     expiresAt: job.expiresAt,
@@ -720,7 +759,9 @@ async function getTabJobHeartbeat(message, sender) {
     await persistBatchRecovery(recovery, {
       status: "paused",
       reason: "service_worker_restarted",
+      hadIssues: true,
     });
+    await notifyBatchRecoveryNudge(recovery);
   }
   return {
     ok: true,
@@ -811,6 +852,7 @@ async function runBatchGenerationJob(job) {
       await markBatchItemComplete({
         batchId: job.batchId,
         itemIndex: index + 1,
+        workTabId: workTab.id,
       });
       lastWorkTabId = workTab.id;
 
@@ -847,7 +889,7 @@ async function runBatchGenerationJob(job) {
       reason: "completed",
       completedCount: groups.length,
       currentItemIndex: groups.length,
-      currentWorkTabId: null,
+      currentWorkTabId: job.currentWorkTabId,
     });
     notifyBatchProgress(job, {
       status: "done",
@@ -856,7 +898,7 @@ async function runBatchGenerationJob(job) {
       total: groups.length,
       offers: Array.from(offersByCampaign.values()),
     });
-    if (lastWorkTabId) {
+    if (lastWorkTabId && job.hadIssues !== true) {
       sendTabMessage(lastWorkTabId, {
         type: "SHOW_BATCH_REVIEW_PROMPT",
         total: groups.length,
@@ -871,9 +913,11 @@ async function runBatchGenerationJob(job) {
       status: "paused",
       message: err.message || "Batch generation stopped.",
       reason: "generation_error",
+      hadIssues: true,
       currentItemIndex: activeItemIndex,
-      currentWorkTabId: null,
+      currentWorkTabId: job.currentWorkTabId,
     });
+    await notifyBatchRecoveryNudge(job);
     notifyBatchProgress(job, {
       status: "paused",
       current: job.completedCount,
@@ -950,8 +994,10 @@ async function startBatchGeneration(message, sender) {
     completedCount: 0,
     currentItemIndex: 0,
     currentWorkTabId: null,
+    lastCompletedWorkTabId: null,
     status: "running",
     reason: null,
+    hadIssues: false,
     createdAt: Date.now(),
     expiresAt: Date.now() + BATCH_RECOVERY_TTL_MS,
   };
@@ -974,7 +1020,7 @@ async function startBatchGeneration(message, sender) {
   };
 }
 
-async function markBatchItemComplete(message) {
+async function markBatchItemComplete(message, sender = null) {
   const job = await getStoredBatchRecovery();
   const itemIndex = Math.floor(Number(message?.itemIndex || 0));
   if (
@@ -988,20 +1034,31 @@ async function markBatchItemComplete(message) {
   }
   const completedCount = Math.max(job.completedCount, itemIndex);
   const isActive = activeTabJob?.kind === "batch" && activeTabJob.batchId === job.batchId;
+  const completedWorkTabId = Number.isInteger(sender?.tab?.id)
+    ? sender.tab.id
+    : Number.isInteger(message?.workTabId)
+      ? message.workTabId
+      : job.lastCompletedWorkTabId;
   await persistBatchRecovery(job, {
     completedCount,
     currentItemIndex: itemIndex,
     currentWorkTabId: null,
+    lastCompletedWorkTabId: completedWorkTabId,
     status: completedCount === job.groups.length
       ? isActive ? "running" : "done"
       : isActive ? "running" : "paused",
     reason: completedCount === job.groups.length
       ? isActive ? null : "completed"
       : isActive ? null : "service_worker_restarted",
+    hadIssues: job.hadIssues === true || !isActive,
   });
   if (isActive) activeTabJob.completedCount = completedCount;
+  if (isActive) activeTabJob.lastCompletedWorkTabId = completedWorkTabId;
   if (!isActive && completedCount === job.groups.length) {
     await cleanupBatchUploadSession(job);
+  }
+  if (!isActive && completedCount < job.groups.length) {
+    await notifyBatchRecoveryNudge(job);
   }
   return { ok: true, completedCount, total: job.groups.length };
 }
@@ -1032,14 +1089,72 @@ async function getBatchRecovery(sender) {
   const job = await getStoredBatchRecovery();
   if (!job) return { ok: true, recovery: null };
   const sourceTabId = sender?.tab?.id;
-  if (job.sourceTabId !== sourceTabId) return { ok: true, recovery: null };
+  if (job.sourceTabId !== sourceTabId) {
+    return {
+      ok: true,
+      recovery: null,
+      nudge: job.status !== "running" && getBatchWorkTabIds(job).includes(sourceTabId),
+      batchId: job.batchId,
+    };
+  }
   if (job.status === "running" && activeTabJob?.batchId !== job.batchId) {
     await persistBatchRecovery(job, {
       status: "paused",
       reason: "service_worker_restarted",
+      hadIssues: true,
     });
+    await notifyBatchRecoveryNudge(job);
   }
   return { ok: true, recovery: publicBatchRecovery(job) };
+}
+
+async function focusBatchRecovery(sender) {
+  const job = await getStoredBatchRecovery();
+  const callerTabId = sender?.tab?.id;
+  if (
+    !job ||
+    job.status !== "paused" ||
+    !getBatchWorkTabIds(job).includes(callerTabId)
+  ) {
+    return { ok: false, error: "Batch recovery is unavailable from this tab." };
+  }
+
+  const existingSource = await getTabIfPresent(job.sourceTabId);
+  if (existingSource) {
+    await activateTab(existingSource.id);
+    sendTabMessage(existingSource.id, {
+      type: "SHOW_BATCH_RECOVERY",
+      recovery: publicBatchRecovery(job),
+    }).catch(() => {});
+    return { ok: true, sourceTabId: existingSource.id, recreated: false };
+  }
+
+  let createUrl;
+  try {
+    const callerUrl = new URL(sender.tab.url);
+    if (
+      callerUrl.protocol !== "https:" ||
+      !/(^|\.)vinted\.[a-z.]+$/i.test(callerUrl.hostname)
+    ) {
+      throw new Error("Invalid Vinted tab.");
+    }
+    callerUrl.pathname = "/items/new";
+    callerUrl.search = "";
+    callerUrl.hash = "";
+    createUrl = callerUrl.toString();
+  } catch {
+    return { ok: false, error: "Could not open the batch tab." };
+  }
+
+  const sourceTab = await createActiveTab(createUrl);
+  await persistBatchRecovery(job, { sourceTabId: sourceTab.id, hadIssues: true });
+  await waitForTabComplete(sourceTab.id);
+  await waitForBatchTabReady(sourceTab.id);
+  await sendTabMessage(sourceTab.id, {
+    type: "SHOW_BATCH_RECOVERY",
+    recovery: publicBatchRecovery(job),
+  });
+  return { ok: true, sourceTabId: sourceTab.id, recreated: true };
 }
 
 async function resumeBatchGeneration(sender) {
@@ -1055,6 +1170,7 @@ async function resumeBatchGeneration(sender) {
       recovery: publicBatchRecovery(job),
     };
   }
+  await persistBatchRecovery(job, { hadIssues: true });
   try {
     job.groups = await refreshBatchRecoveryGroups(job);
   } catch (error) {
@@ -1695,11 +1811,15 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         break;
 
       case "GET_RUNTIME_INFO":
-        sendResponse({ ok: true, batchDiagnosticsVersion: 1 });
+        sendResponse({ ok: true, batchDiagnosticsVersion: 2 });
         break;
 
       case "GET_BATCH_RECOVERY":
         sendResponse(await getBatchRecovery(sender));
+        break;
+
+      case "FOCUS_BATCH_RECOVERY":
+        sendResponse(await focusBatchRecovery(sender));
         break;
 
       case "RESUME_BATCH_GENERATION":
@@ -1707,7 +1827,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         break;
 
       case "MARK_BATCH_ITEM_COMPLETE":
-        sendResponse(await markBatchItemComplete(message));
+        sendResponse(await markBatchItemComplete(message, sender));
         break;
 
       case "DISCARD_BATCH_RECOVERY":
