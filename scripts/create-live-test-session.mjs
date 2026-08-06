@@ -16,17 +16,18 @@ export function readSupabaseClientConfig(source) {
 async function main(env = process.env) {
   const email = env.AUTOLISTER_LIVE_TEST_EMAIL || "samicodesit+ai-style-test@gmail.com";
   const otp = String(env.AUTOLISTER_LIVE_TEST_OTP || "").trim();
+  const link = String(env.AUTOLISTER_LIVE_TEST_LINK || "").trim();
   const output = env.AUTOLISTER_LIVE_SESSION_FILE || "/tmp/autolister-live-session.json";
-  if (!otp) throw new Error("AUTOLISTER_LIVE_TEST_OTP is required");
+  if (!otp && !link) throw new Error("AUTOLISTER_LIVE_TEST_OTP or AUTOLISTER_LIVE_TEST_LINK is required");
 
   const config = readSupabaseClientConfig(
     readFileSync(path.join(repoRoot, "background.js"), "utf8"),
   );
-  const { data, error } = await createClient(config.url, config.anonKey).auth.verifyOtp({
-    email,
-    token: otp,
-    type: "email",
-  });
+  const params = link
+    ? { token_hash: new URL(link).searchParams.get("token"), type: "magiclink" }
+    : { email, token: otp, type: "email" };
+  if (link && !params.token_hash) throw new Error("Magic link has no token");
+  const { data, error } = await createClient(config.url, config.anonKey).auth.verifyOtp(params);
   if (error || !data.session?.access_token) throw error || new Error("No session returned");
 
   writeFileSync(output, JSON.stringify(data.session), { mode: 0o600 });

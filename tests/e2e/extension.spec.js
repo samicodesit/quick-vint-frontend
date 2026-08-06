@@ -194,6 +194,10 @@ function installChromeHarness(page, capacityResponse = null, initialStorage = {}
             response = storage.__startWardrobeResponse || { ok: true };
           } else if (message?.type === "QUICKVINT_TAB_JOB_HEARTBEAT") {
             response = storage.__tabJobHeartbeatResponse || { ok: true, active: true };
+          } else if (message?.type === "GET_BATCH_RECOVERY") {
+            response = { ok: true, recovery: storage.__batchRecovery || null };
+          } else if (message?.type === "RESUME_BATCH_GENERATION") {
+            response = storage.__resumeBatchResponse || { ok: true };
           } else if (message?.type === "GET_USER_PROFILE") {
             response = {
               user: storage.supabaseSession?.user || null,
@@ -382,6 +386,11 @@ async function openContentHarness(page, capacityResponse = null, options = {}) {
   await page.addScriptTag({ path: contentScriptPath });
   if (options.expectAuthenticated === false) {
     await expect(page.locator("#quickvint-signin-btn")).toBeVisible();
+    await expect(page.locator("#quickvint-gen-btn")).not.toBeVisible();
+    return;
+  }
+  if (options.expectListingToolsCollapsed) {
+    await expect(page.locator(".quickvint-tools-compact")).toBeVisible();
     await expect(page.locator("#quickvint-gen-btn")).not.toBeVisible();
     return;
   }
@@ -841,6 +850,90 @@ async function openImageCompressionHarness(page, proxyResponse) {
 }
 
 test.describe("AutoLister extension smoke flows", () => {
+  test("shows the saved completed count and resumes only the remainder", async ({ page }) => {
+    const file = (order) => ({
+      name: `00000${order}-upload.jpg`,
+      path: `saved-batch/00000${order}-upload.jpg`,
+      order,
+      url: tinyPngDataUrl,
+    });
+    await openContentHarness(page, null, {
+      initialStorage: {
+        __batchRecovery: {
+          batchId: "saved-batch",
+          sessionId: "saved-session",
+          inputSource: "phone",
+          groups: [[file(0)], [file(1)], [file(2)]],
+          completedCount: 2,
+          total: 3,
+          status: "paused",
+        },
+      },
+    });
+
+    const modal = page.locator("#quickvint-batch-modal");
+    await expect(modal.locator(".batch-title")).toHaveText("Batch paused");
+    await expect(modal.locator(".batch-subtitle")).toHaveText("2/3 ready");
+    await expect(modal.locator(".batch-status")).toHaveText("Chrome interrupted the batch.");
+    await expect(modal.getByRole("button", { name: "Resume 1 remaining" })).toBeVisible();
+    await modal.getByRole("button", { name: "Resume 1 remaining" }).click();
+    await expect.poll(() => page.evaluate(() =>
+      window.__extensionHarness.runtimeMessages.some(
+        (message) => message.type === "RESUME_BATCH_GENERATION",
+      ),
+    )).toBe(true);
+  });
+
+  test("does not expose listing-tools collapse UI while signed out", async ({ page }) => {
+    await openContentHarness(page, null, {
+      expectAuthenticated: false,
+      initialStorage: {
+        supabaseSession: null,
+        userProfile: null,
+        quickvintListingToolsCollapsed: true,
+      },
+    });
+
+    await expect(page.locator(".quickvint-tools")).not.toHaveClass(/is-collapsed/);
+    await expect(page.locator(".quickvint-tools-collapse")).toBeHidden();
+    await expect(page.locator(".quickvint-tools-compact")).toBeHidden();
+  });
+
+  test("collapses listing tools into a persisted AutoLister capsule", async ({ page }) => {
+    await openContentHarness(page);
+
+    const tools = page.locator(".quickvint-tools");
+    await expect(tools).not.toHaveClass(/is-collapsed/);
+    expect(await page.locator(".quickvint-tools-expanded").evaluate(
+      (node) => getComputedStyle(node).overflow,
+    )).toBe("visible");
+    await expect(page.locator(".quickvint-tools-collapse")).toHaveAttribute(
+      "aria-expanded",
+      "true",
+    );
+
+    await page.locator(".quickvint-tools-collapse").click();
+    await expect(tools).toHaveClass(/is-collapsed/);
+    await expect(page.locator(".quickvint-tools-compact")).toBeVisible();
+    await expect.poll(() => page.evaluate(() =>
+      window.__extensionHarness.storage.quickvintListingToolsCollapsed,
+    )).toBe(true);
+
+    await page.locator(".quickvint-tools-compact").click();
+    await expect(tools).not.toHaveClass(/is-collapsed/);
+    await expect(page.locator("#quickvint-gen-btn")).toBeVisible();
+
+    await openContentHarness(page, null, {
+      pageUrl: "https://www.vinted.nl/items/42/edit",
+      initialStorage: { quickvintListingToolsCollapsed: true },
+      expectListingToolsCollapsed: true,
+    });
+    await expect(page.locator(".quickvint-tools-compact")).toHaveAttribute(
+      "aria-expanded",
+      "false",
+    );
+  });
+
   test("daily DOM canary reports every required listing control", async ({ page }) => {
     const payloads = [];
     await page.route("https://autolister.app/api/dom-canary", async (route) => {
@@ -7598,7 +7691,7 @@ test.describe("own wardrobe rewrite widget", () => {
     await expect(page.getByRole("button", { name: /Select Item 8383838383/ })).toBeVisible();
   });
 
-  test("wardrobe controller renders sticky controls, persists languages, and starts the selected listing", async ({
+  test("wardrobe controller reuses content preferences and starts the selected listing", async ({
     page,
   }) => {
     await page.emulateMedia({ reducedMotion: "reduce" });
@@ -7612,6 +7705,7 @@ test.describe("own wardrobe rewrite widget", () => {
       initialStorage: {
         selectedTitleLanguage: "en",
         selectedDescriptionLanguage: "nl",
+        descriptionFooterText: "Smoke-free home.",
         __startWardrobeDelayMs: 120,
       },
     });
@@ -7626,6 +7720,28 @@ test.describe("own wardrobe rewrite widget", () => {
     }
     await expect(page.getByLabel("Title language")).toHaveAttribute("data-value", "en");
     await expect(page.getByLabel("Description language")).toHaveAttribute("data-value", "nl");
+    for (const selector of [
+      "#quickvint-description-length-toggle",
+      "#quickvint-output-shape-toggle",
+      "#quickvint-hashtags-toggle",
+      "#quickvint-description-footer-btn",
+      "#quickvint-emoji-toggle",
+    ]) {
+      await expect(page.locator(selector)).toBeVisible();
+    }
+    await page.locator("#quickvint-description-length-toggle [data-length='short']").click();
+    await expect.poll(() => page.evaluate(() =>
+      window.__extensionHarness.storage.descriptionLength,
+    )).toBe("short");
+    await expect(page.locator("#quickvint-description-footer-btn")).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+    await page.locator("#quickvint-description-footer-btn").click();
+    await expect(page.locator("#quickvint-description-footer-btn")).toHaveAttribute(
+      "aria-pressed",
+      "false",
+    );
     await page.evaluate(() =>
       chrome.storage.local.set({
         selectedTitleLanguage: "de",
@@ -7659,6 +7775,7 @@ test.describe("own wardrobe rewrite widget", () => {
       applyMode: "review",
       titleLanguageCode: "nl",
       descriptionLanguageCode: "fr",
+      descriptionFooterIncluded: false,
     });
     await expect.poll(() => page.evaluate(() =>
       window.__extensionHarness.runtimeMessages.some(

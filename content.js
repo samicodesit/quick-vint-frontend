@@ -16,6 +16,7 @@
   const DESCRIPTION_FOOTER_INCLUDE_DEFAULT = true;
   const DESCRIPTION_LENGTH_TOGGLE_ID = "quickvint-description-length-toggle";
   const DESCRIPTION_LENGTH_STORAGE_KEY = "descriptionLength";
+  const LISTING_TOOLS_COLLAPSED_KEY = "quickvintListingToolsCollapsed";
   const OUTPUT_SHAPE_TOGGLE_ID = "quickvint-output-shape-toggle";
   const OUTPUT_SHAPE_STORAGE_KEY = "useBulletPoints";
   const HASHTAGS_STORAGE_KEY = "useHashtags";
@@ -1046,6 +1047,7 @@
     return '<span class="quickvint-treadmill" aria-hidden="true"><span class="quickvint-treadmill-track"><span class="quickvint-treadmill-cube"></span></span></span>';
   }
   const PHONE_ICON_SVG = `<svg fill="#ffffff" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M17 1.01L7 1c-1.1 0-2 .9-2 2v18c0 1.1.9 2 2 2h10c1.1 0 2-.9 2-2V3c0-1.1-.9-1.99-2-1.99zM17 19H7V5h10v14z"/></svg>`;
+  const COMPUTER_ICON_SVG = `<svg fill="none" viewBox="0 0 24 24" stroke="#ffffff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" xmlns="http://www.w3.org/2000/svg"><rect x="3" y="4" width="18" height="13" rx="2"/><path d="M8 21h8m-4-4v4"/></svg>`;
   const BATCH_ICON_SVG = `<svg data-icon="upload" fill="none" viewBox="0 0 24 24" stroke="#ffffff" stroke-width="2" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5m-13.5-9L12 3m0 0 4.5 4.5M12 3v13.5"/></svg>`;
   const BATCH_ARROW_UP_SVG = `<svg class="batch-direction-icon" aria-hidden="true" focusable="false" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.25" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" d="M4.5 10.5 12 3m0 0 7.5 7.5M12 3v18"/></svg>`;
   const BATCH_ARROW_DOWN_SVG = `<svg class="batch-direction-icon" aria-hidden="true" focusable="false" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.25" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" d="M19.5 13.5 12 21m0 0-7.5-7.5M12 21V3"/></svg>`;
@@ -1133,6 +1135,8 @@
   let batchInputSource = null;
   let batchComputerUploadPromise = null;
   let batchComputerUploadAbortController = null;
+  let batchRecoveryCheckStarted = false;
+  let trackedBatchRecoveryId = null;
   let listingToolsReadyTracked = false;
   let signedOutToolsReadyTracked = false;
   let eventQueue = [];
@@ -2538,24 +2542,46 @@
     if (!state) return;
     clearInterval(state.timer);
     window.removeEventListener("pagehide", state.pagehide);
+    window.removeEventListener("focus", state.focus);
+    document.removeEventListener("visibilitychange", state.visibilitychange);
     activeTabJobHeartbeat = null;
   }
 
   function startTabJobHeartbeat(kind, onGone) {
     stopTabJobHeartbeat();
-    const state = { kind, timer: null, pagehide: stopTabJobHeartbeat };
+    const state = {
+      kind,
+      timer: null,
+      checking: false,
+      pagehide: stopTabJobHeartbeat,
+      focus: null,
+      visibilitychange: null,
+    };
     const heartbeat = async () => {
+      if (state.checking) return;
+      state.checking = true;
       const response = await sendMessage({
         type: "QUICKVINT_TAB_JOB_HEARTBEAT",
         kind,
       });
+      state.checking = false;
       if (activeTabJobHeartbeat !== state || response?.active) return;
       stopTabJobHeartbeat();
-      onGone(response?.error || "The background job stopped unexpectedly.");
+      onGone(
+        response?.error || "The background job stopped unexpectedly.",
+        response?.recovery || null,
+      );
+    };
+    state.focus = heartbeat;
+    state.visibilitychange = () => {
+      if (document.visibilityState === "visible") heartbeat();
     };
     state.timer = setInterval(heartbeat, TAB_JOB_HEARTBEAT_MS);
     window.addEventListener("pagehide", state.pagehide, { once: true });
+    window.addEventListener("focus", state.focus);
+    document.addEventListener("visibilitychange", state.visibilitychange);
     activeTabJobHeartbeat = state;
+    heartbeat();
   }
 
   function shouldWarnBeforeLeavingListing() {
@@ -4070,6 +4096,10 @@
       isAuthenticated = !!supabaseSession?.access_token;
       updateButtonUI();
       refreshWardrobeRewriteCapacity();
+      if (isAuthenticated && !batchRecoveryCheckStarted) {
+        batchRecoveryCheckStarted = true;
+        maybeShowSavedBatchRecovery().catch(() => {});
+      }
     });
   }
 
@@ -4201,6 +4231,30 @@
 
       #${BTN_ID} {
         min-width: 147px;
+      }
+
+      #${PHONE_BTN_ID} {
+        min-width: 218px;
+      }
+
+      #${PHONE_BTN_ID} .quickvint-source-options,
+      #${PHONE_BTN_ID} .quickvint-source-option {
+        display: inline-flex;
+        align-items: center;
+      }
+
+      #${PHONE_BTN_ID} .quickvint-source-options {
+        gap: 9px;
+      }
+
+      #${PHONE_BTN_ID} .quickvint-source-option {
+        gap: 5px;
+      }
+
+      #${PHONE_BTN_ID} .quickvint-source-divider {
+        width: 1px;
+        height: 17px;
+        background: rgba(255, 255, 255, 0.55);
       }
 
       #${PHONE_BTN_ID} .quickvint-phone-new-badge {
@@ -8746,10 +8800,175 @@
       }
 
       .quickvint-tools {
-        display: inline-flex;
+        display: inline-grid;
+        position: relative;
+        justify-items: end;
+        align-items: flex-end;
+      }
+
+      .quickvint-tools.is-hydrating {
+        opacity: 0;
+      }
+
+      .quickvint-tools-expanded-shell {
+        display: grid;
+        grid-template-rows: 1fr;
+        width: 100%;
+        opacity: 1;
+        transform: translateY(0);
+        visibility: visible;
+        transition:
+          grid-template-rows 320ms cubic-bezier(.22, 1, .36, 1),
+          opacity 180ms ease,
+          transform 320ms cubic-bezier(.22, 1, .36, 1),
+          visibility 0s;
+      }
+
+      .quickvint-tools-expanded {
+        display: flex;
+        min-height: 0;
         flex-direction: column;
         align-items: flex-end;
         gap: 8px;
+        overflow: visible;
+      }
+
+      .quickvint-tools.is-collapsed .quickvint-tools-expanded-shell {
+        grid-template-rows: 0fr;
+        opacity: 0;
+        transform: translateY(-5px);
+        visibility: hidden;
+        transition:
+          grid-template-rows 320ms cubic-bezier(.22, 1, .36, 1),
+          opacity 160ms ease,
+          transform 320ms cubic-bezier(.22, 1, .36, 1),
+          visibility 0s 320ms;
+      }
+
+      .quickvint-tools.is-collapsed .quickvint-tools-expanded {
+        overflow: hidden;
+      }
+
+      .quickvint-tools-collapse {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 38px;
+        height: 38px;
+        flex: 0 0 38px;
+        padding: 0;
+        border: 1px solid #d9d8ff;
+        border-radius: 11px;
+        background: linear-gradient(145deg, #ffffff 10%, #f1efff 100%);
+        color: #5146e5;
+        box-shadow: 0 6px 16px rgba(79, 70, 229, 0.10);
+        cursor: pointer;
+        transition: background 180ms ease, border-color 180ms ease, box-shadow 180ms ease;
+      }
+
+      .quickvint-tools-collapse:hover {
+        border-color: #aaa5ff;
+        background: linear-gradient(145deg, #ffffff 0%, #e8e5ff 100%);
+        box-shadow: 0 8px 18px rgba(79, 70, 229, 0.16);
+      }
+
+      .quickvint-tools-collapse svg,
+      .quickvint-tools-compact-chevron {
+        width: 18px;
+        height: 18px;
+        fill: none;
+        stroke: currentColor;
+        stroke-width: 2.2;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+      }
+
+      .quickvint-tools-compact {
+        display: inline-flex;
+        align-items: center;
+        gap: 10px;
+        max-height: 0;
+        margin-top: 0;
+        padding: 0 15px 0 10px;
+        border: 1px solid rgba(107, 97, 255, 0.24);
+        border-radius: 999px;
+        background:
+          radial-gradient(circle at 16% 20%, rgba(255, 255, 255, 0.95), transparent 32%),
+          linear-gradient(115deg, #f7f5ff 0%, #eef8ff 54%, #ecfffb 100%);
+        color: #241c73;
+        box-shadow: 0 10px 28px rgba(79, 70, 229, 0.14);
+        font: inherit;
+        font-size: 13px;
+        font-weight: 800;
+        letter-spacing: -0.01em;
+        opacity: 0;
+        overflow: hidden;
+        pointer-events: none;
+        transform: translateY(5px) scale(0.97);
+        visibility: hidden;
+        cursor: pointer;
+        transition:
+          max-height 320ms cubic-bezier(.22, 1, .36, 1),
+          margin-top 320ms cubic-bezier(.22, 1, .36, 1),
+          opacity 180ms ease,
+          transform 320ms cubic-bezier(.22, 1, .36, 1),
+          box-shadow 180ms ease,
+          border-color 180ms ease,
+          visibility 0s 320ms;
+      }
+
+      .quickvint-tools.is-collapsed .quickvint-tools-compact {
+        max-height: 46px;
+        min-height: 46px;
+        margin-top: 2px;
+        opacity: 1;
+        pointer-events: auto;
+        transform: translateY(0) scale(1);
+        visibility: visible;
+        transition-delay: 80ms, 0s, 80ms, 80ms, 0s, 0s, 0s;
+      }
+
+      .quickvint-tools-compact:hover {
+        border-color: rgba(79, 70, 229, 0.45);
+        box-shadow: 0 13px 32px rgba(79, 70, 229, 0.21);
+      }
+
+      .quickvint-tools-compact-mark {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 28px;
+        height: 28px;
+        border-radius: 50%;
+        background: linear-gradient(145deg, #756cff, #4f46e5);
+        color: #ffffff;
+        box-shadow: 0 5px 12px rgba(79, 70, 229, 0.28);
+      }
+
+      .quickvint-tools-compact-mark svg {
+        width: 15px;
+        height: 15px;
+        fill: currentColor;
+      }
+
+      .quickvint-tools-compact-chevron {
+        margin-left: 2px;
+        color: #5b53d9;
+      }
+
+      .quickvint-tools-collapse:focus-visible,
+      .quickvint-tools-compact:focus-visible {
+        outline: 3px solid rgba(79, 70, 229, 0.22);
+        outline-offset: 2px;
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        .quickvint-tools,
+        .quickvint-tools-expanded-shell,
+        .quickvint-tools-compact,
+        .quickvint-tools-collapse {
+          transition: none !important;
+        }
       }
 
       .quickvint-primary-tools,
@@ -10051,7 +10270,7 @@
 
         .quickvint-primary-tools {
           display: grid;
-          grid-template-columns: repeat(2, minmax(0, 1fr)) 44px;
+          grid-template-columns: repeat(2, minmax(0, 1fr)) 44px 40px;
           width: 100%;
           gap: 6px;
         }
@@ -10386,10 +10605,9 @@
         position: sticky;
         top: 8px;
         z-index: 10;
-        display: flex;
-        flex-wrap: wrap;
-        align-items: center;
-        gap: 10px 18px;
+        display: grid;
+        grid-template-columns: minmax(0, 1fr);
+        gap: 10px;
         margin: 0 0 12px;
         padding: 10px 12px;
         border: 1px solid #dfe1ff;
@@ -10401,6 +10619,14 @@
         box-shadow: 0 8px 20px rgba(55, 48, 163, .12);
         color: #19164d;
         font: 600 13px/1.3 Arial, sans-serif;
+      }
+
+      .quickvint-wardrobe-selection-main {
+        display: flex;
+        min-width: 0;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 10px 18px;
       }
 
       .quickvint-wardrobe-selection-controller.quickvint-wardrobe-selection-pending {
@@ -10472,6 +10698,48 @@
         margin-left: auto;
       }
 
+      .quickvint-wardrobe-selection-preferences {
+        display: flex;
+        min-width: 0;
+        align-items: center;
+        gap: 10px;
+        padding-top: 10px;
+        border-top: 1px solid rgba(215, 213, 255, .72);
+      }
+
+      .quickvint-wardrobe-selection-preferences-label {
+        flex: 0 0 auto;
+        color: #555272;
+        font-size: 11px;
+        font-weight: 800;
+        letter-spacing: .04em;
+        text-transform: uppercase;
+      }
+
+      .quickvint-wardrobe-selection-preferences-controls {
+        display: flex;
+        min-width: 0;
+        flex: 1 1 auto;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 7px;
+      }
+
+      .quickvint-wardrobe-selection-controller #${DESCRIPTION_LENGTH_TOGGLE_ID},
+      .quickvint-wardrobe-selection-controller #${OUTPUT_SHAPE_TOGGLE_ID},
+      .quickvint-wardrobe-selection-controller .quickvint-binary-toggle,
+      .quickvint-wardrobe-selection-controller .quickvint-note-control {
+        box-shadow: none;
+      }
+
+      .quickvint-wardrobe-selection-controller #${DESCRIPTION_LENGTH_TOGGLE_ID}:hover,
+      .quickvint-wardrobe-selection-controller #${OUTPUT_SHAPE_TOGGLE_ID}:hover,
+      .quickvint-wardrobe-selection-controller .quickvint-binary-toggle:hover,
+      .quickvint-wardrobe-selection-controller .quickvint-note-control:hover {
+        box-shadow: 0 4px 10px rgba(55, 48, 163, .09);
+        transform: none;
+      }
+
       .quickvint-wardrobe-selection-actions button {
         min-height: 40px;
         padding: 0 15px;
@@ -10516,7 +10784,7 @@
       .quickvint-wardrobe-selection-feedback {
         position: relative;
         display: flex;
-        flex-basis: 100%;
+        width: 100%;
         min-height: 38px;
         align-items: center;
         gap: 9px;
@@ -10577,7 +10845,7 @@
       }
 
       @media (max-width: 760px) {
-        .quickvint-wardrobe-selection-controller {
+        .quickvint-wardrobe-selection-main {
           gap: 10px 12px;
         }
 
@@ -10588,6 +10856,37 @@
         .quickvint-wardrobe-selection-actions {
           flex-basis: 100%;
           justify-content: flex-end;
+        }
+      }
+
+      @media (max-width: 520px) {
+        .quickvint-wardrobe-selection-preferences {
+          align-items: flex-start;
+          flex-direction: column;
+          gap: 7px;
+        }
+
+        .quickvint-wardrobe-selection-preferences-label,
+        .quickvint-wardrobe-selection-preferences-controls {
+          width: 100%;
+        }
+
+        .quickvint-wardrobe-selection-preferences-controls {
+          gap: 6px;
+        }
+
+        .quickvint-wardrobe-selection-controller #${DESCRIPTION_LENGTH_TOGGLE_ID},
+        .quickvint-wardrobe-selection-controller #${OUTPUT_SHAPE_TOGGLE_ID},
+        .quickvint-wardrobe-selection-controller .quickvint-binary-toggle,
+        .quickvint-wardrobe-selection-controller .quickvint-note-control {
+          height: 40px;
+          min-height: 40px;
+        }
+
+        .quickvint-wardrobe-selection-controller .quickvint-note-control .quickvint-binary-toggle,
+        .quickvint-wardrobe-selection-controller .quickvint-note-edit {
+          height: 38px;
+          min-height: 38px;
         }
       }
 
@@ -11257,6 +11556,8 @@
       return;
     }
 
+    if (await maybeShowSavedBatchRecovery()) return;
+
     closeUploadChoiceModal();
     const restorePhoneButton = setActionButtonLoading(phoneBtn, "Checking...");
     let capacity;
@@ -11371,10 +11672,14 @@
     btn.id = PHONE_BTN_ID;
     btn.disabled = true;
     btn.innerHTML = `
-        <span class="icon">${PHONE_ICON_SVG}</span>
-        <span class="label">Phone</span>
+        <span class="quickvint-source-options" aria-hidden="true">
+          <span class="quickvint-source-option"><span class="icon">${PHONE_ICON_SVG}</span>Phone</span>
+          <span class="quickvint-source-divider"></span>
+          <span class="quickvint-source-option"><span class="icon">${COMPUTER_ICON_SVG}</span>Computer</span>
+        </span>
         <span class="quickvint-phone-new-badge" aria-hidden="true">NEW</span>
     `;
+    btn.setAttribute("aria-label", "Upload photos from phone or computer");
     btn.addEventListener("click", openUploadChoiceModal);
     return btn;
   }
@@ -12543,6 +12848,7 @@
     const descriptionFooterControl = descriptionFooterBtn?.closest(
       ".quickvint-note-control",
     );
+    document.querySelector(".quickvint-tools")?.__quickvintSyncCollapse?.();
 
     if (isAuthenticated === null) {
       if (signInBtn) signInBtn.style.display = "none";
@@ -14924,7 +15230,10 @@
     }
 
     closeBatchModal({
-      cleanup: cleanup && !isBatchGenerationActive(),
+      cleanup:
+        cleanup &&
+        !isBatchGenerationActive() &&
+        batchProgressStatus !== "paused",
     });
     return true;
   }
@@ -16517,9 +16826,12 @@
   }
 
   async function refreshBatchRemoteFilesForGeneration(sessionId) {
+    const recoveryQuery = batchInputSource === "computer"
+      ? ""
+      : "&v=2&includeUrls=1&fromOrder=0";
     const response = await sendMessage({
       type: "PROXY_FETCH",
-      url: `${PHONE_UPLOAD_API}?sessionId=${sessionId}&v=2&includeUrls=1&fromOrder=0&t=${Date.now()}`,
+      url: `${PHONE_UPLOAD_API}?sessionId=${sessionId}${recoveryQuery}&t=${Date.now()}`,
       options: { method: "GET" },
     });
     if (!response?.ok) {
@@ -16549,9 +16861,10 @@
     batchRemoteFiles = files;
     batchRemoteFileKeys = refreshedKeys;
     batchFetchedCount = Number(data?.count || files.length);
-    batchIsComplete =
-      Number(data?.expectedCount || 0) > 0 &&
-      Number(data?.count || 0) === Number(data?.expectedCount || 0);
+    batchIsComplete = batchInputSource === "computer"
+      ? files.length > 0
+      : Number(data?.expectedCount || 0) > 0 &&
+        Number(data?.count || 0) === Number(data?.expectedCount || 0);
     batchSignedUrlsListedAt = Date.now();
   }
 
@@ -16803,15 +17116,17 @@
       showToast("Phone photos are still being added.", "info");
       return;
     }
-    try {
-      await completePhoneUploadSession(
-        batchUploadSessionId,
-        batchExpectedCount,
-      );
-    } catch (error) {
-      restoreStartButton();
-      showToast(error?.message || "Could not finish the phone upload.", "error");
-      return;
+    if (batchInputSource !== "computer") {
+      try {
+        await completePhoneUploadSession(
+          batchUploadSessionId,
+          batchExpectedCount,
+        );
+      } catch (error) {
+        restoreStartButton();
+        showToast(error?.message || "Could not finish the phone upload.", "error");
+        return;
+      }
     }
 
     if (batchPollInterval) {
@@ -16830,6 +17145,7 @@
     const response = await sendMessage({
       type: "START_BATCH_GENERATION",
       sessionId: batchUploadSessionId,
+      inputSource: batchInputSource === "computer" ? "computer" : "phone",
       groups,
     });
 
@@ -16842,14 +17158,18 @@
         message: response?.error || "Could not start batch generation.",
       });
     } else {
-      startTabJobHeartbeat("batch", (message) =>
+      startTabJobHeartbeat("batch", (message, recovery) => {
+        if (recovery) {
+          showBatchRecovery(recovery);
+          return;
+        }
         handleBatchProgress({
           status: "failed",
           current: 0,
           total: batchProgressGroups.length,
           message,
-        }),
-      );
+        });
+      });
     }
     if (response?.ok && response.limited) {
       const startedCount = Math.max(
@@ -16871,7 +17191,7 @@
   }
 
   function isBatchProgressActive(status) {
-    return !["done", "failed"].includes(status);
+    return !["done", "failed", "paused", "expired"].includes(status);
   }
 
   function getBatchProgressCopy({ status, current = 0, total = 0, message = "", delayMs = 0 }) {
@@ -16882,6 +17202,10 @@
         return `${total} listing${total === 1 ? "" : "s"} ready`;
       case "failed":
         return "Batch generation stopped.";
+      case "paused":
+        return "Chrome interrupted the batch.";
+      case "expired":
+        return "Saved photos are no longer available.";
       case "opening_tab":
         return `${itemCopy}: opening tab...`;
       case "tab_ready":
@@ -16903,7 +17227,7 @@
   function getBatchProgressPercent(status, current, total) {
     if (!total) return 0;
     if (status === "done") return 100;
-    if (status === "failed") {
+    if (["failed", "paused", "expired"].includes(status)) {
       return Math.max(0, Math.min(100, Math.round(((current || 0) / total) * 100)));
     }
 
@@ -16923,6 +17247,9 @@
 
   function getBatchItemState(status, itemNumber, current) {
     if (status === "done") return "done";
+    if (status === "paused" || status === "expired") {
+      return itemNumber <= current ? "done" : "pending";
+    }
     if (status === "failed") {
       if (!current) return "pending";
       if (itemNumber < current) return "done";
@@ -16951,6 +17278,7 @@
 
   function getBatchReadyCount(status, current) {
     if (status === "done") return current;
+    if (status === "paused" || status === "expired" || status === "queued") return current;
     if (status === "item_done" || status === "waiting") return current;
     if (status === "failed") return Math.max(0, current - 1);
     return Math.max(0, current - 1);
@@ -16962,8 +17290,8 @@
 
     const previousStatus = batchProgressStatus;
     batchProgressStatus = status;
-    if (previousStatus !== status && (status === "done" || status === "failed")) {
-      trackGrowthEvent(status === "done" ? "batch_done" : "batch_failed", {
+    if (previousStatus !== status && ["done", "failed", "paused"].includes(status)) {
+      trackGrowthEvent(status === "done" ? "batch_done" : status === "paused" ? "batch_paused" : "batch_failed", {
         current,
         total,
         message: message || null,
@@ -16986,7 +17314,9 @@
 
     const titleEl = document.querySelector(`#${BATCH_MODAL_ID} .batch-title`);
     const subtitleEl = document.querySelector(`#${BATCH_MODAL_ID} .batch-subtitle`);
-    if (titleEl) titleEl.textContent = "Generating listings";
+    const paused = status === "paused";
+    const expired = status === "expired";
+    if (titleEl) titleEl.textContent = paused ? "Batch paused" : expired ? "Batch expired" : "Generating listings";
     if (subtitleEl) {
       subtitleEl.hidden = false;
       subtitleEl.textContent = `${getBatchReadyCount(status, current)}/${total} ready`;
@@ -16998,14 +17328,36 @@
     const progressPercent = getBatchProgressPercent(status, current, total);
     const statusText = getBatchProgressCopy({ status, current, total, message, delayMs });
     const running = isBatchProgressActive(status);
+    const remaining = Math.max(0, total - current);
+    const progressTitle = running
+      ? "Keep this tab open"
+      : status === "done"
+        ? "Review tabs before publishing"
+        : paused
+          ? "Your photos and groups are saved."
+          : expired
+            ? "Start a new batch to continue."
+            : "Generation stopped";
+    const progressNote = paused
+      ? "Resume whenever you’re ready."
+      : expired
+        ? "The temporary recovery window ended."
+        : status === "failed"
+          ? "No more tabs will open."
+          : "Tabs open one at a time.";
+    const actions = paused
+      ? `<button type="button" class="batch-recovery-discard">Discard batch</button><button type="button" class="batch-recovery-resume primary">Resume ${remaining} remaining</button>`
+      : expired
+        ? '<button type="button" class="batch-recovery-discard">Start new batch</button>'
+        : `<button type="button" class="batch-dismiss" ${running ? "disabled" : ""}>${running ? "Working..." : "Done"}</button>`;
 
     body.innerHTML = `
       <div class="batch-progress-stage ${running ? "is-live" : ""}">
         <div class="batch-ambient" aria-hidden="true"></div>
         <div class="batch-progress-head">
           <div>
-            <div class="batch-status ${status === "done" ? "done" : status === "failed" ? "warning" : ""}">${statusText}</div>
-            <div class="batch-progress-title">${running ? "Keep this tab open" : status === "done" ? "Review tabs before publishing" : "Generation stopped"}</div>
+            <div class="batch-status ${status === "done" ? "done" : ["failed", "paused", "expired"].includes(status) ? "warning" : ""}">${escapeHtml(statusText)}</div>
+            <div class="batch-progress-title">${progressTitle}</div>
           </div>
           <div class="batch-progress-count">${progressPercent}%</div>
         </div>
@@ -17013,11 +17365,9 @@
           <span style="width: ${progressPercent}%"></span>
         </div>
         <div class="batch-progress-list" aria-live="polite"></div>
-        ${status === "done" ? "" : `<div class="batch-progress-note">${status === "failed" ? "No more tabs will open." : "Tabs open one at a time."}</div>`}
+        ${status === "done" ? "" : `<div class="batch-progress-note">${progressNote}</div>`}
       </div>
-      <div class="batch-actions">
-        <button type="button" class="batch-dismiss" ${running ? "disabled" : ""}>${running ? "Working..." : "Done"}</button>
-      </div>
+      <div class="batch-actions">${actions}</div>
     `;
 
     const list = body.querySelector(".batch-progress-list");
@@ -17061,12 +17411,123 @@
     });
 
     body.querySelector(".batch-dismiss")?.addEventListener("click", () => {
+      sendMessage({ type: "DISCARD_BATCH_RECOVERY" });
       closeBatchModal({ cleanup: false });
+    });
+    body.querySelector(".batch-recovery-resume")?.addEventListener("click", (event) => {
+      resumeSavedBatch(event.currentTarget);
+    });
+    body.querySelector(".batch-recovery-discard")?.addEventListener("click", async () => {
+      await sendMessage({ type: "DISCARD_BATCH_RECOVERY" });
+      closeBatchModal({ cleanup: false });
+      if (expired) document.getElementById(PHONE_BTN_ID)?.click();
+    });
+  }
+
+  function normalizeBatchRecoveryGroups(groups) {
+    return (Array.isArray(groups) ? groups : []).map((group) =>
+      (Array.isArray(group) ? group : []).map((file, index) => ({
+        file,
+        key: getPhoneUploadFileKey(file),
+        index,
+      })),
+    );
+  }
+
+  function showBatchRecovery(recovery) {
+    if (!recovery?.sessionId || !Array.isArray(recovery.groups)) return false;
+    batchUploadSessionId = recovery.sessionId;
+    batchInputSource = recovery.inputSource === "computer" ? "computer" : "phone";
+    batchProgressGroups = normalizeBatchRecoveryGroups(recovery.groups);
+    if (!document.getElementById(BATCH_MODAL_ID)) createBatchModal(recovery.sessionId);
+    const isRunning = recovery.status === "running";
+    renderBatchProgress({
+      status: recovery.status === "done" ? "done" : recovery.status === "expired" ? "expired" : isRunning ? "queued" : "paused",
+      current: Math.max(0, Number(recovery.completedCount || 0)),
+      total: Math.max(0, Number(recovery.total || recovery.groups.length)),
+      message: recovery.message || "",
+    });
+    if (trackedBatchRecoveryId !== recovery.batchId && recovery.status !== "running") {
+      trackedBatchRecoveryId = recovery.batchId;
+      trackGrowthEvent("batch_recovery_available", {
+        completedCount: Math.max(0, Number(recovery.completedCount || 0)),
+        total: Math.max(0, Number(recovery.total || recovery.groups.length)),
+        status: recovery.status,
+      });
+    }
+    if (isRunning) {
+      startTabJobHeartbeat("batch", (message, restored) => {
+        if (restored) showBatchRecovery(restored);
+        else handleBatchProgress({
+          status: "failed",
+          current: 0,
+          total: batchProgressGroups.length,
+          message,
+        });
+      });
+    }
+    return true;
+  }
+
+  async function getSavedBatchRecovery() {
+    const response = await sendMessage({ type: "GET_BATCH_RECOVERY" });
+    return response?.ok ? response.recovery || null : null;
+  }
+
+  async function maybeShowSavedBatchRecovery() {
+    const recovery = await getSavedBatchRecovery();
+    return recovery ? showBatchRecovery(recovery) : false;
+  }
+
+  async function resumeSavedBatch(button) {
+    const completedCount = document.querySelectorAll(
+      `#${BATCH_MODAL_ID} .batch-progress-card.done`,
+    ).length;
+    trackGrowthEvent("batch_resume", {
+      completedCount,
+      total: batchProgressGroups.length,
+    });
+    const restoreButton = setActionButtonLoading(button, "Resuming");
+    const response = await sendMessage({ type: "RESUME_BATCH_GENERATION" });
+    restoreButton();
+    if (!response?.ok) {
+      trackGrowthEvent("batch_resume_failed", {
+        completedCount,
+        total: batchProgressGroups.length,
+        expired: Boolean(response?.expired),
+        message: response?.error || null,
+      });
+      renderBatchProgress({
+        status: response?.expired ? "expired" : "paused",
+        current: document.querySelectorAll(
+          `#${BATCH_MODAL_ID} .batch-progress-card.done`,
+        ).length,
+        total: batchProgressGroups.length,
+        message: response?.error || "Could not resume this batch.",
+      });
+      return;
+    }
+    trackGrowthEvent("batch_resume_started", {
+      completedCount: Number(response.completedCount || completedCount),
+      total: Number(response.total || batchProgressGroups.length),
+    });
+    if (response.done) {
+      showBatchRecovery(response.recovery);
+      return;
+    }
+    startTabJobHeartbeat("batch", (message, recovery) => {
+      if (recovery) showBatchRecovery(recovery);
+      else handleBatchProgress({
+        status: "failed",
+        current: 0,
+        total: batchProgressGroups.length,
+        message,
+      });
     });
   }
 
   function handleBatchProgress(message) {
-    if (["done", "failed"].includes(message.status)) stopTabJobHeartbeat();
+    if (["done", "failed", "paused"].includes(message.status)) stopTabJobHeartbeat();
     const hasBatchModal = Boolean(document.getElementById(BATCH_MODAL_ID));
     if (message.status === "done" && Array.isArray(message.offers)) {
       queueGenerationOffers(message.offers);
@@ -17488,6 +17949,7 @@
         generationMode: "batch",
         telemetryMode: "wardrobe_rewrite",
         applyGeneratedOutput: false,
+        descriptionFooterIncludedOverride: message.descriptionFooterIncluded,
         languageOverrides: {
           titleLanguageCode: message.titleLanguageCode,
           descriptionLanguageCode: message.descriptionLanguageCode,
@@ -17630,6 +18092,20 @@
         generatedListing?.description,
       );
 
+      if (message.batchId) {
+        let checkpoint = null;
+        for (let attempt = 0; attempt < 2 && !checkpoint?.ok; attempt += 1) {
+          checkpoint = await sendMessage({
+            type: "MARK_BATCH_ITEM_COMPLETE",
+            batchId: message.batchId,
+            itemIndex,
+          });
+        }
+        if (!checkpoint?.ok) {
+          console.warn("AutoLister AI: batch completion checkpoint was not saved");
+        }
+      }
+
       showBatchTabStatus(`${listingPrefix}: ready to review.`, "success");
       hideBatchTabStatus(3500);
       return { ok: true, offers: generatedListing?.offers || [] };
@@ -17660,6 +18136,7 @@
     generationMode = null,
     telemetryMode = null,
     applyGeneratedOutput = true,
+    descriptionFooterIncludedOverride = null,
     languageOverrides = null,
   } = {}) {
     const incompletePhoneUpload = manageButtonState
@@ -17788,7 +18265,10 @@
       const descriptionFooterAccess = canUseDescriptionFooterSetting(userProfile);
       ensureDescriptionFooterListingState();
       const effectiveDescriptionFooterIncluded =
-        descriptionFooterAccess && descriptionFooterIncludeForListing;
+        descriptionFooterAccess &&
+        (typeof descriptionFooterIncludedOverride === "boolean"
+          ? descriptionFooterIncludedOverride
+          : descriptionFooterIncludeForListing);
       const descriptionFooterText =
         effectiveDescriptionFooterIncluded &&
         typeof storedDescriptionFooterText === "string"
@@ -18191,6 +18671,85 @@
     }
   }
 
+  function initializeListingToolsCollapse(toolsWrapper) {
+    if (!toolsWrapper || toolsWrapper.dataset.collapseReady === "true") return;
+    const primaryTools = toolsWrapper.querySelector(".quickvint-primary-tools");
+    const toolOptions = toolsWrapper.querySelector(".quickvint-tool-options");
+    if (!primaryTools || !toolOptions) return;
+
+    toolsWrapper.dataset.collapseReady = "true";
+    toolsWrapper.classList.add("is-hydrating");
+
+    const collapseButton = document.createElement("button");
+    collapseButton.type = "button";
+    collapseButton.className = "quickvint-tools-collapse";
+    collapseButton.setAttribute("aria-label", "Collapse AutoLister AI tools");
+    collapseButton.innerHTML = `
+      <svg viewBox="0 0 24 24" aria-hidden="true">
+        <path d="m7 14 5-5 5 5" />
+      </svg>
+    `;
+    primaryTools.appendChild(collapseButton);
+
+    const expandedShell = document.createElement("div");
+    expandedShell.className = "quickvint-tools-expanded-shell";
+    const expanded = document.createElement("div");
+    expanded.className = "quickvint-tools-expanded";
+    expanded.appendChild(primaryTools);
+    expanded.appendChild(toolOptions);
+    expandedShell.appendChild(expanded);
+
+    const compactButton = document.createElement("button");
+    compactButton.type = "button";
+    compactButton.className = "quickvint-tools-compact";
+    compactButton.setAttribute("aria-label", "Expand AutoLister AI tools");
+    compactButton.innerHTML = `
+      <span class="quickvint-tools-compact-mark" aria-hidden="true">
+        <svg viewBox="0 0 24 24"><path d="M12 2.5c.7 5.2 4.3 8.8 9.5 9.5-5.2.7-8.8 4.3-9.5 9.5-.7-5.2-4.3-8.8-9.5-9.5 5.2-.7 8.8-4.3 9.5-9.5Z" /></svg>
+      </span>
+      <span>AutoLister AI</span>
+      <svg class="quickvint-tools-compact-chevron" viewBox="0 0 24 24" aria-hidden="true"><path d="m7 10 5 5 5-5" /></svg>
+    `;
+    toolsWrapper.appendChild(expandedShell);
+    toolsWrapper.appendChild(compactButton);
+    let preferredCollapsed = false;
+
+    const setCollapsed = (collapsed, persist) => {
+      toolsWrapper.classList.toggle("is-collapsed", collapsed);
+      collapseButton.setAttribute("aria-expanded", String(!collapsed));
+      compactButton.setAttribute("aria-expanded", String(!collapsed));
+      expandedShell.setAttribute("aria-hidden", String(collapsed));
+      expandedShell.inert = collapsed;
+      compactButton.inert = !collapsed;
+      if (persist) {
+        preferredCollapsed = collapsed;
+        chrome.storage.local.set({ [LISTING_TOOLS_COLLAPSED_KEY]: collapsed });
+      }
+    };
+
+    const syncCollapseAvailability = () => {
+      const enabled = isAuthenticated === true;
+      collapseButton.hidden = !enabled;
+      compactButton.hidden = !enabled;
+      collapseButton.style.display = enabled ? "" : "none";
+      compactButton.style.display = enabled ? "" : "none";
+      setCollapsed(enabled && preferredCollapsed, false);
+    };
+    toolsWrapper.__quickvintSyncCollapse = syncCollapseAvailability;
+
+    collapseButton.addEventListener("click", () => setCollapsed(true, true));
+    compactButton.addEventListener("click", () => setCollapsed(false, true));
+    syncCollapseAvailability();
+    chrome.storage.local.get(
+      { [LISTING_TOOLS_COLLAPSED_KEY]: false },
+      (storage) => {
+        preferredCollapsed = Boolean(storage[LISTING_TOOLS_COLLAPSED_KEY]);
+        syncCollapseAvailability();
+        requestAnimationFrame(() => toolsWrapper.classList.remove("is-hydrating"));
+      },
+    );
+  }
+
   // --- INJECTION & OBSERVATION LOGIC ---
 
   function injectButton() {
@@ -18229,6 +18788,7 @@
         DESCRIPTION_LENGTH_TOGGLE_ID,
       );
       signInBtn = document.getElementById(SIGN_IN_BTN_ID);
+      initializeListingToolsCollapse(existingBtn.closest(".quickvint-tools"));
       injectFieldLanguageControls();
       syncEmojiToggleState();
       syncHashtagsToggleState();
@@ -18283,6 +18843,7 @@
       btnContainer.appendChild(signInBtn);
 
       container.parentNode.insertBefore(btnContainer, container.nextSibling);
+      initializeListingToolsCollapse(toolsWrapper);
       injectFieldLanguageControls();
       updateButtonUI();
       maybePostDomCanaryPass();
@@ -18660,14 +19221,20 @@
       "quickvint-wardrobe-selection-controller quickvint-wardrobe-selection-pending";
     controller.setAttribute("aria-label", "Rewrite selected listings");
     controller.innerHTML = `
-      <span class="quickvint-wardrobe-selection-count" role="status" aria-live="polite"></span>
-      <div class="quickvint-wardrobe-selection-languages">
-        <div class="quickvint-wardrobe-selection-language"><span>Title</span><span class="quickvint-wardrobe-title-language-slot"></span></div>
-        <div class="quickvint-wardrobe-selection-language"><span>Description</span><span class="quickvint-wardrobe-description-language-slot"></span></div>
+      <div class="quickvint-wardrobe-selection-main">
+        <span class="quickvint-wardrobe-selection-count" role="status" aria-live="polite"></span>
+        <div class="quickvint-wardrobe-selection-languages">
+          <div class="quickvint-wardrobe-selection-language"><span>Title</span><span class="quickvint-wardrobe-title-language-slot"></span></div>
+          <div class="quickvint-wardrobe-selection-language"><span>Description</span><span class="quickvint-wardrobe-description-language-slot"></span></div>
+        </div>
+        <div class="quickvint-wardrobe-selection-actions">
+          <button type="button" class="quickvint-wardrobe-selection-cancel">Cancel</button>
+          <button type="button" class="quickvint-wardrobe-selection-start">Start rewrite</button>
+        </div>
       </div>
-      <div class="quickvint-wardrobe-selection-actions">
-        <button type="button" class="quickvint-wardrobe-selection-cancel">Cancel</button>
-        <button type="button" class="quickvint-wardrobe-selection-start">Start rewrite</button>
+      <div class="quickvint-wardrobe-selection-preferences">
+        <span class="quickvint-wardrobe-selection-preferences-label">Content</span>
+        <div class="quickvint-wardrobe-selection-preferences-controls"></div>
       </div>
       <p class="quickvint-wardrobe-selection-feedback" aria-live="polite"></p>`;
     const titleLanguageField = createInlineLanguageField(
@@ -18686,6 +19253,20 @@
     controller
       .querySelector(".quickvint-wardrobe-description-language-slot")
       .append(descriptionLanguageField);
+    descriptionLengthToggle = createDescriptionLengthToggle();
+    outputShapeToggleBtn = createOutputShapeToggleButton();
+    hashtagsToggleBtn = createHashtagsToggleButton();
+    const descriptionFooterControl = createDescriptionFooterControl();
+    emojiToggleBtn = createEmojiToggleButton();
+    controller
+      .querySelector(".quickvint-wardrobe-selection-preferences-controls")
+      .append(
+        descriptionLengthToggle,
+        outputShapeToggleBtn,
+        hashtagsToggleBtn,
+        descriptionFooterControl,
+        emojiToggleBtn,
+      );
     grid.before(controller);
     wardrobeSelectionController = controller;
     const titleLanguage = titleLanguageField.querySelector(".quickvint-lang-trigger");
@@ -18733,12 +19314,14 @@
         updateWardrobeSelection();
         return;
       }
+      ensureDescriptionFooterListingState();
       const response = await sendMessage({
         type: "START_WARDROBE_REWRITE",
         items: [...wardrobeRewriteSelectedItems.values()].map(({ id, editUrl }) => ({ id, editUrl })),
         applyMode: wardrobeRewriteApplyMode,
         titleLanguageCode: titleLanguage.dataset.value,
         descriptionLanguageCode: descriptionLanguage.dataset.value,
+        descriptionFooterIncluded: descriptionFooterIncludeForListing,
       });
       if (wardrobeSelectionController !== controller) return;
       if (!response?.ok) {

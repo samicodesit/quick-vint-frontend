@@ -24,7 +24,7 @@ async function runBackground(options = {}) {
   const sentToWorkTab = [];
   const sourceProgress = [];
   const removedTabs = [];
-  const storageData = {
+  const storageData = options.storageData || {
     supabaseSession: {
       access_token: "access-token",
       refresh_token: "refresh-token",
@@ -72,7 +72,9 @@ async function runBackground(options = {}) {
       },
       duplicate(tabId, callback) {
         duplicatedTabs.push(tabId);
-        callback?.({ id: nextTabId++, status: "complete" });
+        const tab = { id: nextTabId++, status: "complete", url: tabs.get(tabId)?.url };
+        if (options.completeDuplicateTabs) tabs.set(tab.id, tab);
+        callback?.(tab);
       },
       update(_tabId, _details, callback) { callback?.(); },
       get(tabId, callback) { callback(tabs.get(tabId)); },
@@ -147,6 +149,14 @@ async function runBackground(options = {}) {
         }
         return response;
       }
+      if (String(url).includes("/api/phone-upload") && options.phoneFiles) {
+        return new Response(JSON.stringify({
+          complete: true,
+          count: options.phoneFiles.length,
+          expectedCount: options.phoneFiles.length,
+          files: options.phoneFiles,
+        }), { status: 200, headers: { "content-type": "application/json" } });
+      }
       return new Response(JSON.stringify({}), { status: 200 });
     },
     setTimeout(callback, delay) {
@@ -167,6 +177,7 @@ async function runBackground(options = {}) {
     duplicatedTabs,
     sentToWorkTab,
     sourceProgress,
+    storageData,
     removedTabs,
     settleDelays,
     resolveRun: () => runResolvers.shift()?.(),
@@ -182,9 +193,65 @@ async function runBackground(options = {}) {
   };
 }
 
+test("batch checkpoint survives a worker restart and resumes only unfinished listings", async () => {
+  const files = [1, 2].map((order) => ({
+    name: `00000${order}-upload.jpg`,
+    path: `batch-1/00000${order}-upload.jpg`,
+    order: order - 1,
+    url: `https://signed.test/${order}`,
+  }));
+  const firstWorker = await runBackground({
+    holdBatchRuns: true,
+    completeDuplicateTabs: true,
+  });
+  const started = await firstWorker.sendRuntimeMessage({
+    type: "START_BATCH_GENERATION",
+    sessionId: "batch-1",
+    inputSource: "phone",
+    groups: [[files[0]], [files[1]]],
+  });
+
+  assert.equal(started.ok, true);
+  assert.equal(firstWorker.storageData.quickvintBatchRecovery.completedCount, 0);
+  const batchId = firstWorker.storageData.quickvintBatchRecovery.batchId;
+
+  const restartedWorker = await runBackground({
+    holdBatchRuns: true,
+    completeDuplicateTabs: true,
+    storageData: firstWorker.storageData,
+    phoneFiles: files,
+  });
+  const marked = await restartedWorker.sendRuntimeMessage({
+    type: "MARK_BATCH_ITEM_COMPLETE",
+    batchId,
+    itemIndex: 1,
+  }, { tab: { id: 100, url: sourceTab.url } });
+  assert.equal(marked.ok, true);
+
+  const heartbeat = await restartedWorker.sendRuntimeMessage({
+    type: "QUICKVINT_TAB_JOB_HEARTBEAT",
+    kind: "batch",
+  });
+  assert.equal(heartbeat.active, false);
+  assert.equal(heartbeat.recoverable, true);
+  assert.equal(heartbeat.recovery.completedCount, 1);
+
+  const resumed = await restartedWorker.sendRuntimeMessage({
+    type: "RESUME_BATCH_GENERATION",
+  });
+  await flush();
+  assert.equal(resumed.ok, true);
+  assert.equal(restartedWorker.sentToWorkTab.length, 1);
+  assert.equal(restartedWorker.sentToWorkTab[0].message.itemIndex, 2);
+  assert.equal(restartedWorker.sentToWorkTab[0].message.files[0].url, "https://signed.test/2");
+});
+
 test("wardrobe rewrite validates its request and opens an active edit tab", async () => {
   const harness = await runBackground({ holdRuns: true });
-  const response = await harness.sendRuntimeMessage(rewriteMessage());
+  const response = await harness.sendRuntimeMessage({
+    ...rewriteMessage(),
+    descriptionFooterIncluded: false,
+  });
 
   assert.equal(response.ok, true);
   assert.deepEqual(harness.createdTabs.map(({ url, active }) => ({ url, active })), [
@@ -192,6 +259,7 @@ test("wardrobe rewrite validates its request and opens an active edit tab", asyn
   ]);
   assert.equal(harness.duplicatedTabs.length, 0);
   assert.equal(harness.sentToWorkTab.some(({ message }) => message.type === "RUN_BATCH_ITEM"), false);
+  assert.equal(harness.sentToWorkTab[0].message.descriptionFooterIncluded, false);
 
   for (const message of [
     rewriteMessage([]),
@@ -201,6 +269,7 @@ test("wardrobe rewrite validates its request and opens an active edit tab", asyn
     rewriteMessage([{ id: "42", editUrl: "https://www.vinted.nl/items/42" }]),
     { ...rewriteMessage(), applyMode: "publish" },
     { ...rewriteMessage(), titleLanguageCode: "xx" },
+    { ...rewriteMessage(), descriptionFooterIncluded: "false" },
   ]) {
     const invalid = await (await runBackground()).sendRuntimeMessage(message);
     assert.equal(invalid.ok, false);
