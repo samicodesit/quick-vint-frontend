@@ -1,8 +1,8 @@
 {
   "appName": {
-    "message": "AutoLister AI - Vinted Description Generator"
+    "message": "AutoLister AI - Asistente de anuncios"
   },
   "appDesc": {
-    "message": "Asistente con IA para titulos y descripciones de anuncios de Vinted"
+    "message": "Asistente con IA para titulos y descripciones desde fotos"
   }
 }
