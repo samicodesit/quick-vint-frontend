@@ -21,7 +21,7 @@ Vinted sellers waste hours every week writing repetitive titles and descriptions
 ✨ Core Features
 Feature	Description
 🤖 One-Click AI Generation	Photos → AI title + description, instantly
-🛡️ Account-Safe	Built to comply with Vinted — won't risk seller accounts (key trust signal — flagged on every plan)
+📝 Seller-Controlled	AutoLister prepares drafts for sellers to review before publishing
 📱 Phone Upload	Snap pics on mobile, list from desktop (Pro & Business soon)
 🌍 6 Languages	EN · FR · DE · ES · IT · NL — auto-detected
 🎨 Tone Control	Standard / Funny / Professional (Pro & Business)
@@ -34,7 +34,7 @@ Price	€0 / forever	€3.99 / mo	€9.99 / mo	€19.99 / mo
 Daily limit	2 listings	15 listings	40 listings	No daily limit
 Monthly limit	8 listings	300 listings	800 listings	1,500 listings
 AI titles & descriptions	✅	✅	✅	✅
-Account-Safe	✅	✅	✅	✅
+Seller-Controlled	✅	✅	✅	✅
 Phone upload	✅ (soon Pro/Business only)	✅ (soon Pro/Business only)	✅	✅
 Change AI writing tone	❌	❌	✅	✅
 Emoji support	❌	❌	✅	✅
@@ -53,7 +53,7 @@ Cross-border EU sellers	Pro / Business	"Sell across Europe in any language — w
 Headlines
 "List 10 items in the time it used to take to list 1."
 "Sell across Europe in 6 languages — without speaking them."
-"Account-Safe AI. Built for Vinted. Trusted by resellers."
+"Your AI listing assistant. Review every draft before publishing."
 "Stop staring at blank description boxes."
 Per-Plan Pitch (one-liners)
 Free: "Try it risk-free — 2 AI listings every day, forever."
@@ -61,7 +61,7 @@ Starter (€3.99): "Less than a coffee for 15 listings/day."
 Pro (€9.99): "40 listings/day + emojis + tone control. Most sellers pick this one."
 Business (€19.99): "No daily cap, priority processing, dedicated support."
 Conversion Levers
-"Account-Safe" badge on every tier — addresses the #1 reseller fear (account bans)
+"Seller-Controlled" badge on every tier — makes the review-before-publishing workflow clear
 Daily + monthly caps — predictable, easy to understand, encourage daily habit
 €3.99 entry tier — extremely low upgrade friction from Free
 "Most Popular" anchor on Pro — drives ARPU up
