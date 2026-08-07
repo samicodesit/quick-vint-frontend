@@ -6,7 +6,7 @@ AutoLister AI is a Vinted description generator that helps you create listing ti
 
 Upload photos on a Vinted listing page and click Generate. The title and description are filled into the listing page for you, so there is no copy-paste needed.
 
-It is to sell faster on Vinted, especially when you have multiple items to upload. Phone upload and batch listing generation work through a QR code: take photos on your phone, send them to your browser, group them by item, and create drafts faster.
+Phone upload and batch drafting work through a QR code: take photos on your phone, send them to your browser, group them by item, and review each draft before publishing.
 
 Features:
 • Vinted title generator for searchable listing titles from photos
@@ -17,3 +17,5 @@ Features:
 • Batch Vinted listing generator for drafting several items in one flow
 
 Suitable for casual sellers, active wardrobe clear-outs, resellers, and anyone who wants a faster first draft while staying in control of every Vinted listing.
+
+AutoLister AI is an independent tool and is not affiliated with, endorsed by, or sponsored by Vinted.

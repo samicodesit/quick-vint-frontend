@@ -6,7 +6,7 @@ AutoLister AI ist ein Vinted-Beschreibungsgenerator, der Ihnen hilft, Titel und 
 
 Laden Sie Fotos auf einer Vinted-Anzeigenseite hoch und klicken Sie auf Generate. Titel und Beschreibung werden direkt in die Anzeigenseite eingefügt, ohne Copy-Paste.
 
-Es hilft Ihnen, schneller auf Vinted zu verkaufen, besonders wenn Sie mehrere Artikel hochladen. Handy-Upload und Batch-Listing funktionieren per QR-Code: Fotos mit dem Handy aufnehmen, an den Browser senden, nach Artikel gruppieren und schneller Entwürfe erstellen.
+Handy-Upload und Batch-Entwürfe funktionieren per QR-Code: Fotos mit dem Handy aufnehmen, an den Browser senden, nach Artikel gruppieren und jeden Entwurf vor der Veröffentlichung prüfen.
 
 Funktionen:
 • Vinted-Titelgenerator für besser auffindbare Anzeigentitel aus Fotos
@@ -17,3 +17,5 @@ Funktionen:
 • Batch-Generator für Vinted-Listings für mehrere Artikel in einem Ablauf
 
 Geeignet für Gelegenheitsverkäufer, aktive Kleiderschrank-Aufräumer, Reseller und alle, die schneller einen ersten Entwurf erstellen möchten, aber die Kontrolle über jedes Vinted-Listing behalten wollen.
+
+AutoLister AI ist ein unabhängiges Tool und weder mit Vinted verbunden noch von Vinted unterstützt oder gesponsert.

@@ -6,7 +6,7 @@ AutoLister AI je generátor popisů Vinted, který pomáhá tvořit titulky a po
 
 Nahrajte fotky na stránce inzerátu Vinted a klikněte na Generate. Titulek a popis se vloží přímo do stránky inzerátu, takže není potřeba nic kopírovat a vkládat.
 
-Pomáhá prodávat rychleji na Vinted, hlavně když máte více předmětů. Nahrávání z telefonu a dávkové generování fungují přes QR kód: vyfoťte předměty telefonem, pošlete fotky do prohlížeče, seskupte je podle předmětů a rychleji vytvořte návrhy.
+Nahrávání z telefonu a příprava více návrhů fungují přes QR kód: vyfoťte předměty telefonem, pošlete fotky do prohlížeče, seskupte je podle předmětů a každý návrh před zveřejněním zkontrolujte.
 
 Funkce:
 • generátor titulků Vinted pro lépe dohledatelné titulky inzerátů z fotek
@@ -17,3 +17,5 @@ Funkce:
 • generátor více inzerátů Vinted najednou pro přípravu více předmětů v jednom postupu
 
 Vhodné pro příležitostné prodejce, aktivní prodejce, resellery i každého, kdo chce rychlejší první návrh a zároveň kontrolu nad každým inzerátem Vinted.
+
+AutoLister AI je nezávislý nástroj a není přidružen, schválen ani sponzorován společností Vinted.

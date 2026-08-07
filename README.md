@@ -13,7 +13,7 @@ AutoLister AI is a Chrome extension that uses AI to instantly generate professio
 
 Tagline ideas:
 
-"From photo to published in 30 seconds." "List 10× faster on Vinted."
+"From photos to editable listing drafts." "Review every draft before publishing."
 
 🎯 The Problem We Solve
 Vinted sellers waste hours every week writing repetitive titles and descriptions. AutoLister AI eliminates that grunt work — letting sellers focus on sourcing, shipping, and scaling their business.
@@ -25,7 +25,7 @@ Feature	Description
 📱 Phone Upload	Snap pics on mobile, list from desktop (Pro & Business soon)
 🌍 6 Languages	EN · FR · DE · ES · IT · NL — auto-detected
 🎨 Tone Control	Standard / Funny / Professional (Pro & Business)
-✨ Emoji Support	Boost listing engagement (Pro & Business)
+✨ Emoji Support	Optional emoji styling (Pro & Business)
 🔐 Magic-Link Login	Passwordless sign-in via email (Supabase)
 💳 Stripe Billing	Self-serve upgrades, cancel anytime
 💰 Pricing (EUR)

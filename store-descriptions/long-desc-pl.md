@@ -6,7 +6,7 @@ AutoLister AI to generator opisów Vinted, który pomaga tworzyć tytuły i opis
 
 Dodaj zdjęcia na stronie ogłoszenia Vinted i kliknij Generate. Tytuł i opis są wstawiane na stronie ogłoszenia, więc nie trzeba nic kopiować i wklejać.
 
-Pomaga sprzedawać szybciej na Vinted, szczególnie gdy masz kilka przedmiotów do dodania. Przesyłanie z telefonu i generowanie wielu ogłoszeń naraz działają przez kod QR: zrób zdjęcia telefonem, wyślij je do przeglądarki, pogrupuj według przedmiotów i szybciej twórz szkice.
+Przesyłanie z telefonu i przygotowywanie wielu wersji roboczych działają przez kod QR: zrób zdjęcia telefonem, wyślij je do przeglądarki, pogrupuj według przedmiotów i sprawdź każdą wersję przed publikacją.
 
 Funkcje:
 • generator tytułów Vinted do tytułów ogłoszeń łatwiejszych do znalezienia na podstawie zdjęć
@@ -17,3 +17,5 @@ Funkcje:
 • generator wielu ogłoszeń Vinted do przygotowania kilku przedmiotów w jednym procesie
 
 Odpowiednie dla sprzedawców okazjonalnych, aktywnych sprzedawców, resellerów i każdego, kto chce szybciej przygotować pierwszy szkic, zachowując kontrolę nad każdym ogłoszeniem Vinted.
+
+AutoLister AI jest niezależnym narzędziem i nie jest powiązane, zatwierdzone ani sponsorowane przez Vinted.
