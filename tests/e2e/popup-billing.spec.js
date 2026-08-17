@@ -40,7 +40,7 @@ function createCustomBusinessProfile() {
     pack_credits: 0,
     custom_daily_limit: 100,
     custom_monthly_limit: 1000,
-    custom_limit_expires_at: "2026-08-07T23:59:59.000Z",
+    custom_limit_expires_at: "2099-12-31T23:59:59.000Z",
   };
 }
 
