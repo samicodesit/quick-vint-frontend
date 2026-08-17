@@ -7452,6 +7452,86 @@ test.describe("wardrobe rewrite tab", () => {
     expect(saves).toBe(0);
   });
 
+  test("wardrobe replace retries once when Vinted reverts the first write", async ({ page }) => {
+    let generationCalls = 0;
+    await page.route("https://autolister.app/api/events/track", (route) => route.fulfill({ status: 204, body: "" }));
+    await page.route("https://autolister.app/api/generate", (route) => {
+      generationCalls += 1;
+      return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ title: "New title", description: "New description" }) });
+    });
+    await openWardrobeEditHarness(page);
+    await page.locator('[data-testid="title--input"]').fill("Original title");
+    await page.locator('[data-testid="description--input"]').fill("Original description");
+    await page.evaluate(() => {
+      for (const [selector, original] of [
+        ['[data-testid="title--input"]', "Original title"],
+        ['[data-testid="description--input"]', "Original description"],
+      ]) {
+        const field = document.querySelector(selector);
+        let revertsRemaining = 1;
+        field.addEventListener("input", () => {
+          if (!revertsRemaining) return;
+          revertsRemaining -= 1;
+          setTimeout(() => { field.value = original; }, 0);
+        });
+      }
+    });
+
+    await expect(sendContentMessage(page, {
+      type: "RUN_WARDROBE_REWRITE_ITEM",
+      itemId: "42",
+      applyMode: "replace",
+      titleLanguageCode: "en",
+      descriptionLanguageCode: "en",
+    })).resolves.toMatchObject({ ok: true });
+    await expect(page.locator('[data-testid="title--input"]')).toHaveValue("New title");
+    await expect(page.locator('[data-testid="description--input"]')).toHaveValue("New description");
+    expect(generationCalls).toBe(1);
+  });
+
+  test("wardrobe replace pauses with review cards when Vinted keeps reverting generated text", async ({ page }) => {
+    test.setTimeout(15_000);
+    let generationCalls = 0;
+    const trackedEvents = [];
+    await page.route("https://autolister.app/api/events/track", (route) => {
+      trackedEvents.push(...(route.request().postDataJSON()?.events || []));
+      return route.fulfill({ status: 204, body: "" });
+    });
+    await page.route("https://autolister.app/api/generate", (route) => {
+      generationCalls += 1;
+      return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ title: "New title", description: "New description" }) });
+    });
+    await openWardrobeEditHarness(page);
+    await page.locator('[data-testid="title--input"]').fill("Original title");
+    await page.locator('[data-testid="description--input"]').fill("Original description");
+    await page.evaluate(() => {
+      for (const [selector, original] of [
+        ['[data-testid="title--input"]', "Original title"],
+        ['[data-testid="description--input"]', "Original description"],
+      ]) {
+        const field = document.querySelector(selector);
+        field.addEventListener("input", () => {
+          setTimeout(() => { field.value = original; }, 0);
+        });
+      }
+    });
+
+    await expect(sendContentMessage(page, {
+      type: "RUN_WARDROBE_REWRITE_ITEM",
+      itemId: "42",
+      applyMode: "replace",
+      titleLanguageCode: "en",
+      descriptionLanguageCode: "en",
+    })).resolves.toMatchObject({ ok: false });
+    await expect(page.locator('[data-testid="title--input"]')).toHaveValue("Original title");
+    await expect(page.locator('[data-testid="description--input"]')).toHaveValue("Original description");
+    await expect(page.locator(".quickvint-wardrobe-review-card")).toHaveCount(2);
+    expect(generationCalls).toBe(1);
+    await expect.poll(() => trackedEvents.some(
+      (event) => event.event === "wardrobe_rewrite_apply_failed",
+    )).toBe(true);
+  });
+
   test("wardrobe review applies, discards, and undoes each field independently", async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 900 });
     await page.route("https://autolister.app/api/events/track", (route) => route.fulfill({ status: 204, body: "" }));

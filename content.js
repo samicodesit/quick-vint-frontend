@@ -30,6 +30,8 @@
   const WARDROBE_REWRITE_STATUS_ID = "quickvint-wardrobe-rewrite-status";
   const WARDROBE_REWRITE_REVIEW_PREFIX = "quickvint-wardrobe-review-";
   const WARDROBE_REWRITE_RESULT_TTL_MS = 5 * 60 * 1000;
+  const WARDROBE_REWRITE_APPLY_ATTEMPTS = 3;
+  const WARDROBE_REWRITE_FIELD_SETTLE_MS = 300;
   const TAB_JOB_HEARTBEAT_MS = 20 * 1000;
   let wardrobeRewriteScheduled = false;
   let wardrobeRewriteCapacity = null;
@@ -18013,13 +18015,19 @@
     });
   }
 
-  function waitForGeneratedListingFields(expectedTitle, expectedDescription, timeoutMs = 2500) {
+  function waitForGeneratedListingFields(
+    expectedTitle,
+    expectedDescription,
+    timeoutMs = 2500,
+    stableForMs = 0,
+  ) {
     const normalize = (value) => String(value || "").trim();
     const expectedTitleText = normalize(expectedTitle);
     const expectedDescriptionText = normalize(expectedDescription);
 
     return new Promise((resolve, reject) => {
       const startedAt = Date.now();
+      let matchedAt = null;
       const check = () => {
         const titleInput = document.querySelector(SELECTORS.title);
         const descInput = document.querySelector(SELECTORS.description);
@@ -18030,8 +18038,13 @@
           normalize(descInput?.value).includes(expectedDescriptionText);
 
         if (titleMatches && descriptionMatches) {
-          resolve();
-          return;
+          if (!matchedAt) matchedAt = Date.now();
+          if (Date.now() - matchedAt >= stableForMs) {
+            resolve();
+            return;
+          }
+        } else {
+          matchedAt = null;
         }
 
         if (Date.now() - startedAt > timeoutMs) {
@@ -18132,6 +18145,42 @@
   function setListingFieldValue(field, value) {
     if (!field) return;
     setNativeInputValue(field, String(value || ""));
+  }
+
+  function wardrobeRewriteFieldsMatch(expected) {
+    return (
+      document.querySelector(SELECTORS.title)?.value === expected.title &&
+      document.querySelector(SELECTORS.description)?.value === expected.description
+    );
+  }
+
+  async function applyWardrobeRewriteOutput(route, originals, output) {
+    for (let attempt = 0; attempt < WARDROBE_REWRITE_APPLY_ATTEMPTS; attempt += 1) {
+      if (
+        window.location.pathname !== route.pathname ||
+        route.pathname !== `/items/${route.itemId}/edit` ||
+        (attempt > 0 && !wardrobeRewriteFieldsMatch(originals))
+      ) {
+        return false;
+      }
+      const title = document.querySelector(SELECTORS.title);
+      const description = document.querySelector(SELECTORS.description);
+      if (!title || !description) return false;
+      setListingFieldValue(title, output.title);
+      setListingFieldValue(description, output.description);
+      try {
+        await waitForGeneratedListingFields(
+          output.title,
+          output.description,
+          2500,
+          WARDROBE_REWRITE_FIELD_SETTLE_MS,
+        );
+        return true;
+      } catch (_error) {
+        // Retry only while Vinted returned both fields to their original values.
+      }
+    }
+    return false;
   }
 
   function isWardrobeRewriteTabReady(itemId) {
@@ -18420,8 +18469,14 @@
       }
       const output = { title: generated.title, description: generated.description };
       if (message.applyMode === "replace") {
-        setListingFieldValue(title, output.title);
-        setListingFieldValue(description, output.description);
+        if (!await applyWardrobeRewriteOutput(route, originals, output)) {
+          trackGrowthEvent("wardrobe_rewrite_apply_failed", {
+            mode: "replace",
+            attempts: WARDROBE_REWRITE_APPLY_ATTEMPTS,
+          });
+          renderListingReviewSuggestions(originals, output, route);
+          throw new Error("Vinted did not keep the generated text. Review it before continuing.");
+        }
         renderWardrobeReplaceUndo(originals, output, route);
         showWardrobeRewriteStatus("New title and description applied. Review before saving.", "success");
       } else {
