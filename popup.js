@@ -32,6 +32,14 @@ document.addEventListener("DOMContentLoaded", () => {
   const DESCRIPTION_FOOTER_STORAGE_KEY = "descriptionFooterText";
   const DESCRIPTION_FOOTER_MAX_LENGTH = 240;
   const languageDefaults = window.AutoListerLanguageDefaults;
+  const PAID_BILLING_STATUSES = new Set([
+    "active",
+    "trialing",
+    "canceling",
+    "past_due",
+    "unpaid",
+  ]);
+  const PAYMENT_REQUIRED_STATUSES = new Set(["past_due", "unpaid"]);
 
   const TIER_DISPLAY_NAMES = {
     free: "Free Plan",
@@ -787,8 +795,9 @@ document.addEventListener("DOMContentLoaded", () => {
       if (userEmailSpan) userEmailSpan.textContent = user.email;
       const rawTier = profile.subscription_tier || "free";
       const normalizedTier = normalizeTier(rawTier);
-      const isActive = profile.subscription_status === "active";
-      const tier = isActive ? normalizedTier : "free";
+      const billingStatus = profile.subscription_status || "free";
+      const hasPaidBilling = PAID_BILLING_STATUSES.has(billingStatus);
+      const tier = hasPaidBilling ? normalizedTier : "free";
       const hasSubscriptionPlan = tier !== "free";
       const shouldResetUsage = shouldRevealAfterUsage || renderedTier !== tier;
       renderedTier = tier;
@@ -829,7 +838,10 @@ document.addEventListener("DOMContentLoaded", () => {
 
       sendRuntimeMessage({ type: "GET_USER_USAGE_COUNT" }).then((usage) => {
         if (requestId !== renderRequestId) return;
-        updateUsageUI(usage || {}, tier);
+        updateUsageUI(
+          { ...(usage || {}), subscriptionStatus: billingStatus },
+          tier,
+        );
       });
     } else {
       renderRequestId += 1;
@@ -911,6 +923,26 @@ document.addEventListener("DOMContentLoaded", () => {
     }
     if (monthlyProgressBar?.parentElement) {
       monthlyProgressBar.parentElement.style.display = "";
+    }
+
+    const paymentRequired = PAYMENT_REQUIRED_STATUSES.has(
+      usage.subscriptionStatus,
+    );
+    if (manageBtn) {
+      manageBtn.textContent = paymentRequired
+        ? "Update payment"
+        : "Manage Subscription";
+    }
+
+    if (paymentRequired) {
+      if (usageLimitNote) {
+        usageLimitNote.textContent =
+          "Payment failed. Update payment to continue.";
+        usageLimitNote.style.display = "block";
+      }
+      if (paidUpgradeBtn) paidUpgradeBtn.classList.add("hidden");
+      setCreditPackVisibility(false);
+      return;
     }
 
     updateUsageUpsell({
@@ -1064,7 +1096,9 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     const hasSubscriptionPlan =
-      signedInState.profile?.subscription_status === "active" &&
+      PAID_BILLING_STATUSES.has(
+        signedInState.profile?.subscription_status,
+      ) &&
       signedInState.tier !== "free";
 
     if (!hasSubscriptionPlan) {
@@ -1273,6 +1307,7 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   async function handleManageSubscription() {
+    const defaultText = manageBtn?.textContent || "Manage Subscription";
     setLoading(manageBtn, true, "Loading…");
     showMessage(null);
     try {
@@ -1324,7 +1359,7 @@ document.addEventListener("DOMContentLoaded", () => {
       console.error("Portal error:", err);
       showMessage("Connection issue. Please try again.", "error");
     } finally {
-      setLoading(manageBtn, false, "Manage Subscription");
+      setLoading(manageBtn, false, defaultText);
     }
   }
 

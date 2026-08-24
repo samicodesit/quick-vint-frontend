@@ -70,7 +70,7 @@ async function runBackgroundHandoff(
         (async () => ({ data: { session: null }, error: null })),
       onAuthStateChange() {},
     },
-    from() {
+    from(table) {
       return {
         select() {
           return this;
@@ -78,10 +78,27 @@ async function runBackgroundHandoff(
         eq() {
           return this;
         },
+        gte() {
+          return this;
+        },
+        order() {
+          return this;
+        },
+        limit() {
+          return this;
+        },
         single: async () => ({
-          data: { email: "seller@example.com", subscription_tier: "free" },
+          data:
+            table === "profiles"
+              ? options.profileData || {
+                  email: "seller@example.com",
+                  subscription_status: "free",
+                  subscription_tier: "free",
+                }
+              : null,
           error: null,
         }),
+        maybeSingle: async () => ({ data: options.dayLimitData || null, error: null }),
       };
     },
   };
@@ -373,6 +390,43 @@ test("background proxy preserves structured API errors", async () => {
     status: 410,
     data: { status: "expired", error: "Upload session expired" },
     error: "Upload session expired",
+  });
+});
+
+test("usage keeps a past-due customer's paid tier and historical usage", async () => {
+  const session = {
+    access_token: "valid-access",
+    refresh_token: "refresh-token",
+    expires_at: 2000000000,
+    user: { id: "user-1", email: "seller@example.com" },
+  };
+  const { response } = await runBackgroundMessage(
+    { type: "GET_USER_USAGE_COUNT" },
+    {
+      initialStorage: { supabaseSession: session },
+      runScheduledTimers: false,
+      profileData: {
+        email: "seller@example.com",
+        subscription_status: "past_due",
+        subscription_tier: "business",
+        api_calls_this_month: 508,
+        is_legacy_plan: false,
+        free_lifetime_generations_used: 5,
+        pack_credits: 0,
+        custom_daily_limit: null,
+        custom_monthly_limit: null,
+        custom_limit_expires_at: null,
+      },
+      dayLimitData: { count: 12 },
+    },
+  );
+
+  assert.equal(response.tier, "business");
+  assert.equal(response.daily, 12);
+  assert.equal(response.monthly, 508);
+  assert.deepEqual(JSON.parse(JSON.stringify(response.limits)), {
+    daily: 60,
+    monthly: 600,
   });
 });
 

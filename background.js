@@ -69,6 +69,13 @@ const TOKEN_REFRESH_MARGIN_MS = 5 * 60 * 1000; // 5 minutes
 const MIN_REFRESH_DELAY_MS = 60 * 1000; // 1 minute
 const FREE_LIFETIME_LIMIT = 5;
 const CHECKOUT_TIERS = new Set(["starter", "pro", "business"]);
+const PAID_BILLING_STATUSES = new Set([
+  "active",
+  "trialing",
+  "canceling",
+  "past_due",
+  "unpaid",
+]);
 const CURRENT_TIER_LIMITS = {
   free: { daily: FREE_LIFETIME_LIMIT, monthly: FREE_LIFETIME_LIMIT },
   starter: { daily: 10, monthly: 75 },
@@ -243,7 +250,7 @@ function normalizeTier(tier) {
 
 function getUsageLimits(profile) {
   const tier =
-    profile?.subscription_status === "active"
+    PAID_BILLING_STATUSES.has(profile?.subscription_status)
       ? normalizeTier(profile?.subscription_tier)
       : "free";
   const source =

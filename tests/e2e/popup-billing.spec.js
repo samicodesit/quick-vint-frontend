@@ -54,6 +54,17 @@ function createFreeProfile() {
   };
 }
 
+function createPastDueBusinessProfile() {
+  return {
+    subscription_status: "past_due",
+    subscription_tier: "business",
+    current_period_end: "2026-08-24T00:00:00.000Z",
+    api_calls_this_month: 508,
+    free_lifetime_generations_used: 5,
+    pack_credits: 0,
+  };
+}
+
 async function installPopupHarness(page, options = {}) {
   const {
     initialStorage = {},
@@ -198,6 +209,51 @@ async function installPopupHarness(page, options = {}) {
 }
 
 test.describe("popup billing portal", () => {
+  test("keeps failed-payment customers on their paid plan with a direct payment action", async ({
+    page,
+  }) => {
+    const portalRequests = [];
+    await page.route("https://autolister.app/api/events/track", (route) =>
+      route.fulfill({ status: 204, body: "" }),
+    );
+    await page.route("https://autolister.app/api/stripe/create-portal", (route) => {
+      portalRequests.push(route.request().postDataJSON());
+      return route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ url: "https://billing.test/session" }),
+      });
+    });
+
+    await installPopupHarness(page, {
+      initialStorage: {
+        supabaseSession: createSession("seller@example.com"),
+        userProfile: createPastDueBusinessProfile(),
+        userUsageCount: {
+          daily: 0,
+          monthly: 508,
+          tier: "business",
+          limits: { daily: 60, monthly: 600 },
+          packCredits: 0,
+        },
+      },
+    });
+
+    await expect(page.locator("#planName")).toHaveText("Business Plan");
+    await expect(page.locator("#monthlyCallsUsed")).toHaveText("508 / 600");
+    await expect(page.locator("#usageLimitNote")).toHaveText(
+      "Payment failed. Update payment to continue.",
+    );
+    await expect(page.locator("#manageBtn")).toHaveText("Update payment");
+
+    await page.locator("#manageBtn").click();
+    await expect.poll(() => portalRequests.length).toBe(1);
+    expect(portalRequests[0]).toEqual({ email: "seller@example.com" });
+    await expect
+      .poll(() => page.evaluate(() => window.__popupHarness.openedUrls))
+      .toEqual(["https://billing.test/session"]);
+  });
+
   test("shows active custom business limits in the popup", async ({ page }) => {
     await page.route("https://autolister.app/api/events/track", (route) =>
       route.fulfill({ status: 204, body: "" }),
