@@ -1,4 +1,6 @@
 const assert = require("node:assert/strict");
+const fs = require("node:fs");
+const path = require("node:path");
 const test = require("node:test");
 
 test("DOM canary runner builds the heartbeat payload", async () => {
@@ -107,6 +109,12 @@ test("DOM canary runner classifies Vinted auth redirects", async () => {
     { reason: "auth_required" },
   );
   assert.deepEqual(
+    classifyCanaryFailure(
+      "https://www.vinted.nl/member/register/select_type?ref_url=%2Fitems%2Fnew",
+    ),
+    { reason: "auth_required" },
+  );
+  assert.deepEqual(
     classifyCanaryFailure("https://www.vinted.nl/items/new"),
     { reason: "selector_timeout" },
   );
@@ -124,4 +132,14 @@ test("DOM canary runner can treat reported failures as process success", async (
     ),
     0,
   );
+});
+
+test("DOM canary scheduled task runs on battery power", () => {
+  const installer = fs.readFileSync(
+    path.resolve(__dirname, "../scripts/install-dom-canary-task.ps1"),
+    "utf8",
+  );
+
+  assert.match(installer, /-AllowStartIfOnBatteries/);
+  assert.match(installer, /-DontStopIfGoingOnBatteries/);
 });

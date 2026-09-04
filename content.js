@@ -13311,7 +13311,33 @@
     return Boolean(
       DOM_CANARY_CONFIG?.enabled &&
         DOM_CANARY_CONFIG?.secret &&
-        location.hostname === "www.vinted.nl",
+        location.hostname === "www.vinted.nl" &&
+        isCurrentDomCanaryRun(),
+    );
+  }
+
+  function isCurrentDomCanaryRun() {
+    const runId = String(DOM_CANARY_CONFIG?.runId || "").trim();
+    if (!runId) return true;
+
+    const params = new URLSearchParams(location.search);
+    if (params.get("autolister_canary") === runId) return true;
+
+    const refUrl = params.get("ref_url");
+    if (!refUrl) return false;
+    try {
+      return (
+        new URL(refUrl, location.origin).searchParams.get("autolister_canary") ===
+        runId
+      );
+    } catch {
+      return false;
+    }
+  }
+
+  function isDomCanaryAuthPath(pathname = location.pathname) {
+    return /\/member\/(?:signup|register)(?:\/|$)|\/member\/login|\/auth\//.test(
+      pathname,
     );
   }
 
@@ -13366,7 +13392,8 @@
   }
 
   function postDomCanary(status, result = {}) {
-    if (!isDomCanaryEnabled()) return;
+    if (!isDomCanaryEnabled() || window.__quickvintDomCanaryReported) return;
+    window.__quickvintDomCanaryReported = true;
     fetch(`${API_BASE}/api/dom-canary`, {
       method: "POST",
       headers: {
@@ -13392,6 +13419,15 @@
     if (!document.querySelector(".quickvint-tools")) return;
     window.__quickvintDomCanaryPassed = true;
     postDomCanary("passed", { injected: true });
+  }
+
+  function startDomCanaryWatchdog() {
+    if (!isDomCanaryEnabled()) return;
+    setTimeout(() => {
+      if (!window.__quickvintDomCanaryPassed) {
+        postDomCanary("failed", { reason: "injection_timeout" });
+      }
+    }, 45000);
   }
 
   function setNativeInputValue(input, value) {
@@ -13454,7 +13490,7 @@
       return;
     }
     if (!DOM_CANARY_CONFIG.email || !DOM_CANARY_CONFIG.password) return;
-    if (!/\/member\/signup\/select_type|\/member\/login|\/auth\//.test(location.pathname)) {
+    if (!isDomCanaryAuthPath()) {
       return;
     }
     if (window.__quickvintDomCanaryLoginAttempted) return;
@@ -13473,9 +13509,7 @@
             } else {
               setTimeout(() => {
                 if (
-                  /\/member\/signup\/select_type|\/member\/login|\/auth\//.test(
-                    location.pathname,
-                  )
+                  isDomCanaryAuthPath()
                 ) {
                   postDomCanary("failed", {
                     reason: "auth_recovery_still_required",
@@ -13493,9 +13527,7 @@
           } else {
             setTimeout(() => {
               if (
-                /\/member\/signup\/select_type|\/member\/login|\/auth\//.test(
-                  location.pathname,
-                )
+                isDomCanaryAuthPath()
               ) {
                 postDomCanary("failed", {
                   reason: "auth_signup_still_required",
@@ -20274,6 +20306,7 @@
     maybeShowReleaseUpdate();
     bindPromptUploadFileCapture();
     bindLimitFollowupResumeListeners();
+    startDomCanaryWatchdog();
     maybeRecoverDomCanaryLogin();
     setTimeout(maybeRecoverDomCanaryLogin, 3000);
     setTimeout(maybeRecoverDomCanaryLogin, 10000);

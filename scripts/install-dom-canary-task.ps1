@@ -138,10 +138,14 @@ if (-not `$secret) {
   throw "DOM_CANARY_SECRET is missing from `$envFile"
 }
 
+`$runId = [DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds().ToString()
+`$separator = if (`$vintedUrl.Contains("?")) { "&" } else { "?" }
+`$canaryUrl = "`$vintedUrl`$separator" + "autolister_canary=`$runId"
 `$mode = if (`$account.mode) { `$account.mode } else { "login" }
 `$configJson = [pscustomobject]@{
   enabled = `$true
   secret = `$secret
+  runId = `$runId
   email = `$account.email
   password = `$account.password
   username = `$account.username
@@ -159,7 +163,7 @@ Start-Process -FilePath `$chromePath -ArgumentList @(
   "--disable-extensions-except=`$extensionPath",
   "--load-extension=`$extensionPath",
   "--new-window",
-  `$vintedUrl
+  `$canaryUrl
 )
 exit 0
 "@
@@ -175,6 +179,8 @@ $trigger = New-ScheduledTaskTrigger `
   -At $firstRun `
   -RepetitionInterval (New-TimeSpan -Hours $IntervalHours)
 $settings = New-ScheduledTaskSettingsSet `
+  -AllowStartIfOnBatteries `
+  -DontStopIfGoingOnBatteries `
   -StartWhenAvailable `
   -WakeToRun `
   -ExecutionTimeLimit (New-TimeSpan -Minutes 20)

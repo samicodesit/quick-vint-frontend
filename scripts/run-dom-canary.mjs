@@ -83,7 +83,7 @@ function pathnameFromUrl(value) {
 
 export function classifyCanaryFailure(currentUrl = "") {
   const pathname = pathnameFromUrl(currentUrl);
-  return /\/member\/(?:signup|login)|\/auth\//.test(pathname)
+  return /\/member\/(?:signup|register|login)|\/auth\//.test(pathname)
     ? { reason: "auth_required" }
     : { reason: "selector_timeout" };
 }

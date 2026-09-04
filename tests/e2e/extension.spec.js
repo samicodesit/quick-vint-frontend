@@ -294,7 +294,11 @@ async function openContentHarness(page, capacityResponse = null, options = {}) {
   });
   if (options.pageUrl) {
     await page.route(options.pageUrl, (route) =>
-      route.fulfill({ status: 200, contentType: "text/html", body: listingFixture }),
+      route.fulfill({
+        status: 200,
+        contentType: "text/html",
+        body: options.pageHtml || listingFixture,
+      }),
     );
     await page.goto(options.pageUrl, { waitUntil: "domcontentloaded" });
   } else {
@@ -400,6 +404,7 @@ async function openContentHarness(page, capacityResponse = null, options = {}) {
   await page.addScriptTag({ path: languageDefaultsPath });
   await page.addScriptTag({ path: qrCodePath });
   await page.addScriptTag({ path: contentScriptPath });
+  if (options.skipToolExpectation) return;
   if (options.expectAuthenticated === false) {
     await expect(page.locator("#quickvint-signin-btn")).toBeVisible();
     await expect(page.locator("#quickvint-gen-btn")).not.toBeVisible();
@@ -1066,9 +1071,14 @@ test.describe("AutoLister extension smoke flows", () => {
       await route.fulfill({ status: 202, contentType: "application/json", body: "{}" });
     });
     await openContentHarness(page, null, {
-      pageUrl: "https://www.vinted.nl/items/new",
+      pageUrl:
+        "https://www.vinted.nl/items/new?autolister_canary=current-run",
       fieldTitleNodes: true,
-      domCanaryConfig: { enabled: true, secret: "test-secret" },
+      domCanaryConfig: {
+        enabled: true,
+        secret: "test-secret",
+        runId: "current-run",
+      },
     });
 
     await expect.poll(() => payloads.length).toBe(1);
@@ -1091,6 +1101,56 @@ test.describe("AutoLister extension smoke flows", () => {
     });
   });
 
+  test("daily DOM canary ignores tabs restored from an older run", async ({ page }) => {
+    const payloads = [];
+    await page.route("https://autolister.app/api/dom-canary", async (route) => {
+      payloads.push(route.request().postDataJSON());
+      await route.fulfill({ status: 202, contentType: "application/json", body: "{}" });
+    });
+    await openContentHarness(page, null, {
+      pageUrl: "https://www.vinted.nl/items/new?autolister_canary=old-run",
+      fieldTitleNodes: true,
+      domCanaryConfig: {
+        enabled: true,
+        secret: "test-secret",
+        runId: "current-run",
+      },
+    });
+
+    await page.waitForTimeout(300);
+    expect(payloads).toHaveLength(0);
+  });
+
+  test("daily DOM canary signs back in from Vinted's register redirect", async ({ page }) => {
+    await page.clock.install();
+    const pageUrl =
+      "https://www.vinted.nl/member/register/select_type?ref_url=%2Fitems%2Fnew%3Fautolister_canary%3Dcurrent-run";
+    await openContentHarness(page, null, {
+      pageUrl,
+      pageHtml: `<!doctype html><html><body>
+        <button type="button" data-testid="auth-select-type--register-switch">Switch account</button>
+        <button type="button" data-testid="auth-select-type--login-email">Email</button>
+        <input name="email" />
+        <input name="password" type="password" />
+        <button type="button" onclick="window.__canaryLoginSubmitted = true">Log in</button>
+      </body></html>`,
+      domCanaryConfig: {
+        enabled: true,
+        secret: "test-secret",
+        runId: "current-run",
+        mode: "login",
+        email: "canary@example.com",
+        password: "secret",
+      },
+      skipToolExpectation: true,
+    });
+
+    await page.clock.fastForward(4_000);
+    await expect.poll(() => page.evaluate(() => window.__canaryLoginSubmitted)).toBe(true);
+    await expect(page.locator('input[name="email"]')).toHaveValue("canary@example.com");
+    await expect(page.locator('input[name="password"]')).toHaveValue("secret");
+  });
+
   test("daily DOM canary does not pass with missing language controls", async ({ page }) => {
     const payloads = [];
     await page.route("https://autolister.app/api/dom-canary", async (route) => {
@@ -1104,6 +1164,30 @@ test.describe("AutoLister extension smoke flows", () => {
 
     await page.waitForTimeout(300);
     expect(payloads).toHaveLength(0);
+  });
+
+  test("daily DOM canary reports a timeout with missing language controls", async ({ page }) => {
+    await page.clock.install();
+    const payloads = [];
+    await page.route("https://autolister.app/api/dom-canary", async (route) => {
+      payloads.push(route.request().postDataJSON());
+      await route.fulfill({ status: 202, contentType: "application/json", body: "{}" });
+    });
+    await openContentHarness(page, null, {
+      pageUrl: "https://www.vinted.nl/items/new",
+      domCanaryConfig: { enabled: true, secret: "test-secret" },
+    });
+
+    await page.clock.fastForward(45_000);
+    await expect.poll(() => payloads.length).toBe(1);
+    expect(payloads[0]).toMatchObject({
+      status: "failed",
+      path: "/items/new",
+      result: {
+        reason: "injection_timeout",
+        dom: { titleLanguage: false, descriptionLanguage: false },
+      },
+    });
   });
 
   async function setupReadyPhoneUploadWithDelayedThumbnails(
