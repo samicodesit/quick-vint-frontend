@@ -100,6 +100,8 @@ Get-CimInstance Win32_Process |
   Where-Object { `$_.Name -eq "chrome.exe" -and `$_.CommandLine -like "*`$profileDir*" } |
   ForEach-Object { Stop-Process -Id `$_.ProcessId -Force -ErrorAction SilentlyContinue }
 Start-Sleep -Seconds 1
+`$sessionPath = Join-Path (Join-Path `$profileDir `$profileDirectory) "Sessions"
+Remove-Item -LiteralPath `$sessionPath -Recurse -Force -ErrorAction SilentlyContinue
 
 if (`$seedProfile -and `$seedUserDataDir -and (Test-Path -LiteralPath `$seedUserDataDir)) {
   `$seedProfilePath = Join-Path `$seedUserDataDir `$seedProfileDirectory
