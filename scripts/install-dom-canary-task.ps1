@@ -3,8 +3,8 @@ param(
   [string]$RepoPath = "\\wsl.localhost\Ubuntu\home\mests\projects\quick-vint",
   [string]$EnvFile = "\\wsl.localhost\Ubuntu\home\mests\projects\autolister\.env.local",
   [string]$CanaryRoot = "$env:LOCALAPPDATA\AutoListerDomCanary",
-  [string]$ProfileDir = "$env:LOCALAPPDATA\Google\Chrome\User Data",
-  [string]$ProfileDirectory = "Profile 4",
+  [string]$ProfileDir = "$env:LOCALAPPDATA\AutoListerDomCanary\Chrome",
+  [string]$ProfileDirectory = "Default",
   [string]$SeedUserDataDir = "$env:LOCALAPPDATA\Google\Chrome\User Data",
   [string]$SeedProfileDirectory = "Default",
   [switch]$SeedProfile,
@@ -156,17 +156,25 @@ if (-not `$secret) {
 `$config = "globalThis.QUICKVINT_DOM_CANARY = `$configJson;"
 [System.IO.File]::WriteAllText((Join-Path `$extensionPath "canary-config.js"), `$config, [System.Text.UTF8Encoding]::new(`$false))
 
+`$userDataArg = '--user-data-dir="' + `$profileDir + '"'
+`$profileArg = '--profile-directory="' + `$profileDirectory + '"'
+`$disableExtensionsArg = '--disable-extensions-except="' + `$extensionPath + '"'
+`$loadExtensionArg = '--load-extension="' + `$extensionPath + '"'
 Start-Process -FilePath `$chromePath -ArgumentList @(
-  "--user-data-dir=`$profileDir",
-  "--profile-directory=`$profileDirectory",
+  `$userDataArg,
+  `$profileArg,
   "--no-first-run",
   "--no-default-browser-check",
   "--disable-search-engine-choice-screen",
-  "--disable-extensions-except=`$extensionPath",
-  "--load-extension=`$extensionPath",
+  `$disableExtensionsArg,
+  `$loadExtensionArg,
   "--new-window",
   `$canaryUrl
 )
+Start-Sleep -Seconds 60
+Get-CimInstance Win32_Process |
+  Where-Object { `$_.Name -eq "chrome.exe" -and `$_.CommandLine -like "*`$profileDir*" } |
+  ForEach-Object { Stop-Process -Id `$_.ProcessId -Force -ErrorAction SilentlyContinue }
 exit 0
 "@
 

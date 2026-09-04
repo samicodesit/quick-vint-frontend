@@ -35,12 +35,12 @@ Windows Scheduled Task: `AutoLister DOM Canary`, scheduled for 16:30
 Europe/Amsterdam. Its generated runner:
 
 1. uses Chrome for Testing;
-2. uses Google Chrome User Data `Profile 4`, which contains the working Vinted session;
+2. uses its own clean canary profile and the saved canary account;
 3. copies the configured frontend checkout into its canary extension directory;
 4. opens the real Vinted `/items/new` page headed;
 5. lets the extension verify title, description, photo input, AutoLister tools,
    Generate, Sign In, Phone, and both language controls;
-6. posts the result to `/api/dom-canary`.
+6. posts one result to `/api/dom-canary`, then closes the canary browser.
 
 The task's `LastTaskResult = 0` only proves the runner launched. The authoritative
 pass/fail and DOM details are the production `/api/dom-canary` `log-detail` body.
@@ -81,7 +81,7 @@ The user can authorize this by saying `Run a fresh real Vinted canary`. Then run
 powershell.exe -NoProfile -Command "Start-ScheduledTask -TaskName 'AutoLister DOM Canary'"
 ```
 
-This opens the same visible Chrome-for-Testing/Profile-4 flow used by the daily
+This opens the same visible Chrome-for-Testing flow used by the daily
 task. Do not substitute another browser or profile. Record the start time, wait
 for a newer `/api/dom-canary` row, fetch its `log-detail`, and apply every pass
 criterion above. `LastTaskResult` is not the verdict.
