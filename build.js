@@ -17,6 +17,7 @@ const INCLUDE_LIST = [
     'language-defaults.js',
     'content.js',
     'background.js',
+    'ops-bridge.js',
     'popup.html',
     'popup.js',
     'callback.html',

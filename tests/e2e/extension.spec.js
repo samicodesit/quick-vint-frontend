@@ -2686,6 +2686,7 @@ test.describe("AutoLister extension smoke flows", () => {
         "canary-config.js",
         "language-defaults.js",
         "lib/qrcode.min.js",
+        "ops-bridge.js",
         "content.js",
       ]);
       expect(manifest.host_permissions).toContain("https://autolister.app/*");

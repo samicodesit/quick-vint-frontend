@@ -4139,6 +4139,15 @@
   });
 
   chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+    if (message?.type === "OPS_FILL_LISTING") {
+      const bridge = globalThis.OpsBridge;
+      if (!bridge?.validateMessage(message.request) || !bridge.validatePacket(message.packet, message.request)) {
+        sendResponse({ ok: false, state: "prepared", reason: "Invalid listing packet." });
+        return false;
+      }
+      sendResponse(bridge.fillListing(message.packet, document, window.location.pathname));
+      return false;
+    }
     if (message?.type === "BATCH_PING") {
       sendResponse({ ok: Boolean(document.querySelector(SELECTORS.fileInput)) });
       return false;

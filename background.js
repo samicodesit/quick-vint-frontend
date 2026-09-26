@@ -1,5 +1,6 @@
 // --- IMPORTS & INITIALIZATION ---
 importScripts("lib/supabase.js");
+importScripts("ops-bridge.js");
 
 const ANALYTICS_CLIENT_ID_KEY = "analyticsClientId";
 const ACCOUNT_EMAIL_STORAGE_KEY = "accountEmail";
@@ -1490,6 +1491,58 @@ function isAllowedAuthHandoffSender(sender) {
   return false;
 }
 
+function isOpsAppSender(sender) {
+  try {
+    const url = new URL(sender?.url || "");
+    return url.origin === "https://autolister.app" && /^\/app(?:\/|$)/.test(url.pathname);
+  } catch {
+    return false;
+  }
+}
+
+async function getOpsIdentity() {
+  const session = await ensureValidToken();
+  if (!session?.access_token) return null;
+  const { data, error } = await createAuthenticatedClient(session.access_token).auth.getUser();
+  if (error || !data?.user?.id) return null;
+  return { userId: data.user.id, token: session.access_token };
+}
+
+async function callOpsHandoff(identity, kind, name, workspaceId, payload, requestId) {
+  const response = await fetch(`${API_BASE}/api/ops`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${identity.token}`, "Content-Type": "application/json" },
+    body: JSON.stringify({ kind, name, workspaceId, payload, ...(kind === "command" ? { meta: { idempotencyKey: requestId, expectedVersion: null } } : {}) }),
+  });
+  const result = await response.json();
+  if (!response.ok || !result?.ok) throw new Error(result?.error?.message || "Listing handoff is unavailable.");
+  return result.data;
+}
+
+async function handleOpsPrepare(message) {
+  const identity = await getOpsIdentity();
+  if (!identity) return { ok: false, state: "prepared", reason: "Sign into the extension with the same AutoLister account." };
+  const ids = { itemId: message.itemId, listingId: message.listingId, revisionId: message.revisionId };
+  const packet = await callOpsHandoff(identity, "query", "handoff.packet", message.workspaceId, ids);
+  if (!globalThis.OpsBridge.validatePacket(packet, message)) return { ok: false, state: "prepared", reason: "Approved listing identity changed." };
+  const tabs = await chrome.tabs.query({});
+  const editors = tabs.filter(tab => {
+    try {
+      const url = new URL(tab.url);
+      return url.protocol === "https:" && /(^|\.)vinted\.[a-z.]+$/i.test(url.hostname) && url.pathname === "/items/new";
+    } catch { return false; }
+  });
+  if (editors.length !== 1) return { ok: true, state: "prepared", workspaceId: message.workspaceId, ...ids, reason: "Open exactly one new Vinted listing form, or use the manual packet." };
+  const filled = await sendTabMessage(editors[0].id, { type: "OPS_FILL_LISTING", request: message, packet });
+  if (!filled?.ok || filled.state !== "filled") return { ok: true, state: "prepared", workspaceId: message.workspaceId, ...ids, reason: filled?.reason || "The form was not filled. Use the manual packet." };
+  try {
+    await callOpsHandoff(identity, "command", "handoff.ack", message.workspaceId, { ...ids, requestId: message.requestId, state: "filled", channel: "extension" }, message.requestId);
+  } catch (_error) {
+    return { ok: true, state: "filled", workspaceId: message.workspaceId, ...ids, reason: "The form was filled, but the acknowledgement needs retry. Review and publish in Vinted yourself." };
+  }
+  return { ok: true, state: "filled", workspaceId: message.workspaceId, ...ids, reason: filled.reason };
+}
+
 function buildPublicUserProfileResponse(supabaseSession, userProfile) {
   const user = supabaseSession?.user || null;
   return {
@@ -1688,6 +1741,19 @@ async function openAuthTab() {
 chrome.runtime.onMessageExternal.addListener((message, sender, sendResponse) => {
   if (!isAllowedExternalSender(sender)) {
     return false;
+  }
+
+  if (message?.type === "OPS_HELLO" || message?.type === "OPS_PREPARE_LISTING") {
+    if (!isOpsAppSender(sender) || !globalThis.OpsBridge?.validateMessage(message)) {
+      sendResponse({ ok: false, reason: "Invalid OS request." });
+      return false;
+    }
+    if (message.type === "OPS_HELLO") {
+      getOpsIdentity().then(identity => sendResponse(identity ? { ok: true, version: globalThis.OpsBridge.VERSION, userId: identity.userId } : { ok: false, reason: "Extension sign-in required." })).catch(() => sendResponse({ ok: false, reason: "Extension sign-in unavailable." }));
+      return true;
+    }
+    handleOpsPrepare(message).then(sendResponse).catch(error => sendResponse({ ok: false, state: "prepared", reason: error?.message || "Handoff unavailable." }));
+    return true;
   }
 
   if (message?.type === "PING") {

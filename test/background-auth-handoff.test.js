@@ -175,7 +175,11 @@ async function runBackgroundHandoff(
     URLSearchParams,
     URL,
     crypto: { randomUUID: () => "cid-test" },
-    importScripts() {
+    importScripts(script) {
+      if (script === "ops-bridge.js") {
+        vm.runInContext(readFileSync("ops-bridge.js", "utf8"), sandbox);
+        return;
+      }
       sandbox.supabase = {
         createClient: () => supabaseClient,
       };
@@ -214,6 +218,19 @@ async function runBackgroundHandoff(
     internalListener,
   };
 }
+
+test("OS extension hello is bound to the app path, origin and protocol", async () => {
+  const message = { type: "OPS_HELLO", version: 1, requestId: "c0000000-0000-4000-8000-000000000905" };
+  const session = { access_token: "token", expires_at: 2000000000, user: { id: "user-1" } };
+  const allowed = await runBackgroundHandoff(message, { origin: "https://autolister.app", url: "https://autolister.app/app/listings", tab: { id: 123 } }, { initialStorage: { supabaseSession: session } });
+  assert.deepEqual(JSON.parse(JSON.stringify(allowed.response)), { ok: true, version: 1, userId: "user-1" });
+  const wrongPath = await runBackgroundHandoff(message, { origin: "https://autolister.app", url: "https://autolister.app/pricing", tab: { id: 123 } });
+  assert.equal(wrongPath.response.ok, false);
+  const wrongOrigin = await runBackgroundHandoff(message, { origin: "https://evil.example", url: "https://evil.example/app", tab: { id: 123 } });
+  assert.equal(wrongOrigin.response, undefined);
+  const wrongVersion = await runBackgroundHandoff({ ...message, version: 2 }, { origin: "https://autolister.app", url: "https://autolister.app/app", tab: { id: 123 } });
+  assert.equal(wrongVersion.response.ok, false);
+});
 
 test("background opens onboarding only for fresh installs", async (t) => {
   await t.test("fresh install keeps the welcome page", async () => {
