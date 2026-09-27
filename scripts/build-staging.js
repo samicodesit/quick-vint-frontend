@@ -3,6 +3,7 @@
 // Build an unpacked test extension without changing tracked production files.
 const fs = require('node:fs');
 const path = require('node:path');
+const crypto = require('node:crypto');
 
 const root = path.resolve(__dirname, '..');
 const output = path.join(root, 'dist', 'staging-extension');
@@ -13,6 +14,10 @@ const files = [
 ];
 const productionApi = 'https://autolister.app';
 const productionSupabase = 'https://jqloiovdwjaornnfvmyu.supabase.co';
+// Separate public key, generated only for the unpacked staging build.
+// Chrome derives this build's stable ID from its SHA-256 hash.
+const stagingExtensionKey = 'MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAqCAfl1VGzcgLEw/PbpCdZWiAgWa4Q2FdYnMgLtWDjX94/dX2BNI9OhV0r34JAdcFQaiCCVEBmT1WshSAntiUTtMP4uxDreiNkuLHelXXKQSSF/+IIPLFnFNOc+Zkx7OWaBmdpotcyZ3YUH1s6Q4VJg3yiCCYop1gOkQ8efu+llOnU6b0ClsFyDbsxs1ktMAXgrySbAbuKj/quUamlwngH8nfoi1MOVFW8l5IMnyKkXowgbTg8os0vIp6E6gvKnz8L+le83VA9tscjyTEEbRl2YBEn/TGnmGf7RO7o7oaHlpalACWmxI6EDQz4Rv7qTYPjTNdQisQc7Q8bK3b6e8J7wIDAQAB';
+const stagingExtensionId = 'olpodlemebcdiklhjfemgdongmidnajb';
 
 function requiredUrl(name) {
   const value = process.env[name];
@@ -25,6 +30,9 @@ function requiredUrl(name) {
 }
 
 function build() {
+  const idFromKey = [...crypto.createHash('sha256').update(Buffer.from(stagingExtensionKey, 'base64')).digest('hex').slice(0, 32)]
+    .map((value) => String.fromCharCode(97 + parseInt(value, 16))).join('');
+  if (idFromKey !== stagingExtensionId) throw new Error('Staging extension key and ID disagree');
   const api = requiredUrl('STAGING_API_URL');
   const supabase = requiredUrl('STAGING_SUPABASE_URL');
   const anonKey = process.env.STAGING_SUPABASE_ANON_KEY;
@@ -54,7 +62,7 @@ function build() {
 
   const manifestPath = path.join(output, 'manifest.json');
   const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
-  delete manifest.key; // A separate unpacked extension identity protects the installed release.
+  manifest.key = stagingExtensionKey; // Stable identity separate from the installed release.
   manifest.name = 'AutoLister Staging';
   manifest.description = 'Private AutoLister staging test build';
   manifest.host_permissions = manifest.host_permissions.map((entry) =>
@@ -68,7 +76,8 @@ function build() {
     if (source.includes(productionSupabase)) throw new Error(`Production Supabase reference remains in ${file}`);
   }
   console.log(`Staging extension ready: ${output}`);
-  console.log('Load this directory unpacked, then allow its exact callback URL in staging Supabase Auth.');
+  console.log(`Staging extension ID: ${stagingExtensionId}`);
+  console.log('Load this directory unpacked, then confirm its ID matches and allow its exact callback URL in staging Supabase Auth.');
 }
 
 if (require.main === module) build();
