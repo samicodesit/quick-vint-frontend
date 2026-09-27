@@ -85,9 +85,12 @@ function build() {
   manifest.key = stagingExtensionKey; // Stable identity separate from the installed release.
   manifest.name = 'AutoLister Staging';
   manifest.description = 'Private AutoLister staging test build';
-  manifest.host_permissions = manifest.host_permissions.map((entry) =>
-    entry === `${productionApi}/*` ? `${api}/*` : entry,
-  );
+  manifest.host_permissions = [
+    ...manifest.host_permissions.map((entry) =>
+      entry === `${productionApi}/*` ? `${api}/*` : entry,
+    ),
+    `${supabase}/*`,
+  ];
   manifest.externally_connectable.matches = [`${api}/*`];
   fs.writeFileSync(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
 
