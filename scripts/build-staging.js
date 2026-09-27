@@ -57,6 +57,26 @@ function build() {
       if (!pattern.test(source)) throw new Error(`Missing Supabase anon key in ${file}`);
       source = source.replace(pattern, (_, prefix) => `${prefix}${JSON.stringify(anonKey)}`);
     }
+    if (file === 'popup.js') {
+      const legacyRequest = `const res = await fetch(\`\${API_BASE}/api/auth/magic-link\`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email }),
+      });`;
+      if (!source.includes(legacyRequest)) throw new Error('Missing extension magic-link request');
+      // Staging uses Supabase's own email delivery. The production popup keeps its
+      // existing Resend-backed endpoint, which is intentionally absent in staging.
+      const stagingRequest = `const { error: otpError } = await supabaseClient.auth.signInWithOtp({
+        email,
+        options: { emailRedirectTo: \`chrome-extension://\${chrome.runtime.id}/callback.html\` },
+      });
+      const res = {
+        ok: !otpError,
+        status: otpError?.status || 200,
+        json: async () => ({ error: otpError?.message }),
+      };`;
+      source = source.replace(legacyRequest, stagingRequest);
+    }
     fs.writeFileSync(target, source);
   }
 
