@@ -14502,11 +14502,13 @@
     return modal;
   }
 
-  async function completePhoneUploadSession(sessionId, expectedCount) {
+  let phoneMetadataCooldown = { sessionId: null, until: 0 };
+  async function completePhoneUploadSession(sessionId, expectedCount, active) {
     if (!sessionId || expectedCount <= 0) return false;
-    let response = null;
-    for (let attempt = 0; attempt < 8; attempt += 1) {
-      response = await sendMessage({
+    if (phoneMetadataCooldown.sessionId === sessionId && Date.now() < phoneMetadataCooldown.until) {
+      throw new Error("Please wait a moment before retrying confirmation.");
+    }
+    const message = {
         type: "PROXY_FETCH",
         url: `${PHONE_UPLOAD_API}?action=complete&v=2&sessionId=${sessionId}&expectedCount=${expectedCount}`,
         options: {
@@ -14517,19 +14519,22 @@
             orders: Array.from({ length: expectedCount }, (_, order) => order),
           }),
         },
+      };
+    try {
+      await globalThis.AutoListerPhoneRecovery.run({
+        settling: true,
+        active,
+        request: ({ timeoutMs }) => sendMessage({ ...message, timeoutMs }),
+        onRetry: () => showToast("Connection interrupted. Retrying…", "info"),
+        onRecovered: ({ attempts }) => trackGrowthEvent("phone_upload_metadata_recovered", { stage: "phone_complete", attempts }),
       });
-      const settling =
-        response?.status === 202 ||
-        response?.data?.settling === true;
-      if (response?.ok && response?.data?.complete !== false) break;
-      if (!settling || attempt === 7) {
-        throw new Error(
-          response?.data?.error || "Could not finish the phone upload.",
-        );
-      }
-      await new Promise((resolve) => setTimeout(resolve, 900));
+    } catch (error) {
+      phoneMetadataCooldown = { sessionId, until: error.retryAt || 0 };
+      if (error.code !== "PHONE_OPERATION_CANCELLED" && ![400, 401, 403, 409, 410].includes(error.status)) trackGrowthEvent("phone_upload_transfer_error", {
+        stage: "phone_complete", errorCode: error.code, statusCode: error.status, attempts: error.attempts, retryable: error.retryable,
+      });
+      throw error;
     }
-
     return true;
   }
 
@@ -14539,7 +14544,7 @@
     if (!state?.sessionId || expectedCount <= 0) return false;
     if (state.complete === true) return true;
 
-    await completePhoneUploadSession(state.sessionId, expectedCount);
+    await completePhoneUploadSession(state.sessionId, expectedCount, () => lastPhoneUploadState === state);
 
     state.complete = true;
     state.updatedAt = Date.now();
@@ -17364,10 +17369,12 @@
       return;
     }
     if (batchInputSource !== "computer") {
+      const confirmationSessionId = batchUploadSessionId;
       try {
         await completePhoneUploadSession(
           batchUploadSessionId,
           batchExpectedCount,
+          () => batchUploadSessionId === confirmationSessionId,
         );
       } catch (error) {
         restoreStartButton();
@@ -17941,8 +17948,25 @@
 
     return new Promise((resolve, reject) => {
       const startedAt = Date.now();
-      let matchedAt = null;
+      const pollMs = 100;
+      let lastCheckedAt = null;
+      let observedMs = 0;
+      let matchedMs = 0;
+      let previouslyMatched = false;
       const check = () => {
+        const now = Date.now();
+        // A hidden tab or suspended callback is not evidence of a failed write.
+        // Count observed foreground time, not time Chrome stopped scheduling us.
+        if (document.visibilityState === "hidden") {
+          lastCheckedAt = null;
+          matchedMs = 0;
+          previouslyMatched = false;
+          setTimeout(check, pollMs);
+          return;
+        }
+        const intervalMs = lastCheckedAt === null ? 0 : Math.min(now - lastCheckedAt, pollMs);
+        lastCheckedAt = now;
+        observedMs += intervalMs;
         const titleInput = document.querySelector(SELECTORS.title);
         const descInput = document.querySelector(SELECTORS.description);
         const titleMatches =
@@ -17952,24 +17976,35 @@
           normalize(descInput?.value).includes(expectedDescriptionText);
 
         if (titleMatches && descriptionMatches) {
-          if (!matchedAt) matchedAt = Date.now();
-          if (Date.now() - matchedAt >= stableForMs) {
+          matchedMs = previouslyMatched ? matchedMs + intervalMs : 0;
+          previouslyMatched = true;
+          if (matchedMs >= stableForMs) {
             resolve();
             return;
           }
         } else {
-          matchedAt = null;
+          matchedMs = 0;
+          previouslyMatched = false;
+          if (observedMs >= timeoutMs) {
+            const error = new Error("Generated listing details did not remain in Vinted's fields.");
+            error.fieldConfirmation = {
+              titleFieldPresent: Boolean(titleInput),
+              descriptionFieldPresent: Boolean(descInput),
+              titleMatches, descriptionMatches,
+              expectedTitleLength: expectedTitleText.length,
+              actualTitleLength: normalize(titleInput?.value).length,
+              expectedDescriptionLength: expectedDescriptionText.length,
+              actualDescriptionLength: normalize(descInput?.value).length,
+              documentVisible: document.visibilityState !== "hidden",
+              elapsedMs: now - startedAt,
+            };
+            reject(error);
+            return;
+          }
         }
-
-        if (Date.now() - startedAt > timeoutMs) {
-          reject(new Error("Generated listing details were not visible in time."));
-          return;
-        }
-
-        requestAnimationFrame(check);
+        setTimeout(check, pollMs);
       };
-
-      requestAnimationFrame(check);
+      check();
     });
   }
 

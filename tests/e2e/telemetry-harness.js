@@ -28,6 +28,7 @@ async function installTelemetryHarness(page, extensionPath) {
     };
   });
   for (const name of ["registry", "core", "client", "background", "flow"]) await page.addScriptTag({ path: path.join(extensionPath, `lib/telemetry-${name}.js`) });
+  await page.addScriptTag({ path: path.join(extensionPath, "lib/phone-upload-recovery.js") });
   await page.evaluate(() => { chrome.runtime.onMessage = window.__telemetryOriginalOnMessage; delete window.__telemetryOriginalOnMessage; });
 }
 module.exports = { installTelemetryHarness };

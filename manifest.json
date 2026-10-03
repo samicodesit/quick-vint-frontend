@@ -96,6 +96,7 @@
         "lib/telemetry-registry.js",
         "lib/telemetry-client.js",
         "lib/telemetry-flow.js",
+        "lib/phone-upload-recovery.js",
         "content.js"
       ],
       "run_at": "document_idle"

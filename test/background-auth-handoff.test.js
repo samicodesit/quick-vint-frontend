@@ -174,6 +174,7 @@ async function runBackgroundHandoff(
     clearTimeout() {},
     URLSearchParams,
     URL,
+    AbortController,
     crypto: { randomUUID: () => "cid-test" },
     importScripts() {
       sandbox.supabase = {
@@ -214,6 +215,22 @@ async function runBackgroundHandoff(
     internalListener,
   };
 }
+
+test("phone metadata proxy exposes Retry-After, scopes its timeout and never retries", async () => {
+  const requests = [];
+  const harness = await runBackgroundHandoff({ type: "PING" }, undefined, {
+    runScheduledTimers: false,
+    fetch: async (url, options) => {
+      requests.push({ url, options });
+      return { ok: false, status: 503, headers: new Headers({ "content-type": "application/json", "retry-after": "60" }), json: async () => ({ retryable: true }) };
+    },
+  });
+  const proxy = (url) => new Promise(resolve => harness.internalListener({ type: "PROXY_FETCH", url, options: { method: "POST" }, timeoutMs: 10000 }, {}, resolve));
+  const metadata = await proxy("https://autolister.app/api/phone-upload?action=complete&v=2");
+  assert.equal(metadata.retryAfter, "60"); assert.equal(requests.length, 1); assert.ok(requests[0].options.signal);
+  const ordinary = await proxy("https://autolister.app/api/generate");
+  assert.equal(ordinary.retryAfter, undefined); assert.equal(requests.length, 2); assert.equal(requests[1].options.signal, undefined);
+});
 
 test("background opens onboarding only for fresh installs", async (t) => {
   await t.test("fresh install keeps the welcome page", async () => {

@@ -15,6 +15,7 @@ function usage() {
 Usage:
   node scripts/chrome-web-store-release.js --zip dist/autolister-ai-vX.Y.Z.zip [--mode upload|upload-and-submit]
   node scripts/chrome-web-store-release.js --mode cancel-submission
+  node scripts/chrome-web-store-release.js --mode status
 
 Required credentials:
   CHROME_WEB_STORE_SERVICE_ACCOUNT_JSON=<raw JSON or base64 JSON>
@@ -51,11 +52,11 @@ function parseArgs(argv) {
     }
   }
 
-  if (!["upload", "upload-and-submit", "cancel-submission"].includes(args.mode)) {
-    throw new Error('--mode must be "upload", "upload-and-submit", or "cancel-submission"');
+  if (!["upload", "upload-and-submit", "cancel-submission", "status"].includes(args.mode)) {
+    throw new Error('--mode must be "upload", "upload-and-submit", "cancel-submission", or "status"');
   }
 
-  if (!args.zipPath && args.mode !== "cancel-submission") {
+  if (!args.zipPath && !["cancel-submission", "status"].includes(args.mode)) {
     throw new Error("--zip is required");
   }
 
@@ -220,6 +221,11 @@ async function main() {
   console.log(`Service account: ${credentials.client_email}`);
 
   const token = await fetchAccessToken(credentials);
+
+  if (config.mode === "status") {
+    console.log(formatPayload(await chromeWebStoreFetch(`${API_ROOT}/v2/${itemName}:fetchStatus`, { method: "GET", token })));
+    return;
+  }
 
   if (config.mode === "cancel-submission") {
     const cancelUrl = `${API_ROOT}/v2/${itemName}:cancelSubmission`;

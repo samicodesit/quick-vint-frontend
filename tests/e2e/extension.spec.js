@@ -9,6 +9,118 @@ const extensionPath = process.env.AUTOLISTER_EXTENSION_PATH
 const languageDefaultsPath = path.join(extensionPath, "language-defaults.js");
 const qrCodePath = path.join(extensionPath, "lib/qrcode.min.js");
 const contentScriptPath = path.join(extensionPath, "content.js");
+
+test("confirms applied fields after animation frames resume beyond timeout", async ({ page }) => {
+  await page.route("https://autolister.app/api/events/track", (route) => route.fulfill({ status: 204, body: "" }));
+  await page.route("https://autolister.app/api/generate", (route) => route.fulfill({
+    status: 200, contentType: "application/json",
+    body: JSON.stringify({ title: "Confirmed sweater", description: "Generated sweater description." }),
+  }));
+  await openContentHarness(page);
+  await page.evaluate(() => {
+    window.__fieldEvents = [];
+    const track = AutoListerTelemetry.track.bind(AutoListerTelemetry);
+    AutoListerTelemetry.track = (event, context) => {
+      window.__fieldEvents.push({ event, context });
+      return track(event, context);
+    };
+    const frame = window.requestAnimationFrame.bind(window);
+    const confirm = AutoListerFlowEvidence.confirmFields;
+    AutoListerFlowEvidence.confirmFields = async (options) => {
+      // Chrome suspends animation frames in hidden tabs. Resume the first
+      // observation after the original wall-clock deadline has passed.
+      window.requestAnimationFrame = (callback) => setTimeout(() => callback(performance.now()), 3000);
+      try { return await confirm(options); }
+      finally { window.requestAnimationFrame = frame; }
+    };
+  });
+  await page.locator("#quickvint-gen-btn").click();
+  await expect(page.locator('[data-testid="title--input"]')).toHaveValue("Confirmed sweater");
+  await expect(page.locator('[data-testid="description--input"]')).toHaveValue("Generated sweater description.");
+  await expect.poll(() => page.evaluate(() => window.__fieldEvents.map(item => item.event)), { timeout: 10000 }).toContain("fields_applied");
+  expect(await page.evaluate(() => window.__fieldEvents.map(item => item.event))).not.toContain("fields_apply_failed");
+});
+
+test("reports which generated field the host reverted without listing text", async ({ page }) => {
+  await page.route("https://autolister.app/api/events/track", (route) => route.fulfill({ status: 204, body: "" }));
+  await page.route("https://autolister.app/api/generate", (route) => route.fulfill({
+    status: 200, contentType: "application/json",
+    body: JSON.stringify({ title: "Confirmed sweater", description: "Generated sweater description." }),
+  }));
+  await openContentHarness(page);
+  await page.evaluate(() => {
+    window.__fieldEvents = [];
+    const track = AutoListerTelemetry.track.bind(AutoListerTelemetry);
+    AutoListerTelemetry.track = (event, context) => {
+      window.__fieldEvents.push({ event, context });
+      return track(event, context);
+    };
+    document.querySelector('[data-testid="description--input"]').addEventListener("input", () => {
+      setTimeout(() => { document.querySelector('[data-testid="description--input"]').value = ""; }, 50);
+    });
+  });
+  await page.locator("#quickvint-gen-btn").click();
+  await expect.poll(() => page.evaluate(() => window.__fieldEvents.find(item => item.event === "fields_apply_failed"))).toBeTruthy();
+  const failure = await page.evaluate(() => window.__fieldEvents.find(item => item.event === "fields_apply_failed"));
+  expect(failure.context).toMatchObject({
+    titleFieldPresent: true, descriptionFieldPresent: true,
+    titleMatches: true, descriptionMatches: false,
+    expectedTitleLength: 17, actualTitleLength: 17,
+    expectedDescriptionLength: 30, actualDescriptionLength: 0,
+    documentVisible: true,
+  });
+  expect(JSON.stringify(failure.context)).not.toContain("Generated sweater description.");
+  expect(await page.evaluate(() => window.__fieldEvents.map(item => item.event))).not.toContain("fields_applied");
+});
+
+test("does not fail field confirmation while the listing tab is hidden", async ({ page }) => {
+  await page.route("https://autolister.app/api/events/track", (route) => route.fulfill({ status: 204, body: "" }));
+  await page.route("https://autolister.app/api/generate", (route) => route.fulfill({
+    status: 200, contentType: "application/json",
+    body: JSON.stringify({ title: "Confirmed sweater", description: "Generated sweater description." }),
+  }));
+  await openContentHarness(page);
+  await page.evaluate(() => {
+    window.__fieldEvents = [];
+    const track = AutoListerTelemetry.track.bind(AutoListerTelemetry);
+    AutoListerTelemetry.track = (event, context) => {
+      window.__fieldEvents.push({ event, context });
+      return track(event, context);
+    };
+    window.__listingVisibility = "hidden";
+    Object.defineProperty(document, "visibilityState", { configurable: true, get: () => window.__listingVisibility });
+  });
+  await page.locator("#quickvint-gen-btn").click();
+  await expect(page.locator('[data-testid="title--input"]')).toHaveValue("Confirmed sweater");
+  await page.waitForTimeout(3000);
+  expect(await page.evaluate(() => window.__fieldEvents.map(item => item.event))).not.toContain("fields_apply_failed");
+  expect(await page.evaluate(() => window.__fieldEvents.map(item => item.event))).not.toContain("fields_applied");
+  await page.evaluate(() => { window.__listingVisibility = "visible"; });
+  await expect.poll(() => page.evaluate(() => window.__fieldEvents.map(item => item.event))).toContain("fields_applied");
+});
+
+test("keeps seller edits during field confirmation without a failure alert", async ({ page }) => {
+  await page.route("https://autolister.app/api/events/track", (route) => route.fulfill({ status: 204, body: "" }));
+  await page.route("https://autolister.app/api/generate", (route) => route.fulfill({
+    status: 200, contentType: "application/json",
+    body: JSON.stringify({ title: "Confirmed sweater", description: "Generated sweater description." }),
+  }));
+  await openContentHarness(page);
+  await page.evaluate(() => {
+    window.__fieldEvents = [];
+    const track = AutoListerTelemetry.track.bind(AutoListerTelemetry);
+    AutoListerTelemetry.track = (event, context) => {
+      window.__fieldEvents.push({ event, context });
+      return track(event, context);
+    };
+  });
+  await page.locator("#quickvint-gen-btn").click();
+  await expect(page.locator('[data-testid="title--input"]')).toHaveValue("Confirmed sweater");
+  await page.locator('[data-testid="description--input"]').fill("Seller's own description");
+  await expect.poll(() => page.evaluate(() => window.__fieldEvents.find(item => item.event === "listing_review" && item.context.reason === "user_edited_during_confirmation"))).toBeTruthy();
+  await expect(page.locator('[data-testid="description--input"]')).toHaveValue("Seller's own description");
+  expect(await page.evaluate(() => window.__fieldEvents.map(item => item.event))).not.toContain("fields_apply_failed");
+});
 const tinyPngDataUrl =
   "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII=";
 const listingFixture = fs.readFileSync(
@@ -2694,6 +2806,7 @@ test.describe("AutoLister extension smoke flows", () => {
         "lib/telemetry-registry.js",
         "lib/telemetry-client.js",
         "lib/telemetry-flow.js",
+        "lib/phone-upload-recovery.js",
         "content.js",
       ]);
       expect(manifest.host_permissions).toContain("https://autolister.app/*");

@@ -1867,8 +1867,21 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       }
 
       case "PROXY_FETCH":
+        // Only phone metadata opts into a deadline. This proxy never retries.
+        let metadataTimer;
+        let phoneMetadata = false;
         try {
-          const response = await fetch(message.url, message.options);
+          const url = new URL(message.url);
+          phoneMetadata = url.origin === API_BASE && url.pathname === "/api/phone-upload" &&
+            ["prepare", "complete"].includes(url.searchParams.get("action")) && message.options?.method === "POST";
+          let fetchOptions = message.options;
+          if (phoneMetadata && Number.isFinite(message.timeoutMs) && message.timeoutMs > 0) {
+            const controller = new AbortController();
+            metadataTimer = setTimeout(() => controller.abort(), Math.min(10000, message.timeoutMs));
+            fetchOptions = { ...fetchOptions, signal: controller.signal };
+          }
+          const response = await fetch(message.url, fetchOptions);
+          const metadataHeaders = phoneMetadata ? { retryAfter: response.headers.get("retry-after") } : {};
 
           if (!response.ok) {
             let data = null;
@@ -1885,6 +1898,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
               status: response.status,
               data,
               error: data?.error || `HTTP ${response.status}`,
+              ...metadataHeaders,
             });
             return;
           }
@@ -1919,10 +1933,12 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
           } else {
             data = await response.text();
           }
-          sendResponse({ ok: true, status: response.status, data });
+          sendResponse({ ok: true, status: response.status, data, ...metadataHeaders });
         } catch (err) {
           console.error("[Background] Fetch exception:", err);
-          sendResponse({ ok: false, error: err.toString() });
+          sendResponse({ ok: false, error: err.toString(), ...(phoneMetadata && err.name === "AbortError" ? { code: "PHONE_REQUEST_TIMEOUT", retryable: true } : {}) });
+        } finally {
+          if (metadataTimer) clearTimeout(metadataTimer);
         }
         break;
 
