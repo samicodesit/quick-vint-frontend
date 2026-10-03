@@ -5,6 +5,7 @@ const path = require("node:path");
 const extension = path.resolve(__dirname, "../..");
 
 test("a real MV3 queue survives browser shutdown and resumes without another account's credentials", async () => {
+  test.setTimeout(100_000);
   const profile = fs.mkdtempSync(path.join(os.tmpdir(), "autolister-telemetry-test-"));
   let context;
   async function launch() {
@@ -24,9 +25,8 @@ test("a real MV3 queue survives browser shutdown and resumes without another acc
     const queued = await worker.evaluate(async () => (await chrome.storage.local.get("autolisterTelemetryV2")).autolisterTelemetryV2.events);
     expect(queued).toHaveLength(1);
     const id = queued[0].event.id;
-    // Restart with B already persisted, so startup cannot legitimately retry A
-    // while this test resets retry timestamps. Test account isolation rather
-    // than racing direct fixture writes against the worker's startup flush.
+    // Restart with B already persisted. Keep the real retry deadline instead
+    // of racing fixture storage writes against the worker's queue transactions.
     await worker.evaluate(async () => {
       await chrome.storage.local.set({ supabaseSession: { user: { id: "account-b" }, access_token: "token-b" } });
       await AutoListerBackgroundTelemetry.flush();
@@ -40,11 +40,14 @@ test("a real MV3 queue survives browser shutdown and resumes without another acc
         __deliveries.push({ body, authorization: options.headers.Authorization });
         return { status: 200, headers: new Headers(), json: async () => ({ acknowledgedIds: body.events.map(event => event.id) }) };
       };
-      const state = (await chrome.storage.local.get("autolisterTelemetryV2")).autolisterTelemetryV2;
-      for (const entry of state.events) entry.nextAt = 0;
-      await chrome.storage.local.set({ autolisterTelemetryV2: state, supabaseSession: { user: { id: "account-b" }, access_token: "token-b" } });
       await AutoListerBackgroundTelemetry.flush();
     });
+    expect(await worker.evaluate(() => __deliveries.length)).toBe(0);
+    await expect.poll(() => worker.evaluate(async () => {
+      const state = (await chrome.storage.local.get("autolisterTelemetryV2")).autolisterTelemetryV2;
+      return state.events[0].nextAt <= Date.now();
+    }), { timeout: 70_000, intervals: [500, 1000] }).toBe(true);
+    await worker.evaluate(() => AutoListerBackgroundTelemetry.flush());
     expect(await worker.evaluate(() => __deliveries.length)).toBe(0);
     await worker.evaluate(async () => {
       await chrome.storage.local.set({ supabaseSession: { user: { id: "account-a" }, access_token: "token-a" } });
