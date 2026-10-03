@@ -1070,7 +1070,6 @@
     limits: "20 extra listings",
   };
   const SUPPORT_EMAIL = "support@autolister.app";
-  const ANALYTICS_CLIENT_ID_KEY = "analyticsClientId";
   const TAILORED_LIMITS_CONTACT_URL =
     `mailto:${SUPPORT_EMAIL}?subject=AutoLister%20AI%20tailored%20limits`;
   const ACCOUNT_REVIEW_CONTACT_URL =
@@ -1146,8 +1145,6 @@
   let trackedBatchRecoveryId = null;
   let listingToolsReadyTracked = false;
   let signedOutToolsReadyTracked = false;
-  let eventQueue = [];
-  let eventFlushTimer = null;
   let batchTabStatusTimer = null;
   let batchReviewPromptHandledThisPage = false;
   let emojiToggleSyncTimer = null;
@@ -1284,135 +1281,18 @@
     }
   }
 
-  function createAnalyticsClientId() {
-    if (crypto?.randomUUID) return crypto.randomUUID();
-    return `cid_${Date.now()}_${Math.random().toString(36).slice(2)}`;
-  }
-
-  function getClientAnalyticsContext() {
-    const userAgent = navigator.userAgent || "";
-    const isIos = /iPhone|iPad|iPod/i.test(userAgent);
-    const isOrion =
-      Boolean(window.KAGI) ||
-      /Orion/i.test(userAgent) ||
-      (isIos && typeof chrome !== "undefined" && Boolean(chrome.runtime?.id));
-    return {
-      clientBrowser: isOrion ? "orion" : "other",
-      clientPlatform: isIos
-        ? "ios"
-        : /Android/i.test(userAgent)
-          ? "android"
-          : "desktop",
-    };
-  }
-
-  async function getAnalyticsClientId() {
-    const data = await chrome.storage.local.get(ANALYTICS_CLIENT_ID_KEY);
-    if (data[ANALYTICS_CLIENT_ID_KEY]) {
-      return data[ANALYTICS_CLIENT_ID_KEY];
-    }
-    const analyticsClientId = createAnalyticsClientId();
-    await chrome.storage.local.set({ [ANALYTICS_CLIENT_ID_KEY]: analyticsClientId });
-    return analyticsClientId;
-  }
-
-  function buildEventPayload(event, context, userProfile, analyticsClientId) {
-    return {
-      event,
-      source: "extension_content",
-      page: `${window.location.origin}${window.location.pathname}`,
-      plan: userProfile?.subscription_tier || "free",
-      context: {
-        ...context,
-        ...getClientAnalyticsContext(),
-        analyticsClientId,
-      },
-      extensionVersion: chrome.runtime.getManifest().version,
-    };
-  }
-
-  async function flushGrowthEvents() {
-    if (eventFlushTimer) {
-      clearTimeout(eventFlushTimer);
-      eventFlushTimer = null;
-    }
-    if (!eventQueue.length) return;
-
-    const queuedEvents = eventQueue.splice(0, eventQueue.length);
-    try {
-      const analyticsClientId = await getAnalyticsClientId();
-      const { supabaseSession, userProfile } = await chrome.storage.local.get([
-        "supabaseSession",
-        "userProfile",
-      ]);
-      const headers = { "Content-Type": "application/json" };
-      if (supabaseSession?.access_token) {
-        headers.Authorization = `Bearer ${supabaseSession.access_token}`;
-      }
-
-      fetch(`${API_BASE}/api/events/track`, {
-        method: "POST",
-        headers,
-        keepalive: true,
-        body: JSON.stringify({
-          events: queuedEvents.map((item) =>
-            buildEventPayload(
-              item.event,
-              item.context,
-              userProfile,
-              analyticsClientId,
-            ),
-          ),
-        }),
-      }).catch(() => {});
-    } catch (err) {
-      // Analytics must never block listing creation.
-    }
-  }
-
   function trackGrowthEvent(event, context = {}) {
-    try {
-      eventQueue.push({ event, context });
+    void globalThis.AutoListerTelemetry?.track(event, context, "extension_content");
+  }
 
-      if (eventQueue.length >= 8) {
-        if (!eventFlushTimer) {
-          eventFlushTimer = setTimeout(flushGrowthEvents, 0);
-        }
-        return;
-      }
-
-      if (!eventFlushTimer) {
-        eventFlushTimer = setTimeout(flushGrowthEvents, 1200);
-      }
-    } catch (err) {
-      // Analytics must never block listing creation.
-    }
+  function flushGrowthEvents() {
+    return globalThis.AutoListerTelemetry?.flush();
   }
 
   async function sendImmediateGrowthEvent(event, context = {}) {
-    const analyticsClientId = await getAnalyticsClientId();
-    const { supabaseSession, userProfile } = await chrome.storage.local.get([
-      "supabaseSession",
-      "userProfile",
-    ]);
-    const headers = { "Content-Type": "application/json" };
-    if (supabaseSession?.access_token) {
-      headers.Authorization = `Bearer ${supabaseSession.access_token}`;
-    }
-
-    const response = await fetch(`${API_BASE}/api/events/track`, {
-      method: "POST",
-      headers,
-      body: JSON.stringify({
-        events: [
-          buildEventPayload(event, context, userProfile, analyticsClientId),
-        ],
-      }),
-    });
-
-    if (!response.ok) {
-      throw new Error("Report could not be sent.");
-    }
+    const result = await globalThis.AutoListerTelemetry?.track(event, context, "extension_content", true);
+    if (!result?.accepted) throw new Error("Report has not been received yet. Please try again.");
+    return result;
   }
 
   function escapeHtml(value) {
@@ -3228,6 +3108,8 @@
     const sessionId = upload.storageSessionId || generateSessionId();
     upload.storageSessionId = sessionId;
     upload.storageUploadError = null;
+    upload.telemetryOperationId ||= createGenerationAttemptId();
+    trackGrowthEvent("manual_upload_start", { operationId: upload.telemetryOperationId, sessionId, photoCount: registration.files.length });
 
     const currentUploadPromise = (async () => {
       const uploadedUrls = await mapWithConcurrency(
@@ -3255,14 +3137,14 @@
       });
 
       trackGrowthEvent("manual_upload_storage_ready", {
-        sessionId,
+        operationId: upload.telemetryOperationId, sessionId,
         uploadedCount: urls.filter(Boolean).length,
         expectedCount: registration.files.length,
       });
     })().catch((error) => {
       upload.storageUploadError = error?.message || String(error);
       trackGrowthEvent("manual_upload_storage_error", {
-        sessionId,
+        operationId: upload.telemetryOperationId, sessionId,
         message: upload.storageUploadError,
         expectedCount: registration.files.length,
         order: Number.isFinite(Number(error?.uploadOrder))
@@ -18509,6 +18391,8 @@
           renderListingReviewSuggestions(originals, output, route);
           throw new Error("Vinted did not keep the generated text. Review it before continuing.");
         }
+        trackGrowthEvent("fields_applied", { mode: "wardrobe_rewrite" });
+        trackGrowthEvent("listing_review", { lastConfirmedStage: "fields_applied", mode: "wardrobe_rewrite" });
         renderWardrobeReplaceUndo(originals, output, route);
         showWardrobeRewriteStatus("New title and description applied. Review before saving.", "success");
       } else {
@@ -19079,6 +18963,16 @@
       ) {
         throw new Error("Generated listing response was incomplete.");
       }
+      trackGrowthEvent("generate_success", {
+        generationAttemptId,
+        mode,
+        photoCount: imageUrls.length,
+        titleLanguageCode,
+        descriptionLanguageCode,
+        useEmojis: effectiveUseEmojis,
+        emojiRetry: Boolean(emojiRetry),
+        hasMeasurementAdvice: Boolean(measurementAdvice && measurementAdvice.trim()),
+      });
       if (requestImageMetadata.some(isCapturedStoragePayload)) {
         clearCapturedPromptUploadGenerationUrls("generate_success");
       }
@@ -19092,6 +18986,7 @@
       const titleInput = document.querySelector(SELECTORS.title);
       const descInput = document.querySelector(SELECTORS.description);
 
+      if (!applyGeneratedOutput || reviewOriginals) trackGrowthEvent("listing_review", { generationAttemptId, lastConfirmedStage: "generation_received" });
       if (applyGeneratedOutput) {
         if (reviewOriginals) {
           if (
@@ -19110,6 +19005,12 @@
           if (titleInput) setListingFieldValue(titleInput, title);
           if (descInput) applyGeneratedDescription(descInput, description);
 
+          void globalThis.AutoListerFlowEvidence?.confirmFields({
+            operationId: generationAttemptId, expectedTitle: title, expectedDescription: description,
+            titleInput, descriptionInput: descInput, wait: waitForGeneratedListingFields,
+            photoCount: imageUrls.length, gridSelector: SELECTORS.mediaGrid, imageSelector: SELECTORS.mediaImage,
+          });
+
           startGenerationOutputEditTracking({
             generationAttemptId,
             mode,
@@ -19127,15 +19028,7 @@
         if (manageButtonState) setButtonSuccessState();
       }
 
-      trackGrowthEvent("generate_success", {
-        mode,
-        photoCount: imageUrls.length,
-        titleLanguageCode,
-        descriptionLanguageCode,
-        useEmojis: effectiveUseEmojis,
-        emojiRetry: Boolean(emojiRetry),
-        hasMeasurementAdvice: Boolean(measurementAdvice && measurementAdvice.trim()),
-      });
+
       if (applyGeneratedOutput) markInlineLanguageHintDone();
 
       const showedOfferPrompt = applyGeneratedOutput && manageButtonState

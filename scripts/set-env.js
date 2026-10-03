@@ -18,6 +18,7 @@ const LOCAL_URL = 'http://localhost:5000';
 // Files to process (relative to project root)
 const FILES_TO_PROCESS = [
     'content.js',
+    'background.js',
     'popup.js',
     'callback.js',
     'callback.html',

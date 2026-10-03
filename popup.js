@@ -330,106 +330,9 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   }
 
-  const eventQueue = [];
-  let eventFlushTimer = null;
-  const ANALYTICS_CLIENT_ID_KEY = "analyticsClientId";
-
-  function createAnalyticsClientId() {
-    if (crypto?.randomUUID) return crypto.randomUUID();
-    return `cid_${Date.now()}_${Math.random().toString(36).slice(2)}`;
-  }
-
-  function getClientAnalyticsContext() {
-    const userAgent = navigator.userAgent || "";
-    const isIos = /iPhone|iPad|iPod/i.test(userAgent);
-    const isOrion =
-      Boolean(window.KAGI) ||
-      /Orion/i.test(userAgent) ||
-      (isIos && typeof chrome !== "undefined" && Boolean(chrome.runtime?.id));
-    return {
-      clientBrowser: isOrion ? "orion" : "other",
-      clientPlatform: isIos
-        ? "ios"
-        : /Android/i.test(userAgent)
-          ? "android"
-          : "desktop",
-    };
-  }
-
-  async function getAnalyticsClientId() {
-    const data = await chrome.storage.local.get(ANALYTICS_CLIENT_ID_KEY);
-    if (data[ANALYTICS_CLIENT_ID_KEY]) {
-      return data[ANALYTICS_CLIENT_ID_KEY];
-    }
-    const analyticsClientId = createAnalyticsClientId();
-    await chrome.storage.local.set({ [ANALYTICS_CLIENT_ID_KEY]: analyticsClientId });
-    return analyticsClientId;
-  }
-
-  function buildEventPayload(event, context, analyticsClientId) {
-    return {
-      event,
-      source: "extension_popup",
-      page: "extension_popup",
-      context: {
-        ...context,
-        ...getClientAnalyticsContext(),
-        analyticsClientId,
-      },
-      extensionVersion: chrome.runtime.getManifest().version,
-    };
-  }
-
-  async function flushGrowthEvents() {
-    if (eventFlushTimer) {
-      clearTimeout(eventFlushTimer);
-      eventFlushTimer = null;
-    }
-    if (!eventQueue.length) return;
-
-    const queuedEvents = eventQueue.splice(0, eventQueue.length);
-    try {
-      const analyticsClientId = await getAnalyticsClientId();
-      const {
-        data: { session },
-      } = await supabaseClient.auth.getSession();
-      const headers = { "Content-Type": "application/json" };
-      if (session?.access_token) {
-        headers.Authorization = `Bearer ${session.access_token}`;
-      }
-
-      fetch(`${API_BASE}/api/events/track`, {
-        method: "POST",
-        headers,
-        body: JSON.stringify({
-          events: queuedEvents.map((item) =>
-            buildEventPayload(item.event, item.context, analyticsClientId),
-          ),
-        }),
-      }).catch(() => {});
-    } catch (err) {
-      // Analytics must never block auth, checkout, or popup rendering.
-    }
-  }
-
   function trackGrowthEvent(event, context = {}, immediate = false) {
-    try {
-      eventQueue.push({ event, context });
-
-      if (immediate || eventQueue.length >= 6) {
-        return flushGrowthEvents();
-      }
-
-      if (!eventFlushTimer) {
-        eventFlushTimer = setTimeout(flushGrowthEvents, 700);
-      }
-    } catch (err) {
-      // Analytics must never block auth, checkout, or popup rendering.
-    }
-    return Promise.resolve();
+    return globalThis.AutoListerTelemetry?.track(event, context, "extension_popup", immediate) || Promise.resolve();
   }
-
-  window.addEventListener("pagehide", flushGrowthEvents);
 
   function setView(view) {
     if (document.body.dataset.view !== view) {
@@ -1118,7 +1021,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
     setLoading(button, true, defaultText);
     showMessage(null);
-    await trackGrowthEvent(
+    void trackGrowthEvent(
       isResend ? "magic_link_resend_request" : "magic_link_request",
       {
         domain: email.split("@")[1]?.toLowerCase() || null,
@@ -1151,7 +1054,7 @@ document.addEventListener("DOMContentLoaded", () => {
       }
 
       await setPendingMagicLinkEmail(email);
-      await trackGrowthEvent(
+      void trackGrowthEvent(
         isResend ? "magic_link_resent" : "magic_link_sent",
         {
           domain: email.split("@")[1]?.toLowerCase() || null,
@@ -1230,7 +1133,7 @@ document.addEventListener("DOMContentLoaded", () => {
       }
 
       await chrome.storage.local.remove(MAGIC_LINK_PENDING_KEY);
-      await trackGrowthEvent(
+      void trackGrowthEvent(
         "magic_link_code_success",
         {
           domain: email.split("@")[1]?.toLowerCase() || null,

@@ -1,3 +1,4 @@
+const { installTelemetryHarness } = require("./telemetry-harness");
 const fs = require("node:fs");
 const path = require("node:path");
 const { test, expect } = require("@playwright/test");
@@ -202,11 +203,36 @@ async function installPopupHarness(page, options = {}) {
   );
 
   await page.addScriptTag({ path: languageDefaultsPath });
+  await installTelemetryHarness(page, extensionPath);
   await page.addScriptTag({ path: popupScriptPath });
   await page.evaluate(() => {
     document.dispatchEvent(new Event("DOMContentLoaded"));
   });
 }
+
+test("sign-in UI advances while telemetry delivery remains pending", async ({ page }) => {
+  await page.route("https://autolister.app/**", route => route.fulfill({
+    status: 200, contentType: "application/json", body: JSON.stringify({ success: true }),
+  }));
+  await installPopupHarness(page);
+  await page.evaluate(() => {
+    window.__authTracking = [];
+    AutoListerTelemetry.track = (event) => {
+      __authTracking.push(event);
+      return new Promise(() => {});
+    };
+  });
+  await page.locator("#emailInput").fill("fixture@example.com");
+  await page.locator("#sendMagicLinkBtn").click();
+  await expect(page.locator("#magicLinkSentState")).toBeVisible({ timeout: 1000 });
+  await expect(page.locator("#sendMagicLinkBtn")).toBeEnabled({ timeout: 1000 });
+  await page.locator("#magicLinkOtpInput").fill("123456");
+  await page.locator("#verifyMagicLinkCodeBtn").click();
+  await expect(page.locator("#messages")).toHaveText("Signed in.", { timeout: 1000 });
+  expect(await page.evaluate(() => __authTracking)).toEqual(expect.arrayContaining([
+    "magic_link_request", "magic_link_sent", "magic_link_code_success",
+  ]));
+});
 
 test.describe("popup billing portal", () => {
   test("keeps failed-payment customers on their paid plan with a direct payment action", async ({
@@ -417,8 +443,7 @@ test.describe("popup billing portal", () => {
       .toBe(1);
     expect(portalRequests[0]).toEqual({ email: "seller@example.com" });
 
-    const openedUrls = await page.evaluate(() => window.__popupHarness.openedUrls);
-    expect(openedUrls).toEqual(["https://billing.test/session"]);
+    await expect.poll(() => page.evaluate(() => window.__popupHarness.openedUrls)).toEqual(["https://billing.test/session"]);
 
     const supabaseSessionCalls = await page.evaluate(() =>
       window.__popupHarness.getSupabaseGetSessionCalls(),

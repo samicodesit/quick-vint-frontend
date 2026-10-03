@@ -43,7 +43,6 @@
   const successDiv = document.getElementById("successState");
   const errorDiv = document.getElementById("errorState");
   const errorMsg = document.getElementById("errorMessage");
-  const ANALYTICS_CLIENT_ID_KEY = "analyticsClientId";
 
   // Global state
   let currentLocalization = null;
@@ -55,7 +54,6 @@
   let callbackActionTaken = false;
   let autoCloseTimerId = null;
   let autoCloseAttemptTracked = false;
-  let analyticsClientId = null;
 
   // Localization methods are now loaded from lib/localization.js
 
@@ -89,79 +87,8 @@
     updateLanguageToggle();
   }
 
-  function createAnalyticsClientId() {
-    if (crypto?.randomUUID) return crypto.randomUUID();
-    return `cid_${Date.now()}_${Math.random().toString(36).slice(2)}`;
-  }
-
-  function getClientAnalyticsContext() {
-    const userAgent = navigator.userAgent || "";
-    const isIos = /iPhone|iPad|iPod/i.test(userAgent);
-    const isOrion =
-      Boolean(window.KAGI) ||
-      /Orion/i.test(userAgent) ||
-      (isIos && typeof chrome !== "undefined" && Boolean(chrome.runtime?.id));
-    return {
-      clientBrowser: isOrion ? "orion" : "other",
-      clientPlatform: isIos
-        ? "ios"
-        : /Android/i.test(userAgent)
-          ? "android"
-          : "desktop",
-    };
-  }
-
-  function ensureAnalyticsClientId() {
-    return new Promise((resolve) => {
-      chrome.storage.local.get(ANALYTICS_CLIENT_ID_KEY, (data) => {
-        if (data[ANALYTICS_CLIENT_ID_KEY]) {
-          analyticsClientId = data[ANALYTICS_CLIENT_ID_KEY];
-          resolve(analyticsClientId);
-          return;
-        }
-
-        analyticsClientId = createAnalyticsClientId();
-        chrome.storage.local.set(
-          { [ANALYTICS_CLIENT_ID_KEY]: analyticsClientId },
-          () => resolve(analyticsClientId),
-        );
-      });
-    });
-  }
-
   function trackCallbackEvent(event, context = {}) {
-    if (!userSession?.access_token) return;
-
-    const send = (clientId) => {
-      fetch(`${API_BASE}/api/events/track`, {
-        method: "POST",
-        keepalive: true,
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${userSession.access_token}`,
-        },
-        body: JSON.stringify({
-          event,
-          source: "extension_callback",
-          page: "callback",
-          context: {
-            ...context,
-            ...getClientAnalyticsContext(),
-            analyticsClientId: clientId,
-          },
-          extensionVersion: chrome.runtime.getManifest().version,
-        }),
-      }).catch(() => {
-        // Analytics must never block login completion.
-      });
-    };
-
-    if (analyticsClientId) {
-      send(analyticsClientId);
-      return;
-    }
-
-    ensureAnalyticsClientId().then(send).catch(() => {});
+    void globalThis.AutoListerTelemetry?.track(event, context, "extension_callback");
   }
 
   function getCallbackUrlContext() {
@@ -183,36 +110,7 @@
   }
 
   function trackCallbackDiagnostic(event, context = {}) {
-    const send = (clientId) => {
-      fetch(`${API_BASE}/api/events/track`, {
-        method: "POST",
-        keepalive: true,
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          event,
-          source: "extension_callback",
-          page: "callback",
-          context: {
-            ...getCallbackUrlContext(),
-            ...context,
-            ...getClientAnalyticsContext(),
-            analyticsClientId: clientId,
-          },
-          extensionVersion: chrome.runtime.getManifest().version,
-        }),
-      }).catch(() => {
-        // Analytics must never block login completion.
-      });
-    };
-
-    if (analyticsClientId) {
-      send(analyticsClientId);
-      return;
-    }
-
-    ensureAnalyticsClientId().then(send).catch(() => {});
+    void globalThis.AutoListerTelemetry?.track(event, { ...getCallbackUrlContext(), ...context }, "extension_callback");
   }
 
   function getErrorMessage(error) {
@@ -517,7 +415,6 @@
   });
 
   // Kick off auth handling for BOTH flows
-  ensureAnalyticsClientId().catch(() => {});
   bootstrapAuthReturn();
 
   window.addEventListener("pagehide", () => {

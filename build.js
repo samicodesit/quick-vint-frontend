@@ -289,7 +289,11 @@ async function main() {
     }
 }
 
+if (require.main === module) {
 main().catch(err => {
     log(`❌ Error: ${err.message}`, 'red');
     process.exit(1);
 });
+}
+
+module.exports = { INCLUDE_LIST, copyReleaseItem, minifyContentScript, createZip };

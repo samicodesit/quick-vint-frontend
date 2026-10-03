@@ -17,10 +17,13 @@ function makeElement() {
 
 async function runCallback({ href, session = null }) {
   const fetchCalls = [];
+  const messages = [];
   const storageData = {};
   const elements = new Map();
   const sandbox = {
     console,
+    TextEncoder,
+    location: new URL(href),
     crypto: { randomUUID: () => "callback-test-cid" },
     document: {
       title: "Callback",
@@ -73,13 +76,17 @@ async function runCallback({ href, session = null }) {
         id: "test-extension",
         getManifest: () => ({ version: "1.3.64" }),
         sendMessage(_message, callback) {
+          if (_message.type === "AUTOLISTER_TELEMETRY") messages.push(_message.event);
           callback?.();
+          return Promise.resolve({ queued: true });
         },
       },
       storage: {
         local: {
           get(key, callback) {
-            callback(typeof key === "string" ? { [key]: storageData[key] } : storageData);
+            const result = typeof key === "string" ? { [key]: storageData[key] } : storageData;
+            callback?.(result);
+            return Promise.resolve(result);
           },
           set(values, callback) {
             Object.assign(storageData, values);
@@ -102,9 +109,11 @@ async function runCallback({ href, session = null }) {
   sandbox.window.navigator = sandbox.navigator;
   sandbox.window.chrome = sandbox.chrome;
 
-  vm.runInNewContext(readFileSync("callback.js", "utf8"), sandbox);
+  const context = vm.createContext(sandbox);
+  for (const file of ["lib/telemetry-registry.js", "lib/telemetry-client.js", "callback.js"]) vm.runInContext(readFileSync(file, "utf8"), context);
   await new Promise((resolve) => setImmediate(resolve));
-  return fetchCalls.map((call) => JSON.parse(call.options.body));
+  assert.equal(fetchCalls.length, 0, "callback delegates delivery to its background worker");
+  return messages;
 }
 
 test("callback logs opened and no-session failure before auth exists", async () => {

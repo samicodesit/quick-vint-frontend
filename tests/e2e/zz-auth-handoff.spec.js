@@ -70,9 +70,13 @@ async function installAuthRoutes(context, events, options = {}) {
       body: callbackJs,
     }),
   );
+  for (const name of ["registry", "core", "client", "website"]) {
+    await context.route(`https://autolister.app/telemetry-${name}.js`, route => route.fulfill({ status: 200, contentType: "application/javascript", body: fs.readFileSync(path.join(apiPath, `public/telemetry-${name}.js`), "utf8") }));
+  }
   await context.route("https://autolister.app/api/events/track", async (route) => {
-    events.push(await route.request().postDataJSON());
-    route.fulfill({ status: 200, contentType: "application/json", body: "{}" });
+    const body = await route.request().postDataJSON();
+    events.push(...(body.events || [body]));
+    route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ acknowledgedIds: (body.events || []).map(event => event.id) }) });
   });
   await context.route(
     "https://jqloiovdwjaornnfvmyu.supabase.co/auth/v1/user",
@@ -145,7 +149,7 @@ test.describe("HTTPS auth handoff", () => {
           subscription_tier: "pro",
         },
       });
-    expect(events.map((event) => event.event)).toEqual(
+    await expect.poll(() => events.map((event) => event.event)).toEqual(
       expect.arrayContaining([
         "auth_link_landed",
         "auth_extension_handoff_started",
@@ -196,7 +200,7 @@ test.describe("HTTPS auth handoff", () => {
         },
         accountEmail: "existing@example.com",
       });
-    expect(events.map((event) => event.event)).toEqual(
+    await expect.poll(() => events.map((event) => event.event)).toEqual(
       expect.arrayContaining([
         "auth_link_landed",
         "auth_extension_handoff_started",

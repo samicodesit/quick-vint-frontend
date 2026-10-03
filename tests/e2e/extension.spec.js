@@ -1,3 +1,4 @@
+const { installTelemetryHarness } = require("./telemetry-harness");
 const fs = require("node:fs");
 const path = require("node:path");
 const { test, expect, chromium } = require("@playwright/test");
@@ -403,6 +404,7 @@ async function openContentHarness(page, capacityResponse = null, options = {}) {
   }
   await page.addScriptTag({ path: languageDefaultsPath });
   await page.addScriptTag({ path: qrCodePath });
+  await installTelemetryHarness(page, extensionPath);
   await page.addScriptTag({ path: contentScriptPath });
   if (options.skipToolExpectation) return;
   if (options.expectAuthenticated === false) {
@@ -457,6 +459,7 @@ async function openWardrobeEditHarness(page, itemId = "42", options = {}) {
     });
   }
   await page.addScriptTag({ path: languageDefaultsPath });
+  await installTelemetryHarness(page, extensionPath);
   await page.addScriptTag({ path: contentScriptPath });
   await expect(page.locator("#quickvint-gen-btn")).toBeVisible();
 }
@@ -573,6 +576,7 @@ async function openWardrobeHarness(
     ...initialStorage,
   });
   await page.addScriptTag({ path: languageDefaultsPath });
+  await installTelemetryHarness(page, extensionPath);
   await page.addScriptTag({ path: contentScriptPath });
 }
 
@@ -860,6 +864,7 @@ async function openImageCompressionHarness(page, proxyResponse) {
     };
   }, proxyResponse);
   await page.addScriptTag({ path: languageDefaultsPath });
+  await installTelemetryHarness(page, extensionPath);
   await page.addScriptTag({ path: contentScriptPath });
   await expect
     .poll(() =>
@@ -1011,7 +1016,7 @@ test.describe("AutoLister extension smoke flows", () => {
       total: 1,
     });
     expect(done.context.recoveryAgeMs).toBeGreaterThanOrEqual(5000);
-    expect(eventFetches.every((request) => request.keepalive === true)).toBe(true);
+    expect(events.every((event) => /^[0-9a-f-]{36}$/i.test(event.id))).toBe(true);
   });
 
   test("does not expose listing-tools collapse UI while signed out", async ({ page }) => {
@@ -2686,6 +2691,9 @@ test.describe("AutoLister extension smoke flows", () => {
         "canary-config.js",
         "language-defaults.js",
         "lib/qrcode.min.js",
+        "lib/telemetry-registry.js",
+        "lib/telemetry-client.js",
+        "lib/telemetry-flow.js",
         "content.js",
       ]);
       expect(manifest.host_permissions).toContain("https://autolister.app/*");
@@ -3264,6 +3272,20 @@ test.describe("AutoLister extension smoke flows", () => {
         workPage.locator("#quickvint-batch-tab-status .batch-tab-status-guidance"),
       ).toHaveCount(0);
       expect(listRequests).toBeGreaterThanOrEqual(1);
+      if (process.env.AUTOLISTER_INCIDENT_REPRO === "1") {
+        await expect(workPage.locator(".photo-box")).toHaveCount(0);
+        await expect(workPage.locator('[data-testid="title--input"]')).toHaveValue("Loaded Batch Item");
+        await expect.poll(() => serviceWorker.evaluate(async () =>
+          Boolean((await chrome.storage.local.get("quickvintBatchRecovery")).quickvintBatchRecovery),
+        )).toBe(false);
+        const saved = await serviceWorker.evaluate(() => chrome.storage.local.get(null));
+        expect(JSON.stringify(saved)).not.toContain("Generated through loaded batch flow.");
+        await workPage.reload({ waitUntil: "domcontentloaded" });
+        await expect(workPage.locator("#quickvint-gen-btn")).toBeVisible();
+        await expect(workPage.locator('[data-testid="title--input"]')).toHaveValue("");
+        await expect(workPage.locator('[data-testid="description--input"]')).toHaveValue("");
+        console.log("INCIDENT_REPRO_MV3: real extension cleaned upload session and removed recovery with zero host thumbnails; generated text lost after reload.");
+      }
     } finally {
       releaseGenerate?.();
       await context.close();
@@ -3757,6 +3779,68 @@ test.describe("AutoLister extension smoke flows", () => {
       capturedUploadSource: "phone_upload_batch",
       generationPayloadSource: "phone_upload_storage_url",
     });
+  });
+
+  test("incident reproduction: rejected Vinted upload still reports ready and refresh loses generated text", async ({ page }) => {
+    test.skip(process.env.AUTOLISTER_INCIDENT_REPRO !== "1", "Opt-in fault injection for the October 3 incident.");
+    const title = "Incident reproduction title";
+    const description = "Incident reproduction description";
+    await page.route("https://autolister.app/api/events/track", (route) => route.fulfill({ status: 204, body: "" }));
+    await page.route("https://autolister.app/api/generate", (route) => route.fulfill({
+      status: 200, contentType: "application/json",
+      body: JSON.stringify({ title, description, measurementAdvice: "" }),
+    }));
+    const pageUrl = "https://www.vinted.com/items/new";
+    await openContentHarness(page, null, { pageUrl, pageHtml: emptyListingFixture, emptyListing: true });
+    // Simulate the host rejecting the photo handoff. This is fault injection,
+    // not a claim about the actual error Vinted returned to the customer.
+    await page.evaluate(() => {
+      window.__rejectedPhotoCount = 0;
+      document.querySelector('[data-testid="add-photos-input"]').addEventListener("change", (event) => {
+        window.__rejectedPhotoCount = event.target.files.length;
+        const alert = document.createElement("div");
+        alert.id = "fixture-upload-error";
+        alert.textContent = "Simulated host photo-upload failure. Refresh required.";
+        document.body.append(alert);
+      });
+    });
+    const result = await page.evaluate(async (dataUrl) => {
+      const originalSendMessage = window.chrome.runtime.sendMessage;
+      const blobUrl = URL.createObjectURL(await (await fetch(dataUrl)).blob());
+      window.chrome.runtime.sendMessage = (message, callback) => {
+        if (message?.type === "PROXY_FETCH") {
+          setTimeout(() => callback?.({ ok: true, data: blobUrl }), 0);
+          return;
+        }
+        originalSendMessage(message, callback);
+      };
+      const listener = window.__extensionHarness.runtimeListeners.find((candidate) => typeof candidate === "function");
+      return new Promise((resolve) => listener({
+        type: "RUN_BATCH_ITEM", batchId: "incident-repro", itemIndex: 1, totalItems: 1,
+        files: Array.from({ length: 5 }, (_, i) => ({ url: `https://phone-upload.test/item-${i}.jpg`, name: `item-${i}.jpg` })),
+      }, {}, resolve));
+    }, tinyPngDataUrl);
+    expect(result).toMatchObject({ ok: true });
+    expect(await page.evaluate(() => window.__rejectedPhotoCount)).toBe(5);
+    await expect(page.locator("#fixture-upload-error")).toBeVisible();
+    await expect(page.locator(".photo-box")).toHaveCount(0);
+    await expect(page.locator("#quickvint-batch-tab-status")).toContainText("ready to review");
+    await expect(page.locator('[data-testid="title--input"]')).toHaveValue(title);
+    await expect(page.locator('[data-testid="description--input"]')).toHaveValue(description);
+    expect(await page.evaluate(() => window.__AUTOLISTER_TEST_HOOKS__.shouldWarnBeforeLeavingListing())).toBe(false);
+    const storage = await page.evaluate(() => window.__extensionHarness.storage);
+    expect(JSON.stringify(storage)).not.toContain(title);
+    expect(JSON.stringify(storage)).not.toContain(description);
+    await page.reload({ waitUntil: "domcontentloaded" });
+    await installChromeHarness(page, null, storage);
+    await page.addScriptTag({ path: languageDefaultsPath });
+    await page.addScriptTag({ path: qrCodePath });
+    await installTelemetryHarness(page, extensionPath);
+    await page.addScriptTag({ path: contentScriptPath });
+    await expect(page.locator("#quickvint-gen-btn")).toBeVisible();
+    await expect(page.locator('[data-testid="title--input"]')).toHaveValue("");
+    await expect(page.locator('[data-testid="description--input"]')).toHaveValue("");
+    console.log("INCIDENT_REPRO: five rejected photos; item returned ok; ready banner shown; no unload warning; generated text absent after reload with preserved extension storage.");
   });
 
   test("keeps batch grouping open after upload idle without refreshing fresh signed URLs", async ({
@@ -4786,11 +4870,11 @@ test.describe("AutoLister extension smoke flows", () => {
     expect(event.context.titleChanged).toBe(true);
     expect(event.context.descriptionChanged).toBe(true);
     expect(event.context.generatedTitle).toBe("Black Test Jacket");
-    expect(event.context.appliedDescription).toBe(
+    expect(event.context.generatedDescription).toBe(
       "Clean black jacket in good condition.",
     );
-    expect(event.context.currentTitle).toBe("Black Test Jacket Size M");
-    expect(event.context.currentDescription).toContain("Smoke-free home.");
+    expect(event.context.finalTitle).toBe("Black Test Jacket Size M");
+    expect(event.context.finalDescription).toContain("Smoke-free home.");
     expect(event.context.titleLengthDelta).toBeGreaterThan(0);
     expect(event.context.descriptionLengthDelta).toBeGreaterThan(0);
   });
@@ -7387,6 +7471,7 @@ test.describe("wardrobe rewrite tab", () => {
     await page.reload({ waitUntil: "domcontentloaded" });
     await installChromeHarness(page);
     await page.addScriptTag({ path: languageDefaultsPath });
+    await installTelemetryHarness(page, extensionPath);
     await page.addScriptTag({ path: contentScriptPath });
     await page.locator('[data-testid^="image-wrapper-"] img').evaluate((image) => image.remove());
     await expect(ping()).resolves.toEqual({ ok: false, itemId: "42" });

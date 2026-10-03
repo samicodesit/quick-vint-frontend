@@ -1,11 +1,12 @@
 // --- IMPORTS & INITIALIZATION ---
-importScripts("lib/supabase.js");
+importScripts("lib/supabase.js", "lib/telemetry-registry.js", "lib/telemetry-core.js", "lib/telemetry-client.js", "lib/telemetry-background.js");
 
 const ANALYTICS_CLIENT_ID_KEY = "analyticsClientId";
 const ACCOUNT_EMAIL_STORAGE_KEY = "accountEmail";
 const USER_USAGE_SNAPSHOT_STORAGE_KEY = "quickvintUserUsageSnapshot";
 const BATCH_RECOVERY_STORAGE_KEY = "quickvintBatchRecovery";
 const BATCH_RECOVERY_TTL_MS = 6 * 60 * 60 * 1000;
+let analyticsClientIdPromise;
 
 function createAnalyticsClientId() {
   if (globalThis.crypto?.randomUUID) return globalThis.crypto.randomUUID();
@@ -13,11 +14,14 @@ function createAnalyticsClientId() {
 }
 
 async function getAnalyticsClientId() {
-  const data = await chrome.storage.local.get(ANALYTICS_CLIENT_ID_KEY);
-  if (data[ANALYTICS_CLIENT_ID_KEY]) return data[ANALYTICS_CLIENT_ID_KEY];
-  const analyticsClientId = createAnalyticsClientId();
-  await chrome.storage.local.set({ [ANALYTICS_CLIENT_ID_KEY]: analyticsClientId });
-  return analyticsClientId;
+  if (!analyticsClientIdPromise) analyticsClientIdPromise = (async () => {
+    const data = await chrome.storage.local.get(ANALYTICS_CLIENT_ID_KEY);
+    if (data[ANALYTICS_CLIENT_ID_KEY]) return data[ANALYTICS_CLIENT_ID_KEY];
+    const analyticsClientId = createAnalyticsClientId();
+    await chrome.storage.local.set({ [ANALYTICS_CLIENT_ID_KEY]: analyticsClientId });
+    return analyticsClientId;
+  })().catch((error) => { analyticsClientIdPromise = null; throw error; });
+  return analyticsClientIdPromise;
 }
 
 function normalizeEmail(email) {
@@ -65,6 +69,7 @@ const SUPABASE_URL = "https://jqloiovdwjaornnfvmyu.supabase.co";
 const SUPABASE_ANON_KEY =
   "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImpxbG9pb3Zkd2phb3JubmZ2bXl1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDgyMDgzMzIsImV4cCI6MjA2Mzc4NDMzMn0.iFtkUorY1UqK8zamnwgjB-yhsXe0bJAA8YFm22bzc3A";
 const API_BASE = "https://autolister.app";
+function getTelemetryEndpoint() { return `${API_BASE}/api/events/track`; }
 const TOKEN_REFRESH_MARGIN_MS = 5 * 60 * 1000; // 5 minutes
 const MIN_REFRESH_DELAY_MS = 60 * 1000; // 1 minute
 const FREE_LIFETIME_LIMIT = 5;
@@ -159,11 +164,14 @@ function scheduleTokenRefresh(session) {
  */
 async function refreshTokenWithRetry(maxRetries = 3) {
   if (tokenRefreshPromise) return tokenRefreshPromise;
+  const telemetryOperation = crypto.randomUUID();
+  const trackRefresh = (event, context = {}) => { void globalThis.AutoListerTelemetry?.track(event, { operationId: telemetryOperation, ...context }, "extension_background"); };
   tokenRefreshPromise = (async () => {
     try {
       const session = await getStoredSession();
       if (!session?.refresh_token) return null;
 
+      trackRefresh("token_refresh_start");
       await supabaseClient.auth.setSession({
         access_token: session.access_token,
         refresh_token: session.refresh_token,
@@ -176,6 +184,7 @@ async function refreshTokenWithRetry(maxRetries = 3) {
 
         if (!error && data.session) {
           await setStoredSession(data.session);
+          trackRefresh("token_refresh_success");
           return data.session;
         }
 
@@ -184,6 +193,7 @@ async function refreshTokenWithRetry(maxRetries = 3) {
           error?.message?.includes("Invalid Refresh Token") ||
           error?.message?.includes("refresh_token_not_found")
         ) {
+          trackRefresh("token_refresh_expired");
           await handleSignOut({ clearAccountEmail: false });
           return null;
         }
@@ -192,9 +202,11 @@ async function refreshTokenWithRetry(maxRetries = 3) {
           await new Promise((res) => setTimeout(res, 1000 * 2 ** attempt));
         }
       }
+      trackRefresh("token_refresh_failed", { errorCode: "REFRESH_RETRIES_EXHAUSTED" });
       console.error("Token refresh failed after all retries.");
       return null;
     } catch (error) {
+      trackRefresh("token_refresh_failed", { errorName: error?.name, message: error?.message, stack: error?.stack });
       console.error("Unexpected error during token refresh:", error);
       return null;
     }
@@ -644,13 +656,17 @@ async function waitForWardrobeRewriteTabReady(tabId, itemId, timeoutMs = 30000) 
 
 function notifyBatchProgress(job, payload) {
   if (!job?.sourceTabId) return;
-  chrome.tabs.sendMessage(job.sourceTabId, {
-    type: "BATCH_PROGRESS",
-    batchId: job.batchId,
-    inputSource: job.inputSource,
-    reason: job.reason || null,
-    createdAt: job.createdAt,
-    ...payload,
+  if (!["done", "paused", "failed"].includes(payload.status)) {
+    void globalThis.AutoListerTelemetry?.track(payload.status === "waiting" ? "batch_worker_waiting" : "batch_worker_progress", { batchId: job.batchId, inputSource: job.inputSource, phase: payload.status, itemIndex: payload.itemIndex, completedCount: job.completedCount, total: payload.total }, "extension_background");
+  }
+  const message = { type: "BATCH_PROGRESS", batchId: job.batchId, inputSource: job.inputSource, reason: job.reason || null, createdAt: job.createdAt, ...payload };
+  const delivery = chrome.tabs.sendMessage(job.sourceTabId, message);
+  delivery?.catch?.(() => {
+    // A closed controller is an interruption, not a host crash. Keep terminal
+    // evidence even when its content-script tracking call can no longer run.
+    if (["done", "paused", "failed"].includes(payload.status)) {
+      void globalThis.AutoListerTelemetry?.track(`batch_${payload.status}`, { batchId: job.batchId, inputSource: job.inputSource, reason: message.reason, message: payload.message, completedCount: job.completedCount, total: payload.total }, "extension_background");
+    }
   });
 }
 
@@ -670,6 +686,9 @@ async function notifyBatchRecoveryNudge(job) {
 
 function notifyWardrobeRewriteProgress(job, payload) {
   if (!job?.sourceTabId) return;
+  job.telemetryOperationId ||= createAnalyticsClientId();
+  const event = payload.status === "failed" ? "wardrobe_rewrite_failed" : payload.status === "done" ? "wardrobe_rewrite_done" : "wardrobe_rewrite_progress";
+  void globalThis.AutoListerTelemetry?.track(event, { operationId: job.telemetryOperationId, mode: "wardrobe_rewrite", phase: payload.status, itemIndex: payload.itemIndex || payload.current, total: payload.total, message: payload.message }, "extension_background");
   chrome.tabs.sendMessage(job.sourceTabId, {
     type: "WARDROBE_REWRITE_PROGRESS",
     ...payload,
@@ -768,6 +787,7 @@ async function getTabJobHeartbeat(message, sender) {
       reason: "service_worker_restarted",
       hadIssues: true,
     });
+    void globalThis.AutoListerTelemetry?.track("operation_interrupted", { batchId: recovery.batchId, reason: "service_worker_restarted", stage: "batch_running" }, "extension_background");
     await notifyBatchRecoveryNudge(recovery);
   }
   return {
@@ -1512,24 +1532,11 @@ function buildPublicUserProfileResponse(supabaseSession, userProfile) {
 }
 
 async function trackAuthHandoffSuccess(session, authEvent = "auth_handoff") {
-  if (!session?.access_token) return;
-  const analyticsClientId = await getAnalyticsClientId();
-  await fetch(`${API_BASE}/api/events/track`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${session.access_token}`,
-    },
-    body: JSON.stringify({
-      event: "auth_success",
-      source: "extension_external_auth",
-      page: "background",
-      context: {
-        auth_event: authEvent,
-        analyticsClientId,
-      },
-    }),
-  }).catch(() => {});
+  if (!session?.user?.id) return;
+  try {
+    const prepared = globalThis.AutoListerTelemetry?.prepare("auth_success", { reason: authEvent }, "extension_external_auth");
+    if (prepared) void globalThis.AutoListerBackgroundTelemetry?.accept(prepared.event, session.user.id, false, true).catch(() => {});
+  } catch { /* Telemetry cannot delay or fail authentication. */ }
 }
 
 async function acceptExternalAuthHandoff(rawSession) {
