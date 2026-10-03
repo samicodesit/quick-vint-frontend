@@ -85,3 +85,62 @@ test("drains anonymous and authenticated partitions without sharing credentials"
   assert.equal(sent[0].token, null);
   assert.equal(sent[1].token, "token-a");
 });
+
+test("a flush requested during an account change rechecks identity before settling", async () => {
+  const state = { events: [], dropped: 0 };
+  let account = { id: "b", token: "token-b" };
+  let releaseIdentity;
+  const blockedIdentity = new Promise((resolve) => { releaseIdentity = resolve; });
+  let first = true;
+  const sent = [];
+  const q = createQueue({
+    storage: { transact: async (fn) => fn(state) },
+    identity: async () => {
+      const snapshot = account;
+      if (first) { first = false; await blockedIdentity; }
+      return snapshot;
+    },
+    send: async (body, token) => {
+      sent.push(token);
+      return { status: 200, json: async () => ({ acknowledgedIds: body.events.map(event => event.id) }) };
+    },
+  });
+  await q.enqueue({ id: "waiting-for-a" }, "a", true);
+  const started = q.flush();
+  account = { id: "a", token: "token-a" };
+  const resumed = q.flush();
+  releaseIdentity();
+  await Promise.all([started, resumed]);
+  assert.deepEqual(sent, ["token-a"]);
+  assert.equal(state.events.length, 0);
+});
+
+test("overlapping critical delivery preserves the failed event's backoff", async () => {
+  const state = { events: [], dropped: 0 };
+  let releaseSend, markStarted;
+  const sending = new Promise((resolve) => { markStarted = resolve; });
+  const blocked = new Promise((resolve) => { releaseSend = resolve; });
+  const sent = [];
+  const q = createQueue({
+    storage: { transact: async (fn) => fn(state) },
+    identity: async () => ({ id: "a", token: "token-a" }),
+    now: () => 1000,
+    send: async (body) => {
+      sent.push(body.events.map(event => event.id));
+      if (sent.length === 1) {
+        markStarted(); await blocked;
+        return { status: 503, json: async () => ({}) };
+      }
+      return { status: 200, json: async () => ({ acknowledgedIds: body.events.map(event => event.id) }) };
+    },
+  });
+  await q.enqueue({ id: "failed" }, "a");
+  const active = q.flush(); await sending;
+  await q.enqueue({ id: "new-critical" }, "a", true);
+  const requested = q.flush(); releaseSend();
+  await Promise.all([active, requested]);
+  assert.deepEqual(sent, [["failed"], ["new-critical"]]);
+  assert.equal(state.events.length, 1);
+  assert.equal(state.events[0].nextAt, 61000);
+  assert.equal(state.events[0].attempts, 1);
+});
