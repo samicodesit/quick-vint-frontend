@@ -17,9 +17,11 @@ async function runBackgroundHandoff(
   const removedTabs = [];
   const timers = [];
   const timerCalls = [];
+  const telemetryEvents = [];
   let externalListener;
   let internalListener;
   let installedListener;
+  let authStateListener;
   let setSessionArgs = null;
   let verifyOtpArgs = null;
   const setSessionResult = options.setSessionResult || {
@@ -35,6 +37,7 @@ async function runBackgroundHandoff(
     auth: {
       setSession: async (session) => {
         setSessionArgs = session;
+        if (options.setSessionError) throw options.setSessionError;
         return {
           ...setSessionResult,
           data: {
@@ -68,7 +71,7 @@ async function runBackgroundHandoff(
       refreshSession:
         options.refreshSession ||
         (async () => ({ data: { session: null }, error: null })),
-      onAuthStateChange() {},
+      onAuthStateChange(listener) { authStateListener = listener; },
     },
     from(table) {
       return {
@@ -163,12 +166,17 @@ async function runBackgroundHandoff(
 
   const sandbox = {
     console,
+    TextEncoder,
+    navigator: { userAgent: "Chrome" },
     chrome,
     fetch: options.fetch || (async () => ({ ok: true, json: async () => ({}) })),
     setTimeout(callback, delay) {
       const timer = { callback, delay };
       timers.push(timer);
       timerCalls.push({ delay });
+      if (options.resolveRefreshBackoff && [2000, 4000].includes(delay)) {
+        queueMicrotask(callback);
+      }
       return timers.length;
     },
     clearTimeout() {},
@@ -176,10 +184,23 @@ async function runBackgroundHandoff(
     URL,
     AbortController,
     crypto: { randomUUID: () => "cid-test" },
-    importScripts() {
+    importScripts(...files) {
       sandbox.supabase = {
         createClient: () => supabaseClient,
       };
+      if (options.captureTelemetry) {
+        for (const file of files) {
+          if (["lib/telemetry-registry.js", "lib/telemetry-client.js"].includes(file)) {
+            vm.runInContext(readFileSync(file, "utf8"), sandbox);
+          }
+        }
+        sandbox.AutoListerBackgroundTelemetry = {
+          async accept(event, accountId) {
+            telemetryEvents.push({ ...event, accountId });
+            return { queued: true };
+          },
+        };
+      }
     },
   };
 
@@ -213,8 +234,93 @@ async function runBackgroundHandoff(
     removedTabs,
     timers: timerCalls,
     internalListener,
+    telemetryEvents,
+    refreshToken: () => vm.runInContext("refreshTokenWithRetry()", sandbox),
+    emitAuthState: (event, session) => authStateListener(event, session),
   };
 }
+
+test("exhausted token refresh retains the final sanitized provider error without changing retry timing", async () => {
+  let refreshCalls = 0;
+  const providerError = Object.assign(new Error("Gateway unavailable https://private.example/path?token=secret Bearer private-credential"), {
+    code: "unexpected_failure", status: 503,
+  });
+  const harness = await runBackgroundHandoff({ type: "PING" }, undefined, {
+    initialStorage: { supabaseSession: {
+      access_token: "existing-access", refresh_token: "existing-refresh", expires_at: 2000000000,
+      user: { id: "user-1", email: "seller@example.com" },
+    } },
+    runScheduledTimers: false,
+    captureTelemetry: true,
+    resolveRefreshBackoff: true,
+    refreshSession: async () => { refreshCalls++; return { data: { session: null }, error: providerError }; },
+  });
+  assert.equal(await harness.refreshToken(), null);
+  await new Promise(resolve => setImmediate(resolve));
+  const failure = harness.telemetryEvents.find(event => event.event === "token_refresh_failed");
+  assert.equal(failure.context.errorCode, "unexpected_failure");
+  assert.equal(failure.context.statusCode, 503);
+  assert.equal(failure.context.attempts, 3);
+  assert.equal(failure.context.stage, "authenticating");
+  assert.equal(failure.context.phase, "refresh_session");
+  assert.ok(failure.context.elapsedMs >= 0);
+  assert.match(failure.context.message, /Gateway unavailable/);
+  assert.equal(failure.context.errorName, "Error");
+  assert.match(failure.context.stack, /Gateway unavailable/);
+  assert.doesNotMatch(JSON.stringify(failure), /private\.example|private-credential|existing-access|existing-refresh/);
+  assert.equal(refreshCalls, 3);
+  assert.deepEqual(harness.timers.filter(timer => [2000, 4000].includes(timer.delay)), [{ delay: 2000 }, { delay: 4000 }]);
+  assert.equal(harness.storageData.supabaseSession.access_token, "existing-access");
+});
+
+test("refresh failures keep their stage and original error after the SDK signs out", async () => {
+  let harness;
+  const providerError = Object.assign(new Error("Provider unavailable"), { code: "unexpected_failure", status: 500 });
+  harness = await runBackgroundHandoff({ type: "PING" }, undefined, {
+    initialStorage: { supabaseSession: {
+      access_token: "existing-access", refresh_token: "existing-refresh", expires_at: 2000000000,
+      user: { id: "user-1" },
+    } },
+    runScheduledTimers: false, captureTelemetry: true, resolveRefreshBackoff: true,
+    refreshSession: async () => {
+      harness.emitAuthState("SIGNED_OUT", null);
+      await new Promise(resolve => setImmediate(resolve));
+      return { data: { session: null }, error: providerError };
+    },
+  });
+  assert.equal(await harness.refreshToken(), null);
+  await new Promise(resolve => setImmediate(resolve));
+  const failure = harness.telemetryEvents.find(event => event.event === "token_refresh_failed");
+  assert.equal(failure.accountId, null);
+  assert.equal(failure.context.stage, "authenticating");
+  assert.equal(failure.context.phase, "refresh_session");
+  assert.equal(failure.context.errorCode, "unexpected_failure");
+  assert.equal(failure.context.operationId, harness.telemetryEvents[0].context.operationId);
+  assert.equal(harness.storageData.supabaseSession, undefined);
+});
+
+test("refresh diagnostics distinguish session restoration exceptions without making refresh requests", async () => {
+  let refreshCalls = 0;
+  const options = {
+    initialStorage: { supabaseSession: {
+      access_token: "existing-access", refresh_token: "existing-refresh", expires_at: 2000000000,
+      user: { id: "user-1" },
+    } },
+    runScheduledTimers: false, captureTelemetry: true,
+    refreshSession: async () => { refreshCalls++; return { data: { session: null }, error: null }; },
+  };
+  const harness = await runBackgroundHandoff({ type: "PING" }, undefined, options);
+  options.setSessionError = Object.assign(new Error("Failed to fetch"), { name: "TypeError" });
+  assert.equal(await harness.refreshToken(), null);
+  await new Promise(resolve => setImmediate(resolve));
+  const failure = harness.telemetryEvents.find(event => event.event === "token_refresh_failed");
+  assert.equal(failure.context.stage, "authenticating");
+  assert.equal(failure.context.phase, "restore_session");
+  assert.equal(failure.context.errorName, "TypeError");
+  assert.equal(failure.context.message, "Failed to fetch");
+  assert.equal(failure.context.attempts, 0);
+  assert.equal(refreshCalls, 0);
+});
 
 test("phone metadata proxy exposes Retry-After, scopes its timeout and never retries", async () => {
   const requests = [];

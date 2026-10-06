@@ -166,34 +166,53 @@ async function refreshTokenWithRetry(maxRetries = 3) {
   if (tokenRefreshPromise) return tokenRefreshPromise;
   const telemetryOperation = crypto.randomUUID();
   const trackRefresh = (event, context = {}) => { void globalThis.AutoListerTelemetry?.track(event, { operationId: telemetryOperation, ...context }, "extension_background"); };
+  const refreshStartedAt = Date.now();
+  let refreshPhase = "load_session";
+  const refreshErrorContext = (error) => ({
+    stage: "authenticating",
+    phase: refreshPhase,
+    elapsedMs: Date.now() - refreshStartedAt,
+    errorCode: error?.code || "REFRESH_RETRIES_EXHAUSTED",
+    errorName: error?.name,
+    message: error?.message,
+    stack: error?.stack,
+    statusCode: error?.status,
+  });
   tokenRefreshPromise = (async () => {
+    let lastRefreshError;
+    let attempts = 0;
     try {
       const session = await getStoredSession();
       if (!session?.refresh_token) return null;
 
       trackRefresh("token_refresh_start");
+      refreshPhase = "restore_session";
       await supabaseClient.auth.setSession({
         access_token: session.access_token,
         refresh_token: session.refresh_token,
       });
 
       for (let attempt = 1; attempt <= maxRetries; attempt++) {
+        attempts = attempt;
+        refreshPhase = "refresh_session";
         const { data, error } = await supabaseClient.auth.refreshSession({
           refresh_token: session.refresh_token,
         });
 
         if (!error && data.session) {
+          refreshPhase = "persist_session";
           await setStoredSession(data.session);
           trackRefresh("token_refresh_success");
           return data.session;
         }
 
+        lastRefreshError = error;
         console.warn(`Token refresh attempt ${attempt} failed:`, error?.message);
         if (
           error?.message?.includes("Invalid Refresh Token") ||
           error?.message?.includes("refresh_token_not_found")
         ) {
-          trackRefresh("token_refresh_expired");
+          trackRefresh("token_refresh_expired", { ...refreshErrorContext(error), attempts });
           await handleSignOut({ clearAccountEmail: false });
           return null;
         }
@@ -202,11 +221,11 @@ async function refreshTokenWithRetry(maxRetries = 3) {
           await new Promise((res) => setTimeout(res, 1000 * 2 ** attempt));
         }
       }
-      trackRefresh("token_refresh_failed", { errorCode: "REFRESH_RETRIES_EXHAUSTED" });
+      trackRefresh("token_refresh_failed", { ...refreshErrorContext(lastRefreshError), reason: "retries_exhausted", attempts });
       console.error("Token refresh failed after all retries.");
       return null;
     } catch (error) {
-      trackRefresh("token_refresh_failed", { errorName: error?.name, message: error?.message, stack: error?.stack });
+      trackRefresh("token_refresh_failed", { ...refreshErrorContext(error), reason: "refresh_exception", attempts });
       console.error("Unexpected error during token refresh:", error);
       return null;
     }
