@@ -860,8 +860,12 @@ async function routeManualStorageUploads(page) {
     }
     if (request.method() === "POST") {
       uploadRequests.push(request.url());
-      uploadBodies.push(request.postDataBuffer()?.toString("latin1") || "");
-      const index = uploadedFiles.length;
+      const body = request.postDataBuffer()?.toString("latin1") || "";
+      uploadBodies.push(body);
+      // Concurrent uploads can arrive in any order. Match the real endpoint's
+      // explicit uploadOrder instead of assigning identity by arrival time.
+      const index = Number(body.match(/name="uploadOrder"\r\n\r\n(\d+)/)?.[1]);
+      expect(Number.isInteger(index)).toBe(true);
       const name = `${String(index).padStart(6, "0")}-manual-${index + 1}.png`;
       const file = {
         name,
@@ -869,7 +873,7 @@ async function routeManualStorageUploads(page) {
         url: `https://storage.test/manual-${index + 1}.png?token=signed-${index + 1}`,
         order: index,
       };
-      uploadedFiles.push(file);
+      uploadedFiles[index] = file;
       return route.fulfill({
         status: 200,
         contentType: "application/json",
