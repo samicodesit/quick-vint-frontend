@@ -13,6 +13,11 @@ async function runBackgroundHandoff(
   options = {},
 ) {
   const storageData = { ...(options.initialStorage || {}) };
+  const storageValue = (value) => {
+    if (!options.reorderStorageKeys || !value || typeof value !== "object") return value;
+    if (Array.isArray(value)) return value.map(storageValue);
+    return Object.fromEntries(Object.keys(value).sort().map(key => [key, storageValue(value[key])]));
+  };
   const createdTabs = [];
   const removedTabs = [];
   const timers = [];
@@ -133,11 +138,11 @@ async function runBackgroundHandoff(
     storage: {
       local: {
         async get(key) {
-          if (typeof key === "string") return { [key]: storageData[key] };
+          if (typeof key === "string") return { [key]: storageValue(storageData[key]) };
           if (Array.isArray(key)) {
-            return Object.fromEntries(key.map((item) => [item, storageData[item]]));
+            return Object.fromEntries(key.map((item) => [item, storageValue(storageData[item])]));
           }
-          return { ...storageData };
+          return storageValue({ ...storageData });
         },
         async set(values) {
           Object.assign(storageData, values);
@@ -235,6 +240,7 @@ async function runBackgroundHandoff(
     timers: timerCalls,
     internalListener,
     telemetryEvents,
+    fireTimer: (delay) => timers.find(timer => timer.delay === delay)?.callback(),
     refreshToken: () => vm.runInContext("refreshTokenWithRetry()", sandbox),
     emitAuthState: (event, session) => authStateListener(event, session),
   };
@@ -654,4 +660,226 @@ test("capacity refreshes and retries once after a 401", async () => {
     "Bearer rejected-access",
     "Bearer fresh-access",
   ]);
+});
+
+const FIRST_TOUCH_KEY = "autolister.first_touch.v1";
+function acquisitionFixture(source = "google") {
+  return { source, medium: source === "google" ? "search" : "organic_social",
+    campaign: "first-campaign", content: "home-cta",
+    capturedAt: new Date().toISOString(), referrerHost: "www.google.com" };
+}
+const acquisitionSender = { url: "https://autolister.app/welcome", origin: "https://autolister.app", frameId: 0 };
+const signedInSession = { access_token: "buyer-access", refresh_token: "buyer-refresh",
+  expires_at: 2000000000, user: { id: "buyer-1", email: "seller@example.com" } };
+async function settleAcquisition() { for (let i = 0; i < 8; i++) await new Promise(resolve => setImmediate(resolve)); }
+function captureAcquisition(harness, attribution, sender = acquisitionSender) {
+  return new Promise(resolve => harness.internalListener(
+    { type: "CAPTURE_ATTRIBUTION", attribution }, sender, resolve));
+}
+
+test("website first touch survives installation and is claimed automatically after Google-style sign-in", async () => {
+  const requests = [];
+  const harness = await runBackgroundHandoff({ type: "PING" }, undefined, {
+    reorderStorageKeys: true,
+    runScheduledTimers: false, fetch: async (url, options) => {
+      requests.push({ url, options }); return { ok: true, status: 200 };
+    },
+  });
+  const first = acquisitionFixture();
+  assert.deepEqual(JSON.parse(JSON.stringify(await captureAcquisition(harness, { ...first, access_token: "never-copy" }))), { ok: true });
+  assert.equal(requests.length, 0);
+  assert.deepEqual(JSON.parse(JSON.stringify(harness.storageData[FIRST_TOUCH_KEY].attribution)), first);
+  assert.doesNotMatch(JSON.stringify(harness.storageData[FIRST_TOUCH_KEY]), /never-copy/);
+  harness.emitAuthState("SIGNED_IN", signedInSession);
+  await settleAcquisition();
+  assert.equal(requests.length, 1);
+  assert.equal(requests[0].url, "https://autolister.app/api/attribution/claim");
+  assert.equal(requests[0].options.headers.Authorization, "Bearer buyer-access");
+  assert.deepEqual(JSON.parse(requests[0].options.body), { attribution: first });
+  assert.equal(harness.storageData[FIRST_TOUCH_KEY].userId, "buyer-1");
+  assert.equal(harness.storageData[FIRST_TOUCH_KEY].claimed, true);
+  await captureAcquisition(harness, acquisitionFixture("tiktok"));
+  harness.emitAuthState("TOKEN_REFRESHED", signedInSession);
+  await settleAcquisition();
+  assert.equal(requests.length, 1);
+  assert.equal(harness.storageData[FIRST_TOUCH_KEY].attribution.source, "google");
+});
+
+test("attribution failure never blocks auth, retains first touch and retries after auth refresh", async () => {
+  let resolveRequest;
+  const requests = [];
+  const harness = await runBackgroundHandoff({ type: "PING" }, undefined, {
+    runScheduledTimers: false, fetch: (url, options) => {
+      requests.push({ url, options });
+      if (requests.length === 1) return new Promise(resolve => { resolveRequest = resolve; });
+      return Promise.resolve({ ok: true, status: 200 });
+    },
+  });
+  const first = acquisitionFixture("tiktok");
+  await captureAcquisition(harness, first);
+  harness.emitAuthState("SIGNED_IN", signedInSession);
+  await settleAcquisition();
+  assert.equal(harness.storageData.supabaseSession.access_token, "buyer-access");
+  assert.equal(harness.storageData.userProfile.subscription_tier, "free");
+  assert.equal(requests.length, 1);
+  harness.emitAuthState("TOKEN_REFRESHED", signedInSession);
+  await settleAcquisition();
+  assert.equal(requests.length, 1, "concurrent auth events must not duplicate the pending claim");
+  resolveRequest({ ok: false, status: 503 });
+  await settleAcquisition();
+  assert.equal(harness.storageData[FIRST_TOUCH_KEY].claimed, undefined);
+  harness.emitAuthState("TOKEN_REFRESHED", signedInSession);
+  await settleAcquisition();
+  assert.equal(requests.length, 2);
+  assert.deepEqual(JSON.parse(requests[1].options.body), { attribution: first });
+  assert.equal(harness.storageData[FIRST_TOUCH_KEY].claimed, true);
+});
+
+test("attribution bridge rejects unrelated pages, subframes, malformed and expired sources", async () => {
+  const harness = await runBackgroundHandoff({ type: "PING" }, undefined, { runScheduledTimers: false });
+  for (const sender of [
+    { ...acquisitionSender, url: "https://www.vinted.co.uk/items/new", origin: "https://www.vinted.co.uk" },
+    { ...acquisitionSender, url: "https://autolister.app.evil.example/welcome" },
+    { ...acquisitionSender, origin: "https://evil.example" },
+    { ...acquisitionSender, frameId: 1 },
+  ]) assert.equal((await captureAcquisition(harness, acquisitionFixture(), sender)).ok, false);
+  for (const value of [null, [], { ...acquisitionFixture(), medium: "invalid" },
+    { ...acquisitionFixture(), source: "seller@example.com" },
+    { ...acquisitionFixture(), capturedAt: new Date(Date.now() - 181 * 86400000).toISOString() },
+    { ...acquisitionFixture(), capturedAt: new Date(Date.now() + 3600000).toISOString() },
+  ]) assert.equal((await captureAcquisition(harness, value)).ok, false);
+  assert.equal(harness.storageData[FIRST_TOUCH_KEY], undefined);
+});
+
+test("a server acknowledgement stays with the original account if auth changes during the claim", async () => {
+  let resolveRequest;
+  const first = acquisitionFixture();
+  const harness = await runBackgroundHandoff({ type: "PING" }, undefined, {
+    initialStorage: { [FIRST_TOUCH_KEY]: { attribution: first } },
+    runScheduledTimers: false,
+    fetch: () => new Promise(resolve => { resolveRequest = resolve; }),
+  });
+  harness.emitAuthState("SIGNED_IN", signedInSession);
+  await settleAcquisition();
+  harness.emitAuthState("SIGNED_OUT", null);
+  await settleAcquisition();
+  resolveRequest({ ok: true, status: 200 });
+  await settleAcquisition();
+  assert.equal(harness.storageData[FIRST_TOUCH_KEY].userId, "buyer-1");
+  assert.equal(harness.storageData[FIRST_TOUCH_KEY].claimed, true);
+  assert.equal(harness.storageData.supabaseSession, undefined);
+});
+
+test("a pending source is claimed after a service worker restart", async () => {
+  const requests = [];
+  const first = acquisitionFixture();
+  const harness = await runBackgroundHandoff({ type: "PING" }, undefined, {
+    initialStorage: {
+      [FIRST_TOUCH_KEY]: { attribution: first },
+      supabaseSession: signedInSession,
+    },
+    runScheduledTimers: false,
+    fetch: async (url, options) => {
+      requests.push({ url, options });
+      return { ok: true, status: 200 };
+    },
+  });
+  await settleAcquisition();
+  assert.equal(requests.length, 1);
+  assert.deepEqual(JSON.parse(requests[0].options.body), { attribution: first });
+  assert.equal(harness.storageData[FIRST_TOUCH_KEY].claimed, true);
+});
+
+test("a hanging claim times out without affecting the signed-in account and can retry", async () => {
+  let requests = 0;
+  let signal;
+  const harness = await runBackgroundHandoff({ type: "PING" }, undefined, {
+    runScheduledTimers: false,
+    fetch: (_url, options) => {
+      requests++;
+      signal = options.signal;
+      if (requests > 1) return Promise.resolve({ ok: true, status: 200 });
+      return new Promise((_resolve, reject) => {
+        signal.addEventListener("abort", () => reject(new Error("aborted")), { once: true });
+      });
+    },
+  });
+  await captureAcquisition(harness, acquisitionFixture());
+  harness.emitAuthState("SIGNED_IN", signedInSession);
+  await settleAcquisition();
+  assert.equal(harness.storageData.userProfile.subscription_tier, "free");
+  assert.equal(signal.aborted, false);
+  harness.fireTimer(5000);
+  await settleAcquisition();
+  assert.equal(signal.aborted, true);
+  assert.equal(harness.storageData.supabaseSession.access_token, "buyer-access");
+  assert.equal(harness.storageData[FIRST_TOUCH_KEY].claimed, undefined);
+  harness.emitAuthState("TOKEN_REFRESHED", signedInSession);
+  await settleAcquisition();
+  assert.equal(requests, 2);
+  assert.equal(harness.storageData[FIRST_TOUCH_KEY].claimed, true);
+});
+
+test("sign-in makes only one claim attempt when the server fails immediately", async () => {
+  let requests = 0;
+  const harness = await runBackgroundHandoff({ type: "PING" }, undefined, {
+    runScheduledTimers: false,
+    fetch: async () => { requests++; return { ok: false, status: 503 }; },
+  });
+  await captureAcquisition(harness, acquisitionFixture());
+  harness.emitAuthState("SIGNED_IN", signedInSession);
+  await settleAcquisition();
+  assert.equal(requests, 1);
+  assert.equal(harness.storageData.supabaseSession.user.id, "buyer-1");
+});
+
+test("a pending source belongs to its first account, including failure and account switching", async () => {
+  let requests = 0;
+  let resolveRequest;
+  const harness = await runBackgroundHandoff({ type: "PING" }, undefined, {
+    runScheduledTimers: false,
+    fetch: () => {
+      requests++;
+      return requests === 1
+        ? new Promise(resolve => { resolveRequest = resolve; })
+        : Promise.resolve({ ok: true, status: 200 });
+    },
+  });
+  await captureAcquisition(harness, acquisitionFixture());
+  harness.emitAuthState("SIGNED_IN", signedInSession);
+  await settleAcquisition();
+  const otherSession = { ...signedInSession, access_token: "other-access", user: { id: "buyer-2" } };
+  harness.emitAuthState("SIGNED_IN", otherSession);
+  await settleAcquisition();
+  assert.equal(requests, 1, "another account must not claim the pending source");
+  resolveRequest({ ok: false, status: 503 });
+  await settleAcquisition();
+  harness.emitAuthState("TOKEN_REFRESHED", otherSession);
+  await settleAcquisition();
+  assert.equal(requests, 1, "a failed claim must retain its original account binding");
+  harness.emitAuthState("SIGNED_IN", signedInSession);
+  await settleAcquisition();
+  assert.equal(requests, 2, "the original account can retry its pending source");
+  harness.emitAuthState("SIGNED_IN", otherSession);
+  await settleAcquisition();
+  assert.equal(requests, 2, "an acknowledged source must not be reused for another account");
+});
+
+test("the real website bridge does not truncate an invalid source into a valid one", async () => {
+  const harness = await runBackgroundHandoff({ type: "PING" }, undefined, { runScheduledTimers: false });
+  const source = { ...acquisitionFixture(), source: "a".repeat(81) };
+  vm.runInNewContext(readFileSync("lib/attribution-bridge.js", "utf8"), {
+    window: {
+      location: { origin: "https://autolister.app" },
+      localStorage: { getItem: () => JSON.stringify(source) },
+      addEventListener() {},
+    },
+    document: { addEventListener() {} },
+    chrome: { runtime: {
+      lastError: null,
+      sendMessage: (message, callback) => harness.internalListener(message, acquisitionSender, callback),
+    } },
+  });
+  await settleAcquisition();
+  assert.equal(harness.storageData[FIRST_TOUCH_KEY], undefined);
 });

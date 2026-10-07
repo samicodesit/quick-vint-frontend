@@ -105,6 +105,110 @@ let tokenRefreshPromise = null;
 let tokenRefreshTimeout = null;
 let activeTabJob = null;
 
+// Website source data travels separately from auth. Never change the OAuth
+// redirect or wait for analytics before completing sign-in.
+const FIRST_TOUCH_KEY = "autolister.first_touch.v1";
+const ATTRIBUTION_MAX_AGE_MS = 180 * 24 * 60 * 60 * 1000;
+let attributionClaimInFlight = false;
+let attributionStorageQueue = Promise.resolve();
+
+function sanitizeFirstTouch(value) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const source = typeof value.source === "string" ? value.source.trim().toLowerCase() : "";
+  const media = ["organic_social", "paid_social", "referral", "search", "email", "direct", "unknown"];
+  const captured = typeof value.capturedAt === "string" ? Date.parse(value.capturedAt) : NaN;
+  if (!/^[a-z0-9][a-z0-9._-]{0,79}$/.test(source) || !media.includes(value.medium) ||
+      !Number.isFinite(captured) || captured > Date.now() + 5 * 60 * 1000 ||
+      captured < Date.now() - ATTRIBUTION_MAX_AGE_MS) return null;
+  const slug = input => typeof input === "string"
+    ? input.trim().toLowerCase().replace(/[^a-z0-9._-]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 80) || null
+    : null;
+  const host = typeof value.referrerHost === "string" ? value.referrerHost.trim().toLowerCase().replace(/\.$/, "") : "";
+  const referrerHost = /^(?=.{1,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z](?:[a-z0-9-]{0,61}[a-z0-9])?$/.test(host) &&
+    !/(^|\.)(autolister\.app|localhost|local|internal)$/.test(host) ? host : null;
+  return { source, medium: value.medium, campaign: slug(value.campaign), content: slug(value.content),
+    capturedAt: new Date(captured).toISOString(), referrerHost };
+}
+
+function withAttributionStorage(task) {
+  const result = attributionStorageQueue.catch(() => {}).then(task);
+  attributionStorageQueue = result;
+  return result;
+}
+
+function isAttributionBridgeSender(sender) {
+  try {
+    return new URL(sender?.url || "").origin === "https://autolister.app" &&
+      (!sender.origin || sender.origin === "https://autolister.app") &&
+      (sender.frameId === undefined || sender.frameId === 0);
+  } catch { return false; }
+}
+
+async function captureWebsiteAttribution(raw) {
+  const attribution = sanitizeFirstTouch(raw);
+  if (!attribution) return { ok: false, error: "invalid_attribution" };
+  await withAttributionStorage(async () => {
+    const data = await chrome.storage.local.get(FIRST_TOUCH_KEY);
+    if (sanitizeFirstTouch(data[FIRST_TOUCH_KEY]?.attribution)) return;
+    await chrome.storage.local.set({ [FIRST_TOUCH_KEY]: { attribution } });
+  });
+  void claimStoredFirstTouch().catch(() => {});
+  return { ok: true };
+}
+
+async function claimStoredFirstTouch() {
+  const data = await chrome.storage.local.get([FIRST_TOUCH_KEY, "supabaseSession"]);
+  const session = data.supabaseSession;
+  const record = data[FIRST_TOUCH_KEY];
+  if (!record) return false;
+  const attribution = sanitizeFirstTouch(record.attribution);
+  if (!attribution) {
+    await withAttributionStorage(async () => {
+      const current = (await chrome.storage.local.get(FIRST_TOUCH_KEY))[FIRST_TOUCH_KEY];
+      if (JSON.stringify(current) === JSON.stringify(record)) await chrome.storage.local.remove(FIRST_TOUCH_KEY);
+    });
+    return false;
+  }
+  const userId = session?.user?.id;
+  if (!userId || !session.access_token || record.claimed ||
+      (record.userId && record.userId !== userId) || attributionClaimInFlight) return false;
+  attributionClaimInFlight = true;
+  try {
+    const pending = { attribution, userId };
+    const bound = await withAttributionStorage(async () => {
+      const current = await chrome.storage.local.get([FIRST_TOUCH_KEY, "supabaseSession"]);
+      if (current.supabaseSession?.user?.id !== userId ||
+          JSON.stringify(current[FIRST_TOUCH_KEY]) !== JSON.stringify(record)) return false;
+      // Bind before sending, so failures or account changes cannot assign this
+      // browser source to a second account. This never changes the auth session.
+      if (!record.userId) await chrome.storage.local.set({ [FIRST_TOUCH_KEY]: pending });
+      return true;
+    });
+    if (!bound) return false;
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 5000);
+    try {
+      const response = await fetch(`${API_BASE}/api/attribution/claim`, {
+        method: "POST", credentials: "omit", signal: controller.signal,
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${session.access_token}` },
+        body: JSON.stringify({ attribution }),
+      });
+      if (!response.ok) return false;
+      await withAttributionStorage(async () => {
+        const current = (await chrome.storage.local.get(FIRST_TOUCH_KEY))[FIRST_TOUCH_KEY];
+        // Chrome storage can reorder object keys. Compare canonical source
+        // values, rather than the serialized order of a newly created object.
+        if (current?.userId === userId && !current.claimed &&
+            JSON.stringify(sanitizeFirstTouch(current.attribution)) === JSON.stringify(attribution)) {
+          await chrome.storage.local.set({ [FIRST_TOUCH_KEY]: { ...pending, claimed: true } });
+        }
+      });
+      return true;
+    } catch { return false; }
+    finally { clearTimeout(timeout); }
+  } finally { attributionClaimInFlight = false; }
+}
+
 // --- SESSION & TOKEN MANAGEMENT ---
 
 /**
@@ -324,6 +428,7 @@ function getUsageLimits(profile) {
 async function updateAndStoreUserProfile() {
   const session = await ensureValidToken();
   if (!session?.access_token) return;
+  void claimStoredFirstTouch().catch(() => {});
 
   try {
     const authClient = createAuthenticatedClient(session.access_token);
@@ -1769,6 +1874,15 @@ chrome.runtime.onMessageExternal.addListener((message, sender, sendResponse) => 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   (async () => {
     switch (message.type) {
+      case "CAPTURE_ATTRIBUTION":
+        if (!isAttributionBridgeSender(sender)) {
+          sendResponse({ ok: false, error: "invalid_sender" });
+          break;
+        }
+        try { sendResponse(await captureWebsiteAttribution(message.attribution)); }
+        catch { sendResponse({ ok: false, error: "attribution_storage_unavailable" }); }
+        break;
+
       case "GET_USER_PROFILE":
         const { supabaseSession, userProfile } = await chrome.storage.local.get(
           ["supabaseSession", "userProfile"],

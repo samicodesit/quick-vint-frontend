@@ -4,6 +4,7 @@ const path = require("node:path");
 const { test, expect, chromium } = require("@playwright/test");
 
 const extensionPath = path.resolve(__dirname, "../..");
+const authContextCleanups = new Set();
 const apiPathCandidates = [
   process.env.AUTOLISTER_API_PATH
     ? path.resolve(process.env.AUTOLISTER_API_PATH)
@@ -52,7 +53,13 @@ async function loadExtension() {
   if (!serviceWorker) {
     serviceWorker = await context.waitForEvent("serviceworker");
   }
-  return { context, serviceWorker };
+  const cleanup = async () => {
+    await context.close();
+    fs.rmSync(userDataDir, { recursive: true, force: true });
+    authContextCleanups.delete(cleanup);
+  };
+  authContextCleanups.add(cleanup);
+  return { context, serviceWorker, cleanup };
 }
 
 async function installAuthRoutes(context, events, options = {}) {
@@ -113,7 +120,80 @@ async function installAuthRoutes(context, events, options = {}) {
 
 test.describe("HTTPS auth handoff", () => {
   test.skip(!apiPath, "API checkout is not available");
+  test.afterEach(async () => {
+    for (const cleanup of [...authContextCleanups]) await cleanup();
+  });
 
+  test("carries a pre-install website source through welcome and the Google-style extension callback without extra UI", async () => {
+    const { context, serviceWorker, cleanup } = await loadExtension();
+    try {
+      const events = [];
+      await installAuthRoutes(context, events);
+      const source = { source: "google", medium: "search", campaign: null, content: null,
+        capturedAt: new Date().toISOString(), referrerHost: "www.google.com" };
+      await context.addInitScript(source => {
+        if (location.origin === "https://autolister.app") localStorage.setItem("autolister.first_touch.v1", JSON.stringify(source));
+      }, source);
+      await context.route("https://autolister.app/welcome", route => route.fulfill({
+        status: 200, contentType: "text/html", body: "<!doctype html><title>Welcome</title><p>Existing welcome page</p>",
+      }));
+      await serviceWorker.evaluate(() => {
+        globalThis.acquisitionRequests = [];
+        const originalFetch = globalThis.fetch;
+        globalThis.fetch = async (url, options) => {
+          if (url === "https://autolister.app/api/attribution/claim") {
+            globalThis.acquisitionRequests.push({ body: JSON.parse(options.body), authorization: options.headers.Authorization });
+            return new Response(JSON.stringify({ ok: true }), { status: 200 });
+          }
+          return originalFetch(url, options);
+        };
+      });
+      const welcome = await context.newPage();
+      await welcome.goto("https://autolister.app/welcome");
+      await expect.poll(() => serviceWorker.evaluate(() =>
+        chrome.storage.local.get("autolister.first_touch.v1"))).toMatchObject({
+          "autolister.first_touch.v1": { attribution: source },
+        });
+      await welcome.close();
+      const callback = await context.newPage();
+      const extensionId = new URL(serviceWorker.url()).hostname;
+      const token = fakeAccessToken();
+      await callback.goto(`chrome-extension://${extensionId}/callback.html#access_token=${token}&refresh_token=refresh-e2e&expires_in=3600`);
+      await expect.poll(() => serviceWorker.evaluate(() => globalThis.acquisitionRequests)).toEqual([
+        { body: { attribution: source }, authorization: `Bearer ${token}` },
+      ]);
+      await expect.poll(() => serviceWorker.evaluate(() =>
+        chrome.storage.local.get(["autolister.first_touch.v1", "supabaseSession"]))).toMatchObject({
+          "autolister.first_touch.v1": { userId: "user-e2e", claimed: true },
+          supabaseSession: { user: { id: "user-e2e" } },
+        });
+    } finally { await cleanup(); }
+  });
+
+  test("captures a website source that arrives after the bridge loads and copies only source fields", async () => {
+    const { context, serviceWorker, cleanup } = await loadExtension();
+    try {
+      await context.route("https://autolister.app/**", route => route.fulfill({
+        status: 200, contentType: "text/html", body: "<!doctype html><title>AutoLister</title><p>Existing content</p>",
+      }));
+      const page = await context.newPage();
+      await page.goto("https://autolister.app/");
+      const source = { source: "tiktok", medium: "paid_social", campaign: "seller-test", content: "proof",
+        capturedAt: new Date().toISOString(), referrerHost: "www.tiktok.com" };
+      await page.evaluate(source => {
+        localStorage.setItem("unrelated-auth-key", "private-session");
+        localStorage.setItem("autolister.first_touch.v1", JSON.stringify({ ...source, email: "private-email", access_token: "private-token" }));
+        document.dispatchEvent(new Event("autolister:attribution-ready"));
+      }, source);
+      await expect.poll(async () => {
+        await page.evaluate(() => document.dispatchEvent(new Event("autolister:attribution-ready")));
+        return serviceWorker.evaluate(() => chrome.storage.local.get("autolister.first_touch.v1"));
+      }).toEqual({
+          "autolister.first_touch.v1": { attribution: source },
+      });
+      await expect(page.locator("p")).toHaveText("Existing content");
+    } finally { await cleanup(); }
+  });
   test("hands Supabase magic-link tokens from the real web callback page to the loaded extension", async () => {
     const { context, serviceWorker } = await loadExtension();
     const events = [];
