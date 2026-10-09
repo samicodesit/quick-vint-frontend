@@ -100,7 +100,39 @@ const SUPPORTED_LANGUAGE_CODES = new Set([
 ]);
 
 // --- STATE ---
-const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+// Bound auth network I/O, including the response body, before Chrome's
+// service-worker fetch deadline. Other Supabase and product requests retain
+// their existing transport. Abort the actual fetch rather than abandoning it.
+async function boundedSupabaseFetch(input, options) {
+  const url = new URL(typeof input === "string" ? input : input?.url || String(input));
+  if (url.origin !== SUPABASE_URL || !url.pathname.startsWith("/auth/v1/")) {
+    return fetch(input, options);
+  }
+  const controller = new AbortController();
+  const callerSignal = options?.signal || input?.signal;
+  const forwardAbort = () => controller.abort(callerSignal.reason);
+  if (callerSignal?.aborted) forwardAbort();
+  else callerSignal?.addEventListener("abort", forwardAbort, { once: true });
+  const timeout = setTimeout(() => controller.abort(Object.assign(
+    new Error("Authentication request timed out"), { name: "AbortError" },
+  )), 20000);
+  try {
+    const response = await fetch(input, { ...options, signal: controller.signal });
+    const body = await response.arrayBuffer();
+    const complete = new Response(body.byteLength ? body : null, {
+      status: response.status, statusText: response.statusText, headers: response.headers,
+    });
+    for (const key of ["url", "redirected", "type"])
+      Object.defineProperty(complete, key, { value: response[key] });
+    return complete;
+  } finally {
+    clearTimeout(timeout);
+    callerSignal?.removeEventListener("abort", forwardAbort);
+  }
+}
+const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+  global: { fetch: boundedSupabaseFetch },
+});
 let tokenRefreshPromise = null;
 let tokenRefreshTimeout = null;
 let activeTabJob = null;
@@ -291,10 +323,19 @@ async function refreshTokenWithRetry(maxRetries = 3) {
 
       trackRefresh("token_refresh_start");
       refreshPhase = "restore_session";
-      await supabaseClient.auth.setSession({
+      const restored = await supabaseClient.auth.setSession({
         access_token: session.access_token,
         refresh_token: session.refresh_token,
       });
+      if (restored.error) {
+        if (restored.error.message?.includes("Invalid Refresh Token") ||
+            restored.error.message?.includes("refresh_token_not_found")) {
+          trackRefresh("token_refresh_expired", { ...refreshErrorContext(restored.error), attempts });
+          await handleSignOut({ clearAccountEmail: false });
+          return null;
+        }
+        throw restored.error;
+      }
 
       for (let attempt = 1; attempt <= maxRetries; attempt++) {
         attempts = attempt;

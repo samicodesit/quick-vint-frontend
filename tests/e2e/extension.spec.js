@@ -224,6 +224,105 @@ async function loadExtension(options = {}) {
   return { context, serviceWorker };
 }
 
+test("the packaged SDK releases stalled auth and succeeds afterwards in the extension worker", async () => {
+  test.setTimeout(60000);
+  const { context, serviceWorker } = await loadExtension();
+  try {
+    const result = await serviceWorker.evaluate(async () => {
+      const originalFetch = globalThis.fetch;
+      let calls = 0;
+      let stalled = true;
+      let aborted = false;
+      globalThis.fetch = async (_input, options) => {
+        calls++;
+        if (stalled) return new Promise((_resolve, reject) => {
+          options.signal.addEventListener("abort", () => { aborted = true; reject(options.signal.reason); }, { once: true });
+        });
+        return new Response(JSON.stringify({ id: "00000000-0000-4000-8000-000000000001", email: "local-test@example.invalid" }), {
+          status: 200, headers: { "content-type": "application/json" },
+        });
+      };
+      const client = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+        global: { fetch: boundedSupabaseFetch },
+        auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
+      });
+      try {
+        const saved = await chrome.storage.local.get("supabaseSession");
+        const start = performance.now();
+        const first = await client.auth.getUser("isolated-test-token");
+        const elapsed = performance.now() - start;
+        stalled = false;
+        const second = await client.auth.getUser("isolated-test-token");
+        const after = await chrome.storage.local.get("supabaseSession");
+        return { calls, aborted, elapsed, error: { name: first.error?.name, status: first.error?.status },
+          recovered: second.data.user?.id, unchangedStorage: JSON.stringify(saved) === JSON.stringify(after) };
+      } finally { globalThis.fetch = originalFetch; client.auth.stopAutoRefresh(); }
+    });
+    expect(result.aborted).toBe(true);
+    expect(result.elapsed).toBeGreaterThanOrEqual(19000);
+    expect(result.elapsed).toBeLessThan(28000);
+    expect(result.error).toEqual({ name: "AuthRetryableFetchError", status: 0 });
+    expect(result.recovered).toBe("00000000-0000-4000-8000-000000000001");
+    expect(result.calls).toBe(2);
+    expect(result.unchangedStorage).toBe(true);
+  } finally { await context.close(); }
+});
+
+test("a stalled SDK restoration produces a terminal refresh diagnostic without extra refresh calls or session loss", async () => {
+  test.setTimeout(60000);
+  const { context, serviceWorker } = await loadExtension();
+  try {
+    const result = await serviceWorker.evaluate(async () => {
+      const originalFetch = globalThis.fetch;
+      const originalTrack = AutoListerTelemetry.track;
+      const events = [];
+      let authCalls = 0;
+      let refreshCalls = 0;
+      const encoded = value => btoa(JSON.stringify(value)).replace(/=/g, "").replace(/\+/g, "-").replace(/\//g, "_");
+      const saved = { access_token: `${encoded({ alg: "HS256", typ: "JWT" })}.${encoded({ exp: Math.floor(Date.now() / 1000) + 3600, sub: "00000000-0000-4000-8000-000000000001" })}.dGVzdA`,
+        refresh_token: "local-test-refresh", expires_at: Math.floor(Date.now() / 1000) + 3600,
+        user: { id: "00000000-0000-4000-8000-000000000001" } };
+      globalThis.fetch = async (input, options) => {
+        const url = String(input);
+        if (url.includes("/api/events/track")) {
+          const body = JSON.parse(options.body);
+          return new Response(JSON.stringify({ acknowledgedIds: body.events.map(event => event.id), duplicateIds: [], rejections: [] }), {
+            status: 200, headers: { "content-type": "application/json" },
+          });
+        }
+        if (url.includes("/auth/v1/")) {
+          authCalls++;
+          if (url.includes("/token")) refreshCalls++;
+          return new Promise((_resolve, reject) => options.signal.addEventListener("abort", () => reject(options.signal.reason), { once: true }));
+        }
+        throw new Error("Unexpected local-test request");
+      };
+      AutoListerTelemetry.track = (...args) => { events.push({ event: args[0], context: args[1] }); return originalTrack(...args); };
+      try {
+        await chrome.storage.local.set({ supabaseSession: saved });
+        const result = await refreshTokenWithRetry();
+        await AutoListerTelemetry.flush();
+        const after = await chrome.storage.local.get("supabaseSession");
+        return { returnedNull: result === null, authCalls, refreshCalls, events,
+          sessionRetained: after.supabaseSession?.access_token === saved.access_token &&
+            after.supabaseSession?.refresh_token === saved.refresh_token &&
+            after.supabaseSession?.expires_at === saved.expires_at &&
+            after.supabaseSession?.user?.id === saved.user.id };
+      } finally {
+        AutoListerTelemetry.track = originalTrack;
+        await chrome.storage.local.remove("supabaseSession");
+        globalThis.fetch = originalFetch;
+      }
+    });
+    expect(result.returnedNull).toBe(true);
+    expect(result.authCalls).toBe(1);
+    expect(result.refreshCalls).toBe(0);
+    expect(result.sessionRetained).toBe(true);
+    expect(result.events.map(event => event.event)).toEqual(["token_refresh_start", "token_refresh_failed"]);
+    expect(result.events[1].context).toMatchObject({ phase: "restore_session", attempts: 0, errorName: "AuthRetryableFetchError", statusCode: 0 });
+  } finally { await context.close(); }
+});
+
 function installChromeHarness(page, capacityResponse = null, initialStorage = {}) {
   return page.evaluate(({ capacity, initialStorage }) => {
     const capacityQueue = Array.isArray(capacity) ? [...capacity] : [capacity];

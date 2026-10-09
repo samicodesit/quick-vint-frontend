@@ -27,6 +27,7 @@ async function runBackgroundHandoff(
   let internalListener;
   let installedListener;
   let authStateListener;
+  let clientOptions;
   let setSessionArgs = null;
   let verifyOtpArgs = null;
   const setSessionResult = options.setSessionResult || {
@@ -77,6 +78,7 @@ async function runBackgroundHandoff(
         options.refreshSession ||
         (async () => ({ data: { session: null }, error: null })),
       onAuthStateChange(listener) { authStateListener = listener; },
+      signOut: async () => { authStateListener?.("SIGNED_OUT", null); return { error: null }; },
     },
     from(table) {
       return {
@@ -188,10 +190,11 @@ async function runBackgroundHandoff(
     URLSearchParams,
     URL,
     AbortController,
+    Response,
     crypto: { randomUUID: () => "cid-test" },
     importScripts(...files) {
       sandbox.supabase = {
-        createClient: () => supabaseClient,
+        createClient: (_url, _key, config) => { clientOptions = config; return supabaseClient; },
       };
       if (options.captureTelemetry) {
         for (const file of files) {
@@ -240,7 +243,8 @@ async function runBackgroundHandoff(
     timers: timerCalls,
     internalListener,
     telemetryEvents,
-    fireTimer: (delay) => timers.find(timer => timer.delay === delay)?.callback(),
+    clientOptions,
+    fireTimer: (delay) => timers.findLast(timer => timer.delay === delay)?.callback(),
     refreshToken: () => vm.runInContext("refreshTokenWithRetry()", sandbox),
     emitAuthState: (event, session) => authStateListener(event, session),
   };
@@ -277,6 +281,103 @@ test("exhausted token refresh retains the final sanitized provider error without
   assert.equal(refreshCalls, 3);
   assert.deepEqual(harness.timers.filter(timer => [2000, 4000].includes(timer.delay)), [{ delay: 2000 }, { delay: 4000 }]);
   assert.equal(harness.storageData.supabaseSession.access_token, "existing-access");
+});
+
+test("Supabase auth fetch has a deadline and leaves product requests untouched", async () => {
+  const calls = [];
+  const harness = await runBackgroundHandoff({ type: "PING" }, undefined, {
+    runScheduledTimers: false,
+    fetch: (url, options) => {
+      calls.push({ url, options });
+      return new Promise((_resolve, reject) => {
+        options?.signal?.addEventListener("abort", () => reject(options.signal.reason));
+      });
+    },
+  });
+  const boundedFetch = harness.clientOptions?.global?.fetch;
+  assert.equal(typeof boundedFetch, "function", "auth requests must have a bounded fetch");
+  const pending = boundedFetch("https://jqloiovdwjaornnfvmyu.supabase.co/auth/v1/user", { headers: { Authorization: "Bearer test" } });
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(calls[0].options.headers.Authorization, "Bearer test");
+  const rejection = assert.rejects(pending, error => error.name === "AbortError");
+  harness.fireTimer(20000);
+  await rejection;
+  const inputOptions = { method: "POST", body: "photo-input" };
+  void boundedFetch("https://jqloiovdwjaornnfvmyu.supabase.co/rest/v1/profiles", inputOptions);
+  assert.equal(calls[1].options, inputOptions);
+});
+
+test("auth deadlines cover stalled response bodies and preserve caller cancellation", async () => {
+  let signal;
+  const harness = await runBackgroundHandoff({ type: "PING" }, undefined, {
+    runScheduledTimers: false,
+    fetch: async (_url, options) => {
+      signal = options.signal;
+      return { arrayBuffer: () => new Promise((_resolve, reject) => {
+        signal.addEventListener("abort", () => reject(signal.reason));
+      }) };
+    },
+  });
+  const fetchAuth = harness.clientOptions.global.fetch;
+  const caller = new AbortController();
+  const pending = fetchAuth("https://jqloiovdwjaornnfvmyu.supabase.co/auth/v1/token", { signal: caller.signal });
+  await new Promise(resolve => setImmediate(resolve));
+  const reason = new Error("Caller cancelled");
+  const rejection = assert.rejects(pending, error => error === reason);
+  caller.abort(reason);
+  await rejection;
+  const stalled = fetchAuth("https://jqloiovdwjaornnfvmyu.supabase.co/auth/v1/user");
+  await new Promise(resolve => setImmediate(resolve));
+  const deadline = assert.rejects(stalled, error => error.name === "AbortError");
+  harness.fireTimer(20000);
+  await deadline;
+});
+
+test("successful auth responses keep their status, headers and body without retry", async () => {
+  let calls = 0;
+  const harness = await runBackgroundHandoff({ type: "PING" }, undefined, {
+    runScheduledTimers: false,
+    fetch: async () => { calls++; return new Response('{"user":{"id":"user-1"}}', {
+      status: 200, headers: { "content-type": "application/json", "x-test": "retained" },
+    }); },
+  });
+  const response = await harness.clientOptions.global.fetch("https://jqloiovdwjaornnfvmyu.supabase.co/auth/v1/user");
+  assert.equal(response.status, 200);
+  assert.equal(response.headers.get("x-test"), "retained");
+  assert.deepEqual(await response.json(), { user: { id: "user-1" } });
+  assert.equal(calls, 1);
+});
+
+test("a session-restoration error ends refresh without extra requests or clearing the stored session", async () => {
+  let requests = 0;
+  const session = { access_token: "saved-access", refresh_token: "saved-refresh", expires_at: 2000000000, user: { id: "user-1" } };
+  const harness = await runBackgroundHandoff({ type: "PING" }, undefined, {
+    initialStorage: { supabaseSession: session }, runScheduledTimers: false, captureTelemetry: true,
+    setSessionResult: { data: { session: null }, error: { name: "AuthRetryableFetchError", status: 0, message: "Authentication request timed out" } },
+    refreshSession: async () => { requests++; return { data: { session: null }, error: null }; },
+    resolveRefreshBackoff: true,
+  });
+  await harness.refreshToken();
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(requests, 0);
+  assert.equal(harness.storageData.supabaseSession.access_token, session.access_token);
+  const failure = harness.telemetryEvents.find(event => event.event === "token_refresh_failed");
+  assert.equal(failure.context.phase, "restore_session");
+  assert.equal(failure.context.errorName, "AuthRetryableFetchError");
+});
+
+test("a confirmed invalid refresh token during restoration keeps the normal sign-out behavior", async () => {
+  const harness = await runBackgroundHandoff({ type: "PING" }, undefined, {
+    initialStorage: { accountEmail: "seller@example.com", supabaseSession: {
+      access_token: "expired-access", refresh_token: "expired-refresh", expires_at: 2000000000, user: { id: "user-1" },
+    } }, runScheduledTimers: false, captureTelemetry: true,
+    setSessionResult: { data: { session: null }, error: { name: "AuthApiError", status: 400, message: "Invalid Refresh Token: refresh_token_not_found" } },
+  });
+  await harness.refreshToken();
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(harness.storageData.supabaseSession, undefined);
+  assert.equal(harness.storageData.accountEmail, "seller@example.com");
+  assert.ok(harness.telemetryEvents.some(event => event.event === "token_refresh_expired"));
 });
 
 test("refresh failures keep their stage and original error after the SDK signs out", async () => {
