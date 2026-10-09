@@ -73,6 +73,41 @@ test("unavailable storage is reported without throwing into product work", async
   assert.equal((await q.flush()).delivered, false);
 });
 
+test("drop evidence identifies expiry, capacity and critical customer reports", async () => {
+  const f = fixture(); const q = f.make();
+  await q.enqueue({ id: "expired-report", event: "listing_report_submitted" }, "a", true);
+  f.time(86401001);
+  for (let i = 0; i < 201; i++) await q.enqueue({ id: `routine-${i}`, event: "click" }, "a");
+  f.respond({ status: 200, json: async () => ({ acknowledgedIds: f.requests.at(-1).body.events.map(event => event.id) }) });
+  await q.flush();
+  const carriers = f.requests.flatMap(request => request.body.events).filter(event => event.context?.queueDropped);
+  assert.equal(carriers.length, 1);
+  assert.deepEqual(carriers[0].context, {
+    queueDropped: 2, queueDroppedExpired: 1, queueDroppedCapacity: 1,
+    queueDroppedRejected: 0, queueDroppedCritical: 1, queueDroppedCustomerReports: 1, queueDroppedUnclassified: 0,
+  });
+});
+
+test("terminal rejection records its reason but network retries and capacity rejection do not count as drops", async () => {
+  const f = fixture(); const q = f.make();
+  await q.enqueue({ id: "rejected", event: "listing_report_submitted" }, "a", true);
+  f.respond({ status: 200, json: async () => ({ rejections: [{ id: "rejected", reason: "expired" }] }) });
+  await q.flush();
+  await q.enqueue({ id: "carrier", event: "click" }, "a");
+  f.respond({ status: 503, json: async () => ({ rejections: [{ id: "carrier", reason: "receipt_capacity" }] }) });
+  await q.flush();
+  const context = f.requests.at(-1).body.events[0].context;
+  assert.equal(context.queueDropped, 1);
+  assert.equal(context.queueDroppedRejected, 1);
+  assert.equal(context.queueDropLastRejection, "expired");
+  assert.equal(context.queueDroppedCustomerReports, 1);
+  assert.equal(f.state().events.length, 1);
+  assert.equal(f.state().dropped, 0);
+  f.time(62000); await q.flush();
+  assert.equal(f.state().dropped, 0);
+  assert.deepEqual(f.requests.at(-1).body.events[0].context, context);
+});
+
 test("drains anonymous and authenticated partitions without sharing credentials", async () => {
   let state = { events: [], dropped: 0 }; const sent = [];
   const q = createQueue({ storage: { transact: async (fn) => fn(state) }, identity: async () => ({ id: "a", token: "token-a" }), send: async (body, token) => {
@@ -84,6 +119,48 @@ test("drains anonymous and authenticated partitions without sharing credentials"
   assert.deepEqual(result.acknowledgedIds.sort(), ["anonymous", "signed-in"]);
   assert.equal(sent[0].token, null);
   assert.equal(sent[1].token, "token-a");
+});
+
+test("pre-upgrade drop totals remain explicitly unclassified and survive a lost acknowledgement", async () => {
+  const f = fixture(); const q = f.make();
+  f.state().dropped = 57;
+  await q.enqueue({ id: "carrier", event: "click" }, "a");
+  await q.flush();
+  assert.equal(f.requests[0].body.events[0].context.queueDroppedUnclassified, 57);
+  f.time(62000);
+  f.respond({ status: 200, json: async () => ({ duplicateIds: ["carrier"] }) });
+  await q.flush();
+  assert.equal(f.state().events.length, 0);
+  assert.deepEqual(f.requests[1].body.events[0].context, f.requests[0].body.events[0].context);
+  assert.equal(f.state().dropped, 0);
+});
+
+test("byte capacity records the routine eviction while preserving a critical report", async () => {
+  const f = fixture(); const q = f.make();
+  await q.enqueue({ id: "report", event: "listing_report_submitted" }, "a", true);
+  for (let i = 0; i < 12; i++) await q.enqueue({ id: String(i), event: "click", context: { message: "x".repeat(45000) } }, "a");
+  assert.equal(f.state().dropped, 1);
+  assert.ok(f.state().events.some(entry => entry.event.id === "report"));
+  await q.flush();
+  const context = f.requests[0].body.events[0].context;
+  assert.equal(context.queueDroppedCapacity, 1);
+  assert.equal(context.queueDroppedCritical, 0);
+  assert.equal(context.queueDroppedCustomerReports, 0);
+});
+
+test("an old tab clearing the total cannot make stale reason counters describe later drops", async () => {
+  const f = fixture(); const q = f.make();
+  f.state().dropCounts = { expired: 57, critical: 1, customerReports: 1 };
+  f.state().dropped = 0;
+  await q.enqueue({ id: "new-routine", event: "click" }, "a");
+  f.time(86401001);
+  await q.enqueue({ id: "new-carrier", event: "click" }, "a");
+  await q.flush();
+  const context = f.requests[0].body.events[0].context;
+  assert.equal(context.queueDropped, 1);
+  assert.equal(context.queueDroppedExpired, 1);
+  assert.equal(context.queueDroppedCritical, 0);
+  assert.equal(context.queueDroppedCustomerReports, 0);
 });
 
 test("a flush requested during an account change rechecks identity before settling", async () => {
