@@ -334,7 +334,11 @@ async function refreshTokenWithRetry(maxRetries = 3) {
           await handleSignOut({ clearAccountEmail: false });
           return null;
         }
-        throw restored.error;
+        // An expired access JWT is recoverable with the refresh token. The
+        // server can reject it before the local clock considers it expired.
+        const accessTokenExpired = restored.error.code === "bad_jwt" &&
+          restored.error.status === 403 && /token is expired/i.test(restored.error.message || "");
+        if (!accessTokenExpired) throw restored.error;
       }
 
       for (let attempt = 1; attempt <= maxRetries; attempt++) {

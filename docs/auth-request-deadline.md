@@ -14,6 +14,19 @@ session. A confirmed invalid refresh token keeps the existing sign-out behavior
 and remembered account email. Outer refresh retries after successful restoration
 retain their existing limit and backoff.
 
+One exception applies when restoration returns `bad_jwt`, HTTP 403, and the
+server explicitly says the access token is expired. The SDK chooses between
+access-token verification and refresh using the local clock. Clock skew or
+expiry during verification can therefore reject the access token before the
+refresh endpoint is reached. Continue through the existing bounded refresh
+path for that specific response. Invalid signatures, other forbidden errors,
+network failures, and invalid refresh tokens keep their existing handling.
+The refreshed session is persisted with its rotated refresh token and account.
+Unit tests and an actual SDK extension-worker fixture first reproduced failed
+recovery, then verified one refresh request and persisted recovery. The live
+expired-token alert establishes the rejection, not a failed listing or the
+validity of that customer's refresh token.
+
 Regression checks execute the packaged Supabase SDK inside a Chromium extension
 worker. A pending auth request aborts at the real deadline, the SDK returns
 AuthRetryableFetchError status zero, and a subsequent request succeeds. A second

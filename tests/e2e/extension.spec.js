@@ -323,6 +323,60 @@ test("a stalled SDK restoration produces a terminal refresh diagnostic without e
   } finally { await context.close(); }
 });
 
+test("the packaged SDK refreshes after the server rejects an access JWT as expired", async () => {
+  const { context, serviceWorker } = await loadExtension();
+  try {
+    const result = await serviceWorker.evaluate(async () => {
+      const originalFetch = globalThis.fetch;
+      const originalTrack = AutoListerTelemetry.track;
+      const requests = [];
+      const events = [];
+      const encoded = value => btoa(JSON.stringify(value)).replace(/=/g, "").replace(/\+/g, "-").replace(/\//g, "_");
+      const user = { id: "00000000-0000-4000-8000-000000000001", email: "local-test@example.invalid" };
+      const token = exp => `${encoded({ alg: "HS256", typ: "JWT" })}.${encoded({ exp, sub: user.id })}.dGVzdA`;
+      // Local clock sees a valid JWT; the server is authoritative about expiry.
+      const saved = { access_token: token(Math.floor(Date.now() / 1000) + 60), refresh_token: "local-refresh", expires_at: Math.floor(Date.now() / 1000) + 60, user };
+      const renewed = { access_token: token(Math.floor(Date.now() / 1000) + 3600), refresh_token: "local-rotated-refresh", expires_in: 3600, token_type: "bearer", user };
+      globalThis.fetch = async (input, options) => {
+        const url = String(input);
+        if (url.includes("/api/events/track")) {
+          const body = JSON.parse(options.body);
+          return new Response(JSON.stringify({ acknowledgedIds: body.events.map(event => event.id), duplicateIds: [], rejections: [] }), { status: 200, headers: { "content-type": "application/json" } });
+        }
+        if (url.includes("/auth/v1/")) requests.push({ path: new URL(url).pathname, method: options.method, refresh: options.body ? JSON.parse(options.body).refresh_token : null });
+        if (url.includes("/auth/v1/user")) {
+          const rejected = new Headers(options.headers).get("authorization") === `Bearer ${saved.access_token}`;
+          return new Response(JSON.stringify(rejected ? { code: "bad_jwt", msg: "invalid JWT: unable to parse or verify signature, token has invalid claims: token is expired" } : user), { status: rejected ? 403 : 200, headers: { "content-type": "application/json", "x-supabase-api-version": "2024-01-01" } });
+        }
+        if (url.includes("/auth/v1/token")) return new Response(JSON.stringify(renewed), { status: 200, headers: { "content-type": "application/json" } });
+        if (url.includes("/rest/v1/profiles")) return new Response(JSON.stringify({ id: user.id, email: user.email, subscription_status: "free", subscription_tier: "free" }), { status: 200, headers: { "content-type": "application/json" } });
+        throw new Error("Unexpected local-test request");
+      };
+      AutoListerTelemetry.track = (...args) => { events.push(args[0]); return originalTrack(...args); };
+      try {
+        await chrome.storage.local.set({ supabaseSession: saved });
+        const session = await refreshTokenWithRetry();
+        await AutoListerTelemetry.flush();
+        const after = await chrome.storage.local.get("supabaseSession");
+        return { recovered: session?.refresh_token === renewed.refresh_token, persisted: after.supabaseSession?.refresh_token === renewed.refresh_token, sameAccount: session?.user.id === user.id, requests, events };
+      } finally {
+        AutoListerTelemetry.track = originalTrack;
+        await chrome.storage.local.remove("supabaseSession");
+        globalThis.fetch = originalFetch;
+      }
+    });
+    expect(result.recovered).toBe(true);
+    expect(result.persisted).toBe(true);
+    expect(result.sameAccount).toBe(true);
+    expect(result.requests).toEqual([
+      { path: "/auth/v1/user", method: "GET", refresh: null },
+      { path: "/auth/v1/token", method: "POST", refresh: "local-refresh" },
+      { path: "/auth/v1/user", method: "GET", refresh: null },
+    ]);
+    expect(result.events).toEqual(["token_refresh_start", "token_refresh_success"]);
+  } finally { await context.close(); }
+});
+
 function installChromeHarness(page, capacityResponse = null, initialStorage = {}) {
   return page.evaluate(({ capacity, initialStorage }) => {
     const capacityQueue = Array.isArray(capacity) ? [...capacity] : [capacity];

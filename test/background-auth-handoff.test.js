@@ -366,6 +366,42 @@ test("a session-restoration error ends refresh without extra requests or clearin
   assert.equal(failure.context.errorName, "AuthRetryableFetchError");
 });
 
+test("a server-expired access JWT still refreshes and persists the valid session", async () => {
+  const session = { access_token: "old-access", refresh_token: "valid-refresh", expires_at: 2000000000, user: { id: "user-1" } };
+  const renewed = { ...session, access_token: "renewed-access", refresh_token: "rotated-refresh" };
+  let calls = 0;
+  const harness = await runBackgroundHandoff({ type: "PING" }, undefined, {
+    initialStorage: { supabaseSession: session }, runScheduledTimers: false, captureTelemetry: true,
+    setSessionResult: { data: { session: null }, error: { name: "AuthApiError", code: "bad_jwt", status: 403, message: "invalid JWT: token has invalid claims: token is expired" } },
+    refreshSession: async () => { calls++; return { data: { session: renewed }, error: null }; },
+  });
+  assert.equal((await harness.refreshToken())?.access_token, renewed.access_token);
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(calls, 1);
+  assert.equal(harness.storageData.supabaseSession.refresh_token, renewed.refresh_token);
+  assert.ok(harness.telemetryEvents.some(event => event.event === "token_refresh_success"));
+  assert.ok(!harness.telemetryEvents.some(event => event.event === "token_refresh_failed"));
+});
+
+test("restoration does not bypass invalid-signature or generic forbidden JWT errors", async () => {
+  for (const error of [
+    { code: "bad_jwt", status: 403, message: "invalid JWT: signature verification failed" },
+    { code: "unexpected_failure", status: 403, message: "token is expired" },
+    { code: "bad_jwt", status: 500, message: "token is expired" },
+  ]) {
+    let calls = 0;
+    const harness = await runBackgroundHandoff({ type: "PING" }, undefined, {
+      initialStorage: { supabaseSession: { access_token: "saved-access", refresh_token: "saved-refresh", expires_at: 2000000000 } },
+      runScheduledTimers: false, captureTelemetry: true,
+      setSessionResult: { data: { session: null }, error: { name: "AuthApiError", ...error } },
+      refreshSession: async () => { calls++; return { data: { session: null }, error: null }; },
+    });
+    assert.equal(await harness.refreshToken(), null);
+    assert.equal(calls, 0);
+    assert.equal(harness.storageData.supabaseSession.access_token, "saved-access");
+  }
+});
+
 test("a confirmed invalid refresh token during restoration keeps the normal sign-out behavior", async () => {
   const harness = await runBackgroundHandoff({ type: "PING" }, undefined, {
     initialStorage: { accountEmail: "seller@example.com", supabaseSession: {
