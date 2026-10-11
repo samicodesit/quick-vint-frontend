@@ -495,6 +495,10 @@ function installChromeHarness(page, capacityResponse = null, initialStorage = {}
             };
           }
 
+          if (message?.type === "START_WARDROBE_REWRITE" && storage.__deferWardrobeStart) {
+            window.__extensionHarness.resolveWardrobeStart = () => callback?.(response);
+            return;
+          }
           setTimeout(
             () => callback?.(response),
             message?.type === "GET_BATCH_CAPACITY"
@@ -8471,7 +8475,7 @@ test.describe("own wardrobe rewrite widget", () => {
       capacityResponse: { allowed: true, available: 2 },
       wardrobeItems: wardrobeItemFixture({ id: "9443601541" }),
       initialStorage: {
-        __startWardrobeDelayMs: 80,
+        __deferWardrobeStart: true,
         __startWardrobeResponse: { ok: false, error: "Background rejected this rewrite." },
       },
     });
@@ -8482,6 +8486,7 @@ test.describe("own wardrobe rewrite widget", () => {
     await expectWardrobeSelectionControlsDisabled(page, true);
     await page.getByRole("button", { name: "Cancel" }).dispatchEvent("click");
     await expect(page.locator(".quickvint-wardrobe-selection-controller")).toBeVisible();
+    await page.evaluate(() => window.__extensionHarness.resolveWardrobeStart());
     await expect(page.locator(".quickvint-wardrobe-selection-feedback")).toHaveText(
       "Background rejected this rewrite.",
     );
