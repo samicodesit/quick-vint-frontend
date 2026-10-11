@@ -10,6 +10,122 @@ const languageDefaultsPath = path.join(extensionPath, "language-defaults.js");
 const qrCodePath = path.join(extensionPath, "lib/qrcode.min.js");
 const contentScriptPath = path.join(extensionPath, "content.js");
 
+test("replays a dropped generation response with the same request and starts a fresh intentional generation", async ({ page }) => {
+  await page.route("https://autolister.app/api/events/track", (route) => route.fulfill({ status: 204, body: "" }));
+  const requests = [];
+  await page.route("https://autolister.app/api/generate", async (route) => {
+    requests.push({ headers: route.request().headers(), body: route.request().postDataJSON() });
+    if (requests.length === 1) return route.abort("connectionreset");
+    return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ title: "Recovered title", description: "Recovered description" }) });
+  });
+  await openContentHarness(page);
+  await page.locator("#quickvint-gen-btn").click();
+  await expect(page.locator('[data-testid="title--input"]')).toHaveValue("Recovered title");
+  expect(requests).toHaveLength(2);
+  const requestId = requests[0].headers["x-autolister-request-id"];
+  expect(requestId).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i);
+  expect(requests[0].headers["x-autolister-client"]).toBe("extension");
+  expect(requests[1].headers["x-autolister-request-id"]).toBe(requestId);
+  expect(requests[1].body).toEqual(requests[0].body);
+  await page.locator('[data-testid="title--input"]').fill("");
+  await page.locator('[data-testid="description--input"]').fill("");
+  await page.locator("#quickvint-gen-btn").click();
+  await expect.poll(() => requests.length).toBe(3);
+  expect(requests[2].headers["x-autolister-request-id"]).not.toBe(requestId);
+});
+
+test("keeps an uncertain generation request for a later retry in the same tab", async ({ page }) => {
+  await page.route("https://autolister.app/api/events/track", (route) => route.fulfill({ status: 204, body: "" }));
+  const requests = [];
+  await page.route("https://autolister.app/api/generate", async (route) => {
+    requests.push({ headers: route.request().headers(), body: route.request().postDataJSON() });
+    if (requests.length <= 2) return route.abort("connectionreset");
+    return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ title: "Recovered later", description: "Recovered description" }) });
+  });
+  await openContentHarness(page);
+  await page.locator("#quickvint-gen-btn").click();
+  await expect.poll(() => requests.length).toBe(2);
+  await expect(page.locator("#quickvint-gen-btn")).toBeEnabled();
+  await page.evaluate(async () => {
+    const { supabaseSession } = await chrome.storage.local.get("supabaseSession");
+    await chrome.storage.local.set({ supabaseSession: { ...supabaseSession, access_token: "refreshed-access-token" } });
+  });
+  await page.locator("#quickvint-gen-btn").click();
+  await expect(page.locator('[data-testid="title--input"]')).toHaveValue("Recovered later");
+  expect(requests).toHaveLength(3);
+  expect(requests[2].headers["x-autolister-request-id"]).toBe(requests[0].headers["x-autolister-request-id"]);
+  expect(requests[2].body).toEqual(requests[0].body);
+  expect(requests[2].headers.authorization).toBe("Bearer refreshed-access-token");
+});
+
+for (const change of ["account", "settings"]) {
+  test(`does not reuse an uncertain generation after changing ${change}`, async ({ page }) => {
+    await page.route("https://autolister.app/api/events/track", (route) => route.fulfill({ status: 204, body: "" }));
+    const requests = [];
+    await page.route("https://autolister.app/api/generate", (route) => {
+      requests.push({ headers: route.request().headers(), body: route.request().postDataJSON() });
+      return route.fulfill({ status: requests.length === 1 ? 503 : 200, contentType: "application/json", body: JSON.stringify(requests.length === 1 ? { error: "Still finalizing", code: "generation_commit_pending" } : { title: "Fresh operation", description: "New account or settings" }) });
+    });
+    await openContentHarness(page);
+    await page.locator("#quickvint-gen-btn").click();
+    await expect.poll(() => requests.length).toBe(1);
+    await expect(page.locator("#quickvint-gen-btn")).toBeEnabled();
+    await page.evaluate(async (change) => {
+      if (change === "settings") {
+        await chrome.storage.local.set({ tone: "casual" });
+      } else {
+        const { supabaseSession } = await chrome.storage.local.get("supabaseSession");
+        await chrome.storage.local.set({ supabaseSession: { ...supabaseSession, access_token: "other-access-token", user: { id: "other-user" } } });
+      }
+    }, change);
+    await page.locator("#quickvint-gen-btn").click();
+    await expect(page.locator('[data-testid="title--input"]')).toHaveValue("Fresh operation");
+    expect(requests).toHaveLength(2);
+    expect(requests[1].headers["x-autolister-request-id"]).not.toBe(requests[0].headers["x-autolister-request-id"]);
+    if (change === "settings") expect(requests[1].body.tone).toBe("casual");
+    else expect(requests[1].headers.authorization).toBe("Bearer other-access-token");
+  });
+}
+
+test("keeps an uncertain operation through a later authentication failure", async ({ page }) => {
+  await page.route("https://autolister.app/api/events/track", (route) => route.fulfill({ status: 204, body: "" }));
+  const requests = [];
+  await page.route("https://autolister.app/api/generate", (route) => {
+    requests.push(route.request().headers());
+    if (requests.length <= 2) return route.abort("connectionreset");
+    return route.fulfill({ status: requests.length === 3 ? 401 : 200, contentType: "application/json", body: JSON.stringify(requests.length === 3 ? { error: "Session expired" } : { title: "Recovered after sign-in", description: "Original operation" }) });
+  });
+  await openContentHarness(page);
+  for (const expectedCount of [2, 3, 4]) {
+    await page.locator("#quickvint-gen-btn").click();
+    await expect.poll(() => requests.length).toBe(expectedCount);
+    if (expectedCount === 3) {
+      await expect(page.locator("#quickvint-toast")).toContainText("Session expired");
+      await page.evaluate(async () => {
+        const { supabaseSession } = await chrome.storage.local.get("supabaseSession");
+        await chrome.storage.local.set({ supabaseSession: { ...supabaseSession, access_token: "signed-in-again" } });
+      });
+    }
+    await expect(page.locator("#quickvint-gen-btn")).toBeEnabled();
+  }
+  await expect(page.locator('[data-testid="title--input"]')).toHaveValue("Recovered after sign-in");
+  expect(new Set(requests.map((headers) => headers["x-autolister-request-id"])).size).toBe(1);
+});
+
+test("recovers an unreadable success response without changing the operation", async ({ page }) => {
+  await page.route("https://autolister.app/api/events/track", (route) => route.fulfill({ status: 204, body: "" }));
+  const requests = [];
+  await page.route("https://autolister.app/api/generate", (route) => {
+    requests.push(route.request().headers());
+    return route.fulfill({ status: 200, contentType: "application/json", body: requests.length === 1 ? '{"title":' : JSON.stringify({ title: "Recovered JSON", description: "Complete response" }) });
+  });
+  await openContentHarness(page);
+  await page.locator("#quickvint-gen-btn").click();
+  await expect(page.locator('[data-testid="title--input"]')).toHaveValue("Recovered JSON");
+  expect(requests).toHaveLength(2);
+  expect(requests[1]["x-autolister-request-id"]).toBe(requests[0]["x-autolister-request-id"]);
+});
+
 test("confirms applied fields after animation frames resume beyond timeout", async ({ page }) => {
   await page.route("https://autolister.app/api/events/track", (route) => route.fulfill({ status: 204, body: "" }));
   await page.route("https://autolister.app/api/generate", (route) => route.fulfill({
@@ -447,6 +563,7 @@ function installChromeHarness(page, capacityResponse = null, initialStorage = {}
             response = {
               access_token: storage.supabaseSession?.access_token,
               expires_at: storage.supabaseSession?.expires_at,
+              userId: storage.supabaseSession?.user?.id || null,
             };
           } else if (message?.type === "GET_BATCH_CAPACITY") {
             if (capacityQueue.length) currentCapacity = capacityQueue.shift();
@@ -4383,7 +4500,18 @@ test.describe("AutoLister extension smoke flows", () => {
 
     await openContentHarness(page);
 
-    const uploadBuffer = Buffer.from(tinyPngDataUrl.split(",")[1], "base64");
+    // The DOM still contains the tiny Vinted thumbnail. Supply a real-sized
+    // original and inspect the actual multipart JPEG bytes sent to storage.
+    const originalDataUrl = await page.evaluate(() => {
+      const canvas = document.createElement("canvas");
+      canvas.width = 1600;
+      canvas.height = 1200;
+      const context = canvas.getContext("2d");
+      context.fillStyle = "rgb(20, 90, 180)";
+      context.fillRect(0, 0, canvas.width, canvas.height);
+      return canvas.toDataURL("image/png");
+    });
+    const uploadBuffer = Buffer.from(originalDataUrl.split(",")[1], "base64");
     await page.setInputFiles('[data-testid="add-photos-input"]', {
       name: "original-upload.png",
       mimeType: "image/png",
@@ -4398,6 +4526,18 @@ test.describe("AutoLister extension smoke flows", () => {
     expect(manualStorage.uploadBodies[0]).toContain(
       'Content-Type: image/jpeg',
     );
+    const uploadedJpeg = manualStorage.uploadBodies[0].match(
+      /Content-Type: image\/jpeg\r\n\r\n([\s\S]*?)\r\n--/,
+    );
+    expect(uploadedJpeg).not.toBeNull();
+    const processedPhoto = await page.evaluate(async (base64) => {
+      const blob = await (await fetch(`data:image/jpeg;base64,${base64}`)).blob();
+      const bitmap = await createImageBitmap(blob);
+      const dimensions = { width: bitmap.width, height: bitmap.height };
+      bitmap.close();
+      return dimensions;
+    }, Buffer.from(uploadedJpeg[1], "latin1").toString("base64"));
+    expect(processedPhoto).toEqual({ width: 1280, height: 960 });
     expect(requestBodies[0].imageUrls).toEqual([
       "https://storage.test/manual-1.png?token=signed-1",
     ]);
@@ -6369,6 +6509,7 @@ test.describe("AutoLister extension smoke flows", () => {
     page,
   }) => {
     const requestBodies = [];
+    const requestIds = [];
     const trackedEvents = [];
     await page.route("https://autolister.app/api/events/track", (route) => {
       trackedEvents.push(route.request().postDataJSON());
@@ -6377,6 +6518,7 @@ test.describe("AutoLister extension smoke flows", () => {
     await page.route("https://autolister.app/api/generate", (route) => {
       const body = route.request().postDataJSON();
       requestBodies.push(body);
+      requestIds.push(route.request().headers()["x-autolister-request-id"]);
       if (
         requestBodies.length === 1 &&
         body.imageUrls?.some((url) => String(url).startsWith("https://storage.test/"))
@@ -6458,6 +6600,9 @@ test.describe("AutoLister extension smoke flows", () => {
       sourceKind: "blob_url",
     });
     expect(requestBodies[1].imageMetadata[0].generationPayloadSource).toBeUndefined();
+    expect(requestIds[0]).toBeTruthy();
+    expect(requestIds[1]).toBeTruthy();
+    expect(requestIds[1]).not.toBe(requestIds[0]);
     await expect(page.locator('[data-testid="title--input"]')).toHaveValue(
       "Recovered Phone Upload",
     );

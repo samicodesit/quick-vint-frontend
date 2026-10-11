@@ -1945,6 +1945,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
             ? {
                 access_token: session.access_token,
                 expires_at: session.expires_at,
+                userId: session.user?.id || null,
               }
             : null,
         );

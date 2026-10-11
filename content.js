@@ -1098,6 +1098,9 @@
   let outputShapeToggleBtn = null;
   let signInBtn = null;
   let isBusy = false;
+  // One uncertain request, kept only in this tab. Reuse its exact payload so
+  // refreshed upload URLs cannot turn a retry into another paid generation.
+  let pendingGenerationRequest = null;
   let generateBusyLabel = "Generating";
   let isAuthenticated = null;
   let pollInterval = null;
@@ -3715,6 +3718,17 @@
     return `gen_${Date.now().toString(36)}_${Math.random()
       .toString(36)
       .slice(2, 8)}`;
+  }
+
+  function createGenerationRequestId() {
+    if (typeof crypto.randomUUID === "function") return crypto.randomUUID();
+    const bytes = crypto.getRandomValues(new Uint8Array(16));
+    bytes[6] = (bytes[6] & 15) | 64;
+    bytes[8] = (bytes[8] & 63) | 128;
+    const hex = Array.from(bytes, (byte) =>
+      byte.toString(16).padStart(2, "0"),
+    ).join("");
+    return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
   }
 
   function truncateForTelemetry(value, maxLength = 700) {
@@ -18775,7 +18789,9 @@
         descriptionFooterLength: effectiveDescriptionFooterText.length,
         emojiRetry: Boolean(emojiRetry),
       });
-      const { access_token } = await sendMessage({ type: "GET_ACCESS_TOKEN" });
+      const { access_token, userId } = await sendMessage({
+        type: "GET_ACCESS_TOKEN",
+      });
 
       if (!access_token) {
         throw new Error(
@@ -18813,7 +18829,30 @@
         return maybeUseRemoteImagesForOversizedGeneratePayload(requestBody);
       }
 
-      let preparedGeneratePayload = await buildPreparedGeneratePayload(imageEntries);
+      const retryKey = JSON.stringify({
+        account: userId || access_token,
+        listing: window.location.pathname,
+        photos: imageUrls,
+        ...baseRequestBody,
+        generationAttemptId: undefined,
+        descriptionFooterText: effectiveDescriptionFooterText,
+      });
+      if (
+        pendingGenerationRequest?.key !== retryKey ||
+        Date.now() - pendingGenerationRequest.createdAt >= 15 * 60 * 1000
+      ) {
+        pendingGenerationRequest = null;
+      }
+      let preparedGeneratePayload =
+        pendingGenerationRequest?.payload ||
+        (await buildPreparedGeneratePayload(imageEntries));
+      let generationRequest = pendingGenerationRequest || {
+        key: retryKey,
+        requestId: createGenerationRequestId(),
+        payload: preparedGeneratePayload,
+        createdAt: Date.now(),
+        uncertain: false,
+      };
       let requestBodyJson = preparedGeneratePayload.requestBodyJson;
       let requestImageUrls = preparedGeneratePayload.requestBody.imageUrls;
       let requestImageMetadata =
@@ -18826,6 +18865,7 @@
         });
       }
 
+      let generationResponseData;
       const sendGenerateRequest = async (retryReason = null) => {
         const fetchStartedAt = Date.now();
         generateFetchDiagnostics = {
@@ -18846,16 +18886,46 @@
           retryReason,
         };
 
-        const generateResponse = await fetch(`${API_BASE}/api/generate`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${access_token}`,
-            "X-Autolister-Extension-Version":
-              chrome.runtime.getManifest().version,
-          },
-          body: requestBodyJson,
-        });
+        pendingGenerationRequest = generationRequest;
+        let generateResponse;
+        // Retry a broken connection or unreadable success body once. The
+        // server replays this request ID rather than running AI again.
+        for (let attempt = 0; attempt < 2; attempt += 1) {
+          try {
+            generateResponse = await fetch(`${API_BASE}/api/generate`, {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                Authorization: `Bearer ${access_token}`,
+                "X-Autolister-Extension-Version":
+                  chrome.runtime.getManifest().version,
+                "X-Autolister-Client": "extension",
+                "X-Autolister-Request-Id": generationRequest.requestId,
+              },
+              body: requestBodyJson,
+            });
+            if (generateResponse.ok) {
+              generationResponseData = await generateResponse.json();
+            }
+            break;
+          } catch (error) {
+            generationRequest.uncertain = true;
+            if (attempt === 1) throw error;
+          }
+        }
+        const definitiveFailure = [400, 401, 403, 413, 415, 422, 429].includes(
+          generateResponse.status,
+        );
+        if (!generateResponse.ok && !definitiveFailure) {
+          generationRequest.uncertain = true;
+        }
+        // A new input/limit rejection can start afresh. Once a prior outcome
+        // is uncertain, even an expired sign-in must not discard its identity.
+        if (definitiveFailure && !generationRequest.uncertain) {
+          if (pendingGenerationRequest === generationRequest) {
+            pendingGenerationRequest = null;
+          }
+        }
         generateFetchDiagnostics.elapsedMs = Date.now() - fetchStartedAt;
         delete generateFetchDiagnostics.startedAtMs;
         return generateResponse;
@@ -18966,6 +19036,13 @@
           requestImageUrls = preparedGeneratePayload.requestBody.imageUrls;
           requestImageMetadata =
             preparedGeneratePayload.requestBody.imageMetadata;
+          generationRequest = {
+            key: retryKey,
+            requestId: createGenerationRequestId(),
+            payload: preparedGeneratePayload,
+            createdAt: Date.now(),
+            uncertain: false,
+          };
           response = await sendGenerateRequest("local_captured_images");
           if (response.ok) {
             // Continue to normal success handling below.
@@ -18989,7 +19066,7 @@
         }
       }
 
-      const { title, description, measurementAdvice, offers = [] } = await response.json();
+      const { title, description, measurementAdvice, offers = [] } = generationResponseData;
       if (
         typeof title !== "string" ||
         !title.trim() ||
@@ -18998,6 +19075,7 @@
       ) {
         throw new Error("Generated listing response was incomplete.");
       }
+      if (pendingGenerationRequest === generationRequest) pendingGenerationRequest = null;
       trackGrowthEvent("generate_success", {
         generationAttemptId,
         mode,
