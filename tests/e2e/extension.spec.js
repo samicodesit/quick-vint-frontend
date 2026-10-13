@@ -5217,11 +5217,221 @@ test.describe("AutoLister extension smoke flows", () => {
       sourceSelection: "current_src",
       promptSource: "vinted_dom_image",
       capturedUploadFileCount: 2,
-      capturedUploadMatchStatus: "count_mismatch_fallback_to_vinted",
+      capturedUploadMatchStatus: "count_mismatch_after_reorder_fallback_to_vinted",
       capturedUploadOrderTrusted: false,
       capturedUploadSetTrusted: true,
     });
     expect(requestBodies[0].imageMetadata[0].capturedUploadFile).toBeNull();
+  });
+
+  async function addDistinctPagePhotos(page, colors) {
+    await page.evaluate((fills) => {
+      const grid = document.querySelector('[data-testid="media-upload-grid"]');
+      fills.forEach((fill, index) => {
+        const canvas = document.createElement("canvas");
+        canvas.width = 4;
+        canvas.height = 4;
+        const ctx = canvas.getContext("2d");
+        ctx.fillStyle = fill;
+        ctx.fillRect(0, 0, 4, 4);
+        const box = document.createElement("div");
+        box.className = "photo-box";
+        box.innerHTML = `
+          <div class="photo-box__image-container">
+            <img class="web_ui__Image__content" alt="Page photo ${index + 1}" src="${canvas.toDataURL("image/png")}" />
+          </div>
+        `;
+        grid.appendChild(box);
+      });
+    }, colors);
+  }
+
+  function routeGenerateAndEvents(page, title) {
+    const requestBodies = [];
+    const eventBatches = [];
+    return Promise.all([
+      page.route("https://autolister.app/api/events/track", (route) => {
+        eventBatches.push(route.request().postDataJSON());
+        return route.fulfill({ status: 204, body: "" });
+      }),
+      page.route("https://autolister.app/api/generate", (route) => {
+        requestBodies.push(route.request().postDataJSON());
+        return route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify({
+            title,
+            description: "Generated from Vinted page photos.",
+            measurementAdvice: "",
+          }),
+        });
+      }),
+    ]).then(() => ({ requestBodies, eventBatches }));
+  }
+
+  test("sends oversized Vinted page photo sets through temp storage instead of inline", async ({
+    page,
+  }) => {
+    const storage = await routeManualStorageUploads(page);
+    const { requestBodies, eventBatches } = await routeGenerateAndEvents(
+      page,
+      "Stored Page Photos Jacket",
+    );
+
+    await openContentHarness(page);
+    await addDistinctPagePhotos(page, ["#c0392b", "#2980b9"]);
+    await page.evaluate(() => {
+      window.__AUTOLISTER_MAX_GENERATE_REQUEST_BODY_BYTES = 1000;
+    });
+    await page.locator("#quickvint-gen-btn").click();
+
+    await expect(page.locator('[data-testid="title--input"]')).toHaveValue(
+      "Stored Page Photos Jacket",
+    );
+    expect(storage.uploadRequests).toHaveLength(3);
+    expect(requestBodies).toHaveLength(1);
+    expect(requestBodies[0].imageUrls).toEqual([
+      "https://storage.test/manual-1.png?token=signed-1",
+      "https://storage.test/manual-2.png?token=signed-2",
+      "https://storage.test/manual-3.png?token=signed-3",
+    ]);
+    expect(requestBodies[0].imageMetadata.map((entry) => entry.index)).toEqual([1, 2, 3]);
+    for (const metadata of requestBodies[0].imageMetadata) {
+      expect(metadata).toMatchObject({
+        promptSource: "vinted_dom_image",
+        generationPayloadSource: "prepared_photo_storage_url",
+        capturedUploadAvailable: false,
+        capturedUploadMatchStatus: "no_capture_photos_present_at_load",
+      });
+    }
+    await expect
+      .poll(
+        () =>
+          eventBatches
+            .flatMap((batch) => batch.events || [])
+            .find((event) => event.event === "generate_click")?.context?.photoSource,
+        { timeout: 5000 },
+      )
+      .toBe("vinted_page_photos:no_capture_photos_present_at_load");
+  });
+
+  test("keeps small Vinted page photo sets inline", async ({ page }) => {
+    const storage = await routeManualStorageUploads(page);
+    const { requestBodies } = await routeGenerateAndEvents(page, "Inline Page Photos");
+
+    await openContentHarness(page);
+    await addDistinctPagePhotos(page, ["#16a085"]);
+    await page.locator("#quickvint-gen-btn").click();
+
+    await expect(page.locator('[data-testid="title--input"]')).toHaveValue(
+      "Inline Page Photos",
+    );
+    expect(storage.uploadRequests).toHaveLength(0);
+    expect(requestBodies[0].imageUrls).toHaveLength(2);
+    expect(
+      requestBodies[0].imageUrls.every((url) => url.startsWith("data:image/jpeg;base64,")),
+    ).toBe(true);
+    expect(requestBodies[0].imageMetadata[0].generationPayloadSource).toBeUndefined();
+  });
+
+  test("reports a clear photo preparation error when oversized photos cannot be stored", async ({
+    page,
+  }) => {
+    const { requestBodies, eventBatches } = await routeGenerateAndEvents(page, "Unused");
+    await page.route("https://autolister.app/api/phone-upload**", (route) =>
+      route.fulfill({
+        status: 400,
+        contentType: "application/json",
+        body: JSON.stringify({ error: "Rejected upload" }),
+      }),
+    );
+
+    await openContentHarness(page);
+    await addDistinctPagePhotos(page, ["#8e44ad"]);
+    await page.evaluate(() => {
+      window.__AUTOLISTER_MAX_GENERATE_REQUEST_BODY_BYTES = 1000;
+    });
+    await page.locator("#quickvint-gen-btn").click();
+
+    await expect(page.getByText("Could not prepare photos. Try again.")).toBeVisible();
+    expect(requestBodies).toHaveLength(0);
+    await expect
+      .poll(() =>
+        eventBatches
+          .flatMap((batch) => batch.events || [])
+          .find((event) => event.event === "generate_error")?.context,
+      )
+      .toMatchObject({
+        reason: "photo_storage_upload_failed",
+        statusCode: 400,
+        photoSource: "vinted_page_photos:no_capture_photos_present_at_load",
+      });
+  });
+
+  test("labels Vinted page photos on existing listing edit pages", async ({ page }) => {
+    const { requestBodies } = await routeGenerateAndEvents(page, "Edit Page Jacket");
+    await openContentHarness(page, null, {
+      pageUrl: "https://www.vinted.nl/items/42/edit",
+      initialStorage: { "quickvintReleaseUpdateSeen:2026-08-06": true },
+    });
+    await page.locator("#quickvint-gen-btn").click();
+
+    await expect.poll(() => requestBodies.length).toBe(1);
+    expect(requestBodies[0].imageMetadata[0]).toMatchObject({
+      promptSource: "vinted_dom_image",
+      capturedUploadAvailable: false,
+      capturedUploadMatchStatus: "no_capture_existing_listing",
+    });
+  });
+
+  test("labels Vinted page photos that arrived by drag and drop", async ({ page }) => {
+    const { requestBodies } = await routeGenerateAndEvents(page, "Dropped Jacket");
+    await openContentHarness(page, null, { emptyListing: true });
+    await page.evaluate(() => {
+      const transfer = new DataTransfer();
+      transfer.items.add(new File(["x"], "dropped.png", { type: "image/png" }));
+      document
+        .querySelector('[data-testid="media-upload-grid"]')
+        .dispatchEvent(new DragEvent("drop", { bubbles: true, dataTransfer: transfer }));
+    });
+    await addDistinctPagePhotos(page, ["#d35400"]);
+    await page.locator("#quickvint-gen-btn").click();
+
+    await expect(page.locator('[data-testid="title--input"]')).toHaveValue(
+      "Dropped Jacket",
+    );
+    expect(requestBodies[0].imageMetadata[0]).toMatchObject({
+      promptSource: "vinted_dom_image",
+      capturedUploadMatchStatus: "no_capture_drag_and_drop",
+    });
+  });
+
+  test("labels Vinted page photos used after captured originals expired", async ({
+    page,
+  }) => {
+    await routeManualStorageUploads(page);
+    const { requestBodies } = await routeGenerateAndEvents(page, "Expired Capture Jacket");
+    await openContentHarness(page, null, { emptyListing: true });
+
+    const uploadBuffer = Buffer.from(tinyPngDataUrl.split(",")[1], "base64");
+    await page.setInputFiles('[data-testid="add-photos-input"]', [
+      { name: "original.png", mimeType: "image/png", buffer: uploadBuffer },
+    ]);
+    await addDistinctPagePhotos(page, ["#27ae60"]);
+    await page.evaluate(() => {
+      const realNow = Date.now;
+      Date.now = () => realNow() + 31 * 60 * 1000;
+    });
+    await page.locator("#quickvint-gen-btn").click();
+
+    await expect(page.locator('[data-testid="title--input"]')).toHaveValue(
+      "Expired Capture Jacket",
+    );
+    expect(requestBodies[0].imageMetadata[0]).toMatchObject({
+      promptSource: "vinted_dom_image",
+      capturedUploadAvailable: false,
+      capturedUploadMatchStatus: "no_capture_expired",
+    });
   });
 
   test("tracks generated output edits after users change generated copy", async ({
