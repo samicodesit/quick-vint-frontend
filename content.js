@@ -1175,12 +1175,13 @@
   let limitFollowupResumeListenersBound = false;
   let capturedPromptUpload = null;
   // Why Vinted's page photos had to be used instead of captured originals.
-  // Each signal is tied to the listing page it happened on, because the
-  // content script survives Vinted's in-app navigation between listings.
+  // The content script survives Vinted's in-app navigation and every new
+  // listing reuses /items/new, so each signal is tied to the photo grid
+  // instance it was seen on, not only to the path.
   const missingCaptureSignals = {
-    expiredOnPath: null,
-    photosPresentOnPath: null,
-    filesDroppedOnPath: null,
+    expired: null,
+    photosPresent: null,
+    filesDropped: null,
   };
   let suppressNextFileInputCapture = false;
   const boundPromptUploadFileInputs = new WeakSet();
@@ -2730,24 +2731,38 @@
       }
     });
     capturedPromptUpload = null;
-    if (reason === "expired") {
-      missingCaptureSignals.expiredOnPath = window.location.pathname;
-    }
+    if (reason === "expired") markMissingCaptureSignal("expired");
     if (reason !== "replace") {
       console.debug(`AutoLister AI: cleared captured prompt upload (${reason}).`);
     }
   }
 
+  function markMissingCaptureSignal(
+    name,
+    grid = document.querySelector(SELECTORS.mediaGrid),
+  ) {
+    missingCaptureSignals[name] = {
+      path: window.location.pathname,
+      grid: grid ? new WeakRef(grid) : null,
+    };
+  }
+
+  function hasMissingCaptureSignal(name) {
+    const signal = missingCaptureSignals[name];
+    if (!signal || signal.path !== window.location.pathname) return false;
+    const currentGrid = document.querySelector(SELECTORS.mediaGrid);
+    // Without a grid at the time (e.g. a drop on an empty form) only the
+    // path can be checked.
+    return signal.grid ? signal.grid.deref() === currentGrid : true;
+  }
+
   // Stored on each Vinted page photo as capturedUploadMatchStatus, so the
   // generate log says exactly why captured originals were not available.
   function getMissingCaptureReason() {
-    const path = window.location.pathname;
-    if (missingCaptureSignals.expiredOnPath === path) return "no_capture_expired";
+    if (hasMissingCaptureSignal("expired")) return "no_capture_expired";
     if (isListingEditPage()) return "no_capture_existing_listing";
-    if (missingCaptureSignals.filesDroppedOnPath === path) {
-      return "no_capture_drag_and_drop";
-    }
-    if (missingCaptureSignals.photosPresentOnPath === path) {
+    if (hasMissingCaptureSignal("filesDropped")) return "no_capture_drag_and_drop";
+    if (hasMissingCaptureSignal("photosPresent")) {
       return "no_capture_photos_present_at_load";
     }
     return "no_capture_never_captured";
@@ -2810,8 +2825,7 @@
         ? activeUpload.currentSetTrusted === false
           ? activeUpload.untrustedReason || "untrusted_set"
           : "unmatched_set"
-        : !activeUpload &&
-            missingCaptureSignals.expiredOnPath === window.location.pathname
+        : !activeUpload && hasMissingCaptureSignal("expired")
           ? "expired"
           : existingUpload?.replacedEarlierFilesReason || null;
     if (!existingFiles.length) {
@@ -3622,11 +3636,13 @@
     return new TextEncoder().encode(value).length;
   }
 
+  // The upload status goes into reason, not statusCode: incident triage reads
+  // generate_error statusCode as the generate endpoint's own response.
   function createPhotoPreparationError(reason, cause) {
     const error = new Error("Could not prepare photos. Try again.");
+    const status = Number(cause?.status);
     error.diagnostics = {
-      reason,
-      statusCode: Number.isFinite(Number(cause?.status)) ? Number(cause.status) : undefined,
+      reason: Number.isFinite(status) ? `${reason}:${status}` : reason,
       order: Number.isFinite(Number(cause?.uploadOrder)) ? Number(cause.uploadOrder) : undefined,
     };
     return error;
@@ -3980,7 +3996,7 @@
       const notePhotosPresentWithoutCapture = () => {
         if (capturedPromptUpload) return;
         if (!grid.querySelector(SELECTORS.mediaPhotoBox)) return;
-        missingCaptureSignals.photosPresentOnPath = window.location.pathname;
+        markMissingCaptureSignal("photosPresent", grid);
       };
       notePhotosPresentWithoutCapture();
 
@@ -4053,7 +4069,7 @@
       "drop",
       (event) => {
         if (event.dataTransfer?.files?.length) {
-          missingCaptureSignals.filesDroppedOnPath = window.location.pathname;
+          markMissingCaptureSignal("filesDropped");
         }
         const target = event.target;
         if (!(target instanceof Element)) return;

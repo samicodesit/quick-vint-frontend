@@ -5362,8 +5362,7 @@ test.describe("AutoLister extension smoke flows", () => {
           .find((event) => event.event === "generate_error")?.context,
       )
       .toMatchObject({
-        reason: "photo_storage_upload_failed",
-        statusCode: 400,
+        reason: "photo_storage_upload_failed:400",
         photoSource: "vinted_page_photos:no_capture_photos_present_at_load",
       });
   });
@@ -5404,6 +5403,35 @@ test.describe("AutoLister extension smoke flows", () => {
       promptSource: "vinted_dom_image",
       capturedUploadMatchStatus: "no_capture_drag_and_drop",
     });
+  });
+
+  test("does not carry a drag and drop reason into the next listing form", async ({
+    page,
+  }) => {
+    const { requestBodies } = await routeGenerateAndEvents(page, "Next Listing Jacket");
+    await openContentHarness(page, null, { emptyListing: true });
+    await page.evaluate(() => {
+      const transfer = new DataTransfer();
+      transfer.items.add(new File(["x"], "dropped.png", { type: "image/png" }));
+      document
+        .querySelector('[data-testid="media-upload-grid"]')
+        .dispatchEvent(new DragEvent("drop", { bubbles: true, dataTransfer: transfer }));
+      // Vinted renders a fresh form (and grid) for the next listing on the
+      // same /items/new path without reloading the page.
+      const oldGrid = document.querySelector('[data-testid="media-upload-grid"]');
+      const freshGrid = oldGrid.cloneNode(false);
+      freshGrid.appendChild(oldGrid.querySelector('[data-testid="add-photos-input"]'));
+      oldGrid.replaceWith(freshGrid);
+    });
+    await addDistinctPagePhotos(page, ["#2c3e50"]);
+    await page.locator("#quickvint-gen-btn").click();
+
+    await expect(page.locator('[data-testid="title--input"]')).toHaveValue(
+      "Next Listing Jacket",
+    );
+    expect(requestBodies[0].imageMetadata[0].capturedUploadMatchStatus).not.toBe(
+      "no_capture_drag_and_drop",
+    );
   });
 
   test("labels Vinted page photos used after captured originals expired", async ({
