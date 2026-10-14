@@ -1,6 +1,7 @@
 const { test } = require("node:test");
 const assert = require("node:assert/strict");
 const { createQueue } = require("../lib/telemetry-core.js");
+require("../lib/telemetry-registry.js");
 
 function fixture() {
   let state = { events: [], dropped: 0 };
@@ -73,6 +74,62 @@ test("unavailable storage is reported without throwing into product work", async
   assert.equal((await q.flush()).delivered, false);
 });
 
+test("a critical auth flood cannot evict a distinct generation failure or customer report", async () => {
+  const f = fixture(); const q = f.make();
+  await q.enqueue({ id: "failed-generation", event: "generate_error", context: { generationAttemptId: "attempt-a" } }, "a", true);
+  await q.enqueue({ id: "support-report", event: "listing_report_submitted" }, "a", true);
+  for (let i = 0; i < 220; i++) await q.enqueue({ id: `auth-${i}`, event: "token_refresh_failed", source: "extension_background", context: { phase: "restore_session", statusCode: 0, operationId: `refresh-${i}` } }, "a", true);
+  const ids = f.state().events.map(entry => entry.event.id);
+  assert.ok(ids.includes("failed-generation"));
+  assert.ok(ids.includes("support-report"));
+  assert.ok(ids.includes("auth-219"));
+  assert.equal(ids.length, 200);
+  assert.equal(f.state().dropCounts.capacity, 22);
+  assert.equal(f.state().dropCounts.customerReports || 0, 0);
+});
+
+test("byte overflow preserves distinct operations and accounts before repeated incident evidence", async () => {
+  const f = fixture(); const q = f.make();
+  await q.enqueue({ id: "other-account", event: "generate_error", context: { generationAttemptId: "first" } }, "b", true);
+  await q.enqueue({ id: "other-operation", event: "generate_error", context: { generationAttemptId: "second" } }, "a", true);
+  for (let i = 0; i < 15; i++) await q.enqueue({ id: `repeat-${i}`, event: "generate_error", context: { generationAttemptId: "third", message: "x".repeat(45000) } }, "a", true);
+  assert.ok(f.state().events.some(entry => entry.event.id === "other-account"));
+  assert.ok(f.state().events.some(entry => entry.event.id === "other-operation"));
+  assert.ok(f.state().events.some(entry => entry.event.id === "repeat-14"));
+  assert.ok(Buffer.byteLength(JSON.stringify(f.state())) <= 524288);
+  assert.ok(f.state().dropCounts.capacity > 0);
+});
+
+test("customer reports have capacity priority even when all diagnostic failures are distinct", async () => {
+  const f = fixture(); const q = f.make();
+  await q.enqueue({ id: "report", event: "listing_report_submitted" }, "a", true);
+  for (let i = 0; i < 200; i++) await q.enqueue({ id: `failure-${i}`, event: "generate_error", context: { generationAttemptId: `attempt-${i}` } }, "a", true);
+  assert.ok(f.state().events.some(entry => entry.event.id === "report"));
+  assert.equal(f.state().dropCounts.customerReports || 0, 0);
+});
+
+test("drop evidence names discarded event types rather than attributing them to the carrier", async () => {
+  const f = fixture(); const q = f.make();
+  await q.enqueue({ id: "expired-generation", event: "generate_error" }, "a", true);
+  f.time(86401001);
+  await q.enqueue({ id: "auth-carrier", event: "token_refresh_failed" }, "a", true);
+  await q.flush();
+  assert.equal(f.requests[0].body.events[0].context.queueDroppedEventTypes, '{"generate_error":1}');
+});
+
+test("drop type evidence stays bounded and never retains arbitrary caller names", async () => {
+  const f = fixture(); const q = f.make();
+  const types = ["generate_error", "token_refresh_failed", "fields_apply_failed", "phone_upload_transfer_error", "listing_report_submitted", "own_context_exception", "private-caller-name"];
+  for (const event of types) await q.enqueue({ id: event, event }, "a", true);
+  f.time(86401001);
+  await q.enqueue({ id: "carrier", event: "token_refresh_failed" }, "a", true);
+  await q.flush();
+  const value = f.requests[0].body.events[0].context.queueDroppedEventTypes;
+  assert.deepEqual(JSON.parse(value), { generate_error: 1, token_refresh_failed: 1, fields_apply_failed: 1, phone_upload_transfer_error: 1, other: 3 });
+  assert.ok(value.length <= 500);
+  assert.ok(!value.includes("private-caller-name"));
+});
+
 test("drop evidence identifies expiry, capacity and critical customer reports", async () => {
   const f = fixture(); const q = f.make();
   await q.enqueue({ id: "expired-report", event: "listing_report_submitted" }, "a", true);
@@ -85,6 +142,7 @@ test("drop evidence identifies expiry, capacity and critical customer reports", 
   assert.deepEqual(carriers[0].context, {
     queueDropped: 2, queueDroppedExpired: 1, queueDroppedCapacity: 1,
     queueDroppedRejected: 0, queueDroppedCritical: 1, queueDroppedCustomerReports: 1, queueDroppedUnclassified: 0,
+    queueDroppedEventTypes: '{"listing_report_submitted":1,"other":1}',
   });
 });
 

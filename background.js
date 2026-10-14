@@ -1917,6 +1917,9 @@ chrome.runtime.onMessageExternal.addListener((message, sender, sendResponse) => 
  * Main message handler for requests from other parts of the extension.
  */
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  // The durable telemetry listener owns these acknowledgements. A second reply
+  // here would win the race before storage or server acceptance completes.
+  if (["AUTOLISTER_TELEMETRY", "AUTOLISTER_TELEMETRY_FLUSH"].includes(message?.type)) return false;
   (async () => {
     switch (message.type) {
       case "CAPTURE_ATTRIBUTION":
