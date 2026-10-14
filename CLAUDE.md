@@ -39,6 +39,8 @@ For upload/generation incidents, check the relevant E2E tests in `tests/e2e/exte
 - phone single upload generation uses `generationPayloadSource: "phone_upload_storage_url"`.
 - batch upload generation uses `generationPayloadSource: "phone_upload_storage_url"`.
 - visible Vinted image URLs are fallback behavior only when captured originals cannot be trusted.
+- Vinted page photos record why originals were missing in `capturedUploadMatchStatus` (`no_capture_*`, `count_mismatch_*`); see `../quick-vint-api/docs/production-log-runbook.md`.
+- requests above 3,500,000 UTF-8 bytes upload their prepared photos to temp storage and generate with `generationPayloadSource: "prepared_photo_storage_url"`.
 
 ## Release Agent Rules
 
