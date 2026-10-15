@@ -2769,13 +2769,14 @@
     const fileList = Array.from(files || []).filter(Boolean);
     if (!fileList.length) return null;
 
-    const existingUpload = append ? getActiveCapturedPromptUpload() : null;
+    let existingUpload = append ? getActiveCapturedPromptUpload() : null;
     const existingFiles =
       existingUpload && existingUpload.currentSetTrusted !== false
         ? existingUpload.files
         : [];
     if (!existingFiles.length) {
       revokeCapturedPromptUpload("replace");
+      existingUpload = null;
     }
 
     const capturedAt = Date.now();
