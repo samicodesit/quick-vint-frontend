@@ -1,4 +1,5 @@
 const { installTelemetryHarness } = require("./telemetry-harness");
+const { openBatchJourney } = require("./batch-journey");
 const fs = require("node:fs");
 const path = require("node:path");
 const { test, expect, chromium } = require("@playwright/test");
@@ -189,7 +190,7 @@ test("reports which generated field the host reverted without listing text", asy
   expect(await page.evaluate(() => window.__fieldEvents.map(item => item.event))).not.toContain("fields_applied");
 });
 
-test("does not fail field confirmation while the listing tab is hidden", async ({ page }) => {
+test("confirms stable matching fields while hidden without requiring foreground", async ({ page }) => {
   await page.route("https://autolister.app/api/events/track", (route) => route.fulfill({ status: 204, body: "" }));
   await page.route("https://autolister.app/api/generate", (route) => route.fulfill({
     status: 200, contentType: "application/json",
@@ -208,11 +209,10 @@ test("does not fail field confirmation while the listing tab is hidden", async (
   });
   await page.locator("#quickvint-gen-btn").click();
   await expect(page.locator('[data-testid="title--input"]')).toHaveValue("Confirmed sweater");
-  await page.waitForTimeout(3000);
-  expect(await page.evaluate(() => window.__fieldEvents.map(item => item.event))).not.toContain("fields_apply_failed");
-  expect(await page.evaluate(() => window.__fieldEvents.map(item => item.event))).not.toContain("fields_applied");
-  await page.evaluate(() => { window.__listingVisibility = "visible"; });
   await expect.poll(() => page.evaluate(() => window.__fieldEvents.map(item => item.event))).toContain("fields_applied");
+  expect(await page.evaluate(() => window.__fieldEvents.map(item => item.event))).not.toContain("fields_apply_failed");
+  expect(await page.evaluate(() => document.visibilityState)).toBe("hidden");
+  expect(await page.evaluate(() => window.__fieldEvents.filter(item => item.event === "fields_applied").length)).toBe(1);
 });
 
 test("keeps seller edits during field confirmation without a failure alert", async ({ page }) => {
@@ -337,7 +337,7 @@ async function loadExtension(options = {}) {
     serviceWorker = await context.waitForEvent("serviceworker");
   }
 
-  return { context, serviceWorker };
+  return { context, serviceWorker, userDataDir };
 }
 
 test("the packaged SDK releases stalled auth and succeeds afterwards in the extension worker", async () => {
@@ -1335,6 +1335,7 @@ test.describe("AutoLister extension smoke flows", () => {
       initialStorage: {
         __batchRecovery: {
           batchId: "saved-batch",
+          ownerId: "test-user",
           sessionId: "saved-session",
           inputSource: "phone",
           groups: [[file(0)], [file(1)], [file(2)]],
@@ -1367,6 +1368,7 @@ test.describe("AutoLister extension smoke flows", () => {
       initialStorage: {
         __batchRecovery: {
           batchId: "batch-observability",
+          ownerId: "test-user",
           sessionId: "saved-session",
           inputSource: "computer",
           groups: [[{ name: "one.jpg", path: "saved/one.jpg", url: tinyPngDataUrl }]],
@@ -3491,196 +3493,17 @@ test.describe("AutoLister extension smoke flows", () => {
   });
 
   test("waits for Vinted photo input in the loaded MV3 batch flow", async () => {
-    const { context, serviceWorker } = await loadExtension();
-    const page = await context.newPage();
-    const requestBodies = [];
-    const cleanupRequests = [];
-    let listingLoads = 0;
-    let listRequests = 0;
-    let capacityRequests = 0;
-    let releaseBatchCapacity;
-    let releaseGenerate;
-    const batchCapacityMayFinish = new Promise((resolve) => {
-      releaseBatchCapacity = resolve;
-    });
-    const generateMayFinish = new Promise((resolve) => {
-      releaseGenerate = resolve;
-    });
+    const flow = await openBatchJourney({ fileInputDelay: 1500 });
     try {
-      await serviceWorker.evaluate(() =>
-        chrome.storage.local.set({
-          supabaseSession: {
-            access_token: "test-access-token",
-            refresh_token: "test-refresh-token",
-            expires_at: Math.floor(Date.now() / 1000) + 3600,
-            user: { id: "test-user", email: "seller@example.com" },
-          },
-          userProfile: {
-            subscription_status: "active",
-            subscription_tier: "pro",
-            api_calls_this_month: 0,
-            pack_credits: 0,
-          },
-          selectedLanguage: "en",
-          selectedTitleLanguage: "en",
-          selectedDescriptionLanguage: "en",
-          tone: "standard",
-          useBulletPoints: true,
-          descriptionLength: "long",
-          useHashtags: true,
-        }),
-      );
-
-      await context.route("https://www.vinted.com/**", (route) => {
-        listingLoads += 1;
-        return route.fulfill({
-          status: 200,
-          contentType: "text/html",
-          body:
-            listingLoads === 1
-              ? emptyListingFixture
-              : delayedFileInputListingFixture,
-        });
-      });
-      await context.route("https://autolister.app/api/user/batch-capacity", async (route) => {
-        capacityRequests += 1;
-        if (capacityRequests > 2) await batchCapacityMayFinish;
-        return route.fulfill({
-          status: 200,
-          contentType: "application/json",
-          body: JSON.stringify({ allowed: true, available: 10 }),
-        });
-      });
-      await context.route("https://autolister.app/api/events/track", (route) =>
-        route.fulfill({ status: 204, body: "" }),
-      );
-      await context.route("https://autolister.app/api/generate", async (route) => {
-        requestBodies.push(route.request().postDataJSON());
-        await generateMayFinish;
-        return route.fulfill({
-          status: 200,
-          contentType: "application/json",
-          body: JSON.stringify({
-            title: "Loaded Batch Item",
-            description: "Generated through loaded batch flow.",
-            measurementAdvice: "",
-          }),
-        });
-      });
-      await context.route("https://autolister.app/api/phone-upload**", (route) => {
-        const url = new URL(route.request().url());
-        if (url.searchParams.get("action") === "cleanup") {
-          cleanupRequests.push(route.request().url());
-          return route.fulfill({ status: 204, body: "" });
-        }
-        listRequests += 1;
-        return route.fulfill({
-          status: 200,
-          contentType: "application/json",
-          body: JSON.stringify({
-            files: [
-              {
-                name: "batch-real-1.jpg",
-                path: "session/batch-real-1.jpg",
-                order: 0,
-                url: "https://storage.test/batch-real-1.jpg",
-              },
-              {
-                name: "batch-real-2.jpg",
-                path: "session/batch-real-2.jpg",
-                order: 1,
-                url: "https://storage.test/batch-real-2.jpg",
-              },
-            ],
-            count: 2,
-            complete: true,
-          }),
-        });
-      });
-      await context.route("https://storage.test/**", (route) =>
-        route.fulfill({
-          status: 200,
-          contentType: "image/png",
-          body: Buffer.from(tinyPngDataUrl.split(",")[1], "base64"),
-        }),
-      );
-
-      await page.goto("https://www.vinted.com/items/new", {
-        waitUntil: "domcontentloaded",
-      });
-      await page.evaluate(() => {
-        document.querySelectorAll(".photo-box").forEach((node) => node.remove());
-        document.querySelector('[data-testid="title--input"]').value = "";
-        document.querySelector('[data-testid="description--input"]').value = "";
-      });
-
-      await expect(page.locator("#quickvint-phone-btn")).toBeVisible();
-      await expect(page.locator("#quickvint-batch-btn")).toHaveCount(0);
-      await chooseBatchUpload(page);
-      await expect(
-        page.locator("#quickvint-batch-modal .batch-gallery .batch-photo"),
-      ).toHaveCount(2);
-      await page
-        .locator("#quickvint-batch-modal .batch-gallery .batch-photo")
-        .nth(0)
-        .click();
-      await page
-        .locator("#quickvint-batch-modal .batch-gallery .batch-photo")
-        .nth(1)
-        .click();
-      await page.locator("#quickvint-batch-modal .batch-mark-group").click();
-      const batchStartButton = page.locator(
-        "#quickvint-batch-modal .batch-start",
-      );
-      await expect(batchStartButton).toBeEnabled();
-      await batchStartButton.click();
-      await expect(batchStartButton.locator(".label")).toHaveText("Starting");
-      await expect(batchStartButton.locator(".quickvint-mirage")).toBeVisible();
-      releaseBatchCapacity();
-
-      await expect.poll(() => requestBodies.length).toBe(1);
-      expect(listingLoads).toBeGreaterThanOrEqual(2);
-      const workPage = context
-        .pages()
-        .find((candidate) => candidate !== page && candidate.url().includes("/items/new"));
-      await expect(
-        workPage.locator('[data-testid="add-photos-input"]'),
-      ).toHaveCount(1);
-      await expect(
-        workPage.locator("#quickvint-batch-tab-status .batch-tab-status-guidance"),
-      ).toHaveText("Keep Chrome open");
-      expect(requestBodies[0].imageUrls).toEqual([
-        "https://storage.test/batch-real-1.jpg",
-        "https://storage.test/batch-real-2.jpg",
-      ]);
-      expect(requestBodies[0].imageMetadata[0]).toMatchObject({
-        capturedUploadSource: "phone_upload_batch",
-        generationPayloadSource: "phone_upload_storage_url",
-      });
-      releaseGenerate();
-      await expect.poll(() => cleanupRequests.length).toBe(1);
-      await expect(
-        workPage.locator("#quickvint-batch-tab-status .batch-tab-status-guidance"),
-      ).toHaveCount(0);
-      expect(listRequests).toBeGreaterThanOrEqual(1);
-      if (process.env.AUTOLISTER_INCIDENT_REPRO === "1") {
-        await expect(workPage.locator(".photo-box")).toHaveCount(0);
-        await expect(workPage.locator('[data-testid="title--input"]')).toHaveValue("Loaded Batch Item");
-        await expect.poll(() => serviceWorker.evaluate(async () =>
-          Boolean((await chrome.storage.local.get("quickvintBatchRecovery")).quickvintBatchRecovery),
-        )).toBe(false);
-        const saved = await serviceWorker.evaluate(() => chrome.storage.local.get(null));
-        expect(JSON.stringify(saved)).not.toContain("Generated through loaded batch flow.");
-        await workPage.reload({ waitUntil: "domcontentloaded" });
-        await expect(workPage.locator("#quickvint-gen-btn")).toBeVisible();
-        await expect(workPage.locator('[data-testid="title--input"]')).toHaveValue("");
-        await expect(workPage.locator('[data-testid="description--input"]')).toHaveValue("");
-        console.log("INCIDENT_REPRO_MV3: real extension cleaned upload session and removed recovery with zero host thumbnails; generated text lost after reload.");
-      }
-    } finally {
-      releaseGenerate?.();
-      await context.close();
-    }
+      await flow.start();
+      await expect.poll(() => flow.requests.length).toBe(1);
+      const work = flow.context.pages().find(candidate => candidate !== flow.controller && candidate.url().includes("/items/new"));
+      expect(await work.evaluate(() => window.__fileInputReady)).toBe(true);
+      expect(await work.evaluate(() => window.__photoInputChanges)).toBe(1);
+      await expect.poll(() => flow.cleanup.length).toBe(1);
+      await expect(work.locator('[data-testid="title--input"]')).toHaveValue("Item 1");
+      expect(flow.commits.size).toBe(1);
+    } finally { await flow.close(); }
   });
 
   test("background checkout uses the stored account email when the session is missing", async () => {
@@ -3918,7 +3741,7 @@ test.describe("AutoLister extension smoke flows", () => {
   test("reports batch work tab ready only when Vinted photo input exists", async ({
     page,
   }) => {
-    await openContentHarness(page);
+    await openContentHarness(page, null, { pageUrl: "https://www.vinted.com/items/new" });
 
     const pingBatchTab = () =>
       page.evaluate(
@@ -3983,8 +3806,8 @@ test.describe("AutoLister extension smoke flows", () => {
       reservedWidth: node.offsetWidth - node.clientWidth,
     }));
     expect(scrollSurface).toMatchObject({
-      overflowY: "scroll",
-      scrollbarWidth: "auto",
+      overflowY: "auto",
+      scrollbarWidth: "thin",
     });
     expect(scrollSurface.reservedWidth).toBeGreaterThan(0);
 
@@ -4093,83 +3916,26 @@ test.describe("AutoLister extension smoke flows", () => {
     await expect(jumpToPhotos).toBeDisabled();
   });
 
-  test("uses uploaded storage URLs for batch files when Vinted thumbnails are late", async ({
-    page,
-  }) => {
-    const requestBodies = [];
-    await page.route("https://autolister.app/api/events/track", (route) =>
-      route.fulfill({ status: 204, body: "" }),
-    );
-    await page.route("https://autolister.app/api/generate", (route) => {
-      requestBodies.push(route.request().postDataJSON());
-      return route.fulfill({
-        status: 200,
-        contentType: "application/json",
-        body: JSON.stringify({
-          title: "Late Thumbnail Batch",
-          description: "Generated before Vinted thumbnails appeared.",
-          measurementAdvice: "",
-        }),
+  test("uses uploaded storage URLs for batch files when Vinted thumbnails are late", async () => {
+    const flow = await openBatchJourney({ photos: 1, hostPhotoDelay: 3000 });
+    try {
+      await flow.start();
+      await expect.poll(() => flow.requests.length).toBe(1);
+      expect(flow.cleanup).toHaveLength(0);
+      expect(flow.requests[0].body.imageUrls).toEqual(["https://storage.test/photo-0.png"]);
+      expect(flow.requests[0].body.imageMetadata).toHaveLength(1);
+      expect(flow.requests[0].body.imageMetadata[0]).toMatchObject({
+        sourceSelection: "captured_upload_file",
+        promptSource: "captured_upload_file",
+        sourceKind: "remote_url",
+        sourceUrl: "https://storage.test/photo-0.png",
+        capturedUploadSource: "phone_upload_batch",
+        generationPayloadSource: "phone_upload_storage_url",
       });
-    });
-
-    await openContentHarness(page, null, { emptyListing: true });
-
-    const result = await page.evaluate(async (dataUrl) => {
-      const originalSendMessage = window.chrome.runtime.sendMessage;
-      const originalSetInterval = window.setInterval.bind(window);
-      const originalNow = Date.now.bind(Date);
-      let fakeNow = originalNow();
-      const blob = await (await fetch(dataUrl)).blob();
-      const blobUrl = URL.createObjectURL(blob);
-
-      window.chrome.runtime.sendMessage = (message, callback) => {
-        if (message?.type === "PROXY_FETCH") {
-          setTimeout(() => callback?.({ ok: true, data: blobUrl }), 0);
-          return;
-        }
-        originalSendMessage(message, callback);
-      };
-      Date.now = () => fakeNow;
-      window.setInterval = (callback, delay, ...args) =>
-        originalSetInterval(
-          () => {
-            if (delay === 500) fakeNow += 61000;
-            callback(...args);
-          },
-          delay === 500 ? 5 : delay,
-        );
-
-      const listener = window.__extensionHarness.runtimeListeners.find(
-        (candidate) => typeof candidate === "function",
-      );
-      return await new Promise((resolve) => {
-        listener(
-          {
-            type: "RUN_BATCH_ITEM",
-            itemIndex: 1,
-            totalItems: 1,
-            files: [{ url: "https://phone-upload.test/item-a.jpg", name: "item-a.jpg" }],
-          },
-          {},
-          resolve,
-        );
-      });
-    }, tinyPngDataUrl);
-
-    expect(result).toMatchObject({ ok: true });
-    expect(requestBodies[0].imageUrls).toEqual([
-      "https://phone-upload.test/item-a.jpg",
-    ]);
-    expect(requestBodies[0].imageMetadata).toHaveLength(1);
-    expect(requestBodies[0].imageMetadata[0]).toMatchObject({
-      sourceSelection: "captured_upload_file",
-      promptSource: "captured_upload_file",
-      sourceKind: "remote_url",
-      sourceUrl: "https://phone-upload.test/item-a.jpg",
-      capturedUploadSource: "phone_upload_batch",
-      generationPayloadSource: "phone_upload_storage_url",
-    });
+      await expect.poll(() => flow.cleanup.length).toBe(1);
+      const work = flow.context.pages().find(candidate => candidate !== flow.controller && candidate.url().includes("/items/new"));
+      expect(await work.evaluate(() => window.__photoInputChanges)).toBe(1);
+    } finally { await flow.close(); }
   });
 
   test("incident reproduction: rejected Vinted upload still reports ready and refresh loses generated text", async ({ page }) => {
@@ -9045,3 +8811,172 @@ test.describe("own wardrobe rewrite widget", () => {
     }
   });
 });
+
+  test("incident7067: batch resume preserves the committed generation identity", async () => {
+    test.skip(process.env.AUTOLISTER_INCIDENT_7067_REPRO !== "1", "Opt-in red regression. Batch resume currently replaces the committed request identity.");
+    const { context, serviceWorker, userDataDir } = await loadExtension();
+    const page = await context.newPage();
+    const requestBodies = []; const requestIds = []; const committed = new Set();
+    const cleanupRequests = [];
+    let listingLoads = 0;
+    let listRequests = 0;
+    let capacityRequests = 0;
+    let releaseBatchCapacity;
+    let releaseGenerate;
+    const batchCapacityMayFinish = new Promise((resolve) => {
+      releaseBatchCapacity = resolve;
+    });
+    const generateMayFinish = new Promise((resolve) => {
+      releaseGenerate = resolve;
+    });
+    try {
+      await serviceWorker.evaluate(() =>
+        chrome.storage.local.set({
+          supabaseSession: {
+            access_token: "test-access-token",
+            refresh_token: "test-refresh-token",
+            expires_at: Math.floor(Date.now() / 1000) + 3600,
+            user: { id: "test-user", email: "seller@example.com" },
+          },
+          userProfile: {
+            subscription_status: "active",
+            subscription_tier: "pro",
+            api_calls_this_month: 0,
+            pack_credits: 0,
+          },
+          selectedLanguage: "en",
+          selectedTitleLanguage: "en",
+          selectedDescriptionLanguage: "en",
+          tone: "standard",
+          useBulletPoints: true,
+          descriptionLength: "long",
+          useHashtags: true,
+        }),
+      );
+
+      await context.route("https://www.vinted.com/**", (route) => {
+        listingLoads += 1;
+        return route.fulfill({
+          status: 200,
+          contentType: "text/html",
+          body:
+            listingLoads === 1
+              ? emptyListingFixture
+              : delayedFileInputListingFixture,
+        });
+      });
+      await context.route("https://autolister.app/api/user/batch-capacity", async (route) => {
+        capacityRequests += 1;
+        if (capacityRequests > 2) await batchCapacityMayFinish;
+        return route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify({ allowed: true, available: 10 }),
+        });
+      });
+      await context.route("https://autolister.app/api/events/track", (route) =>
+        route.fulfill({ status: 204, body: "" }),
+      );
+      await context.route("https://autolister.app/api/generate", async (route) => {
+        const id = route.request().headers()["x-autolister-request-id"];
+        requestBodies.push(route.request().postDataJSON()); requestIds.push(id);
+        // Controlled local server model: first request commits, but both
+        // immediate transport attempts lose their responses.
+        committed.add(id);
+        if (requestIds.length <= 2) return route.abort("connectionreset");
+        return route.fulfill({status:200,contentType:"application/json",body:JSON.stringify({title:"Recovered batch item",description:"Recovered description",measurementAdvice:""})});
+      });
+      await context.route("https://autolister.app/api/phone-upload**", (route) => {
+        const url = new URL(route.request().url());
+        if (url.searchParams.get("action") === "cleanup") {
+          cleanupRequests.push(route.request().url());
+          return route.fulfill({ status: 204, body: "" });
+        }
+        listRequests += 1;
+        return route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify({
+            files: [
+              {
+                name: "batch-real-1.jpg",
+                path: "session/batch-real-1.jpg",
+                order: 0,
+                url: "https://storage.test/batch-real-1.jpg",
+              },
+              {
+                name: "batch-real-2.jpg",
+                path: "session/batch-real-2.jpg",
+                order: 1,
+                url: "https://storage.test/batch-real-2.jpg",
+              },
+            ],
+            count: 2,
+            complete: true,
+          }),
+        });
+      });
+      await context.route("https://storage.test/**", (route) =>
+        route.fulfill({
+          status: 200,
+          contentType: "image/png",
+          body: Buffer.from(tinyPngDataUrl.split(",")[1], "base64"),
+        }),
+      );
+
+      await page.goto("https://www.vinted.com/items/new", {
+        waitUntil: "domcontentloaded",
+      });
+      await page.evaluate(() => {
+        document.querySelectorAll(".photo-box").forEach((node) => node.remove());
+        document.querySelector('[data-testid="title--input"]').value = "";
+        document.querySelector('[data-testid="description--input"]').value = "";
+      });
+
+      await expect(page.locator("#quickvint-phone-btn")).toBeVisible();
+      await expect(page.locator("#quickvint-batch-btn")).toHaveCount(0);
+      await chooseBatchUpload(page);
+      await expect(
+        page.locator("#quickvint-batch-modal .batch-gallery .batch-photo"),
+      ).toHaveCount(2);
+      await page
+        .locator("#quickvint-batch-modal .batch-gallery .batch-photo")
+        .nth(0)
+        .click();
+      await page
+        .locator("#quickvint-batch-modal .batch-gallery .batch-photo")
+        .nth(1)
+        .click();
+      await page.locator("#quickvint-batch-modal .batch-mark-group").click();
+      const batchStartButton = page.locator(
+        "#quickvint-batch-modal .batch-start",
+      );
+      await expect(batchStartButton).toBeEnabled();
+      await batchStartButton.click();
+      await expect(batchStartButton.locator(".label")).toHaveText("Starting");
+      await expect(batchStartButton.locator(".quickvint-mirage")).toBeVisible();
+      releaseBatchCapacity();
+
+      await expect.poll(() => requestBodies.length).toBe(2);
+      await expect.poll(async () => (await serviceWorker.evaluate(() => chrome.storage.local.get("quickvintBatchRecovery"))).quickvintBatchRecovery?.status).toBe("paused");
+      const before = await serviceWorker.evaluate(() => chrome.storage.local.get("quickvintBatchRecovery"));
+      expect(before.quickvintBatchRecovery.completedCount).toBe(0);
+      // Resume through the real recovery UI, not a direct job function.
+      const resume = page.locator("#quickvint-batch-modal .batch-recovery-resume");
+      if (await resume.count()) await resume.click();
+      else {
+        const nudge = page.locator("#quickvint-batch-recovery-nudge");
+        await expect(nudge).toBeVisible();
+        await nudge.getByRole("button",{name:/resume/i}).click();
+      }
+      await expect.poll(() => requestBodies.length).toBe(3);
+      console.log("INCIDENT7067 "+JSON.stringify({requestIds,committedModelCalls:committed.size,samePayloadPhotos:JSON.stringify(requestBodies[0].imageUrls)===JSON.stringify(requestBodies[2].imageUrls)}));
+      expect(requestIds[2], "same batch item must recover its original request rather than commit another generation").toBe(requestIds[0]);
+    } finally {
+      releaseBatchCapacity?.(); releaseGenerate?.();
+      await context.close();
+      const owned = userDataDir;
+      if (!owned || !owned.startsWith(require("node:os").tmpdir()+"/quick-vint-e2e-")) throw new Error("unsafe profile cleanup");
+      fs.rmSync(owned,{recursive:true,force:true});
+    }
+  });

@@ -5,7 +5,13 @@ const ANALYTICS_CLIENT_ID_KEY = "analyticsClientId";
 const ACCOUNT_EMAIL_STORAGE_KEY = "accountEmail";
 const USER_USAGE_SNAPSHOT_STORAGE_KEY = "quickvintUserUsageSnapshot";
 const BATCH_RECOVERY_STORAGE_KEY = "quickvintBatchRecovery";
+const BATCH_GENERATION_REQUEST_KEY = "quickvintBatchGenerationRequest";
+const BATCH_REVIEW_STORAGE_KEY = "quickvintBatchReviews";
 const BATCH_RECOVERY_TTL_MS = 6 * 60 * 60 * 1000;
+let batchGenerationRequestQueue = Promise.resolve();
+let batchReviewQueue = Promise.resolve();
+let batchCheckpointQueue = Promise.resolve();
+let batchRecoveryQueue = Promise.resolve();
 let analyticsClientIdPromise;
 
 function createAnalyticsClientId() {
@@ -687,15 +693,30 @@ function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-function duplicateTab(tabId) {
+async function createBatchWorkTab(job) {
+  const source = await getTabIfPresent(job.sourceTabId);
+  if (!source?.url) throw new Error("The batch tab was closed. Your source photos are still saved.");
+  const url = new URL(source.url);
+  if (url.protocol !== "https:" || !/(^|\.)vinted\.[a-z.]+$/i.test(url.hostname)) {
+    throw new Error("Keep the batch tab on Vinted while listings are prepared.");
+  }
+  url.pathname = "/items/new";
+  url.search = "";
+  url.hash = "";
+  const previous = await getTabIfPresent(job.lastCompletedWorkTabId);
+  const anchor = previous?.windowId === source.windowId ? previous : source;
   return new Promise((resolve, reject) => {
-    chrome.tabs.duplicate(tabId, (tab) => {
+    chrome.tabs.create({
+      url: url.toString(), active: false, openerTabId: source.id,
+      ...(Number.isInteger(source.windowId) ? { windowId: source.windowId } : {}),
+      ...(Number.isInteger(anchor?.index) ? { index: anchor.index + 1 } : {}),
+    }, (tab) => {
       const error = chrome.runtime.lastError;
       if (error || !tab?.id) {
-        reject(new Error(error?.message || "Could not duplicate Vinted tab."));
+        reject(new Error(error?.message || "Could not open a Vinted listing tab."));
         return;
       }
-      chrome.tabs.update(tab.id, { active: false }, () => resolve(tab));
+      resolve(tab);
     });
   });
 }
@@ -823,18 +844,19 @@ async function waitForWardrobeRewriteTabReady(tabId, itemId, timeoutMs = 30000) 
   throw new Error(lastError?.message || "Vinted edit tab was not ready in time.");
 }
 
-function notifyBatchProgress(job, payload) {
+async function notifyBatchProgress(job, payload) {
   if (!job?.sourceTabId) return;
+  if ((await getStoredSession())?.user?.id !== job.ownerId) return;
   if (!["done", "paused", "failed"].includes(payload.status)) {
-    void globalThis.AutoListerTelemetry?.track(payload.status === "waiting" ? "batch_worker_waiting" : "batch_worker_progress", { batchId: job.batchId, inputSource: job.inputSource, phase: payload.status, itemIndex: payload.itemIndex, completedCount: job.completedCount, total: payload.total }, "extension_background");
+    void globalThis.AutoListerTelemetry?.track(payload.status === "waiting" ? "batch_worker_waiting" : "batch_worker_progress", { batchId: job.batchId, generationAttemptId: job.currentGenerationAttemptId, reason: payload.reason, inputSource: job.inputSource, phase: payload.status, itemIndex: payload.itemIndex, completedCount: job.completedCount, total: payload.total }, "extension_background", false, job.ownerId);
   }
-  const message = { type: "BATCH_PROGRESS", batchId: job.batchId, inputSource: job.inputSource, reason: job.reason || null, createdAt: job.createdAt, ...payload };
+  const message = { type: "BATCH_PROGRESS", ownerId: job.ownerId, batchId: job.batchId, generationAttemptId: job.currentGenerationAttemptId, inputSource: job.inputSource, reason: job.reason || null, createdAt: job.createdAt, ...payload };
   const delivery = chrome.tabs.sendMessage(job.sourceTabId, message);
   delivery?.catch?.(() => {
     // A closed controller is an interruption, not a host crash. Keep terminal
     // evidence even when its content-script tracking call can no longer run.
     if (["done", "paused", "failed"].includes(payload.status)) {
-      void globalThis.AutoListerTelemetry?.track(`batch_${payload.status}`, { batchId: job.batchId, inputSource: job.inputSource, reason: message.reason, message: payload.message, completedCount: job.completedCount, total: payload.total }, "extension_background");
+      void globalThis.AutoListerTelemetry?.track(message.reason === "user_stopped" ? "batch_cancelled" : `batch_${payload.status}`, { batchId: job.batchId, generationAttemptId: job.currentGenerationAttemptId, itemIndex: job.currentItemIndex, inputSource: job.inputSource, reason: message.reason, message: payload.message, completedCount: job.completedCount, total: payload.total }, "extension_background", false, job.ownerId);
     }
   });
 }
@@ -845,9 +867,11 @@ function getBatchWorkTabIds(job) {
 }
 
 async function notifyBatchRecoveryNudge(job) {
+  if ((await getStoredSession())?.user?.id !== job.ownerId) return;
   await Promise.allSettled(getBatchWorkTabIds(job).map((tabId) =>
     sendTabMessage(tabId, {
       type: "SHOW_BATCH_RECOVERY_NUDGE",
+      ownerId: job.ownerId,
       batchId: job.batchId,
     }),
   ));
@@ -884,17 +908,37 @@ async function getStoredBatchRecovery() {
   return stored;
 }
 
-async function persistBatchRecovery(job, updates = {}) {
+function persistBatchRecovery(job, updates = {}, options = {}) {
+  const operation = batchRecoveryQueue.then(async () => {
+    const latest = (await chrome.storage.local.get(BATCH_RECOVERY_STORAGE_KEY))[BATCH_RECOVERY_STORAGE_KEY];
+    const changed = () => Object.assign(new Error("This batch changed. Your photos are still saved."), { code: "BATCH_STATE_CHANGED" });
+    if (!options.initialize) {
+      if (!latest || latest.batchId !== job.batchId || latest.ownerId !== job.ownerId) throw changed();
+      const proposedStatus = updates.status || job.status;
+      if (latest.status === "paused" && ["running", "done"].includes(proposedStatus) && !options.resume) throw changed();
+      if (latest.status === "done" && proposedStatus !== "done") throw changed();
+      if (Number(latest.completedCount || 0) > Math.max(Number(job.completedCount || 0), Number(updates.completedCount || 0)) ||
+          Number(latest.currentItemIndex || 0) > Math.max(Number(job.currentItemIndex || 0), Number(updates.currentItemIndex || 0))) throw changed();
+    }
+    return writeBatchRecovery(job, updates);
+  });
+  batchRecoveryQueue = operation.catch(() => {});
+  return operation;
+}
+
+async function writeBatchRecovery(job, updates) {
   const stored = {
     version: 1,
     kind: "batch",
     batchId: job.batchId,
+    ownerId: job.ownerId || null,
     sourceTabId: job.sourceTabId,
     sessionId: job.sessionId,
     inputSource: job.inputSource || "phone",
     groups: job.groups,
     completedCount: Math.max(0, Number(job.completedCount || 0)),
     currentItemIndex: Math.max(0, Number(job.currentItemIndex || 0)),
+    currentGenerationAttemptId: job.currentGenerationAttemptId || null,
     currentWorkTabId: Number.isInteger(job.currentWorkTabId)
       ? job.currentWorkTabId
       : null,
@@ -910,13 +954,16 @@ async function persistBatchRecovery(job, updates = {}) {
     expiresAt: Number(job.expiresAt || Date.now() + BATCH_RECOVERY_TTL_MS),
     ...updates,
   };
-  Object.assign(job, stored);
   await chrome.storage.local.set({ [BATCH_RECOVERY_STORAGE_KEY]: stored });
+  Object.assign(job, stored);
   return stored;
 }
 
 function publicBatchRecovery(job) {
   return {
+    ownerId: job.ownerId,
+    generationAttemptId: job.currentGenerationAttemptId || null,
+    itemIndex: job.currentItemIndex,
     batchId: job.batchId,
     sessionId: job.sessionId,
     inputSource: job.inputSource,
@@ -941,23 +988,24 @@ async function getTabJobHeartbeat(message, sender) {
   if (!Number.isInteger(sourceTabId) || sourceTabId <= 0) {
     return { ok: false, active: false, error: "Invalid tab job heartbeat." };
   }
+  const accountId = message.kind === "batch" ? (await getStoredSession())?.user?.id : null;
+  if (message.kind === "batch" && (!accountId || (activeTabJob?.kind === "batch" && activeTabJob.ownerId !== accountId))) {
+    return { ok: true, active: false };
+  }
   const active =
     activeTabJob?.kind === message.kind &&
     activeTabJob.sourceTabId === sourceTabId;
   if (active || message.kind !== "batch") return { ok: true, active };
 
   const recovery = await getStoredBatchRecovery();
-  if (!recovery || recovery.sourceTabId !== sourceTabId) {
+  if (!recovery || recovery.ownerId !== accountId || recovery.sourceTabId !== sourceTabId) {
     return { ok: true, active: false };
   }
   if (recovery.status === "running") {
-    await persistBatchRecovery(recovery, {
-      status: "paused",
-      reason: "service_worker_restarted",
-      hadIssues: true,
-    });
-    void globalThis.AutoListerTelemetry?.track("operation_interrupted", { batchId: recovery.batchId, reason: "service_worker_restarted", stage: "batch_running" }, "extension_background");
-    await notifyBatchRecoveryNudge(recovery);
+    if (!activeTabJob) {
+      reattachRunningBatch(recovery);
+    }
+    return { ok: true, active: activeTabJob?.batchId === recovery.batchId };
   }
   return {
     ok: true,
@@ -965,6 +1013,15 @@ async function getTabJobHeartbeat(message, sender) {
     recoverable: true,
     recovery: publicBatchRecovery(recovery),
   };
+}
+
+function reattachRunningBatch(job) {
+  activeTabJob = job;
+  void globalThis.AutoListerTelemetry?.track("batch_worker_progress", {
+    batchId: job.batchId, generationAttemptId: job.currentGenerationAttemptId,
+    itemIndex: job.currentItemIndex, phase: "worker_reattached", reason: "service_worker_restarted",
+  }, "extension_background", false, job.ownerId);
+  runBatchGenerationJob(job);
 }
 
 async function cleanupBatchUploadSession(job, reason = "completed") {
@@ -991,7 +1048,9 @@ async function runBatchGenerationJob(job) {
   const offersByCampaign = new Map();
 
   notifyBatchProgress(job, {
-    status: "queued",
+    status: job.currentWorkTabId && job.message ? "waiting" : "queued",
+    message: job.message || undefined,
+    reason: job.reason || undefined,
     current: job.completedCount,
     total: groups.length,
   });
@@ -999,26 +1058,37 @@ async function runBatchGenerationJob(job) {
   try {
     for (let index = activeItemIndex; index < groups.length; index += 1) {
       activeItemIndex = index + 1;
+      if (job.stopRequested || (await getStoredSession())?.user?.id !== job.ownerId) {
+        throw new Error(job.stopRequested ? "Batch stopped. Your photos are saved." : "Sign in with the account that started this batch before continuing.");
+      }
+      const retainedWorkTabId = job.currentItemIndex === activeItemIndex && Number.isInteger(job.currentWorkTabId)
+        ? job.currentWorkTabId : null;
+      const retainedWorkTab = retainedWorkTabId ? await getTabIfPresent(retainedWorkTabId) : null;
+      const retainedWaiting = retainedWorkTab && ["network_wait", "generation_pending", "host_fields_hidden"].includes(job.reason);
+      if (retainedWorkTabId && !retainedWorkTab) throw new Error("The listing tab was closed. Your photos are saved. Resume when ready.");
       await persistBatchRecovery(job, {
         status: "running",
-        message: null,
-        reason: null,
+        message: retainedWaiting ? job.message : null,
+        reason: retainedWaiting ? job.reason : null,
         currentItemIndex: activeItemIndex,
-        currentWorkTabId: null,
+        currentGenerationAttemptId: retainedWorkTabId ? job.currentGenerationAttemptId : null,
+        currentWorkTabId: retainedWorkTabId,
       });
-      notifyBatchProgress(job, {
+      if (!retainedWorkTab) notifyBatchProgress(job, {
         status: "opening_tab",
         current: index + 1,
         total: groups.length,
         itemIndex: index + 1,
       });
 
-      const workTab = await duplicateTab(job.sourceTabId);
+      const workTab = retainedWorkTab || await createBatchWorkTab(job);
       await persistBatchRecovery(job, { currentWorkTabId: workTab.id });
-      await waitForTabComplete(workTab.id);
+      if (!retainedWorkTab) await recordBatchWorkStart(job, index + 1, workTab.id).catch(error => {
+        console.debug("Batch navigation unavailable:", error);
+      });
       await waitForBatchTabReady(workTab.id);
 
-      notifyBatchProgress(job, {
+      if (!retainedWorkTab) notifyBatchProgress(job, {
         status: "tab_ready",
         current: index + 1,
         total: groups.length,
@@ -1026,14 +1096,17 @@ async function runBatchGenerationJob(job) {
       });
 
       notifyBatchProgress(job, {
-        status: "generating",
-        current: index + 1,
+        status: retainedWaiting ? "waiting" : "generating",
+        message: retainedWaiting ? job.message : undefined,
+        reason: retainedWaiting ? job.reason : undefined,
+        current: retainedWaiting ? job.completedCount : index + 1,
         total: groups.length,
         itemIndex: index + 1,
       });
 
       const result = await sendTabMessage(workTab.id, {
         type: "RUN_BATCH_ITEM",
+        ownerId: job.ownerId,
         batchId: job.batchId,
         itemIndex: index + 1,
         totalItems: groups.length,
@@ -1045,11 +1118,12 @@ async function runBatchGenerationJob(job) {
           result?.error || `Listing ${index + 1} could not be generated.`,
         );
       }
-      await markBatchItemComplete({
+      const checkpoint = await markBatchItemComplete({
         batchId: job.batchId,
         itemIndex: index + 1,
         workTabId: workTab.id,
       });
+      if (!checkpoint?.ok) throw new Error(checkpoint?.error || "Could not save this listing's completion. Your source photos are still saved.");
       lastWorkTabId = workTab.id;
 
       if (Array.isArray(result.offers)) {
@@ -1095,36 +1169,48 @@ async function runBatchGenerationJob(job) {
       offers: Array.from(offersByCampaign.values()),
     });
     if (lastWorkTabId && job.hadIssues !== true) {
-      sendTabMessage(lastWorkTabId, {
+      sendTabMessage(job.sourceTabId, {
         type: "SHOW_BATCH_REVIEW_PROMPT",
         total: groups.length,
+        deferUntilBatchDismissed: true,
       }).catch((error) =>
         console.debug("Batch review prompt unavailable:", error),
       );
     }
     await chrome.storage.local.remove(BATCH_RECOVERY_STORAGE_KEY);
   } catch (err) {
-    console.error("[Background] Batch generation failed:", err);
+    if (err.code === "BATCH_STATE_CHANGED") return;
+    if (!job.stopRequested) console.error("[Background] Batch generation failed:", err);
     await persistBatchRecovery(job, {
       status: "paused",
       message: err.message || "Batch generation stopped.",
-      reason: "generation_error",
+      reason: job.stopRequested ? "user_stopped" : "generation_error",
       hadIssues: true,
       currentItemIndex: activeItemIndex,
       currentWorkTabId: job.currentWorkTabId,
     });
-    await notifyBatchRecoveryNudge(job);
+    if (!job.stopRequested) await notifyBatchRecoveryNudge(job);
     notifyBatchProgress(job, {
       status: "paused",
       current: job.completedCount,
       total: groups.length,
       itemIndex: activeItemIndex,
       message: err.message || "Batch generation stopped.",
-      reason: "generation_error",
+      reason: job.stopRequested ? "user_stopped" : "generation_error",
     });
   } finally {
     if (activeTabJob === job) activeTabJob = null;
   }
+}
+
+async function savedBatchStartBlock(ownerId, sourceTabId) {
+  const saved = await getStoredBatchRecovery();
+  if (!saved?.ownerId || saved.status === "done") return null;
+  const owned = saved.ownerId === ownerId;
+  return { ok: false, code: "saved_batch_exists", error: owned
+    ? "Resume or discard your saved batch before starting another one."
+    : "Another account has a saved batch in this browser. Finish it with that account before starting another batch.",
+    ...(owned && saved.sourceTabId === sourceTabId ? { recovery: publicBatchRecovery(saved) } : {}) };
 }
 
 async function startBatchGeneration(message, sender) {
@@ -1141,6 +1227,10 @@ async function startBatchGeneration(message, sender) {
   if (!sourceTabId) {
     return { ok: false, error: "Could not find the current Vinted tab." };
   }
+  const ownerId = (await getStoredSession())?.user?.id;
+  if (!ownerId) return { ok: false, error: "Please sign in before starting a batch." };
+  const savedBlock = await savedBatchStartBlock(ownerId, sourceTabId);
+  if (savedBlock) return savedBlock;
 
   let groups = Array.isArray(message.groups)
     ? message.groups.filter((group) => Array.isArray(group) && group.length > 0)
@@ -1180,8 +1270,14 @@ async function startBatchGeneration(message, sender) {
     };
   }
 
+  if ((await getStoredSession())?.user?.id !== ownerId) return { ok: false, error: "Your account changed. Start the batch again when ready." };
+  await batchCheckpointQueue;
+  const finalSavedBlock = await savedBatchStartBlock(ownerId, sourceTabId);
+  if (finalSavedBlock) return finalSavedBlock;
+  if (activeTabJob) return { ok: false, error: "Another tab job is already running." };
   const job = {
     kind: "batch",
+    ownerId,
     batchId: createAnalyticsClientId(),
     sourceTabId,
     sessionId: message.sessionId,
@@ -1200,7 +1296,7 @@ async function startBatchGeneration(message, sender) {
 
   activeTabJob = job;
   try {
-    await persistBatchRecovery(job);
+    await persistBatchRecovery(job, {}, { initialize: true });
   } catch (error) {
     if (activeTabJob === job) activeTabJob = null;
     return { ok: false, error: "Could not save this batch for recovery." };
@@ -1216,9 +1312,23 @@ async function startBatchGeneration(message, sender) {
   };
 }
 
-async function markBatchItemComplete(message, sender = null) {
+function markBatchItemComplete(message, sender = null) {
+  const result = batchCheckpointQueue.then(() => completeBatchItemCheckpoint(message, sender));
+  batchCheckpointQueue = result.catch(() => {});
+  return result.catch(error => ({ ok: false, error: error?.message || "Could not save this listing's completion. Your photos are still saved." }));
+}
+
+async function completeBatchItemCheckpoint(message, sender) {
   const job = await getStoredBatchRecovery();
   const itemIndex = Math.floor(Number(message?.itemIndex || 0));
+  const completedWorkTabId = Number.isInteger(sender?.tab?.id)
+    ? sender.tab.id
+    : Number.isInteger(message?.workTabId) ? message.workTabId : null;
+  const accountId = (await getStoredSession())?.user?.id;
+  if (job && (!accountId || job.ownerId !== accountId)) {
+    return { ok: false, error: "Sign in with the account that started this batch before continuing." };
+  }
+  if (job && !["running", "done"].includes(job.status)) return { ok: false, error: "Batch paused. Your photos are saved." };
   if (
     !job ||
     message?.batchId !== job.batchId ||
@@ -1228,13 +1338,17 @@ async function markBatchItemComplete(message, sender = null) {
   ) {
     return { ok: false, error: "Batch checkpoint is unavailable." };
   }
+  if (itemIndex <= job.completedCount) {
+    return itemIndex === job.completedCount && completedWorkTabId === job.lastCompletedWorkTabId
+      ? { ok: true, completedCount: job.completedCount, total: job.groups.length }
+      : { ok: false, error: "This listing is no longer the active batch item." };
+  }
+  if (completedWorkTabId !== job.currentWorkTabId || itemIndex !== job.currentItemIndex) {
+    return { ok: false, error: "Only the active listing tab can confirm this batch item." };
+  }
   const completedCount = Math.max(job.completedCount, itemIndex);
   const isActive = activeTabJob?.kind === "batch" && activeTabJob.batchId === job.batchId;
-  const completedWorkTabId = Number.isInteger(sender?.tab?.id)
-    ? sender.tab.id
-    : Number.isInteger(message?.workTabId)
-      ? message.workTabId
-      : job.lastCompletedWorkTabId;
+  const autoContinue = !activeTabJob && job.status === "running" && completedCount < job.groups.length;
   await persistBatchRecovery(job, {
     completedCount,
     currentItemIndex: itemIndex,
@@ -1242,18 +1356,34 @@ async function markBatchItemComplete(message, sender = null) {
     lastCompletedWorkTabId: completedWorkTabId,
     status: completedCount === job.groups.length
       ? isActive ? "running" : "done"
-      : isActive ? "running" : "paused",
+      : isActive || autoContinue ? "running" : "paused",
     reason: completedCount === job.groups.length
       ? isActive ? null : "completed"
-      : isActive ? null : "service_worker_restarted",
+      : isActive || autoContinue ? null : "service_worker_restarted",
     hadIssues: job.hadIssues === true || !isActive,
   });
   if (isActive) activeTabJob.completedCount = completedCount;
   if (isActive) activeTabJob.lastCompletedWorkTabId = completedWorkTabId;
+  if (completedCount === job.groups.length) {
+    void globalThis.AutoListerTelemetry?.track("batch_complete", { batchId: job.batchId, generationAttemptId: job.currentGenerationAttemptId, itemIndex, completedCount, total: job.groups.length }, "extension_background", false, job.ownerId);
+  }
+  await recordBatchReviewCompletion(job, itemIndex, completedWorkTabId).catch(error => {
+    console.debug("Batch review navigation unavailable:", error);
+  });
+  await mutateBatchGenerationRequest(async () => {
+    const pending = (await chrome.storage.local.get(BATCH_GENERATION_REQUEST_KEY))[BATCH_GENERATION_REQUEST_KEY];
+    if (pending?.batchId === job.batchId && pending.itemIndex <= completedCount) {
+      await chrome.storage.local.remove(BATCH_GENERATION_REQUEST_KEY);
+    }
+  });
   if (!isActive && completedCount === job.groups.length) {
     await cleanupBatchUploadSession(job);
+    notifyBatchProgress(job, { status: "done", current: completedCount, total: job.groups.length, reason: "completed" });
   }
-  if (!isActive && completedCount < job.groups.length) {
+  if (autoContinue) {
+    activeTabJob = job;
+    runBatchGenerationJob(job);
+  } else if (!isActive && completedCount < job.groups.length) {
     await notifyBatchRecoveryNudge(job);
   }
   return { ok: true, completedCount, total: job.groups.length };
@@ -1263,12 +1393,129 @@ function getBatchFileKey(file) {
   return String(file?.path || file?.name || "");
 }
 
+function mutateBatchReviews(operation) {
+  const result = batchReviewQueue.then(async () => {
+    const stored = (await chrome.storage.local.get(BATCH_REVIEW_STORAGE_KEY))[BATCH_REVIEW_STORAGE_KEY] || {};
+    const records = Object.fromEntries(Object.entries(stored).filter(([, record]) => Number(record?.expiresAt) > Date.now()));
+    return operation(records);
+  });
+  batchReviewQueue = result.catch(() => {});
+  return result;
+}
+
+function publicBatchReview(record) {
+  return { ownerId: record.ownerId, batchId: record.batchId, total: record.total, readyCount: record.tabs.filter(Number.isInteger).length,
+    readyItems: record.tabs.map((tabId, index) => Number.isInteger(tabId) ? index + 1 : null).filter(Boolean),
+    following: record.following !== false, pauseReason: record.pauseReason || null };
+}
+
+async function notifyBatchReview(record) {
+  if ((await getStoredSession())?.user?.id !== record.ownerId) return;
+  await Promise.allSettled([...new Set([record.sourceTabId, record.currentWorkTabId, ...record.tabs])].filter(Number.isInteger).map(tabId =>
+    sendTabMessage(tabId, { type: "BATCH_REVIEW_STATE", state: publicBatchReview(record),
+      itemIndex: record.tabs.indexOf(tabId) + 1 }),
+  ));
+}
+
+async function recordBatchWorkStart(job, itemIndex, tabId) {
+  let record = await mutateBatchReviews(async records => {
+    const old = records[job.batchId];
+    const next = old?.ownerId === job.ownerId ? old : {
+      batchId: job.batchId, ownerId: job.ownerId, sourceTabId: job.sourceTabId,
+      total: job.groups.length, tabs: [], following: true, expiresAt: job.expiresAt,
+    };
+    next.currentWorkTabId = tabId;
+    next.currentItemIndex = itemIndex;
+    records[job.batchId] = next;
+    const bounded = Object.fromEntries(Object.entries(records).slice(-10));
+    await chrome.storage.local.set({ [BATCH_REVIEW_STORAGE_KEY]: bounded });
+    return next;
+  });
+  await notifyBatchReview(record);
+  if (!record.following) return;
+  const active = await new Promise(resolve => chrome.tabs.query({ active: true, lastFocusedWindow: true }, tabs => resolve(tabs?.[0] || null)));
+  if (active?.id !== record.sourceTabId && !record.tabs.includes(active?.id)) {
+    record = await mutateBatchReviews(async records => {
+      const latest = records[job.batchId];
+      if (!latest) return record;
+      latest.following = false; latest.pauseReason = "other_tab";
+      await chrome.storage.local.set({ [BATCH_REVIEW_STORAGE_KEY]: records });
+      return latest;
+    });
+    await notifyBatchReview(record);
+    return;
+  }
+  const allowed = await sendTabMessage(active.id, { type: "CAN_BATCH_AUTO_FOLLOW", batchId: job.batchId }).catch(() => null);
+  if (!allowed?.ok) {
+    record = await mutateBatchReviews(async records => {
+      const latest = records[job.batchId];
+      if (!latest) return record;
+      latest.following = false; latest.pauseReason = "editing";
+      await chrome.storage.local.set({ [BATCH_REVIEW_STORAGE_KEY]: records });
+      return latest;
+    });
+    await notifyBatchReview(record);
+    return;
+  }
+  // Recheck a concurrently delivered edit/pause before changing focus.
+  const latest = await mutateBatchReviews(records => records[job.batchId]);
+  const stillActive = await new Promise(resolve => chrome.tabs.query({ active: true, lastFocusedWindow: true }, tabs => resolve(tabs?.[0]?.id)));
+  if (latest?.following && stillActive === active.id && (await getStoredSession())?.user?.id === job.ownerId) await activateTab(tabId);
+}
+
+async function recordBatchReviewCompletion(job, itemIndex, tabId) {
+  const record = await mutateBatchReviews(async records => {
+    const next = records[job.batchId];
+    if (!next || next.ownerId !== job.ownerId) return null;
+    next.tabs[itemIndex - 1] = tabId;
+    if (next.currentWorkTabId === tabId) next.currentWorkTabId = null;
+    await chrome.storage.local.set({ [BATCH_REVIEW_STORAGE_KEY]: records });
+    return next;
+  });
+  if (record) await notifyBatchReview(record);
+}
+
+async function batchReviewAction(message, sender) {
+  const accountId = (await getStoredSession())?.user?.id;
+  let targetId = null;
+  const result = await mutateBatchReviews(async records => {
+    const record = records[message.batchId];
+    const callerId = sender?.tab?.id;
+    if (!record || record.ownerId !== accountId ||
+        (callerId !== record.sourceTabId && callerId !== record.currentWorkTabId && !record.tabs.includes(callerId))) {
+      return { ok: false, error: "This batch is unavailable for this tab and account." };
+    }
+    if (message.type === "SET_BATCH_FOLLOW") {
+      record.following = message.following === true;
+      record.pauseReason = record.following ? null : message.reason === "editing" ? "editing" : "manual";
+      await chrome.storage.local.set({ [BATCH_REVIEW_STORAGE_KEY]: records });
+      await notifyBatchReview(record);
+      if (record.following) targetId = record.currentWorkTabId || record.tabs.filter(Number.isInteger).at(-1) || null;
+    } else if (message.type === "FOCUS_BATCH_REVIEW") {
+      targetId = message.target === "controller" ? record.sourceTabId : record.tabs[Number(message.itemIndex) - 1];
+      if (!Number.isInteger(targetId)) return { ok: false, error: "That listing is still being prepared." };
+      record.following = false; record.pauseReason = "manual";
+      await chrome.storage.local.set({ [BATCH_REVIEW_STORAGE_KEY]: records });
+      await notifyBatchReview(record);
+    }
+    return { ok: true, state: publicBatchReview(record) };
+  });
+  if (result.ok && Number.isInteger(targetId)) {
+    if (!await getTabIfPresent(targetId)) return { ok: false, error: "This listing tab was closed. Your other listing tabs are still open." };
+    await activateTab(targetId);
+  }
+  return result;
+}
+
 async function refreshBatchRecoveryGroups(job) {
   const v2Query = job.inputSource === "computer" ? "" : "&v=2&includeUrls=1&fromOrder=0";
   const response = await fetch(
     `${API_BASE}/api/phone-upload?sessionId=${encodeURIComponent(job.sessionId)}${v2Query}&t=${Date.now()}`,
   );
-  if (!response.ok) throw new Error("Saved photos are no longer available.");
+  if (!response.ok) throw Object.assign(new Error(response.status === 410
+    ? "This saved upload expired. Start a new batch with your original photos."
+    : response.status === 404 ? "This saved upload could not be found. Use your original photos to start a new batch."
+      : `Could not check saved photos (HTTP ${response.status}). Please try again.`), { expired: response.status === 410 });
   const data = await response.json();
   const files = Array.isArray(data?.files) ? data.files : [];
   const byKey = new Map(files.map((file) => [getBatchFileKey(file), file]));
@@ -1276,39 +1523,41 @@ async function refreshBatchRecoveryGroups(job) {
     group.map((oldFile) => byKey.get(getBatchFileKey(oldFile))),
   );
   if (!files.length || groups.some((group) => group.some((file) => !file))) {
-    throw new Error("Saved photos are no longer available.");
+    throw new Error("Could not load every saved photo. Please try again before starting a new batch.");
   }
   return groups;
 }
 
 async function getBatchRecovery(sender) {
   const job = await getStoredBatchRecovery();
-  if (!job) return { ok: true, recovery: null };
+  const accountId = (await getStoredSession())?.user?.id;
+  if (!job || !accountId || job.ownerId !== accountId) return { ok: true, recovery: null,
+    savedBatchBlocked: Boolean(job?.ownerId && job.status !== "done") };
   const sourceTabId = sender?.tab?.id;
   if (job.sourceTabId !== sourceTabId) {
     return {
       ok: true,
       recovery: null,
       nudge: job.status !== "running" && getBatchWorkTabIds(job).includes(sourceTabId),
+      ownerId: job.ownerId,
       batchId: job.batchId,
     };
   }
   if (job.status === "running" && activeTabJob?.batchId !== job.batchId) {
-    await persistBatchRecovery(job, {
-      status: "paused",
-      reason: "service_worker_restarted",
-      hadIssues: true,
-    });
-    await notifyBatchRecoveryNudge(job);
+    if (!activeTabJob) {
+      reattachRunningBatch(job);
+    }
   }
   return { ok: true, recovery: publicBatchRecovery(job) };
 }
 
 async function focusBatchRecovery(sender) {
   const job = await getStoredBatchRecovery();
+  const accountId = (await getStoredSession())?.user?.id;
   const callerTabId = sender?.tab?.id;
   if (
     !job ||
+    !accountId || job.ownerId !== accountId ||
     job.status !== "paused" ||
     !getBatchWorkTabIds(job).includes(callerTabId)
   ) {
@@ -1344,7 +1593,6 @@ async function focusBatchRecovery(sender) {
 
   const sourceTab = await createActiveTab(createUrl);
   await persistBatchRecovery(job, { sourceTabId: sourceTab.id, hadIssues: true });
-  await waitForTabComplete(sourceTab.id);
   await waitForBatchTabReady(sourceTab.id);
   await sendTabMessage(sourceTab.id, {
     type: "SHOW_BATCH_RECOVERY",
@@ -1353,10 +1601,16 @@ async function focusBatchRecovery(sender) {
   return { ok: true, sourceTabId: sourceTab.id, recreated: true };
 }
 
-async function resumeBatchGeneration(sender) {
+async function resumeBatchGeneration(message, sender) {
   if (activeTabJob) return { ok: false, error: "Another batch is already running." };
   const job = await getStoredBatchRecovery();
   if (!job) return { ok: false, error: "This saved batch is no longer available." };
+  if (!job.ownerId || job.ownerId !== (await getStoredSession())?.user?.id) {
+    return { ok: false, error: "Sign in with the account that started this batch before continuing." };
+  }
+  if (message.batchId !== job.batchId || (sender?.tab?.id !== job.sourceTabId && !getBatchWorkTabIds(job).includes(sender?.tab?.id))) {
+    return { ok: false, error: "This saved batch is no longer available from this control." };
+  }
   if (job.completedCount >= job.groups.length) {
     return {
       ok: true,
@@ -1370,14 +1624,15 @@ async function resumeBatchGeneration(sender) {
   try {
     job.groups = await refreshBatchRecoveryGroups(job);
   } catch (error) {
+    const expired = error.expired === true;
     await persistBatchRecovery(job, {
-      status: "expired",
+      status: expired ? "expired" : "paused",
       message: error.message,
-      reason: "recovery_files_expired",
+      reason: expired ? "recovery_files_expired" : "recovery_check_failed",
     });
     return {
       ok: false,
-      expired: true,
+      expired,
       batchId: job.batchId,
       inputSource: job.inputSource,
       error: error.message,
@@ -1389,7 +1644,8 @@ async function resumeBatchGeneration(sender) {
     message: null,
     reason: null,
     sourceTabId: job.sourceTabId,
-  });
+    currentWorkTabId: null,
+  }, { resume: true });
   activeTabJob = job;
   runBatchGenerationJob(job);
   return {
@@ -1401,14 +1657,78 @@ async function resumeBatchGeneration(sender) {
   };
 }
 
-async function discardBatchRecovery() {
+async function discardBatchRecovery(message, sender) {
+  const job = await getStoredBatchRecovery();
+  if (!job) return { ok: true };
+  const accountId = (await getStoredSession())?.user?.id;
+  const callerId = sender?.tab?.id;
+  if (!accountId || job.ownerId !== accountId || message.batchId !== job.batchId ||
+      (callerId !== job.sourceTabId && !getBatchWorkTabIds(job).includes(callerId))) {
+    return { ok: false, error: "This batch is unavailable for this tab and account." };
+  }
   if (activeTabJob?.kind === "batch") {
     return { ok: false, error: "The batch is still running." };
   }
-  const job = await getStoredBatchRecovery();
-  if (job) await cleanupBatchUploadSession(job, "cancelled");
+  if (job.status !== "done") await cleanupBatchUploadSession(job, "cancelled");
   await chrome.storage.local.remove(BATCH_RECOVERY_STORAGE_KEY);
+  await mutateBatchGenerationRequest(() => chrome.storage.local.remove(BATCH_GENERATION_REQUEST_KEY));
   return { ok: true };
+}
+
+function mutateBatchGenerationRequest(operation) {
+  const result = batchGenerationRequestQueue.then(operation);
+  batchGenerationRequestQueue = result.catch(() => {});
+  return result;
+}
+
+async function batchGenerationRequest(message, sender, save = false) {
+  return mutateBatchGenerationRequest(async () => {
+    const job = await getStoredBatchRecovery();
+    const accountId = (await getStoredSession())?.user?.id;
+    const itemIndex = Math.floor(Number(message?.itemIndex));
+    if (!job || job.status !== "running" || !accountId || job.ownerId !== accountId || message.userId !== accountId ||
+        message.batchId !== job.batchId || sender?.tab?.id !== job.currentWorkTabId ||
+        itemIndex !== job.currentItemIndex || itemIndex !== Number(job.completedCount || 0) + 1) {
+      return { ok: false, error: "This batch item is no longer active for the signed-in account." };
+    }
+    let pending = (await chrome.storage.local.get(BATCH_GENERATION_REQUEST_KEY))[BATCH_GENERATION_REQUEST_KEY];
+    if (pending && Number(pending.expiresAt) <= Date.now()) {
+      await chrome.storage.local.remove(BATCH_GENERATION_REQUEST_KEY);
+      pending = null;
+    }
+    if (pending && (pending.accountId !== accountId || pending.batchId !== job.batchId || pending.itemIndex !== itemIndex)) {
+      return { ok: false, error: "A different saved generation must be reviewed before continuing." };
+    }
+    if (save) {
+      const request = message.request;
+      if (!request || typeof request.requestId !== "string" || !request.requestId || request.requestId.length > 128 ||
+          typeof request.requestBodyJson !== "string" || new TextEncoder().encode(request.requestBodyJson).length > 4 * 1024 * 1024) {
+        return { ok: false, error: "Could not save the generation request safely. Your photos are still saved." };
+      }
+      let body;
+      try { body = JSON.parse(request.requestBodyJson); } catch { return { ok: false, error: "Invalid generation request." }; }
+      if (body?.generationMode !== "batch" || !Array.isArray(body.imageUrls) || !body.imageUrls.length || body.imageUrls.length > 20) {
+        return { ok: false, error: "Invalid batch generation request." };
+      }
+      if (pending && (pending.requestId !== request.requestId || pending.requestBodyJson !== request.requestBodyJson) &&
+          !(message.replaceDefinitive === true && message.previousRequestId === pending.requestId)) {
+        return { ok: false, error: "The saved generation request changed. Your photos are still saved." };
+      }
+      pending = {
+        accountId, batchId: job.batchId, itemIndex,
+        requestId: request.requestId, requestBodyJson: request.requestBodyJson,
+        payloadFallback: request.payloadFallback || null,
+        createdAt: pending?.createdAt || Date.now(), expiresAt: job.expiresAt,
+      };
+      await chrome.storage.local.set({ [BATCH_GENERATION_REQUEST_KEY]: pending });
+      if (job.currentGenerationAttemptId !== body.generationAttemptId) {
+        await persistBatchRecovery(job, { currentGenerationAttemptId: body.generationAttemptId });
+        if (activeTabJob?.batchId === job.batchId) activeTabJob.currentGenerationAttemptId = body.generationAttemptId;
+        void globalThis.AutoListerTelemetry?.track("batch_item_started", { batchId: job.batchId, generationAttemptId: body.generationAttemptId, itemIndex }, "extension_background", false, job.ownerId);
+      }
+    }
+    return { ok: true, request: pending || null };
+  }).catch(() => ({ ok: false, error: "Could not save or read this generation safely. Your photos are still saved." }));
 }
 
 function validateWardrobeRewriteRequest(message, sender, available) {
@@ -2019,15 +2339,61 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         break;
 
       case "RESUME_BATCH_GENERATION":
-        sendResponse(await resumeBatchGeneration(sender));
+        sendResponse(await resumeBatchGeneration(message, sender));
         break;
+
+      case "STOP_BATCH_GENERATION": {
+        const job = activeTabJob?.kind === "batch" ? activeTabJob : await getStoredBatchRecovery();
+        const accountId = (await getStoredSession())?.user?.id;
+        if (!job || !accountId || job.ownerId !== accountId || job.batchId !== message.batchId ||
+            (job.sourceTabId !== sender?.tab?.id && !getBatchWorkTabIds(job).includes(sender?.tab?.id))) {
+          sendResponse({ ok: false, error: "This batch is unavailable for this tab and account." });
+          break;
+        }
+        job.stopRequested = true;
+        await persistBatchRecovery(job, { status: "paused", reason: "user_stopped", message: "Batch stopped. Your photos are saved." });
+        if (job.currentWorkTabId) await sendTabMessage(job.currentWorkTabId, { type: "STOP_BATCH_ITEM", batchId: job.batchId }).catch(() => {});
+        notifyBatchProgress(job, { status: "paused", current: job.completedCount, total: job.groups.length, reason: "user_stopped", message: "Batch stopped. Your photos are saved." });
+        sendResponse({ ok: true });
+        break;
+      }
 
       case "MARK_BATCH_ITEM_COMPLETE":
         sendResponse(await markBatchItemComplete(message, sender));
         break;
 
+      case "GET_BATCH_GENERATION_REQUEST":
+        sendResponse(await batchGenerationRequest(message, sender));
+        break;
+
+      case "BATCH_ITEM_WAITING": {
+        const job = await getStoredBatchRecovery();
+        const accountId = (await getStoredSession())?.user?.id;
+        if (!job || job.status !== "running" || activeTabJob?.stopRequested || !accountId || job.ownerId !== accountId || job.batchId !== message.batchId ||
+            job.currentWorkTabId !== sender?.tab?.id || job.currentItemIndex !== message.itemIndex ||
+            job.currentGenerationAttemptId !== message.generationAttemptId) {
+          sendResponse({ ok: false });
+          break;
+        }
+        const saved = await persistBatchRecovery(job, { reason: message.reason, message: message.message }).catch(() => null);
+        if (!saved) { sendResponse({ ok: false }); break; }
+        notifyBatchProgress(job, { status: "waiting", current: job.completedCount, itemIndex: job.currentItemIndex,
+          total: job.groups.length, reason: message.reason, message: message.message });
+        sendResponse({ ok: true });
+        break;
+      }
+
+      case "SAVE_BATCH_GENERATION_REQUEST":
+        sendResponse(await batchGenerationRequest(message, sender, true));
+        break;
+
+      case "SET_BATCH_FOLLOW":
+      case "FOCUS_BATCH_REVIEW":
+        sendResponse(await batchReviewAction(message, sender));
+        break;
+
       case "DISCARD_BATCH_RECOVERY":
-        sendResponse(await discardBatchRecovery());
+        sendResponse(await discardBatchRecovery(message, sender));
         break;
 
       case "START_BATCH_GENERATION": {

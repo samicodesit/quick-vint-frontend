@@ -1139,17 +1139,23 @@
   let batchProgressGroups = [];
   let batchProgressStatus = null;
   let batchProgressContext = {};
+  let batchNavigationState = null;
+  let batchNavigationItem = null;
+  let batchNavigationEdited = false;
+  let batchItemTask = null;
   let batchGenerationCapacity = null;
   let batchCapacityLoading = false;
   let batchInputSource = null;
   let batchComputerUploadPromise = null;
   let batchComputerUploadAbortController = null;
   let batchRecoveryCheckStarted = false;
+  let batchAuthUserId = null;
   let trackedBatchRecoveryId = null;
   let listingToolsReadyTracked = false;
   let signedOutToolsReadyTracked = false;
   let batchTabStatusTimer = null;
   let batchReviewPromptHandledThisPage = false;
+  let pendingBatchReviewPrompt = null;
   let emojiToggleSyncTimer = null;
   let hashtagsToggleSyncTimer = null;
   let descriptionFooterSyncTimer = null;
@@ -1284,8 +1290,8 @@
     }
   }
 
-  function trackGrowthEvent(event, context = {}) {
-    void globalThis.AutoListerTelemetry?.track(event, context, "extension_content");
+  function trackGrowthEvent(event, context = {}, expectedAccountId = undefined) {
+    void globalThis.AutoListerTelemetry?.track(event, context, "extension_content", false, expectedAccountId);
   }
 
   function flushGrowthEvents() {
@@ -2855,6 +2861,7 @@
     const hadGenerationUrls = capturedUpload.files.some((entry) => entry.generateUrl);
     capturedUpload.files.forEach((entry) => {
       entry.generateUrl = null;
+      entry.generationUrlInvalidated = true;
     });
     capturedUpload.generationUrlsInvalidatedReason = reason || "fallback_to_local";
     return hadGenerationUrls;
@@ -3137,6 +3144,7 @@
       urls.forEach((url, offset) => {
         if (url && upload.files[registration.startIndex + offset]) {
           upload.files[registration.startIndex + offset].generateUrl = url;
+          upload.files[registration.startIndex + offset].generationUrlInvalidated = false;
         }
       });
 
@@ -3179,7 +3187,10 @@
         upload.currentSetTrusted !== false &&
         !upload.storageUploadError &&
         upload.files?.length > 0 &&
-        upload.files.some((entry) => !entry.generateUrl),
+        // Consumed/rejected storage URLs are intentionally cleared. Their
+        // retained local files remain available for a later generation; only
+        // newly captured files still awaiting storage should show Preparing.
+        upload.files.some((entry) => !entry.generateUrl && !entry.generationUrlInvalidated),
     );
   }
 
@@ -3998,6 +4009,7 @@
 
   function initializeAuthState() {
     chrome.storage.local.get("supabaseSession", ({ supabaseSession }) => {
+      batchAuthUserId = supabaseSession?.user?.id || null;
       isAuthenticated = !!supabaseSession?.access_token;
       updateButtonUI();
       refreshWardrobeRewriteCapacity();
@@ -4010,9 +4022,27 @@
 
   chrome.storage.onChanged.addListener((changes) => {
     if (changes.supabaseSession) {
+      const nextUserId = changes.supabaseSession.newValue?.user?.id || null;
+      if (nextUserId !== batchAuthUserId) {
+        batchItemTask?.controller.abort();
+        batchAuthUserId = nextUserId;
+        closeBatchModal({ cleanup: false });
+        batchNavigationState = null;
+        batchNavigationItem = null;
+        batchProgressContext = {};
+        trackedBatchRecoveryId = null;
+        pendingBatchReviewPrompt = null;
+        document.getElementById(BATCH_RECOVERY_NUDGE_ID)?.remove();
+        document.getElementById("quickvint-batch-tab-status")?.remove();
+        batchRecoveryCheckStarted = false;
+      }
       isAuthenticated = !!changes.supabaseSession.newValue?.access_token;
       updateButtonUI();
       refreshWardrobeRewriteCapacity();
+      if (isAuthenticated && !batchRecoveryCheckStarted) {
+        batchRecoveryCheckStarted = true;
+        maybeShowSavedBatchRecovery().catch(() => {});
+      }
     }
     if (
       changes.selectedLanguage ||
@@ -4036,8 +4066,27 @@
   });
 
   chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+    if (message?.type === "BATCH_REVIEW_STATE") {
+      if (message.state?.ownerId && message.state.ownerId !== batchAuthUserId) { sendResponse({ ok: false }); return false; }
+      const batchId = batchNavigationItem?.batchId || batchProgressContext.batchId;
+      if (batchId === message.state?.batchId) {
+        batchNavigationState = message.state;
+        renderBatchNavigation();
+        updateBatchReviewLinks();
+      }
+      sendResponse({ ok: true });
+      return false;
+    }
+    if (message?.type === "CAN_BATCH_AUTO_FOLLOW") {
+      const batchId = batchNavigationItem?.batchId || batchProgressContext.batchId;
+      sendResponse({ ok: batchId === message.batchId && !batchNavigationEdited &&
+        !isBatchEditingControl(document.activeElement) });
+      return false;
+    }
     if (message?.type === "BATCH_PING") {
-      sendResponse({ ok: Boolean(document.querySelector(SELECTORS.fileInput)) });
+      const controls = [SELECTORS.fileInput, SELECTORS.title, SELECTORS.description]
+        .map(selector => document.querySelector(selector));
+      sendResponse({ ok: window.location.pathname === "/items/new" && controls.every(control => control && !control.disabled) });
       return false;
     }
 
@@ -4054,7 +4103,19 @@
       return true;
     }
 
+    if (message?.type === "STOP_BATCH_ITEM") {
+      if (batchItemTask?.batchId !== message.batchId) { sendResponse({ ok: false }); return false; }
+      batchItemTask.controller.abort();
+      sendResponse({ ok: true });
+      return false;
+    }
+
     if (message?.type === "SHOW_BATCH_REVIEW_PROMPT") {
+      if (message.deferUntilBatchDismissed) {
+        pendingBatchReviewPrompt = { total: message.total };
+        sendResponse({ ok: true, shown: false, deferred: true });
+        return false;
+      }
       showBatchReviewPrompt(message)
         .then((shown) => sendResponse({ ok: true, shown }))
         .catch((error) =>
@@ -4064,6 +4125,7 @@
     }
 
     if (message?.type === "SHOW_BATCH_RECOVERY_NUDGE") {
+      if (message.ownerId && message.ownerId !== batchAuthUserId) { sendResponse({ ok: false }); return false; }
       showBatchRecoveryNudge();
       sendResponse({ ok: true });
       return false;
@@ -4075,6 +4137,7 @@
     }
 
     if (message?.type === "BATCH_PROGRESS") {
+      if (message.ownerId && message.ownerId !== batchAuthUserId) { sendResponse({ ok: false }); return false; }
       handleBatchProgress(message);
       sendResponse({ ok: true });
       return false;
@@ -4422,6 +4485,14 @@
         }
       }
 
+      #quickvint-batch-tab-status.has-batch-navigation { box-sizing: border-box; pointer-events: auto; flex-wrap: wrap; }
+      #quickvint-batch-tab-status .batch-navigation-copy { display: grid; gap: 4px; flex: 1; min-width: 180px; }
+      #quickvint-batch-tab-status .batch-navigation-copy span { color: #777493; font-size: 11px; font-weight: 500; }
+      #quickvint-batch-tab-status .batch-navigation-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+      #quickvint-batch-tab-status button { min-height: 44px; padding: 8px 10px; border: 1px solid #dfd9f0;
+        border-radius: 8px; background: #ffffffa8; color: #503a85; font-family: inherit; font-size: 12px; line-height: 1.3; font-weight: 500; cursor: pointer; }
+      #quickvint-batch-tab-status button:hover { background: #eee9fc; }
+      #quickvint-batch-tab-status button:focus-visible { outline: 2px solid #7450c2; outline-offset: 2px; }
       #quickvint-batch-tab-status {
         position: relative;
         display: inline-flex;
@@ -6575,26 +6646,30 @@
         min-height: 0;
         max-height: min(650px, calc(100vh - 184px));
         overflow-x: hidden;
-        overflow-y: scroll;
+        overflow-y: auto;
         overscroll-behavior: contain;
-        padding: 0 8px 20px 0;
+        padding: 0 8px 12px 0;
         scrollbar-gutter: stable;
-        scrollbar-color: #64748b #cbd5e1;
-        scrollbar-width: auto;
+        scrollbar-color: #b4a9ca transparent;
+        scrollbar-width: thin;
       }
 
       #${BATCH_MODAL_ID}.organizing .batch-review::-webkit-scrollbar {
-        width: 10px;
+        width: 6px;
       }
 
       #${BATCH_MODAL_ID}.organizing .batch-review::-webkit-scrollbar-track {
-        background: #cbd5e1;
+        background: transparent;
       }
 
       #${BATCH_MODAL_ID}.organizing .batch-review::-webkit-scrollbar-thumb {
-        border: 2px solid #cbd5e1;
+        border: 0;
         border-radius: 8px;
-        background: #64748b;
+        background: #b4a9ca;
+      }
+
+      #${BATCH_MODAL_ID}.organizing .batch-review::-webkit-scrollbar-button {
+        display: none;
       }
 
       #${BATCH_MODAL_ID}.organizing .organize-progress {
@@ -7577,6 +7652,13 @@
       #${BATCH_MODAL_ID}.generating .batch-progress-card.done .batch-progress-badge {
         background: #dcfce7;
         color: #15803d;
+      }
+
+      #${BATCH_MODAL_ID}.generating button.batch-progress-badge {
+        min-height: 44px;
+        border: 1px solid #b8e3c7;
+        cursor: pointer;
+        font-family: inherit;
       }
 
       #${BATCH_MODAL_ID}.generating .batch-progress-card.failed .batch-progress-badge {
@@ -12844,6 +12926,7 @@
 
     const label = button.querySelector(".label");
     const previousLabel = label?.textContent || button.textContent || "";
+    const previousChildren = label ? null : Array.from(button.childNodes);
     const previousDisabled = button.disabled;
     const previousCursor = button.style.cursor;
     const previousBackground = button.style.background;
@@ -12866,7 +12949,7 @@
       if (label) {
         label.textContent = previousLabel;
       } else {
-        button.textContent = previousLabel;
+        button.replaceChildren(...previousChildren);
       }
     };
   }
@@ -15542,6 +15625,17 @@
   }
 
   async function onBatchUploadClick(capacity) {
+    const saved = await getSavedBatchRecovery();
+    if (saved?.recovery && saved.recovery.status !== "done") {
+      showBatchRecovery(saved.recovery);
+      return;
+    }
+    if (saved?.savedBatchBlocked || (saved?.batchId && !saved.recovery)) {
+      showToast(saved.savedBatchBlocked
+        ? "Another account has a saved batch in this browser. Finish it with that account before starting another batch."
+        : "Resume or discard your saved batch in its existing batch tab first.", "info");
+      return;
+    }
     if (!isAuthenticated) {
       trackGrowthEvent("phone_upload_blocked", { reason: "signed_out" });
       showToast("Please sign in via the extension popup first.", "error");
@@ -17431,6 +17525,10 @@
 
     if (!response?.ok) {
       stopTabJobHeartbeat();
+      if (response?.recovery && showBatchRecovery(response.recovery)) {
+        showToast(response.error, "info");
+        return;
+      }
       renderBatchProgress({
         status: "failed",
         current: 0,
@@ -17567,7 +17665,7 @@
   }
 
   function getBatchDiagnosticContext(details = {}) {
-    for (const key of ["batchId", "inputSource", "reason", "createdAt"]) {
+    for (const key of ["batchId", "generationAttemptId", "itemIndex", "inputSource", "reason", "createdAt"]) {
       if (details[key] !== undefined && details[key] !== null) {
         batchProgressContext[key] = details[key];
       }
@@ -17575,6 +17673,8 @@
     const createdAt = Number(batchProgressContext.createdAt || 0);
     return {
       batchId: batchProgressContext.batchId || null,
+      generationAttemptId: batchProgressContext.generationAttemptId || null,
+      itemIndex: batchProgressContext.itemIndex || null,
       inputSource: batchProgressContext.inputSource || null,
       reason: batchProgressContext.reason || null,
       completedCount: Math.max(0, Number(details.current || 0)),
@@ -17590,6 +17690,8 @@
     message = "",
     delayMs = 0,
     batchId,
+    generationAttemptId,
+    itemIndex,
     inputSource,
     reason,
     createdAt,
@@ -17599,6 +17701,8 @@
 
     const diagnostics = getBatchDiagnosticContext({
       batchId,
+      generationAttemptId,
+      itemIndex,
       inputSource,
       reason,
       createdAt,
@@ -17608,7 +17712,7 @@
     const previousStatus = batchProgressStatus;
     batchProgressStatus = status;
     if (previousStatus !== status && ["done", "failed", "paused"].includes(status)) {
-      trackGrowthEvent(status === "done" ? "batch_done" : status === "paused" ? "batch_paused" : "batch_failed", {
+      trackGrowthEvent(status === "done" ? "batch_done" : status === "paused" && reason === "user_stopped" ? "batch_cancelled" : status === "paused" ? "batch_paused" : "batch_failed", {
         ...diagnostics,
         current,
         message: message || null,
@@ -17634,7 +17738,7 @@
     const subtitleEl = document.querySelector(`#${BATCH_MODAL_ID} .batch-subtitle`);
     const paused = status === "paused";
     const expired = status === "expired";
-    if (titleEl) titleEl.textContent = paused ? "Batch paused" : expired ? "Batch expired" : "Generating listings";
+    if (titleEl) titleEl.textContent = paused ? "Batch paused" : expired ? "Batch expired" : status === "done" ? "Listings ready" : "Generating listings";
     if (subtitleEl) {
       subtitleEl.hidden = false;
       subtitleEl.textContent = `${getBatchReadyCount(status, current)}/${total} ready`;
@@ -17643,12 +17747,16 @@
     const groups = batchProgressGroups.length
       ? batchProgressGroups
       : getBatchGroupsWithKeys();
-    const progressPercent = getBatchProgressPercent(status, current, total);
+    const waitingForCurrentItem = status === "waiting" &&
+      ["network_wait", "generation_pending", "host_fields_hidden"].includes(reason);
+    const progressPercent = waitingForCurrentItem
+      ? total ? Math.round((current / total) * 100) : 0
+      : getBatchProgressPercent(status, current, total);
     const statusText = getBatchProgressCopy({ status, current, total, message, delayMs });
     const running = isBatchProgressActive(status);
     const remaining = Math.max(0, total - current);
     const progressTitle = running
-      ? "Keep this tab open"
+      ? "Your listings are being prepared"
       : status === "done"
         ? "Review tabs before publishing"
         : paused
@@ -17662,12 +17770,13 @@
         ? "The temporary recovery window ended."
         : status === "failed"
           ? "No more tabs will open."
-          : "Tabs open one at a time.";
+          : "Follow each listing as it is prepared. Start editing to stay on a listing.";
     const actions = paused
       ? `<button type="button" class="batch-recovery-discard">Discard batch</button><button type="button" class="batch-recovery-resume primary">Resume ${remaining} remaining</button>`
       : expired
         ? '<button type="button" class="batch-recovery-discard">Start new batch</button>'
-        : `<button type="button" class="batch-dismiss" ${running ? "disabled" : ""}>${running ? "Working..." : "Done"}</button>`;
+        : running ? '<button type="button" class="batch-stop">Stop batch</button>'
+          : '<button type="button" class="batch-dismiss">Done</button>';
 
     body.innerHTML = `
       <div class="batch-progress-stage ${running ? "is-live" : ""}">
@@ -17677,7 +17786,7 @@
             <div class="batch-status ${status === "done" ? "done" : ["failed", "paused", "expired"].includes(status) ? "warning" : ""}">${escapeHtml(statusText)}</div>
             <div class="batch-progress-title">${progressTitle}</div>
           </div>
-          <div class="batch-progress-count">${progressPercent}%</div>
+          <div class="batch-progress-count">${waitingForCurrentItem ? "Waiting" : `${progressPercent}%`}</div>
         </div>
         <div class="batch-live-progress" aria-hidden="true">
           <span style="width: ${progressPercent}%"></span>
@@ -17691,7 +17800,9 @@
     const list = body.querySelector(".batch-progress-list");
     groups.forEach((group, index) => {
       const itemNumber = index + 1;
-      const state = getBatchItemState(status, itemNumber, current);
+      const state = waitingForCurrentItem
+        ? getBatchItemState("generating", itemNumber, diagnostics.itemIndex || current + 1)
+        : getBatchItemState(status, itemNumber, current);
       const card = document.createElement("div");
       card.className = `batch-progress-card ${state}`;
 
@@ -17720,23 +17831,39 @@
 
       const badge = document.createElement("div");
       badge.className = "batch-progress-badge";
-      badge.textContent = getBatchItemStateLabel(state, status);
+      badge.textContent = waitingForCurrentItem && state === "active"
+        ? reason === "network_wait" ? "Waiting for connection"
+          : reason === "generation_pending" ? "Finishing generation" : "Waiting for Vinted"
+        : getBatchItemStateLabel(state, status);
 
       card.appendChild(thumbs);
       card.appendChild(meta);
       card.appendChild(badge);
       list?.appendChild(card);
     });
+    updateBatchReviewLinks();
+
+    body.querySelector(".batch-stop")?.addEventListener("click", async event => {
+      const button = event.currentTarget;
+      button.disabled = true;
+      const response = await sendMessage({ type: "STOP_BATCH_GENERATION", batchId: batchProgressContext.batchId });
+      if (!response?.ok) { button.disabled = false; showToast(response?.error || "Could not stop the batch.", "error"); }
+    });
 
     body.querySelector(".batch-dismiss")?.addEventListener("click", () => {
-      sendMessage({ type: "DISCARD_BATCH_RECOVERY" });
+      sendMessage({ type: "DISCARD_BATCH_RECOVERY", batchId: batchProgressContext.batchId });
       closeBatchModal({ cleanup: false });
+      if (status === "done" && pendingBatchReviewPrompt) {
+        const prompt = pendingBatchReviewPrompt;
+        pendingBatchReviewPrompt = null;
+        void showBatchReviewPrompt(prompt);
+      }
     });
     body.querySelector(".batch-recovery-resume")?.addEventListener("click", (event) => {
       resumeSavedBatch(event.currentTarget);
     });
     body.querySelector(".batch-recovery-discard")?.addEventListener("click", async () => {
-      await sendMessage({ type: "DISCARD_BATCH_RECOVERY" });
+      await sendMessage({ type: "DISCARD_BATCH_RECOVERY", batchId: batchProgressContext.batchId });
       closeBatchModal({ cleanup: false });
       if (expired) document.getElementById(PHONE_BTN_ID)?.click();
     });
@@ -17753,6 +17880,7 @@
   }
 
   function showBatchRecovery(recovery) {
+    if (!batchAuthUserId || recovery?.ownerId !== batchAuthUserId) return false;
     if (!recovery?.sessionId || !Array.isArray(recovery.groups)) return false;
     document.getElementById(BATCH_RECOVERY_NUDGE_ID)?.remove();
     batchUploadSessionId = recovery.sessionId;
@@ -17761,11 +17889,15 @@
     if (!document.getElementById(BATCH_MODAL_ID)) createBatchModal(recovery.sessionId);
     const isRunning = recovery.status === "running";
     renderBatchProgress({
-      status: recovery.status === "done" ? "done" : recovery.status === "expired" ? "expired" : isRunning ? "queued" : "paused",
+      status: recovery.status === "done" ? "done" : recovery.status === "expired" ? "expired" : isRunning
+        ? ["network_wait", "generation_pending", "host_fields_hidden"].includes(recovery.reason) ? "waiting" : "queued"
+        : "paused",
       current: Math.max(0, Number(recovery.completedCount || 0)),
       total: Math.max(0, Number(recovery.total || recovery.groups.length)),
       message: recovery.message || "",
       batchId: recovery.batchId,
+      generationAttemptId: recovery.generationAttemptId,
+      itemIndex: recovery.itemIndex,
       inputSource: recovery.inputSource,
       reason: recovery.reason,
       createdAt: recovery.createdAt,
@@ -17846,6 +17978,7 @@
 
   async function maybeShowSavedBatchRecovery() {
     const result = await getSavedBatchRecovery();
+    if (result?.nudge && result.ownerId !== batchAuthUserId) return false;
     if (result?.nudge) return showBatchRecoveryNudge();
     return result?.recovery ? showBatchRecovery(result.recovery) : false;
   }
@@ -17862,7 +17995,7 @@
       completedCount,
     });
     const restoreButton = setActionButtonLoading(button, "Resuming");
-    const response = await sendMessage({ type: "RESUME_BATCH_GENERATION" });
+    const response = await sendMessage({ type: "RESUME_BATCH_GENERATION", batchId: batchProgressContext.batchId });
     restoreButton();
     if (!response?.ok) {
       trackGrowthEvent("batch_resume_failed", {
@@ -17926,10 +18059,11 @@
     }
   }
 
-  function waitForUploadedPhotoCount(targetCount, timeoutMs = BATCH_UPLOAD_WAIT_TIMEOUT_MS) {
+  function waitForUploadedPhotoCount(targetCount, timeoutMs = BATCH_UPLOAD_WAIT_TIMEOUT_MS, signal = null) {
     return new Promise((resolve, reject) => {
       const startedAt = Date.now();
       const timer = setInterval(() => {
+        if (signal?.aborted) { clearInterval(timer); reject(new Error("Batch stopped. Your photos are saved.")); return; }
         const uploadedEntries = getUploadedImageEntries();
         const capturedReadyCount = uploadedEntries.filter(
           (entry) => entry.promptSource === "captured_upload_file",
@@ -17951,11 +18085,41 @@
     });
   }
 
+  function waitForHostUploadedPhotos(targetCount, timeoutMs = BATCH_UPLOAD_WAIT_TIMEOUT_MS, signal = null) {
+    const startedAt = Date.now();
+    return new Promise((resolve, reject) => {
+      const check = () => {
+        if (signal?.aborted) { reject(new Error("Batch stopped. Your photos are saved.")); return; }
+        const confirmed = new Set();
+        const grid = document.querySelector(SELECTORS.mediaGrid);
+        const visibleError = Array.from(grid?.querySelectorAll('[aria-invalid="true"]') || [])
+          .find(element => element.getClientRects().length && element.textContent?.trim());
+        if (visibleError) return reject(new Error("Vinted could not upload these photos. Your generated details and source photos are saved."));
+        for (const image of grid?.querySelectorAll(SELECTORS.mediaImage) || []) {
+          try {
+            const url = new URL(image.currentSrc || image.src);
+            if (url.protocol === "https:" && /(^|\.)vinted\.(net|com)$/.test(url.hostname) && image.complete && image.naturalWidth > 0) {
+              confirmed.add(url.origin + url.pathname);
+            }
+          } catch { /* Local previews do not establish a host upload. */ }
+        }
+        if (confirmed.size >= targetCount) return resolve();
+        if (Date.now() - startedAt >= timeoutMs) {
+          return reject(new Error("Your generated details are ready, but Vinted has not confirmed all photos. Your source photos are still saved."));
+        }
+        setTimeout(check, 500);
+      };
+      check();
+    });
+  }
+
   function waitForGeneratedListingFields(
     expectedTitle,
     expectedDescription,
     timeoutMs = 2500,
     stableForMs = 0,
+    onHiddenMismatch = null,
+    signal = null,
   ) {
     const normalize = (value) => String(value || "").trim();
     const expectedTitleText = normalize(expectedTitle);
@@ -17968,20 +18132,10 @@
       let observedMs = 0;
       let matchedMs = 0;
       let previouslyMatched = false;
+      let hiddenNotified = false;
       const check = () => {
+        if (signal?.aborted) { reject(new Error("Batch stopped. Your photos are saved.")); return; }
         const now = Date.now();
-        // A hidden tab or suspended callback is not evidence of a failed write.
-        // Count observed foreground time, not time Chrome stopped scheduling us.
-        if (document.visibilityState === "hidden") {
-          lastCheckedAt = null;
-          matchedMs = 0;
-          previouslyMatched = false;
-          setTimeout(check, pollMs);
-          return;
-        }
-        const intervalMs = lastCheckedAt === null ? 0 : Math.min(now - lastCheckedAt, pollMs);
-        lastCheckedAt = now;
-        observedMs += intervalMs;
         const titleInput = document.querySelector(SELECTORS.title);
         const descInput = document.querySelector(SELECTORS.description);
         const titleMatches =
@@ -17989,9 +18143,33 @@
         const descriptionMatches =
           !expectedDescriptionText ||
           normalize(descInput?.value).includes(expectedDescriptionText);
+        // Positive DOM evidence remains valid in a background tab. The batch
+        // must not wait for the seller to foreground every generated listing.
+        // Stability observations still require scheduled foreground time.
+        if (titleMatches && descriptionMatches && stableForMs === 0) {
+          resolve();
+          return;
+        }
+        // A hidden tab or suspended callback is not evidence of a failed write.
+        // Count observed foreground time, not time Chrome stopped scheduling us.
+        if (document.visibilityState === "hidden" && !(titleMatches && descriptionMatches)) {
+          if (!hiddenNotified && now - startedAt >= 5000) {
+            hiddenNotified = true;
+            onHiddenMismatch?.();
+          }
+          lastCheckedAt = null;
+          matchedMs = 0;
+          previouslyMatched = false;
+          setTimeout(check, pollMs);
+          return;
+        }
+        const matchingIntervalMs = lastCheckedAt === null ? 0 : Math.max(0, now - lastCheckedAt);
+        const intervalMs = Math.min(matchingIntervalMs, pollMs);
+        lastCheckedAt = now;
+        observedMs += intervalMs;
 
         if (titleMatches && descriptionMatches) {
-          matchedMs = previouslyMatched ? matchedMs + intervalMs : 0;
+          matchedMs = previouslyMatched ? matchedMs + matchingIntervalMs : 0;
           previouslyMatched = true;
           if (matchedMs >= stableForMs) {
             resolve();
@@ -18023,7 +18201,67 @@
     });
   }
 
+  function isBatchEditingControl(target) {
+    return target instanceof Element && !target.closest("#quickvint-batch-tab-status") &&
+      Boolean(target.closest('textarea, select, input:not([type="file"]):not([type="hidden"]), [contenteditable="true"]'));
+  }
+
+  async function setBatchNavigationFollowing(following, reason) {
+    if (!batchNavigationState) return;
+    if (following) batchNavigationEdited = false;
+    const result = await sendMessage({ type: "SET_BATCH_FOLLOW", batchId: batchNavigationState.batchId, following, reason });
+    if (result?.ok) { batchNavigationState = result.state; renderBatchNavigation(); }
+  }
+
+  document.addEventListener("input", event => {
+    if (!event.isTrusted || !batchNavigationItem || !isBatchEditingControl(event.target)) return;
+    batchNavigationEdited = true;
+    if (batchNavigationState?.following) {
+      batchNavigationState = { ...batchNavigationState, following: false, pauseReason: "editing" };
+      renderBatchNavigation();
+      void setBatchNavigationFollowing(false, "editing");
+    }
+  }, true);
+
+  function updateBatchReviewLinks() {
+    if (!batchNavigationState || batchNavigationState.batchId !== batchProgressContext.batchId) return;
+    document.querySelectorAll(`#${BATCH_MODAL_ID} .batch-progress-card`).forEach((card, index) => {
+      if (!batchNavigationState.readyItems.includes(index + 1)) return;
+      const old = card.querySelector(".batch-progress-badge");
+      if (!old || old.tagName === "BUTTON") return;
+      const button = document.createElement("button");
+      button.type = "button"; button.className = old.className;
+      button.textContent = "Review"; button.setAttribute("aria-label", `Review listing ${index + 1}`);
+      button.addEventListener("click", () => sendMessage({ type: "FOCUS_BATCH_REVIEW", batchId: batchNavigationState.batchId, itemIndex: index + 1 }));
+      old.replaceWith(button);
+    });
+  }
+
+  function renderBatchNavigation() {
+    if (!batchNavigationItem || batchNavigationState?.batchId !== batchNavigationItem.batchId) return;
+    if (!batchNavigationState.readyItems.includes(batchNavigationItem.itemIndex)) return;
+    const bar = document.getElementById("quickvint-batch-tab-status");
+    if (!bar) return;
+    if (batchTabStatusTimer) { clearTimeout(batchTabStatusTimer); batchTabStatusTimer = null; }
+    bar.className = "success visible has-batch-navigation";
+    const state = batchNavigationState;
+    const next = state.readyItems.find(index => index > batchNavigationItem.itemIndex);
+    const complete = state.readyCount === state.total;
+    bar.innerHTML = `<span class="batch-tab-status-icon" aria-hidden="true">✓</span><div class="batch-navigation-copy"><strong>Listing ${batchNavigationItem.itemIndex} of ${state.total}: ready to review.</strong>
+      <span aria-live="polite">${state.readyCount}/${state.total} ready${complete ? ". Review before publishing." : state.following ? ". Next listing opens automatically." : ". Staying here while the batch continues."}</span></div>
+      <div class="batch-navigation-actions">${!state.following && next ? '<button type="button" data-next>Next ready listing</button>' : ""}
+      ${!complete ? `<button type="button" data-follow aria-pressed="${state.following}">${state.following ? "Pause auto-follow" : "Follow new listings"}</button>` : ""}
+      <button type="button" data-controller>Back to batch</button></div>`;
+    bar.querySelector("[data-follow]")?.addEventListener("click", () => setBatchNavigationFollowing(!state.following));
+    bar.querySelector("[data-next]")?.addEventListener("click", () => sendMessage({ type: "FOCUS_BATCH_REVIEW", batchId: state.batchId, itemIndex: next }));
+    bar.querySelector("[data-controller]").addEventListener("click", () => sendMessage({ type: "FOCUS_BATCH_REVIEW", batchId: state.batchId, target: "controller" }));
+  }
+
   function showBatchTabStatus(message, state = "loading") {
+    if (state === "success" && batchNavigationState?.batchId === batchNavigationItem?.batchId && batchNavigationState) {
+      renderBatchNavigation();
+      return;
+    }
     let status = document.getElementById("quickvint-batch-tab-status");
     if (!status) {
       status = document.createElement("div");
@@ -18055,7 +18293,7 @@
       batchTabStatusTimer = null;
     }
 
-    const iconText = state === "success" ? "✓" : state === "error" ? "!" : "";
+    const iconText = state === "success" ? "✓" : state === "error" ? "!" : state === "paused" ? "Ⅱ" : "";
     status.className = state;
     status.innerHTML = `
       <span class="batch-tab-status-icon" aria-hidden="true">${iconText}</span>
@@ -18071,6 +18309,7 @@
   }
 
   function hideBatchTabStatus(delayMs = 0) {
+    if (document.getElementById("quickvint-batch-tab-status")?.classList.contains("has-batch-navigation")) return;
     if (batchTabStatusTimer) {
       clearTimeout(batchTabStatusTimer);
       batchTabStatusTimer = null;
@@ -18501,8 +18740,26 @@
     }
   }
 
-  async function runBatchItem(message) {
+  function runBatchItem(message) {
+    const ownerId = batchAuthUserId;
+    if (!ownerId || (message.ownerId && message.ownerId !== ownerId)) return Promise.reject(new Error("This batch belongs to another account."));
+    if (batchItemTask?.batchId === message.batchId && batchItemTask.itemIndex === message.itemIndex && batchItemTask.ownerId === ownerId) {
+      return batchItemTask.promise;
+    }
+    if (batchItemTask?.running) return Promise.reject(new Error("Another batch item is still running in this tab."));
+    const task = { batchId: message.batchId, itemIndex: message.itemIndex, ownerId, controller: new AbortController(), running: true };
+    batchItemTask = task;
+    task.promise = executeBatchItem(message, task).finally(() => { task.running = false; });
+    return task.promise;
+  }
+
+  async function executeBatchItem(message, task) {
+    const checkActive = () => {
+      if (task.controller.signal.aborted || batchAuthUserId !== task.ownerId) throw new Error("Batch stopped. Your photos are saved.");
+    };
     removeClonedBatchUiForWorkTab();
+    batchNavigationItem = { batchId: message.batchId, itemIndex: Math.max(1, Number(message.itemIndex || 1)) };
+    batchNavigationEdited = false;
 
     const remoteFiles = Array.isArray(message.files) ? message.files : [];
     const itemIndex = Math.max(1, Number(message.itemIndex || 1));
@@ -18528,10 +18785,17 @@
 
     const initialPhotoCount = getVisibleUploadedPhotoCount();
     let downloads = [];
+    // A foreground seller can watch generation without an arriving response
+    // overwriting text they started typing. Release only our two field locks
+    // after confirmation, including all error paths. Other host fields work.
+    const batchFieldLocks = [SELECTORS.title, SELECTORS.description].map(selector => document.querySelector(selector))
+      .filter(Boolean).map(field => ({ field, readOnly: field.readOnly, busy: field.getAttribute("aria-busy") }));
+    batchFieldLocks.forEach(({ field }) => { field.readOnly = true; field.setAttribute("aria-busy", "true"); });
 
     try {
       showBatchTabStatus(`${listingPrefix}: preparing photos...`);
       downloads = await Promise.all(remoteFiles.map(downloadPhoneUploadFile));
+      checkActive();
       const successfulDownloads = downloads.filter((result) => result.file);
       const filesToInject = successfulDownloads.map((result) => result.file);
 
@@ -18549,7 +18813,8 @@
       }
 
       showBatchTabStatus(`${listingPrefix}: waiting for Vinted to show photos...`);
-      await waitForUploadedPhotoCount(initialPhotoCount + filesToInject.length);
+      await waitForUploadedPhotoCount(initialPhotoCount + filesToInject.length, undefined, task.controller.signal);
+      checkActive();
 
       showBatchTabStatus(`${listingPrefix}: writing title and description...`);
       const generatedListing = await generateCurrentListing({
@@ -18558,11 +18823,26 @@
         showMeasurementAdvice: false,
         throwOnLimit: true,
         generationMode: "batch",
+        batchContext: { batchId: message.batchId, itemIndex },
+        batchSignal: task.controller.signal,
       });
+      checkActive();
+      showBatchTabStatus(`${listingPrefix}: waiting for photos to finish uploading...`);
+      await waitForHostUploadedPhotos(initialPhotoCount + filesToInject.length, undefined, task.controller.signal);
+      checkActive();
       showBatchTabStatus(`${listingPrefix}: checking listing details...`);
       await waitForGeneratedListingFields(
         generatedListing?.title,
         generatedListing?.description,
+        2500,
+        500,
+        () => {
+          const messageText = "Waiting for Vinted. Open this listing tab to finish checking its fields.";
+          showBatchTabStatus(messageText);
+          void sendMessage({ type: "BATCH_ITEM_WAITING", batchId: message.batchId, itemIndex,
+            generationAttemptId: generatedListing.generationAttemptId, reason: "host_fields_hidden", message: messageText });
+        },
+        task.controller.signal,
       );
 
       if (message.batchId) {
@@ -18575,7 +18855,7 @@
           });
         }
         if (!checkpoint?.ok) {
-          console.warn("AutoLister AI: batch completion checkpoint was not saved");
+          throw new Error(checkpoint?.error || "Could not save this listing's completion. Your source photos are still saved.");
         }
       }
 
@@ -18583,13 +18863,17 @@
       hideBatchTabStatus(3500);
       return { ok: true, offers: generatedListing?.offers || [] };
     } catch (err) {
-      showBatchTabStatus(
-        err.message || `${listingPrefix}: generation failed.`,
-        "error",
-      );
-      hideBatchTabStatus(9000);
+      if (batchAuthUserId === task.ownerId) {
+        showBatchTabStatus(err.message || `${listingPrefix}: generation failed.`, task.controller.signal.aborted ? "paused" : "error");
+        hideBatchTabStatus(9000);
+      }
       throw err;
     } finally {
+      batchFieldLocks.forEach(({ field, readOnly, busy }) => {
+        field.readOnly = readOnly;
+        if (busy === null) field.removeAttribute("aria-busy");
+        else field.setAttribute("aria-busy", busy);
+      });
       downloads.forEach((result) => {
         if (result.previewUrl) URL.revokeObjectURL(result.previewUrl);
       });
@@ -18611,6 +18895,8 @@
     applyGeneratedOutput = true,
     descriptionFooterIncludedOverride = null,
     languageOverrides = null,
+    batchContext = null,
+    batchSignal = null,
   } = {}) {
     const incompletePhoneUpload = manageButtonState
       ? getIncompletePhoneUploadState()
@@ -18636,13 +18922,15 @@
     let imageEntries = getUploadedImageEntries();
     let imageUrls = imageEntries.map((entry) => entry.url);
     let imageSourceTelemetry = buildImageSourceTelemetry(imageEntries);
-    const generationAttemptId = createGenerationAttemptId();
+    let generationAttemptId = createGenerationAttemptId();
     const mode = telemetryMode || (manageButtonState ? "manual" : "batch");
     const requestGenerationMode = generationMode || mode;
     let generateFetchDiagnostics = null;
+    let generationOwnerId = batchAuthUserId || undefined;
+    const trackGenerationEvent = (name, context) => trackGrowthEvent(name, { ...batchContext, generationAttemptId, ...context }, generationOwnerId);
 
     if (!imageUrls.length) {
-      trackGrowthEvent("generate_missing_photo", { mode });
+      trackGenerationEvent("generate_missing_photo", { mode });
       if (manageButtonState) {
         showToast("Please upload at least one image.", "error");
       }
@@ -18666,7 +18954,7 @@
     if (manageButtonState) {
       const imageSourceSummary =
         summarizeImageSourcesForTelemetry(imageSourceTelemetry);
-      trackGrowthEvent("generate_click", {
+      trackGenerationEvent("generate_click", {
         generationAttemptId,
         mode: "manual",
         descriptionApplyChoice,
@@ -18762,7 +19050,21 @@
       const legacyLanguageCode = descriptionLanguageCode || titleLanguageCode;
       const imageSourceSummary =
         summarizeImageSourcesForTelemetry(imageSourceTelemetry);
-      trackGrowthEvent("generate_request", {
+      const { access_token, userId } = (await sendMessage({ type: "GET_ACCESS_TOKEN" })) || {};
+      generationOwnerId = userId || generationOwnerId;
+      if (!access_token) {
+        throw new Error("Your session has expired. Please sign in again via the extension.");
+      }
+      let durableRequest = null;
+      if (batchContext) {
+        const saved = await sendMessage({ type: "GET_BATCH_GENERATION_REQUEST", ...batchContext, userId });
+        if (!saved?.ok) throw new Error(saved?.error || "Could not check the saved generation. Your photos are still saved.");
+        durableRequest = saved.request;
+        if (durableRequest) {
+          generationAttemptId = JSON.parse(durableRequest.requestBodyJson).generationAttemptId;
+        }
+      }
+      trackGenerationEvent("generate_request", {
         generationAttemptId,
         mode,
         photoCount: imageUrls.length,
@@ -18790,16 +19092,6 @@
         descriptionFooterLength: effectiveDescriptionFooterText.length,
         emojiRetry: Boolean(emojiRetry),
       });
-      const { access_token, userId } = await sendMessage({
-        type: "GET_ACCESS_TOKEN",
-      });
-
-      if (!access_token) {
-        throw new Error(
-          "Your session has expired. Please sign in again via the extension.",
-        );
-      }
-
       const baseRequestBody = {
         languageCode: legacyLanguageCode,
         titleLanguageCode,
@@ -18845,9 +19137,19 @@
         pendingGenerationRequest = null;
       }
       let preparedGeneratePayload =
-        pendingGenerationRequest?.payload ||
+        (durableRequest ? {
+          requestBody: JSON.parse(durableRequest.requestBodyJson),
+          requestBodyJson: durableRequest.requestBodyJson,
+          payloadFallback: durableRequest.payloadFallback,
+        } : pendingGenerationRequest?.payload) ||
         (await buildPreparedGeneratePayload(imageEntries));
-      let generationRequest = pendingGenerationRequest || {
+      let generationRequest = durableRequest ? {
+        key: retryKey,
+        requestId: durableRequest.requestId,
+        payload: preparedGeneratePayload,
+        createdAt: durableRequest.createdAt,
+        uncertain: true,
+      } : pendingGenerationRequest || {
         key: retryKey,
         requestId: createGenerationRequestId(),
         payload: preparedGeneratePayload,
@@ -18859,7 +19161,7 @@
       let requestImageMetadata =
         preparedGeneratePayload.requestBody.imageMetadata;
       if (preparedGeneratePayload.payloadFallback) {
-        trackGrowthEvent("generate_payload_remote_fallback", {
+        trackGenerationEvent("generate_payload_remote_fallback", {
           generationAttemptId,
           mode,
           ...preparedGeneratePayload.payloadFallback,
@@ -18867,7 +19169,16 @@
       }
 
       let generationResponseData;
-      const sendGenerateRequest = async (retryReason = null) => {
+      const sendGenerateRequest = async (retryReason = null, previousRequestId = null) => {
+        if (batchContext) {
+          const saved = await sendMessage({
+            type: "SAVE_BATCH_GENERATION_REQUEST", ...batchContext, userId,
+            request: { requestId: generationRequest.requestId, requestBodyJson, payloadFallback: preparedGeneratePayload.payloadFallback },
+            replaceDefinitive: retryReason === "local_captured_images",
+            previousRequestId,
+          });
+          if (!saved?.ok) throw new Error(saved?.error || "Could not save this generation safely. Your photos are still saved.");
+        }
         const fetchStartedAt = Date.now();
         generateFetchDiagnostics = {
           generationAttemptId,
@@ -18889,9 +19200,17 @@
 
         pendingGenerationRequest = generationRequest;
         let generateResponse;
-        // Retry a broken connection or unreadable success body once. The
-        // server replays this request ID rather than running AI again.
-        for (let attempt = 0; attempt < 2; attempt += 1) {
+        // Ordinary interruptions stay in this item and replay its exact saved
+        // request. A prolonged outage still leaves an explicit recovery path.
+        let waitingReported = false;
+        for (let attempt = 0; ; attempt += 1) {
+          if (batchSignal?.aborted) throw new Error("Batch stopped. Your photos are saved.");
+          if (batchContext && attempt > 0) {
+            const current = await sendMessage({ type: "GET_BATCH_GENERATION_REQUEST", ...batchContext, userId });
+            if (!current?.ok || current.request?.requestId !== generationRequest.requestId) {
+              throw new Error(current?.error || "The batch changed. Your photos are saved.");
+            }
+          }
           try {
             generateResponse = await fetch(`${API_BASE}/api/generate`, {
               method: "POST",
@@ -18904,16 +19223,42 @@
                 "X-Autolister-Request-Id": generationRequest.requestId,
               },
               body: requestBodyJson,
+              signal: batchSignal || undefined,
             });
+            if (batchContext && [409, 503].includes(generateResponse.status)) {
+              const pending = await generateResponse.clone().json().catch(() => null);
+              if (["generation_in_progress", "generation_commit_pending"].includes(pending?.code)) {
+                const retryAfter = Number(generateResponse.headers.get("Retry-After"));
+                throw Object.assign(new Error("Your generation is still finishing."), { retryDelayMs: Number.isFinite(retryAfter) && retryAfter > 0 ? retryAfter * 1000 : 1500 });
+              }
+            }
             if (generateResponse.ok) {
               generationResponseData = await generateResponse.json();
             }
             break;
           } catch (error) {
             generationRequest.uncertain = true;
-            if (attempt === 1) throw error;
+            if (batchSignal?.aborted || (!batchContext && attempt >= 1) ||
+                (batchContext && Date.now() - fetchStartedAt >= 120000)) throw error;
+            if (batchContext && attempt >= 1) {
+              const waitingMessage = "Waiting for your connection. Your photos are saved.";
+              showBatchTabStatus(error.retryDelayMs ? "Your generation is still finishing. Your photos are saved." : waitingMessage);
+              if (!waitingReported) {
+                waitingReported = true;
+                await sendMessage({ type: "BATCH_ITEM_WAITING", ...batchContext, generationAttemptId,
+                  reason: error.retryDelayMs ? "generation_pending" : "network_wait", message: error.retryDelayMs ? "Your generation is still finishing. Your photos are saved." : waitingMessage });
+              }
+              const delay = Math.max([700, 1500, 3000, 5000][Math.min(attempt - 1, 3)], error.retryDelayMs || 0);
+              await new Promise((resolve, reject) => {
+                const abort = () => { clearTimeout(timer); reject(new Error("Batch stopped. Your photos are saved.")); };
+                const timer = setTimeout(() => { batchSignal?.removeEventListener("abort", abort); resolve(); }, delay);
+                batchSignal?.addEventListener("abort", abort, { once: true });
+                if (batchSignal?.aborted) abort();
+              });
+            }
           }
         }
+        if (waitingReported) trackGenerationEvent("batch_worker_progress", { phase: "connection_recovered", itemIndex: batchContext.itemIndex });
         const definitiveFailure = [400, 401, 403, 413, 415, 422, 429].includes(
           generateResponse.status,
         );
@@ -18933,9 +19278,11 @@
       };
 
       let response = await sendGenerateRequest();
+      if (batchSignal?.aborted) throw new Error("Batch stopped. Your photos are saved.");
+      if (generationOwnerId && batchAuthUserId !== generationOwnerId) throw new Error("Your account changed. This generation has not been applied.");
 
       if (response.status === 401) {
-        trackGrowthEvent("generate_error", { mode, status: 401 });
+        trackGenerationEvent("generate_error", { mode, status: 401 });
         isAuthenticated = false;
         showToast("Session expired. Please sign in again.", "error");
         if (manageButtonState) {
@@ -18947,14 +19294,14 @@
       if (response.status === 429 || response.status === 403) {
         const errData = await response.json();
         if (response.status === 403 && errData.code !== "account_paused") {
-          trackGrowthEvent("generate_error", {
+          trackGenerationEvent("generate_error", {
             mode,
             status: response.status,
             code: errData.code || null,
           });
           throw new Error(errData.error || "Request blocked.");
         }
-        trackGrowthEvent("generate_limit_hit", {
+        trackGenerationEvent("generate_limit_hit", {
           mode,
           status: response.status,
           code: errData.code || null,
@@ -18996,7 +19343,7 @@
           );
         }
         if (errData.code === "account_paused") {
-          trackGrowthEvent("account_paused_shown", {
+          trackGenerationEvent("account_paused_shown", {
             mode,
             status: response.status,
             code: errData.code,
@@ -19021,7 +19368,7 @@
           ) &&
           clearCapturedPromptUploadGenerationUrls("generate_remote_image_failed")
         ) {
-          trackGrowthEvent("generate_retry_local_captured_images", {
+          trackGenerationEvent("generate_retry_local_captured_images", {
             mode,
             status: response.status,
             message: error || null,
@@ -19037,6 +19384,7 @@
           requestImageUrls = preparedGeneratePayload.requestBody.imageUrls;
           requestImageMetadata =
             preparedGeneratePayload.requestBody.imageMetadata;
+          const previousRequestId = generationRequest.requestId;
           generationRequest = {
             key: retryKey,
             requestId: createGenerationRequestId(),
@@ -19044,12 +19392,12 @@
             createdAt: Date.now(),
             uncertain: false,
           };
-          response = await sendGenerateRequest("local_captured_images");
+          response = await sendGenerateRequest("local_captured_images", previousRequestId);
           if (response.ok) {
             // Continue to normal success handling below.
           } else {
             const retryError = await response.json().catch(() => ({}));
-            trackGrowthEvent("generate_error", {
+            trackGenerationEvent("generate_error", {
               mode,
               status: response.status,
               message: retryError.error || null,
@@ -19058,7 +19406,7 @@
             throw new Error(retryError.error || `HTTP ${response.status}`);
           }
         } else {
-          trackGrowthEvent("generate_error", {
+          trackGenerationEvent("generate_error", {
             mode,
             status: response.status,
             message: error || null,
@@ -19076,8 +19424,14 @@
       ) {
         throw new Error("Generated listing response was incomplete.");
       }
+      if (batchContext) {
+        const current = await sendMessage({ type: "GET_BATCH_GENERATION_REQUEST", ...batchContext, userId });
+        if (!current?.ok || current.request?.requestId !== generationRequest.requestId) {
+          throw new Error(current?.error || "This batch changed while generation was running. Your photos are still saved.");
+        }
+      }
       if (pendingGenerationRequest === generationRequest) pendingGenerationRequest = null;
-      trackGrowthEvent("generate_success", {
+      trackGenerationEvent("generate_success", {
         generationAttemptId,
         mode,
         photoCount: imageUrls.length,
@@ -19100,7 +19454,7 @@
       const titleInput = document.querySelector(SELECTORS.title);
       const descInput = document.querySelector(SELECTORS.description);
 
-      if (!applyGeneratedOutput || reviewOriginals) trackGrowthEvent("listing_review", { generationAttemptId, lastConfirmedStage: "generation_received" });
+      if (!applyGeneratedOutput || reviewOriginals) trackGenerationEvent("listing_review", { generationAttemptId, lastConfirmedStage: "generation_received" });
       if (applyGeneratedOutput) {
         if (reviewOriginals) {
           if (
@@ -19120,6 +19474,7 @@
           if (descInput) applyGeneratedDescription(descInput, description);
 
           void globalThis.AutoListerFlowEvidence?.confirmFields({
+            expectedAccountId: generationOwnerId,
             operationId: generationAttemptId, expectedTitle: title, expectedDescription: description,
             titleInput, descriptionInput: descInput, wait: waitForGeneratedListingFields,
             photoCount: imageUrls.length, gridSelector: SELECTORS.mediaGrid, imageSelector: SELECTORS.mediaImage,
@@ -19161,9 +19516,9 @@
         await maybeShowEmojiRetryPrompt(descInput);
       }
 
-      return { ok: true, title, description, measurementAdvice, offers };
+      return { ok: true, title, description, measurementAdvice, offers, generationAttemptId };
     } catch (err) {
-      console.error("AutoLister AI Error:", err);
+      if (!batchSignal?.aborted) console.error("AutoLister AI Error:", err);
       if (generateFetchDiagnostics?.startedAtMs) {
         generateFetchDiagnostics.elapsedMs =
           Date.now() - generateFetchDiagnostics.startedAtMs;
@@ -19171,8 +19526,10 @@
       }
       const toastMessage = err.message || "An unexpected error occurred.";
       const isWaitingMessage = isGenerateWaitingMessage(toastMessage);
-      if (!isWaitingMessage) {
-        trackGrowthEvent(
+      if (batchSignal?.aborted) {
+        trackGenerationEvent("generate_cancelled", { mode, reason: "batch_stopped" });
+      } else if (!isWaitingMessage) {
+        trackGenerationEvent(
           "generate_error",
           buildGenerateFailureDiagnostics(err, {
             mode,

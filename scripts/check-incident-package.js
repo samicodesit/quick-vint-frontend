@@ -25,7 +25,7 @@ async function main() {
       const source = fs.readFileSync(path.join(staged, html), "utf8");
       for (const [, script] of source.matchAll(/<script[^>]+src="([^"]+)"/g)) assert.ok(fs.existsSync(path.join(staged, script)), script);
     }
-    const api = path.resolve(root, "../quick-vint-api/public");
+    const api = process.env.AUTOLISTER_API_PUBLIC ? path.resolve(process.env.AUTOLISTER_API_PUBLIC) : path.resolve(root, "../quick-vint-api/public");
     if (fs.existsSync(api)) for (const name of ["core", "client", "registry"]) {
       assert.equal(fs.readFileSync(path.join(staged, `lib/telemetry-${name}.js`), "utf8"), fs.readFileSync(path.join(api, `telemetry-${name}.js`), "utf8"), `${name} differs between the coordinated repositories`);
     }
