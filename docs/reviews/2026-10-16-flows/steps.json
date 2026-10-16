@@ -1,0 +1,362 @@
+[
+  {
+    "flow": "batch",
+    "id": "01",
+    "title": "Choose the photo source",
+    "note": "Start with Phone or Computer on the existing toolbar.",
+    "filename": "batch-01.png",
+    "detail": "batch-01-detail.png",
+    "capturedAt": "2026-10-16T15:28:14.890Z"
+  },
+  {
+    "flow": "batch",
+    "id": "02",
+    "title": "Choose the upload flow",
+    "note": "Single item and multiple items stay in the existing chooser. Photos for this local demo are supplied by fixtures.",
+    "filename": "batch-02.png",
+    "detail": "batch-02-detail.png",
+    "capturedAt": "2026-10-16T15:21:05.828Z"
+  },
+  {
+    "flow": "batch",
+    "id": "02a",
+    "title": "Add batch photos from phone or computer",
+    "note": "The existing upload step offers a QR code, file selection, folder selection and drag-and-drop. This capture precedes receiving photos.",
+    "filename": "batch-02a.png",
+    "detail": "batch-02a-detail.png",
+    "capturedAt": "2026-10-16T15:35:18.092Z"
+  },
+  {
+    "flow": "batch",
+    "id": "03",
+    "title": "Receive photos for a batch",
+    "note": "Four pictured demo files have arrived. The organizer is the real extension UI.",
+    "filename": "batch-03.png",
+    "detail": "batch-03-detail.png",
+    "capturedAt": "2026-10-16T15:21:06.134Z"
+  },
+  {
+    "flow": "batch",
+    "id": "04",
+    "title": "Select photos for the first item",
+    "note": "Two selected sweater photos make one listing.",
+    "filename": "batch-04.png",
+    "detail": "batch-04-detail.png",
+    "capturedAt": "2026-10-16T15:21:24.015Z"
+  },
+  {
+    "flow": "batch",
+    "id": "05",
+    "title": "First item grouped",
+    "note": "The first group stays visible and the two remaining photos can form the second item.",
+    "filename": "batch-05.png",
+    "detail": "batch-05-detail.png",
+    "capturedAt": "2026-10-16T15:21:24.421Z"
+  },
+  {
+    "flow": "batch",
+    "id": "06",
+    "title": "Both items grouped",
+    "note": "All four photos belong to two listings. Generation has not started.",
+    "filename": "batch-06.png",
+    "detail": "batch-06-detail.png",
+    "capturedAt": "2026-10-16T15:26:08.363Z"
+  },
+  {
+    "flow": "batch",
+    "id": "07",
+    "title": "First listing opens immediately",
+    "note": "Actual Chromium focus moved before the controlled AI response was released. The title is still empty and preparation is visible.",
+    "filename": "batch-07.png",
+    "detail": "batch-07-detail.png",
+    "capturedAt": "2026-10-16T15:26:16.376Z"
+  },
+  {
+    "flow": "batch",
+    "id": "08",
+    "title": "First listing ready",
+    "note": "Photos and generated text are present, fields are editable, and one status banner contains navigation controls.",
+    "filename": "batch-08.png",
+    "detail": "batch-08-detail.png",
+    "capturedAt": "2026-10-16T15:26:32.279Z"
+  },
+  {
+    "flow": "batch",
+    "id": "09",
+    "title": "Second listing opens while preparing",
+    "note": "No extra Next or Start click. The second actual tab becomes active before its controlled generation completes.",
+    "filename": "batch-09.png",
+    "detail": "batch-09-detail.png",
+    "capturedAt": "2026-10-16T15:26:34.381Z"
+  },
+  {
+    "flow": "batch",
+    "id": "10",
+    "title": "Both listings ready",
+    "note": "The second tab stays active. Two controlled generation requests completed, one per item, with no extra Continue click.",
+    "filename": "batch-10.png",
+    "detail": "batch-10-detail.png",
+    "capturedAt": "2026-10-16T15:26:52.423Z"
+  },
+  {
+    "flow": "batch",
+    "id": "11",
+    "title": "Batch summary with review links",
+    "note": "Two listings are ready. Review links reopen the existing listing tabs.",
+    "filename": "batch-11.png",
+    "detail": "batch-11-detail.png",
+    "capturedAt": "2026-10-16T15:26:52.688Z"
+  },
+  {
+    "flow": "batch",
+    "id": "12",
+    "title": "Review and edit the prepared listing",
+    "note": "The original listing tab reopens. A real input edit persists while both listings remain ready. Nothing is published.",
+    "filename": "batch-12.png",
+    "detail": "batch-12-detail.png",
+    "capturedAt": "2026-10-16T15:27:02.028Z"
+  },
+  {
+    "flow": "single-computer",
+    "id": "01",
+    "title": "Single item from computer",
+    "note": "Start with the existing AutoLister toolbar. The surrounding listing page is a simplified local fixture.",
+    "filename": "single-computer-01.png",
+    "detail": "single-computer-01-detail.png",
+    "capturedAt": "2026-10-16T15:28:14.725Z"
+  },
+  {
+    "flow": "single-computer",
+    "id": "02",
+    "title": "Two photos selected",
+    "note": "Actual browser file selection and real multipart requests were used. Temporary storage and the host photo acknowledgement are controlled.",
+    "filename": "single-computer-02.png",
+    "detail": "single-computer-02-detail.png",
+    "capturedAt": "2026-10-16T15:28:15.197Z"
+  },
+  {
+    "flow": "single-computer",
+    "id": "03",
+    "title": "Generation in progress",
+    "note": "The real extension submitted one request. The response is held locally so the pending state can be reviewed.",
+    "filename": "single-computer-03.png",
+    "detail": "single-computer-03-detail.png",
+    "capturedAt": "2026-10-16T15:28:27.271Z"
+  },
+  {
+    "flow": "single-computer",
+    "id": "04",
+    "title": "Generated title and description",
+    "note": "Title and description are filled. Generate returns to its usable state after the normal brief success indication.",
+    "filename": "single-computer-04.png",
+    "detail": "single-computer-04-detail.png",
+    "capturedAt": "2026-10-16T15:33:42.541Z"
+  },
+  {
+    "flow": "single-computer",
+    "id": "05",
+    "title": "Review and edit",
+    "note": "A seller can edit the generated description. No batch controls are added. Nothing is published.",
+    "filename": "single-computer-05.png",
+    "detail": "single-computer-05-detail.png",
+    "capturedAt": "2026-10-16T15:33:42.752Z"
+  },
+  {
+    "flow": "single-phone",
+    "id": "01",
+    "title": "Single-item phone handoff",
+    "note": "Scan the QR code to add photos. This shows the real extension UI; transport is controlled for this walkthrough.",
+    "filename": "single-phone-01.png",
+    "detail": "single-phone-01-detail.png",
+    "capturedAt": "2026-10-16T15:35:02.459Z"
+  },
+  {
+    "flow": "single-phone",
+    "id": "02",
+    "title": "Photos received from the controlled phone session",
+    "note": "Two photos are ready. This is not proof of an actual handset upload or transport recovery.",
+    "filename": "single-phone-02.png",
+    "detail": "single-phone-02-detail.png",
+    "capturedAt": "2026-10-16T15:34:41.823Z"
+  },
+  {
+    "flow": "single-phone",
+    "id": "03",
+    "title": "Generate from the phone modal",
+    "note": "The extension injects the photos and sends one generation request. The controlled response is held.",
+    "filename": "single-phone-03.png",
+    "detail": "single-phone-03-detail.png",
+    "capturedAt": "2026-10-16T15:34:42.170Z"
+  },
+  {
+    "flow": "single-phone",
+    "id": "04",
+    "title": "Single item prepared",
+    "note": "The phone modal closes, the two photos remain, and text is filled into the existing fields.",
+    "filename": "single-phone-04.png",
+    "detail": "single-phone-04-detail.png",
+    "capturedAt": "2026-10-16T15:34:44.655Z"
+  },
+  {
+    "flow": "web-batch",
+    "id": "01",
+    "title": "Add several items",
+    "note": "The existing compact batch entry screen. No new web app navigation or layout was introduced.",
+    "filename": "web-batch-01.png",
+    "detail": null,
+    "capturedAt": "2026-10-16T15:38:41.771Z"
+  },
+  {
+    "flow": "web-batch",
+    "id": "02",
+    "title": "Three photos ready to group",
+    "note": "Real image preparation and browser storage. Select the photos belonging to each item.",
+    "filename": "web-batch-02.png",
+    "detail": null,
+    "capturedAt": "2026-10-16T15:38:42.690Z"
+  },
+  {
+    "flow": "web-batch",
+    "id": "03",
+    "title": "Select photos of one item",
+    "note": "Two selected photos are grouped into one item through Create item. The third photo becomes a separate item.",
+    "filename": "web-batch-03.png",
+    "detail": null,
+    "capturedAt": "2026-10-16T15:39:04.590Z"
+  },
+  {
+    "flow": "web-batch",
+    "id": "04",
+    "title": "Two grouped items ready",
+    "note": "All three photos are assigned to two items. The seller explicitly starts generation once for the batch.",
+    "filename": "web-batch-04.png",
+    "detail": null,
+    "capturedAt": "2026-10-16T15:40:10.445Z"
+  },
+  {
+    "flow": "web-batch",
+    "id": "05",
+    "title": "Batch generation in progress",
+    "note": "The first grouped item is generating. The controlled model response is held; no paid generation is called.",
+    "filename": "web-batch-05.png",
+    "detail": null,
+    "capturedAt": "2026-10-16T15:40:10.612Z"
+  },
+  {
+    "flow": "web-batch",
+    "id": "06",
+    "title": "Both items ready to copy",
+    "note": "The existing sequential queue finished both items without another Start or Continue click.",
+    "filename": "web-batch-06.png",
+    "detail": null,
+    "capturedAt": "2026-10-16T15:40:10.744Z"
+  },
+  {
+    "flow": "web-batch",
+    "id": "07",
+    "title": "All prepared drafts in the library",
+    "note": "The earlier single item and both new batch items remain saved locally.",
+    "filename": "web-batch-07.png",
+    "detail": null,
+    "capturedAt": "2026-10-16T15:40:10.863Z"
+  },
+  {
+    "flow": "web-batch",
+    "id": "08",
+    "title": "Open and copy a batch draft",
+    "note": "Each prepared draft opens in the same compact editor. The actual browser clipboard contains this draft description.",
+    "filename": "web-batch-08.png",
+    "detail": null,
+    "capturedAt": "2026-10-16T15:40:23.543Z"
+  },
+  {
+    "flow": "web-batch",
+    "id": "09",
+    "title": "Desktop layout remains compact",
+    "note": "The existing web app at 1440 px after image loading and layout paint. Cover and thumbnail reference the same selected-item blob. No product UI files were changed.",
+    "filename": "web-batch-09.png",
+    "detail": null,
+    "capturedAt": "2026-10-16T15:47:44.248Z"
+  },
+  {
+    "flow": "web-single",
+    "id": "01",
+    "title": "First-use listing style",
+    "note": "Current compact web app at 390 px. A newly created fixture account sees the existing first-use style screen.",
+    "filename": "web-single-01.png",
+    "detail": null,
+    "capturedAt": "2026-10-16T15:37:17.789Z"
+  },
+  {
+    "flow": "web-single",
+    "id": "02",
+    "title": "First item opens after style setup",
+    "note": "Use this style opens a new item directly, so the seller can add photos immediately.",
+    "filename": "web-single-02.png",
+    "detail": null,
+    "capturedAt": "2026-10-16T15:37:57.511Z"
+  },
+  {
+    "flow": "web-single",
+    "id": "03",
+    "title": "One item with two photos",
+    "note": "Actual browser file selection, image preparation and browser storage. Generation remains an explicit action.",
+    "filename": "web-single-03.png",
+    "detail": null,
+    "capturedAt": "2026-10-16T15:37:58.274Z"
+  },
+  {
+    "flow": "web-single",
+    "id": "04",
+    "title": "Generation in progress",
+    "note": "Real web UI and upload requests, with storage and AI services controlled. The model response is held for inspection.",
+    "filename": "web-single-04.png",
+    "detail": null,
+    "capturedAt": "2026-10-16T15:38:06.145Z"
+  },
+  {
+    "flow": "web-single",
+    "id": "05",
+    "title": "Generated item ready",
+    "note": "Generated text is editable in the compact existing editor. These outputs come from the test fixture, not a paid model.",
+    "filename": "web-single-05.png",
+    "detail": null,
+    "capturedAt": "2026-10-16T15:38:06.237Z"
+  },
+  {
+    "flow": "web-single",
+    "id": "06",
+    "title": "Review, edit and copy",
+    "note": "A real edit is saved in browser storage. Copy title writes the reviewed title to the real browser clipboard.",
+    "filename": "web-single-06.png",
+    "detail": null,
+    "capturedAt": "2026-10-16T15:38:18.478Z"
+  },
+  {
+    "flow": "web-single",
+    "id": "07",
+    "title": "Draft saved in this browser",
+    "note": "The prepared item appears in the existing draft library. Browser-local storage is not cloud synchronization.",
+    "filename": "web-single-07.png",
+    "detail": null,
+    "capturedAt": "2026-10-16T15:38:18.578Z"
+  },
+  {
+    "flow": "web-single",
+    "id": "08",
+    "title": "Reload retains edits and both photos",
+    "note": "After a real page reload, the same local draft, reviewed title and two photos reopen. No extra generation was requested.",
+    "filename": "web-single-08.png",
+    "detail": null,
+    "capturedAt": "2026-10-16T15:38:18.844Z"
+  },
+  {
+    "flow": "web-single",
+    "id": "09",
+    "title": "Editing works offline",
+    "note": "Chromium network is actually offline. The title edit saves locally. This does not test upload or generation recovery.",
+    "filename": "web-single-09.png",
+    "detail": null,
+    "capturedAt": "2026-10-16T15:38:41.609Z"
+  }
+]

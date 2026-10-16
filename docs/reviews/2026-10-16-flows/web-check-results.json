@@ -1,0 +1,38 @@
+{
+  "checks": [
+    "New badge stays above the batch tab in both entry modes at phone/tablet/desktop widths",
+    "Ten photos fit the mobile photo grid",
+    "Manual privacy brush works with mouse and touch, Undo/Cancel, crop/rotation/straighten, viewport changes, opaque exported pixels and exact original restore",
+    "Lazy photo editor handles real mouse/touch crops, rotation, straighten, source-size export, Cancel and exact original restore",
+    "Generation stays in place and saves its result locally",
+    "Long descriptions scroll naturally with a stable bottom action",
+    "App logo returns to drafts without reloading and saves pending edits",
+    "Reload preserves text and ten local JPEGs without downloading cloud drafts",
+    "Offline edits save durably in the browser",
+    "Photo deletion previews the selected JPEG and releases its local blob",
+    "Whole-card selection and Cancel behave consistently",
+    "Grouping and sequential batch generation use local drafts",
+    "Tailored trial, daily, monthly and pause paywalls preserve drafts; burst limits never sell access; bearer checkout retries and cancellation work",
+    "Existing generation limits prevent new generation requests",
+    "Dropdowns and account sheet open and close cleanly at 360px",
+    "Dropdowns and account sheet open and close cleanly at 390px",
+    "Dropdowns and account sheet open and close cleanly at 768px",
+    "Dropdowns and account sheet open and close cleanly at 1440px",
+    "A lost response recovers via a read-only lookup without another generation",
+    "Desktop copy offers the real Chrome extension; phones and installed users are skipped; dismissal survives reload for seven days; Escape removes the backdrop immediately",
+    "Listed status remains local and survives returning to the library",
+    "Bulk deletion removes only selected items and their local photos",
+    "Manage plan reaches bearer billing without waiting for stalled background telemetry",
+    "Existing durable telemetry records batch size, quota paywalls and copies without blocking the UI"
+  ],
+  "generations": 5,
+  "uploadCount": 14,
+  "noCloudDraftRequests": true,
+  "errors": [],
+  "panelBefore": {
+    "x": -7.5,
+    "y": 786,
+    "width": 390,
+    "height": 58
+  }
+}

@@ -1,0 +1,13 @@
+{
+  "sourceBase": "d4e2eea3ab2c3142ab2fbbdc212822e6c48e1dc3",
+  "unreleased": true,
+  "sha256": {
+    "content.js": "fd194e796b7beed40f726f1c59c4e9ba0d65f4c51a53cb3c4fb5d2d20451e03d",
+    "background.js": "daca9a4b38347c75af608dcb1f0860e45e6f0260e9120ccfb2ae5aecc98bb111",
+    "tests/e2e/batch-journey.js": "af48225a4cf1d5ee89d244a85bd6200933fb7111efc5d872d5c1033a60257bd6",
+    "tests/e2e/batch-flow-reliability.spec.js": "74b86bf198ea7719220eee4390fb2134817b29a472011338888bff7cbca3494d",
+    "tests/e2e/batch-request-replay.spec.js": "9d9554e8d17bc8052e89176ae3c3a8b32b3ca57dad398c1e47cb1e360c5b2969",
+    "tests/e2e/batch-review-navigation.spec.js": "6d3b39b8557b89201a7bde696a5a1c82e66fb8b1fcdf65435e451a624d4de9cb",
+    "tests/e2e/single-flow-review.spec.js": "9aa43496ac5196b2f0d0348fb26ac5c65e88a3bd389e203edc71946345edc6f3"
+  }
+}
