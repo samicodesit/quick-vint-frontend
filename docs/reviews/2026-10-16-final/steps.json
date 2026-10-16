@@ -323,8 +323,8 @@
   {
     "flow": "web",
     "id": "failed",
-    "title": "Failed replacement keeps the previous text unavailable",
-    "note": "Primary-operated browser with a controlled HTTP422. Copy is disabled and the existing footer offers Retry with its cost.",
+    "title": "Failed replacement identifies the previous text",
+    "note": "Primary-operated browser with a controlled HTTP422. Existing Copy previous buttons preserve earlier work without another paid generation. Needs attention remains visible; the footer offers an optional explicit Retry with its cost.",
     "filename": "web-failed-replacement.png",
     "detail": null
   },
@@ -340,7 +340,7 @@
     "flow": "web",
     "id": "retry-ready",
     "title": "Explicit retry restores the normal review screen",
-    "note": "Primary clicked Retry against the local model. Photos remained, the new text appeared, and Copy and Mark as listed became available.",
+    "note": "Primary clicked Retry against the local model. Photos remained, the new text appeared, and ordinary Copy and Mark as listed returned.",
     "filename": "web-retry-ready.png",
     "detail": null
   },
@@ -350,6 +350,14 @@
     "title": "Other failed items remain visible after retry and reload",
     "note": "Automated real-browser evidence, separately inspected. One item was retried successfully. The other still shows Needs attention after reload.",
     "filename": "web-other-failure.png",
+    "detail": null
+  },
+  {
+    "flow": "recovery",
+    "id": "terminal",
+    "title": "Completion survives a temporary checkpoint failure",
+    "note": "Primary-operated actual MV3 batch. One controlled final storage write failed, then the existing checkpoint retry completed safely. One modeled generation, two retained listing photos and one cleanup. Reload showed no false Resume prompt. No paid generation or live marketplace action.",
+    "filename": "terminal-complete.png",
     "detail": null
   },
   {

@@ -175,87 +175,93 @@ Primary-operated browser journey. The connection returned and the batch finished
 
 ![Photo download recovers after a worker restart](photo-download-recovered.png)
 
+### 24. Completion survives a temporary checkpoint failure
+
+Primary-operated actual MV3 batch. One controlled final storage write failed, then the existing checkpoint retry completed safely. One modeled generation, two retained listing photos and one cleanup. Reload showed no false Resume prompt. No paid generation or live marketplace action.
+
+![Completion survives a temporary checkpoint failure](terminal-complete.png)
+
 ## Web app batch
 
-### 24. First-use style preferences
+### 25. First-use style preferences
 
 Healthy. Existing compact preference setup; no batch redesign.
 
 ![First-use style preferences](web-01.png)
 
-### 25. Web batch photos ready to group
+### 26. Web batch photos ready to group
 
 Healthy. Existing compact web grouping. Four actual local photos.
 
 ![Web batch photos ready to group](web-02.png)
 
-### 26. Web batch ready for Start
+### 27. Web batch ready for Start
 
 Healthy. Two grouped drafts. Start stays explicit.
 
 ![Web batch ready for Start](web-03.png)
 
-### 27. Batch starts in place
+### 28. Batch starts in place
 
 Healthy. No automatic navigation on mobile.
 
 ![Batch starts in place](web-04.png)
 
-### 28. First item ready before the batch finishes
+### 29. First item ready before the batch finishes
 
 Healthy. Ready row offers Review instead of settings; second item continues.
 
 ![First item ready before the batch finishes](web-05.png)
 
-### 29. Review and Copy while the batch continues
+### 30. Review and Copy while the batch continues
 
 Healthy. Compact progress remains; Copy works, unfinished Next is disabled.
 
 ![Review and Copy while the batch continues](web-06.png)
 
-### 30. Batch finishes without moving the seller
+### 31. Batch finishes without moving the seller
 
 Healthy. Text edits and focus remain; Next ready item is now available.
 
 ![Batch finishes without moving the seller](web-07.png)
 
-### 31. Explicit next ready item
+### 32. Explicit next ready item
 
 Healthy. Next opens Dress 2. Seller chooses when to move; Copy and Mark as listed remain accessible.
 
 ![Explicit next ready item](web-08.png)
 
-### 32. Both ready rows offer Review
+### 33. Both ready rows offer Review
 
 Healthy. Settings icons are replaced by Review on ready items.
 
 ![Both ready rows offer Review](web-09.png)
 
-### 33. Small phone review
+### 34. Small phone review
 
 Healthy. At 320px the progress, Copy controls and Mark as listed fit without horizontal overflow.
 
 ![Small phone review](web-10.png)
 
-### 34. Failed replacement keeps the previous text unavailable
+### 35. Failed replacement identifies the previous text
 
-Primary-operated browser with a controlled HTTP422. Copy is disabled and the existing footer offers Retry with its cost.
+Primary-operated browser with a controlled HTTP422. Existing Copy previous buttons preserve earlier work without another paid generation. Needs attention remains visible; the footer offers an optional explicit Retry with its cost.
 
-![Failed replacement keeps the previous text unavailable](web-failed-replacement.png)
+![Failed replacement identifies the previous text](web-failed-replacement.png)
 
-### 35. The failure state at 320 pixels
+### 36. The failure state at 320 pixels
 
 Primary-operated viewport check. No horizontal overflow or extra recovery panel.
 
 ![The failure state at 320 pixels](web-failed-small.png)
 
-### 36. Explicit retry restores the normal review screen
+### 37. Explicit retry restores the normal review screen
 
-Primary clicked Retry against the local model. Photos remained, the new text appeared, and Copy and Mark as listed became available.
+Primary clicked Retry against the local model. Photos remained, the new text appeared, and ordinary Copy and Mark as listed returned.
 
 ![Explicit retry restores the normal review screen](web-retry-ready.png)
 
-### 37. Other failed items remain visible after retry and reload
+### 38. Other failed items remain visible after retry and reload
 
 Automated real-browser evidence, separately inspected. One item was retried successfully. The other still shows Needs attention after reload.
 
@@ -263,19 +269,19 @@ Automated real-browser evidence, separately inspected. One item was retried succ
 
 ## Web app single item
 
-### 38. Single web item with photos
+### 39. Single web item with photos
 
 Healthy. Existing compact single-item workspace and Generate.
 
 ![Single web item with photos](web-single-01.png)
 
-### 39. Single web item prepares in place
+### 40. Single web item prepares in place
 
 Healthy. Photos stay visible and there is no batch navigation.
 
 ![Single web item prepares in place](web-single-02.png)
 
-### 40. Single web result ready to Copy
+### 41. Single web result ready to Copy
 
 Healthy. Existing compact review screen, clipboard works, photos retained.
 
@@ -283,25 +289,25 @@ Healthy. Existing compact review screen, clipboard works, photos retained.
 
 ## Phone transport
 
-### 41. Connection loss keeps the selected photos
+### 42. Connection loss keeps the selected photos
 
 Passed. Actual multipart upload over loopback HTTP with controlled socket loss. Automatic retry and explicit Cancel remain available.
 
 ![Connection loss keeps the selected photos](phone-transport-01.png)
 
-### 42. Progressing slow upload completes
+### 43. Progressing slow upload completes
 
 Passed. One actual upload took about 60 seconds without a retry. The noise image is deliberate high-entropy test data.
 
 ![Progressing slow upload completes](phone-transport-02.png)
 
-### 43. Expired session is terminal
+### 44. Expired session is terminal
 
 Passed. Explicit HTTP 410 shows clear expiry guidance without revived Retry or Cancel controls.
 
 ![Expired session is terminal](phone-transport-03.png)
 
-### 44. Seller cancellation stops retrying
+### 45. Seller cancellation stops retrying
 
 Passed. Actual browser Cancel stops retries and leaves the cancelled screen. The disabled photo control cannot restart this session.
 
