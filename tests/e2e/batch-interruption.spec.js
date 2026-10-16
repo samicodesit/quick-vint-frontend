@@ -1,6 +1,132 @@
 const { test, expect } = require("@playwright/test");
 const { openBatchJourney, sendFromExtensionContent } = require("./batch-journey");
 
+test("an interrupted source-photo download waits and retries only the missing photo automatically", async () => {
+  const flow = await openBatchJourney();
+  let online = false;
+  let attempts = 0;
+  let otherDownloads = 0;
+  try {
+    await flow.context.route('https://storage.test/photo-0.png', route => {
+      if (route.request().resourceType() !== 'fetch') return route.fallback();
+      attempts++;
+      return online ? route.fallback() : route.abort('connectionreset');
+    });
+    await flow.context.route('https://storage.test/photo-1.png', route => {
+      if (route.request().resourceType() === 'fetch') otherDownloads++;
+      return route.fallback();
+    });
+    await flow.start();
+    await expect(flow.controller.locator('.batch-status')).toContainText('Waiting to download photos');
+    await expect(flow.controller.locator('.batch-progress-count')).toHaveText('Waiting');
+    expect(flow.requests).toHaveLength(0);
+    expect(flow.cleanup).toHaveLength(0);
+    expect(await flow.controller.locator('.batch-recovery-resume').count()).toBe(0);
+    expect((await flow.restartWorker()).active).toBe(true);
+    await expect(flow.controller.locator('.batch-status')).toContainText('Waiting to download photos');
+    online = true;
+    await expect.poll(() => flow.cleanup.length).toBe(1);
+    expect(attempts).toBeGreaterThan(1);
+    expect(otherDownloads).toBe(1);
+    expect(flow.requests).toHaveLength(1);
+    const work = flow.context.pages().find(p => p !== flow.controller && p.url().includes('/items/new'));
+    expect(await work.evaluate(() => window.__photoInputChanges)).toBe(1);
+    expect(await work.locator('input[type=file]').evaluate(el => el.files.length)).toBe(2);
+  } finally { await flow.close(); }
+});
+
+test("persistent source-photo loss reaches its retry deadline without generating", async () => {
+  const flow = await openBatchJourney();
+  try {
+    await flow.context.route('https://storage.test/photo-0.png', route =>
+      route.request().resourceType() === 'fetch' ? route.abort('connectionreset') : route.fallback());
+    await flow.start();
+    await expect(flow.controller.locator('.batch-status')).toContainText('Waiting to download photos');
+    const work = flow.context.pages().find(p => p !== flow.controller && p.url().includes('/items/new'));
+    const cdp = await flow.context.newCDPSession(work);
+    const worlds = [];
+    cdp.on('Runtime.executionContextCreated', ({ context }) => worlds.push(context));
+    try {
+      await cdp.send('Runtime.enable');
+      let advanced = false;
+      for (const world of worlds.filter(w => !w.auxData?.isDefault)) {
+        const probe = await cdp.send('Runtime.evaluate', { contextId: world.id, expression: 'Boolean(globalThis.chrome?.runtime?.id)', returnByValue: true });
+        if (!probe.result.value) continue;
+        // Actual failed photo fetch, controlled elapsed clock for the bounded
+        // two-minute boundary. This does not simulate a historical root cause.
+        await cdp.send('Runtime.evaluate', { contextId: world.id, expression: 'Date.now = ((now) => () => now() + 121000)(Date.now)' });
+        advanced = true; break;
+      }
+      expect(advanced).toBe(true);
+    } finally { await cdp.detach(); }
+    await expect(flow.controller.locator('.batch-recovery-resume')).toBeVisible();
+    await expect(flow.controller.locator('.batch-status')).toContainText('connection was unavailable');
+    expect(flow.requests).toHaveLength(0);
+    expect(flow.cleanup).toHaveLength(0);
+    expect((await flow.worker.evaluate(() => chrome.storage.local.get('quickvintBatchRecovery'))).quickvintBatchRecovery.groups[0]).toHaveLength(2);
+  } finally { await flow.close(); }
+});
+
+test("source-photo retry respects Retry-After before continuing", async () => {
+  const flow = await openBatchJourney();
+  const times = [];
+  try {
+    await flow.context.route('https://storage.test/photo-0.png', route => {
+      if (route.request().resourceType() !== 'fetch') return route.fallback();
+      times.push(Date.now());
+      return times.length === 1
+        ? route.fulfill({ status: 429, headers: { 'Retry-After': '1', 'Access-Control-Expose-Headers': 'Retry-After' }, body: 'Slow down' }) : route.fallback();
+    });
+    await flow.start();
+    await expect.poll(() => flow.cleanup.length).toBe(1);
+    expect(times).toHaveLength(2);
+    expect(times[1] - times[0]).toBeGreaterThanOrEqual(950);
+    expect(flow.requests).toHaveLength(1);
+  } finally { await flow.close(); }
+});
+
+test("a definitively unavailable source photo pauses without generating or deleting photos", async () => {
+  const flow = await openBatchJourney();
+  let attempts = 0;
+  try {
+    await flow.context.route('https://storage.test/photo-0.png', route => {
+      if (route.request().resourceType() !== 'fetch') return route.fallback();
+      attempts++; return route.fulfill({ status: 404, body: 'Missing photo' });
+    });
+    await flow.start();
+    await expect(flow.controller.locator('.batch-recovery-resume')).toBeVisible();
+    expect(attempts).toBe(1);
+    expect(flow.requests).toHaveLength(0);
+    expect(flow.cleanup).toHaveLength(0);
+    const saved = await flow.worker.evaluate(() => chrome.storage.local.get('quickvintBatchRecovery'));
+    expect(saved.quickvintBatchRecovery.groups[0]).toHaveLength(2);
+  } finally { await flow.close(); }
+});
+
+test("stopping persistent source-photo connection loss cancels retries and retains the batch", async () => {
+  const flow = await openBatchJourney();
+  let attempts = 0;
+  try {
+    await flow.context.route('https://storage.test/photo-0.png', route => {
+      if (route.request().resourceType() !== 'fetch') return route.fallback();
+      attempts++; return route.abort('connectionreset');
+    });
+    await flow.start();
+    await expect(flow.controller.locator('.batch-status')).toContainText('Waiting to download photos');
+    const saved = await flow.worker.evaluate(() => chrome.storage.local.get('quickvintBatchRecovery'));
+    expect((await sendFromExtensionContent(flow.context, flow.controller, {
+      type: 'STOP_BATCH_GENERATION', batchId: saved.quickvintBatchRecovery.batchId,
+    })).ok).toBe(true);
+    await expect(flow.controller.locator('.batch-recovery-resume')).toBeVisible();
+    const count = attempts;
+    await flow.controller.waitForTimeout(1700);
+    expect(attempts).toBe(count);
+    expect(flow.requests).toHaveLength(0);
+    expect(flow.cleanup).toHaveLength(0);
+    expect((await flow.worker.evaluate(() => chrome.storage.local.get('quickvintBatchRecovery'))).quickvintBatchRecovery.groups[0]).toHaveLength(2);
+  } finally { await flow.close(); }
+});
+
 test("a restarted worker reattaches to the running content item without reinjecting photos", async () => {
   let finish;
   const mayFinish = new Promise(resolve => { finish = resolve; });

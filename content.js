@@ -15129,15 +15129,24 @@
     );
   }
 
-  async function downloadPhoneUploadFile(remoteFile) {
+  async function downloadPhoneUploadFile(remoteFile, { signal, timeoutMs } = {}) {
     const key = getPhoneUploadFileKey(remoteFile);
+    let response;
     try {
-      const response = await sendMessage({
+      const request = {
         type: "PROXY_FETCH",
         url: remoteFile.url,
         options: { method: "GET" },
         isBlob: true,
-      });
+        ...(timeoutMs ? { timeoutMs } : {}),
+      };
+      response = signal ? await new Promise((resolve, reject) => {
+        const abort = () => { signal.removeEventListener("abort", abort); reject(new Error("Batch stopped. Your photos are saved.")); };
+        if (signal.aborted) return abort();
+        signal.addEventListener("abort", abort, { once: true });
+        sendMessage(request).then(resolve, reject).finally(() => signal.removeEventListener("abort", abort));
+      }) : await sendMessage(request);
+      if (signal?.aborted) throw new Error("Batch stopped. Your photos are saved.");
 
       if (!response || !response.ok) {
         throw new Error(
@@ -15147,6 +15156,7 @@
 
       const res = await fetch(response.data);
       const blob = await res.blob();
+      if (signal?.aborted) throw new Error("Batch stopped. Your photos are saved.");
       const filename = remoteFile.name || `upload_${Date.now()}.jpg`;
       const file = new File([blob], filename, {
         type: blob.type || "image/jpeg",
@@ -15172,6 +15182,9 @@
         file: null,
         previewUrl: null,
         error,
+        status: response?.status || 0,
+        retryable: !signal?.aborted && (!response?.status || [408, 425, 429].includes(response.status) || response.status >= 500),
+        retryAfter: response?.retryAfter || null,
       };
     }
   }
@@ -17748,7 +17761,7 @@
       ? batchProgressGroups
       : getBatchGroupsWithKeys();
     const waitingForCurrentItem = status === "waiting" &&
-      ["network_wait", "generation_pending", "host_fields_hidden"].includes(reason);
+      ["network_wait", "photo_download_wait", "generation_pending", "host_fields_hidden"].includes(reason);
     const progressPercent = waitingForCurrentItem
       ? total ? Math.round((current / total) * 100) : 0
       : getBatchProgressPercent(status, current, total);
@@ -17833,6 +17846,7 @@
       badge.className = "batch-progress-badge";
       badge.textContent = waitingForCurrentItem && state === "active"
         ? reason === "network_wait" ? "Waiting for connection"
+          : reason === "photo_download_wait" ? "Waiting for photos"
           : reason === "generation_pending" ? "Finishing generation" : "Waiting for Vinted"
         : getBatchItemStateLabel(state, status);
 
@@ -17890,7 +17904,7 @@
     const isRunning = recovery.status === "running";
     renderBatchProgress({
       status: recovery.status === "done" ? "done" : recovery.status === "expired" ? "expired" : isRunning
-        ? ["network_wait", "generation_pending", "host_fields_hidden"].includes(recovery.reason) ? "waiting" : "queued"
+        ? ["network_wait", "photo_download_wait", "generation_pending", "host_fields_hidden"].includes(recovery.reason) ? "waiting" : "queued"
         : "paused",
       current: Math.max(0, Number(recovery.completedCount || 0)),
       total: Math.max(0, Number(recovery.total || recovery.groups.length)),
@@ -18794,7 +18808,46 @@
 
     try {
       showBatchTabStatus(`${listingPrefix}: preparing photos...`);
-      downloads = await Promise.all(remoteFiles.map(downloadPhoneUploadFile));
+      const downloadStartedAt = Date.now();
+      let waitingForPhotos = false;
+      for (let attempt = 0; ; attempt += 1) {
+        checkActive();
+        await Promise.all(remoteFiles.map(async (file, index) => {
+          if (!downloads[index]?.file) downloads[index] = await downloadPhoneUploadFile(file, {
+            signal: task.controller.signal,
+            timeoutMs: Math.min(30000, Math.max(1, 120000 - (Date.now() - downloadStartedAt))),
+          });
+        }));
+        checkActive();
+        const missing = downloads.filter(result => !result.file);
+        if (!missing.length) break;
+        if (missing.some(result => !result.retryable)) {
+          throw new Error("A source photo is no longer available. Your batch is saved. Check the photos before retrying.");
+        }
+        const remainingMs = 120000 - (Date.now() - downloadStartedAt);
+        if (remainingMs <= 0) throw new Error("Photos could not be downloaded while the connection was unavailable. Your batch is saved. Resume when your connection is back.");
+        const waitingMessage = "Waiting to download photos...";
+        showBatchTabStatus(waitingMessage);
+        if (!waitingForPhotos) {
+          waitingForPhotos = true;
+          await sendMessage({ type: "BATCH_ITEM_WAITING", batchId: message.batchId, itemIndex,
+            generationAttemptId: message.generationAttemptId || null, reason: "photo_download_wait", message: waitingMessage });
+          trackGrowthEvent("batch_worker_progress", { batchId: message.batchId, itemIndex, phase: "photo_download_wait" }, task.ownerId);
+        }
+        const retryAfterMs = Math.max(0, ...missing.map(result => {
+          const seconds = Number(result.retryAfter);
+          return Number.isFinite(seconds) ? seconds * 1000 : Math.max(0, Date.parse(result.retryAfter) - Date.now()) || 0;
+        }));
+        const delay = Math.min(remainingMs, Math.max([700, 1500, 3000, 5000][Math.min(attempt, 3)], retryAfterMs));
+        await new Promise((resolve, reject) => {
+          const abort = () => { clearTimeout(timer); task.controller.signal.removeEventListener("abort", abort); reject(new Error("Batch stopped. Your photos are saved.")); };
+          const timer = setTimeout(() => { task.controller.signal.removeEventListener("abort", abort); resolve(); }, delay);
+          task.controller.signal.addEventListener("abort", abort, { once: true });
+          if (task.controller.signal.aborted) abort();
+        });
+        if (Date.now() - downloadStartedAt >= 120000) throw new Error("Photos could not be downloaded while the connection was unavailable. Your batch is saved. Resume when your connection is back.");
+      }
+      if (waitingForPhotos) trackGrowthEvent("batch_worker_progress", { batchId: message.batchId, itemIndex, phase: "photo_download_recovered" }, task.ownerId);
       checkActive();
       const successfulDownloads = downloads.filter((result) => result.file);
       const filesToInject = successfulDownloads.map((result) => result.file);

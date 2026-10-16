@@ -66,6 +66,9 @@ async function runBackground(options = {}) {
           return structuredClone(storageData);
         },
         async set(values) {
+          if (options.failRecoveryReason && values.quickvintBatchRecovery?.reason === options.failRecoveryReason) {
+            throw new Error('Controlled storage failure');
+          }
           if (options.holdRecoveryReason && !recoveryWriteHeld && values.quickvintBatchRecovery?.reason === options.holdRecoveryReason) {
             recoveryWriteHeld = true;
             await recoveryWriteMayFinish;
@@ -261,6 +264,21 @@ test("an in-flight waiting checkpoint cannot reactivate a batch after Stop", asy
   assert.equal(harness.storageData.quickvintBatchRecovery.status, 'paused');
   assert.equal(harness.storageData.quickvintBatchRecovery.reason, 'user_stopped');
   assert.equal(harness.cleanupCalls.length, 0);
+});
+
+test("Stop still reaches the work tab and reports a failed checkpoint when storage rejects", async () => {
+  const harness = await runBackground({ failRecoveryReason: 'user_stopped', storageData: {
+    supabaseSession: { access_token: 'local-token', user: { id: 'owner' } },
+    quickvintBatchRecovery: { version: 1, kind: 'batch', batchId: 'stop-storage', ownerId: 'owner', sourceTabId: 7,
+      sessionId: 'local-session', groups: [[{ name: 'photo.jpg' }]], completedCount: 0, currentItemIndex: 1,
+      currentWorkTabId: 100, status: 'running', expiresAt: Date.now() + 60000 },
+  } });
+  const response = await harness.sendRuntimeMessage({ type: 'STOP_BATCH_GENERATION', batchId: 'stop-storage' });
+  assert.equal(response.ok, false);
+  assert.match(response.error, /save.*stop/i);
+  assert.equal(harness.sentTabMessages.some(({ tabId, message }) => tabId === 100 && message.type === 'STOP_BATCH_ITEM'), true);
+  assert.equal(harness.cleanupCalls.length, 0);
+  assert.equal(harness.storageData.quickvintBatchRecovery.groups[0].length, 1);
 });
 
 test("an unowned legacy recovery is neither disclosed nor adopted by the current account", async () => {

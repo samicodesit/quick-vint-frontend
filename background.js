@@ -1064,7 +1064,7 @@ async function runBatchGenerationJob(job) {
       const retainedWorkTabId = job.currentItemIndex === activeItemIndex && Number.isInteger(job.currentWorkTabId)
         ? job.currentWorkTabId : null;
       const retainedWorkTab = retainedWorkTabId ? await getTabIfPresent(retainedWorkTabId) : null;
-      const retainedWaiting = retainedWorkTab && ["network_wait", "generation_pending", "host_fields_hidden"].includes(job.reason);
+      const retainedWaiting = retainedWorkTab && ["network_wait", "photo_download_wait", "generation_pending", "host_fields_hidden"].includes(job.reason);
       if (retainedWorkTabId && !retainedWorkTab) throw new Error("The listing tab was closed. Your photos are saved. Resume when ready.");
       await persistBatchRecovery(job, {
         status: "running",
@@ -1110,6 +1110,7 @@ async function runBatchGenerationJob(job) {
         batchId: job.batchId,
         itemIndex: index + 1,
         totalItems: groups.length,
+        generationAttemptId: job.currentGenerationAttemptId || null,
         files: groups[index],
       });
 
@@ -2351,8 +2352,16 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
           break;
         }
         job.stopRequested = true;
-        await persistBatchRecovery(job, { status: "paused", reason: "user_stopped", message: "Batch stopped. Your photos are saved." });
-        if (job.currentWorkTabId) await sendTabMessage(job.currentWorkTabId, { type: "STOP_BATCH_ITEM", batchId: job.batchId }).catch(() => {});
+        const stoppedWork = job.currentWorkTabId
+          ? sendTabMessage(job.currentWorkTabId, { type: "STOP_BATCH_ITEM", batchId: job.batchId }).catch(() => {})
+          : Promise.resolve();
+        let savedStop = true;
+        await persistBatchRecovery(job, { status: "paused", reason: "user_stopped", message: "Batch stopped. Your photos are saved." }).catch(() => { savedStop = false; });
+        await stoppedWork;
+        if (!savedStop) {
+          sendResponse({ ok: false, error: "Could not save the stop. Keep this tab open and try Stop again." });
+          break;
+        }
         notifyBatchProgress(job, { status: "paused", current: job.completedCount, total: job.groups.length, reason: "user_stopped", message: "Batch stopped. Your photos are saved." });
         sendResponse({ ok: true });
         break;
@@ -2415,21 +2424,24 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       }
 
       case "PROXY_FETCH":
-        // Only phone metadata opts into a deadline. This proxy never retries.
+        // Callers own retries. Only metadata and explicit photo downloads opt
+        // into a deadline, so unrelated proxy requests retain their contract.
         let metadataTimer;
         let phoneMetadata = false;
+        let photoDownload = false;
         try {
           const url = new URL(message.url);
           phoneMetadata = url.origin === API_BASE && url.pathname === "/api/phone-upload" &&
             ["prepare", "complete"].includes(url.searchParams.get("action")) && message.options?.method === "POST";
+          photoDownload = message.isBlob === true && message.options?.method === "GET";
           let fetchOptions = message.options;
-          if (phoneMetadata && Number.isFinite(message.timeoutMs) && message.timeoutMs > 0) {
+          if ((phoneMetadata || photoDownload) && Number.isFinite(message.timeoutMs) && message.timeoutMs > 0) {
             const controller = new AbortController();
-            metadataTimer = setTimeout(() => controller.abort(), Math.min(10000, message.timeoutMs));
+            metadataTimer = setTimeout(() => controller.abort(), Math.min(phoneMetadata ? 10000 : 30000, message.timeoutMs));
             fetchOptions = { ...fetchOptions, signal: controller.signal };
           }
           const response = await fetch(message.url, fetchOptions);
-          const metadataHeaders = phoneMetadata ? { retryAfter: response.headers.get("retry-after") } : {};
+          const metadataHeaders = phoneMetadata || photoDownload ? { retryAfter: response.headers.get("retry-after") } : {};
 
           if (!response.ok) {
             let data = null;
@@ -2484,7 +2496,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
           sendResponse({ ok: true, status: response.status, data, ...metadataHeaders });
         } catch (err) {
           console.error("[Background] Fetch exception:", err);
-          sendResponse({ ok: false, error: err.toString(), ...(phoneMetadata && err.name === "AbortError" ? { code: "PHONE_REQUEST_TIMEOUT", retryable: true } : {}) });
+          sendResponse({ ok: false, error: err.toString(), ...((phoneMetadata || photoDownload) && err.name === "AbortError" ? { code: "PHONE_REQUEST_TIMEOUT", retryable: true } : {}) });
         } finally {
           if (metadataTimer) clearTimeout(metadataTimer);
         }
