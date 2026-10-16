@@ -1,5 +1,7 @@
 # Web app batch
 
+**Superseded:** use the [updated web batch walkthrough](../2026-10-16-web-batch-v2/README.md) for Review actions, progress during editing and early copying. The screenshots below are retained as history.
+
 [All flows](README.md) · [Evidence and limits](evidence.md)
 
 **Unreleased interaction review.** Actual compact local web app at 390 px, plus a desktop view. Auth and backend generation/storage are controlled.

@@ -1,5 +1,7 @@
 # AutoLister flow review, 16 October 2026
 
+**Updated web batch flow:** [Review ready items while the rest prepare, 15 screenshots](../2026-10-16-web-batch-v2/README.md). This supersedes the original web batch walkthrough below. The extension walkthroughs are unchanged.
+
 **40 numbered screenshots. Unreleased extension candidate.** Open a flow below, then tap any screenshot to zoom. Modal images are cropped for phone readability; each step also links the full browser viewport.
 
 1. [Extension batch: upload, group, watch each new tab, review](batch.md) (13 steps)

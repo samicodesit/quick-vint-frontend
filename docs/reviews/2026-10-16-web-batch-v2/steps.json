@@ -1,0 +1,62 @@
+[
+  {
+    "name": "01-photos",
+    "note": "Add photos and group them by item."
+  },
+  {
+    "name": "02-grouped",
+    "note": "Group related photos, then Generate 2 drafts once."
+  },
+  {
+    "name": "03-preparing",
+    "note": "Generation begins on the overview, without automatic navigation."
+  },
+  {
+    "name": "04-review-ready",
+    "note": "The first item offers Review immediately while the next prepares."
+  },
+  {
+    "name": "05-review-with-progress",
+    "note": "Review item 1 while item 2 prepares. Next ready is disabled until a result exists."
+  },
+  {
+    "name": "06-copy-early",
+    "note": "Copy immediately. The item remains a draft until explicitly marked as listed."
+  },
+  {
+    "name": "07-completes-in-place",
+    "note": "Completion preserves the seller edits and current item."
+  },
+  {
+    "name": "08-next-ready",
+    "note": "The seller chooses Next ready to review the second result."
+  },
+  {
+    "name": "09-batch-ready",
+    "note": "Both rows offer Review, with one completion count and no redundant grouping panel."
+  },
+  {
+    "name": "10-mark-listed",
+    "note": "After explicit Mark as listed, the next ready item opens and Back to batch remains available."
+  },
+  {
+    "name": "11-single-after-batch",
+    "note": "Starting a new single item still offers Generate, without old batch progress."
+  },
+  {
+    "name": "12-small-phone",
+    "note": "320px check: review actions and batch progress fit without horizontal scrolling."
+  },
+  {
+    "name": "13-tablet",
+    "note": "Tablet layout keeps the same compact review and progress."
+  },
+  {
+    "name": "14-desktop",
+    "note": "Desktop web review uses the existing layout, with one progress panel."
+  },
+  {
+    "name": "15-progress-scrolled",
+    "note": "Long-description stress check: progress stays below the sticky header and clear of the bottom action."
+  }
+]

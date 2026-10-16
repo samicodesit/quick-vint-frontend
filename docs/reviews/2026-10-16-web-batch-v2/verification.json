@@ -1,0 +1,123 @@
+{
+  "status": "local_verified_not_deployed",
+  "backendCandidateCommit": "7c3f3d3e7538c4e385ddcc1b53f9ffd0bb75a060",
+  "backendBaseCommit": "fee91d9473d5327d30b1b930188c0a7e3256fb22",
+  "productionVerification": {
+    "lint": "passed",
+    "types": "passed",
+    "build": "passed",
+    "format": "passed",
+    "testFilesPassed": 134,
+    "testsPassed": 994,
+    "optInTestsSkipped": 4
+  },
+  "focusedBrowserRuns": [
+    {
+      "items": 2,
+      "checks": [
+        "First ready item has an explicit Review action while later work continues, with no automatic navigation",
+        "One compact progress panel remains accessible without covering Copy or Mark as listed; unfinished Next is disabled",
+        "Opening a new single item after a completed batch keeps Generate visible without stale batch progress",
+        "Later completion preserves edits and focus; explicit Next ready and Back to batch work; all photos remain and each item generates once"
+      ],
+      "pageErrors": [],
+      "controlledGenerations": 2,
+      "scope": "Real Chromium product UI, image preparation, IndexedDB and clipboard. Controlled auth, storage and AI. No native iOS or server-owned background execution certification."
+    },
+    {
+      "items": 2,
+      "checks": [
+        "First ready item has an explicit Review action while later work continues, with no automatic navigation",
+        "One compact progress panel remains accessible without covering Copy or Mark as listed; unfinished Next is disabled",
+        "Opening a new single item after a completed batch keeps Generate visible without stale batch progress",
+        "Later completion preserves edits and focus; explicit Next ready and Back to batch work; all photos remain and each item generates once"
+      ],
+      "pageErrors": [],
+      "controlledGenerations": 2,
+      "scope": "Real Chromium product UI, image preparation, IndexedDB and clipboard. Controlled auth, storage and AI. No native iOS or server-owned background execution certification."
+    },
+    {
+      "items": 2,
+      "checks": [
+        "First ready item has an explicit Review action while later work continues, with no automatic navigation",
+        "One compact progress panel remains accessible without covering Copy or Mark as listed; unfinished Next is disabled",
+        "Opening a new single item after a completed batch keeps Generate visible without stale batch progress",
+        "Later completion preserves edits and focus; explicit Next ready and Back to batch work; all photos remain and each item generates once"
+      ],
+      "pageErrors": [],
+      "controlledGenerations": 2,
+      "scope": "Real Chromium product UI, image preparation, IndexedDB and clipboard. Controlled auth, storage and AI. No native iOS or server-owned background execution certification."
+    },
+    {
+      "items": 20,
+      "checks": [
+        "First ready item has an explicit Review action while later work continues, with no automatic navigation",
+        "One compact progress panel remains accessible without covering Copy or Mark as listed; unfinished Next is disabled",
+        "Opening a new single item after a completed batch keeps Generate visible without stale batch progress",
+        "Later completion preserves edits and focus; explicit Next ready and Back to batch work; all photos remain and each item generates once"
+      ],
+      "pageErrors": [],
+      "controlledGenerations": 20,
+      "scope": "Real Chromium product UI, image preparation, IndexedDB and clipboard. Controlled auth, storage and AI. No native iOS or server-owned background execution certification."
+    }
+  ],
+  "broaderBrowserJourney": {
+    "passed": 24,
+    "checks": [
+      "New badge stays above the batch tab in both entry modes at phone/tablet/desktop widths",
+      "Ten photos fit the mobile photo grid",
+      "Manual privacy brush works with mouse and touch, Undo/Cancel, crop/rotation/straighten, viewport changes, opaque exported pixels and exact original restore",
+      "Lazy photo editor handles real mouse/touch crops, rotation, straighten, source-size export, Cancel and exact original restore",
+      "Generation stays in place and saves its result locally",
+      "Long descriptions scroll naturally with a stable bottom action",
+      "App logo returns to drafts without reloading and saves pending edits",
+      "Reload preserves text and ten local JPEGs without downloading cloud drafts",
+      "Offline edits save durably in the browser",
+      "Photo deletion previews the selected JPEG and releases its local blob",
+      "Whole-card selection and Cancel behave consistently",
+      "Grouping and sequential batch generation use local drafts",
+      "Tailored trial, daily, monthly and pause paywalls preserve drafts; burst limits never sell access; bearer checkout retries and cancellation work",
+      "Existing generation limits prevent new generation requests",
+      "Dropdowns and account sheet open and close cleanly at 360px",
+      "Dropdowns and account sheet open and close cleanly at 390px",
+      "Dropdowns and account sheet open and close cleanly at 768px",
+      "Dropdowns and account sheet open and close cleanly at 1440px",
+      "A lost response recovers via a read-only lookup without another generation",
+      "Desktop copy offers the real Chrome extension; phones and installed users are skipped; dismissal survives reload for seven days; Escape removes the backdrop immediately",
+      "Listed status remains local and survives returning to the library",
+      "Bulk deletion removes only selected items and their local photos",
+      "Manage plan reaches bearer billing without waiting for stalled background telemetry",
+      "Existing durable telemetry records batch size, quota paywalls and copies without blocking the UI"
+    ],
+    "generations": 5,
+    "uploadCount": 14,
+    "errors": []
+  },
+  "extensionSourceUnchanged": {
+    "background.js": "daca9a4b38347c75af608dcb1f0860e45e6f0260e9120ccfb2ae5aecc98bb111",
+    "content.js": "fd194e796b7beed40f726f1c59c4e9ba0d65f4c51a53cb3c4fb5d2d20451e03d",
+    "manifest.json": "9015b7620250a01941249b3f9515b60dbdb0de7a83dfa625fd86d52b7e16a6a9"
+  },
+  "backendSource": {
+    "src/app/mobile-web/draftWorkspace.ts": "3f14fec10ac778d9e1e50b85edaa8a2fd20f1ffc779272fe8d022a1865348db4",
+    "src/components/mobile-web/DraftWorkspace.astro": "f9a46bfbec34276b7e262a271c959279d6c59d84d478fa51d111c0e0e0218f23",
+    "src/styles/listing-drafts.css": "fe643b5b3053cb4d1a79d047f490eb9ec41bc2334e96cedf2deb471bea5a2f79"
+  },
+  "screenshots": {
+    "01-photos.png": "91af55c7d9c0912a303deab21b25d9cff3907fc6bb94f89463a2434b32afab30",
+    "02-grouped.png": "5b5d1ab4ed0a7df49387c0a0194591bee7fab1b7be23533e21d37430d648d0de",
+    "03-preparing.png": "9fa5c5d8e5cf8c1a181be43fd80c3bf5109b0835fd2da65860e7ed83fb832a2c",
+    "04-review-ready.png": "56d9e2074dd8d80737e6f7964e7a9b5f932ead568bc8a76e96b6acb69f4cb582",
+    "05-review-with-progress.png": "fd4ab1e05c7a47e2a2ce63f0b79a02f7bec5501c4b4cf941689d639c328b7f3f",
+    "06-copy-early.png": "6d5442f07aad43ecd6beffed6c4ddfe62c7ef4d8f2df2f18993e633dfa493c9a",
+    "07-completes-in-place.png": "1bd0f257e69490789a97923dfeb2e04155a7d776945a69c4e32894ef51c6e3cf",
+    "08-next-ready.png": "66f17b6462ad90c310b1375e0c39ae0dd429e7a0169578b0424f3bcd0731012b",
+    "09-batch-ready.png": "c26645887dc49880ee2a485cbf6c53a445e98c0deb0c0e55f562bc037c0bcd1b",
+    "10-mark-listed.png": "282b56c1acc2828db53f182c750e45e5e7fc7190e29e126e40fc910df82834aa",
+    "11-single-after-batch.png": "9b62b5da3a0bcc19b032364b3c5a9fd329609e533da579cd31e042074e1186d0",
+    "12-small-phone.png": "ee62159c16069d8cafe97e3eb915f8aa4a81b84db138f39aa88466d5bd857b33",
+    "13-tablet.png": "30d09cf0386d74b50cfe057640c5b1dfd2fe85df0a35eb6daddbbaf20b9a2161",
+    "14-desktop.png": "1fcf5dd67dfeef6667f4411d870099119dbf08a57ac4ff1c254c74e8d536f9ed",
+    "15-progress-scrolled.png": "6329a086ca1e9635703e4403920cc24c4bc2c1c13733cab5c34225219ee8c2ce"
+  }
+}
