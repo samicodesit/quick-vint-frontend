@@ -1154,14 +1154,10 @@ async function runBatchGenerationJob(job) {
       }
     }
 
+    // The last item checkpoints its count and terminal status atomically before
+    // releasing the exact request or source photos. No second terminal write
+    // may turn a completed batch into an interruption.
     await cleanupBatchUploadSession(job);
-    await persistBatchRecovery(job, {
-      status: "done",
-      reason: "completed",
-      completedCount: groups.length,
-      currentItemIndex: groups.length,
-      currentWorkTabId: job.currentWorkTabId,
-    });
     notifyBatchProgress(job, {
       status: "done",
       reason: "completed",
@@ -1178,7 +1174,11 @@ async function runBatchGenerationJob(job) {
         console.debug("Batch review prompt unavailable:", error),
       );
     }
-    await chrome.storage.local.remove(BATCH_RECOVERY_STORAGE_KEY);
+    await chrome.storage.local.remove(BATCH_RECOVERY_STORAGE_KEY).catch(error => {
+      // A retained done checkpoint is safe to show and does not block a new
+      // batch. Failure to remove it must not report a generation failure.
+      console.debug("Completed batch checkpoint retained:", error);
+    });
   } catch (err) {
     if (err.code === "BATCH_STATE_CHANGED") return;
     if (!job.stopRequested) console.error("[Background] Batch generation failed:", err);
@@ -1356,15 +1356,19 @@ async function completeBatchItemCheckpoint(message, sender) {
     currentWorkTabId: null,
     lastCompletedWorkTabId: completedWorkTabId,
     status: completedCount === job.groups.length
-      ? isActive ? "running" : "done"
+      ? "done"
       : isActive || autoContinue ? "running" : "paused",
     reason: completedCount === job.groups.length
-      ? isActive ? null : "completed"
+      ? "completed"
       : isActive || autoContinue ? null : "service_worker_restarted",
     hadIssues: job.hadIssues === true || !isActive,
   });
   if (isActive) activeTabJob.completedCount = completedCount;
   if (isActive) activeTabJob.lastCompletedWorkTabId = completedWorkTabId;
+  if (isActive && completedCount === job.groups.length) {
+    activeTabJob.status = "done";
+    activeTabJob.reason = "completed";
+  }
   if (completedCount === job.groups.length) {
     void globalThis.AutoListerTelemetry?.track("batch_complete", { batchId: job.batchId, generationAttemptId: job.currentGenerationAttemptId, itemIndex, completedCount, total: job.groups.length }, "extension_background", false, job.ownerId);
   }
