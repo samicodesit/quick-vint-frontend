@@ -198,11 +198,11 @@ async function openBatchJourney(options = {}) {
     if (url.pathname.startsWith("/api/user")) return route.fulfill({ status: 200, contentType: "application/json", body: "{}" });
     unexpected.push(url.pathname); return route.abort();
   });
-  await worker.evaluate(() => chrome.storage.local.set({
-    supabaseSession: { access_token: "local-test-access", refresh_token: "local-test-refresh", expires_at: Math.floor(Date.now() / 1000) + 3600, user: { id: "test-user", email: "seller@example.invalid" } },
+  await worker.evaluate(session => chrome.storage.local.set({
+    supabaseSession: session || { access_token: "local-test-access", refresh_token: "local-test-refresh", expires_at: Math.floor(Date.now() / 1000) + 3600, user: { id: "test-user", email: "seller@example.invalid" } },
     userProfile: { subscription_status: "active", subscription_tier: "pro", api_calls_this_month: 0, pack_credits: 0 },
     selectedLanguage: "en", selectedTitleLanguage: "en", selectedDescriptionLanguage: "en", tone: "standard", descriptionLength: "long", useBulletPoints: true,
-  }));
+  }), options.session);
   await context.setOffline(false);
   const controller = await context.newPage();
   await controller.goto("https://www.vinted.com/items/new", { waitUntil: "domcontentloaded" });

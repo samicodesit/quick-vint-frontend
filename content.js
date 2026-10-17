@@ -1294,6 +1294,10 @@
     void globalThis.AutoListerTelemetry?.track(event, context, "extension_content", false, expectedAccountId);
   }
 
+  const authActionObserver = globalThis.AutoListerAuthActions?.createObserver({
+    track: trackGrowthEvent, getOwner: () => batchAuthUserId,
+  });
+
   function flushGrowthEvents() {
     return globalThis.AutoListerTelemetry?.flush();
   }
@@ -4035,6 +4039,7 @@
     if (changes.supabaseSession) {
       const nextUserId = changes.supabaseSession.newValue?.user?.id || null;
       if (nextUserId !== batchAuthUserId) {
+        authActionObserver?.clear();
         batchItemTask?.controller.abort();
         batchAuthUserId = nextUserId;
         closeBatchModal({ cleanup: false });
@@ -19069,6 +19074,8 @@
     const requestGenerationMode = generationMode || mode;
     let generateFetchDiagnostics = null;
     let generationOwnerId = batchAuthUserId || undefined;
+    let authAction;
+    let authBlockReason;
     const trackGenerationEvent = (name, context) => trackGrowthEvent(name, { ...batchContext, generationAttemptId, ...context }, generationOwnerId);
 
     if (!imageUrls.length) {
@@ -19192,9 +19199,18 @@
       const legacyLanguageCode = descriptionLanguageCode || titleLanguageCode;
       const imageSourceSummary =
         summarizeImageSourcesForTelemetry(imageSourceTelemetry);
-      const { access_token, userId } = (await sendMessage({ type: "GET_ACCESS_TOKEN" })) || {};
+      authAction = authActionObserver?.begin({ entryPoint: "generate", generationAttemptId,
+        scope: [window.location.pathname, batchContext?.batchId, batchContext?.itemIndex,
+          mode, requestGenerationMode, Boolean(emojiRetry), descriptionApplyChoice, applyGeneratedOutput,
+          titleLanguageCode, descriptionLanguageCode, tone,
+          effectiveUseEmojis, useHashtags, useBulletPoints, descriptionLength, effectiveDescriptionFooterText, ...imageUrls] });
+      const credentials = (await sendMessage({ type: "GET_ACCESS_TOKEN",
+        ...(authAction?.operationId ? { authContext: { operationId: authAction.operationId, entryPoint: "generate" } } : {}) })) || {};
+      authAction?.observe(credentials);
+      const { access_token, userId } = credentials;
       generationOwnerId = userId || generationOwnerId;
       if (!access_token) {
+        authBlockReason = "session_missing";
         throw new Error("Your session has expired. Please sign in again via the extension.");
       }
       let durableRequest = null;
@@ -19424,6 +19440,7 @@
       if (generationOwnerId && batchAuthUserId !== generationOwnerId) throw new Error("Your account changed. This generation has not been applied.");
 
       if (response.status === 401) {
+        authBlockReason = "unauthorized";
         trackGenerationEvent("generate_error", { mode, status: 401 });
         isAuthenticated = false;
         showToast("Session expired. Please sign in again.", "error");
@@ -19658,8 +19675,13 @@
         await maybeShowEmojiRetryPrompt(descInput);
       }
 
+      authAction?.finish("succeeded", { generationAttemptId, statusCode: response.status });
       return { ok: true, title, description, measurementAdvice, offers, generationAttemptId };
     } catch (err) {
+      authAction?.finish(authBlockReason ? "blocked" : batchSignal?.aborted ? "cancelled" : "failed", {
+        generationAttemptId,
+        ...(authBlockReason ? { reason: authBlockReason, statusCode: authBlockReason === "unauthorized" ? 401 : 0 } : {}),
+      });
       if (!batchSignal?.aborted) console.error("AutoLister AI Error:", err);
       if (generateFetchDiagnostics?.startedAtMs) {
         generateFetchDiagnostics.elapsedMs =

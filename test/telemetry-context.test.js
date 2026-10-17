@@ -11,6 +11,17 @@ function telemetry() {
   return sandbox.AutoListerTelemetry;
 }
 
+test("auth action and refresh links survive the client allowlist without carrying credentials", () => {
+  const { event } = telemetry().prepare("auth_action_result", {
+    operationId: "action-1", authRefreshOperationId: "refresh-1", parentOperationId: "action-1",
+    entryPoint: "generate", resultStatus: "blocked", attempt: 1, access_token: "private",
+  });
+  assert.equal(event.context.authRefreshOperationId, "refresh-1");
+  assert.equal(event.context.parentOperationId, "action-1");
+  assert.equal(event.context.resultStatus, "blocked");
+  assert.equal(event.context.access_token, undefined);
+});
+
 test("legacy error code and numeric status reach the canonical diagnostic fields", () => {
   const { event } = telemetry().prepare("generate_error", {
     code: "provider_unavailable", status: 503, message: "Service unavailable",

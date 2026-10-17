@@ -300,17 +300,28 @@ function scheduleTokenRefresh(session) {
   const refreshIn = expiresAt - now - TOKEN_REFRESH_MARGIN_MS;
 
   const timeout = Math.max(refreshIn, MIN_REFRESH_DELAY_MS);
-  tokenRefreshTimeout = setTimeout(refreshTokenWithRetry, timeout);
+  tokenRefreshTimeout = setTimeout(() => refreshTokenWithRetry(3, { entryPoint: "scheduled_refresh" }), timeout);
 }
 
 /**
  * Refreshes the authentication token with exponential backoff retry logic.
  * @returns {Promise<object|null>} The new session object or null on failure.
  */
-async function refreshTokenWithRetry(maxRetries = 3) {
-  if (tokenRefreshPromise) return tokenRefreshPromise;
+let tokenRefreshDiagnostic;
+async function refreshTokenWithRetry(maxRetries = 3, diagnostic = {}) {
+  if (tokenRefreshPromise) {
+    diagnostic.authRefreshOperationId = tokenRefreshDiagnostic?.operationId;
+    observeAuthAction(diagnostic, "refresh_joined");
+    return tokenRefreshPromise;
+  }
   const telemetryOperation = crypto.randomUUID();
-  const trackRefresh = (event, context = {}) => { void globalThis.AutoListerTelemetry?.track(event, { operationId: telemetryOperation, ...context }, "extension_background"); };
+  tokenRefreshDiagnostic = { operationId: telemetryOperation };
+  diagnostic.authRefreshOperationId = telemetryOperation;
+  const trackRefresh = (event, context = {}) => { void globalThis.AutoListerTelemetry?.track(event, {
+    operationId: telemetryOperation, entryPoint: diagnostic.entryPoint || "unspecified",
+    parentOperationId: diagnostic.parentOperationId, target: diagnostic.target,
+    navigatorOnline: globalThis.navigator?.onLine, ...context,
+  }, "extension_background"); };
   const refreshStartedAt = Date.now();
   let refreshPhase = "load_session";
   const refreshErrorContext = (error) => ({
@@ -393,6 +404,7 @@ async function refreshTokenWithRetry(maxRetries = 3) {
     return await tokenRefreshPromise;
   } finally {
     tokenRefreshPromise = null;
+    tokenRefreshDiagnostic = null;
   }
 }
 
@@ -400,14 +412,34 @@ async function refreshTokenWithRetry(maxRetries = 3) {
  * Ensures the current session token is valid, refreshing it if necessary.
  * @returns {Promise<object|null>} A valid session object or null.
  */
-async function ensureValidToken() {
+async function ensureValidToken(diagnostic = {}) {
   const session = await getStoredSession();
   if (!session) return null;
+  diagnostic.ownerId = session.user?.id;
 
   if (isTokenNearExpiry(session)) {
-    return (await refreshTokenWithRetry()) || (await getStoredSession());
+    return (await refreshTokenWithRetry(3, diagnostic)) || (await getStoredSession());
   }
   return session;
+}
+
+function authRequestDiagnostic(message, entryPoint) {
+  const context = message?.authContext;
+  const parentOperationId = typeof context?.operationId === "string" && /^[a-z\d_-]{1,120}$/i.test(context.operationId)
+    ? context.operationId : undefined;
+  const target = ["generate", "phone_session_open", "offer_claim", "offer_dismiss"].includes(context?.entryPoint)
+    ? context.entryPoint : undefined;
+  return { entryPoint, ...(parentOperationId && target ? { parentOperationId, target } : {}) };
+}
+
+function observeAuthAction(diagnostic, resultStatus) {
+  if (!diagnostic.parentOperationId || !diagnostic.authRefreshOperationId) return;
+  try {
+    void globalThis.AutoListerTelemetry?.track("auth_action_result", {
+      operationId: diagnostic.parentOperationId, authRefreshOperationId: diagnostic.authRefreshOperationId,
+      entryPoint: diagnostic.target, resultStatus,
+    }, "extension_background", false, diagnostic.ownerId || null);
+  } catch { /* This observation cannot change the credential response. */ }
 }
 
 /**
@@ -480,7 +512,7 @@ function getUsageLimits(profile) {
  * This is the single source of truth for the user's profile data.
  */
 async function updateAndStoreUserProfile() {
-  const session = await ensureValidToken();
+  const session = await ensureValidToken({ entryPoint: "profile_update" });
   if (!session?.access_token) return;
   void claimStoredFirstTouch().catch(() => {});
 
@@ -518,7 +550,7 @@ async function updateAndStoreUserProfile() {
  * @returns {Promise<object>}
  */
 async function fetchUserUsageCount() {
-  const session = await ensureValidToken();
+  const session = await ensureValidToken({ entryPoint: "usage_count" });
   if (!session?.access_token) {
     return {
       daily: 0,
@@ -634,7 +666,7 @@ async function getStoredCheckoutEmail(session) {
 }
 
 async function createCheckout(message = {}) {
-  const session = await ensureValidToken();
+  const session = await ensureValidToken({ entryPoint: "checkout" });
   const email = await getStoredCheckoutEmail(session);
   if (!email) {
     return {
@@ -2261,7 +2293,7 @@ async function startWardrobeRewrite(message, sender) {
 }
 
 async function getBatchCapacity() {
-  let session = await ensureValidToken();
+  let session = await ensureValidToken({ entryPoint: "batch_capacity" });
   if (!session?.access_token) {
     return {
       ok: false,
@@ -2282,7 +2314,7 @@ async function getBatchCapacity() {
         },
       });
       if (response.status !== 401 || attempt === 1) break;
-      session = await refreshTokenWithRetry();
+      session = await refreshTokenWithRetry(3, { entryPoint: "batch_capacity_unauthorized" });
       if (!session?.access_token) break;
     }
     const payload = await response.json().catch(() => ({}));
@@ -2598,20 +2630,24 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         break;
 
       case "GET_ACCESS_TOKEN":
-        const session = await ensureValidToken();
+        const accessDiagnostic = authRequestDiagnostic(message, "access_token_request");
+        const session = await ensureValidToken(accessDiagnostic);
+        observeAuthAction(accessDiagnostic, session?.access_token ? "credentials_returned" : "credentials_unavailable");
         sendResponse(
           session
             ? {
                 access_token: session.access_token,
                 expires_at: session.expires_at,
                 userId: session.user?.id || null,
+                ...(accessDiagnostic.parentOperationId && session.user?.id === accessDiagnostic.ownerId && accessDiagnostic.authRefreshOperationId
+                  ? { authRefreshOperationId: accessDiagnostic.authRefreshOperationId } : {}),
               }
             : null,
         );
         break;
 
       case "GET_VALID_SESSION":
-        const validSession = await ensureValidToken();
+        const validSession = await ensureValidToken({ entryPoint: "valid_session_request" });
         sendResponse(
           validSession?.user?.email
             ? {
@@ -2902,7 +2938,7 @@ async function init() {
     updateAndStoreUserProfile();
 
     if (isTokenNearExpiry(session)) {
-      await refreshTokenWithRetry();
+      await refreshTokenWithRetry(3, { entryPoint: "startup_restore" });
     } else {
       scheduleTokenRefresh(session);
     }

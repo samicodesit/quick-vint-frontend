@@ -3104,6 +3104,7 @@ test.describe("AutoLister extension smoke flows", () => {
         "lib/telemetry-registry.js",
         "lib/telemetry-client.js",
         "lib/telemetry-flow.js",
+        "lib/auth-action-observer.js",
         "lib/phone-upload-recovery.js",
         "content.js",
       ]);
