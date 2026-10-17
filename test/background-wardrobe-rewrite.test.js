@@ -167,6 +167,7 @@ async function runBackground(options = {}) {
     URL,
     URLSearchParams,
     Response,
+    AbortController,
     crypto: { randomUUID: () => "cid-test" },
     fetch: async (url) => {
       if (String(url).includes("action=cleanup")) cleanupCalls.push(String(url));

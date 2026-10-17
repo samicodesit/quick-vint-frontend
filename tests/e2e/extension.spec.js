@@ -1300,7 +1300,7 @@ test.describe("AutoLister extension smoke flows", () => {
     const overlay = page.locator("#quickvint-batch-recovery-nudge");
     await expect(overlay).toHaveCount(1);
     await expect(overlay.getByRole("heading", { name: "Your batch was interrupted" })).toBeVisible();
-    await expect(overlay).toContainText("Your progress is saved.");
+    await expect(overlay.locator("p")).toBeHidden();
     await expect(overlay).toHaveCSS("position", "fixed");
     await expect(overlay).toHaveCSS("inset", "0px");
 

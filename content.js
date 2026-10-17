@@ -4126,7 +4126,15 @@
 
     if (message?.type === "SHOW_BATCH_RECOVERY_NUDGE") {
       if (message.ownerId && message.ownerId !== batchAuthUserId) { sendResponse({ ok: false }); return false; }
-      showBatchRecoveryNudge(message.status);
+      showBatchRecoveryNudge(message.status, message.batchId);
+      sendResponse({ ok: true });
+      return false;
+    }
+
+    if (message?.type === "CLEAR_BATCH_RECOVERY_NUDGE") {
+      if (!message.ownerId || message.ownerId !== batchAuthUserId || !message.batchId) { sendResponse({ ok: false }); return false; }
+      const nudge = document.getElementById(BATCH_RECOVERY_NUDGE_ID);
+      if (nudge?.dataset.batchId === message.batchId) nudge.remove();
       sendResponse({ ok: true });
       return false;
     }
@@ -17725,7 +17733,7 @@
     const previousStatus = batchProgressStatus;
     batchProgressStatus = status;
     if (previousStatus !== status && ["done", "failed", "paused"].includes(status)) {
-      trackGrowthEvent(status === "done" ? "batch_done" : status === "paused" && reason === "user_stopped" ? "batch_cancelled" : status === "paused" ? "batch_paused" : "batch_failed", {
+      trackGrowthEvent(status === "done" ? "batch_done" : status === "paused" && ["user_stopped", "discard_pending"].includes(reason) ? "batch_cancelled" : status === "paused" ? "batch_paused" : "batch_failed", {
         ...diagnostics,
         current,
         message: message || null,
@@ -17751,9 +17759,10 @@
     const subtitleEl = document.querySelector(`#${BATCH_MODAL_ID} .batch-subtitle`);
     const paused = status === "paused";
     const expired = status === "expired";
-    if (titleEl) titleEl.textContent = paused ? "Batch paused" : expired ? "Batch expired" : status === "done" ? "Listings ready" : "Generating listings";
+    const discardPending = reason === "discard_pending";
+    if (titleEl) titleEl.textContent = discardPending ? "Discard not finished" : paused ? "Batch paused" : expired ? "Batch expired" : status === "done" ? "Listings ready" : "Generating listings";
     if (subtitleEl) {
-      subtitleEl.hidden = false;
+      subtitleEl.hidden = discardPending;
       subtitleEl.textContent = `${getBatchReadyCount(status, current)}/${total} ready`;
     }
 
@@ -17768,23 +17777,16 @@
     const statusText = getBatchProgressCopy({ status, current, total, message, delayMs });
     const running = isBatchProgressActive(status);
     const remaining = Math.max(0, total - current);
-    const progressTitle = running
-      ? "Your listings are being prepared"
-      : status === "done"
-        ? "Review tabs before publishing"
-        : paused
-          ? "Your photos and groups are saved."
-          : expired
-            ? ""
-            : "Generation stopped";
-    const progressNote = paused
-      ? "Resume whenever you’re ready."
-      : expired
-        ? "The temporary recovery window ended."
+    const progressTitle = status === "done" ? "Review tabs before publishing"
+      : status === "failed" ? "Generation stopped" : "";
+    const progressNote = paused || expired
+      ? ""
         : status === "failed"
           ? "No more tabs will open."
-          : "Follow each listing as it is prepared. Start editing to stay on a listing.";
-    const actions = paused
+          : "Editing pauses auto-follow.";
+    const actions = discardPending
+      ? '<button type="button" class="batch-recovery-discard primary">Retry discard</button>'
+      : paused
       ? `<button type="button" class="batch-recovery-discard">Discard batch</button><button type="button" class="batch-recovery-resume primary">Resume ${remaining} remaining</button>`
       : expired
         ? '<button type="button" class="batch-recovery-discard">Start new batch</button>'
@@ -17794,7 +17796,7 @@
     body.innerHTML = `
       <div class="batch-progress-stage ${running ? "is-live" : ""}">
         <div class="batch-ambient" aria-hidden="true"></div>
-        <div class="batch-progress-head">
+        ${discardPending ? "" : `<div class="batch-progress-head">
           <div>
             <div class="batch-status ${status === "done" ? "done" : ["failed", "paused", "expired"].includes(status) ? "warning" : ""}">${escapeHtml(statusText)}</div>
             ${progressTitle ? `<div class="batch-progress-title">${progressTitle}</div>` : ""}
@@ -17803,9 +17805,9 @@
         </div>
         <div class="batch-live-progress" aria-hidden="true">
           <span style="width: ${progressPercent}%"></span>
-        </div>
+        </div>`}
         <div class="batch-progress-list" aria-live="polite"></div>
-        ${status === "done" || expired ? "" : `<div class="batch-progress-note">${progressNote}</div>`}
+        ${status === "done" || !progressNote ? "" : `<div class="batch-progress-note">${progressNote}</div>`}
       </div>
       <div class="batch-actions">${actions}</div>
     `;
@@ -17844,7 +17846,7 @@
 
       const badge = document.createElement("div");
       badge.className = "batch-progress-badge";
-      badge.textContent = expired && state !== "done" ? "Expired" : waitingForCurrentItem && state === "active"
+      badge.textContent = discardPending && state !== "done" ? "Discard pending" : expired && state !== "done" ? "Expired" : waitingForCurrentItem && state === "active"
         ? reason === "network_wait" ? "Waiting for connection"
           : reason === "photo_download_wait" ? "Waiting for photos"
           : reason === "generation_pending" ? "Finishing generation" : "Waiting for Vinted"
@@ -17852,7 +17854,7 @@
 
       card.appendChild(thumbs);
       card.appendChild(meta);
-      card.appendChild(badge);
+      if (!discardPending || state === "done") card.appendChild(badge);
       list?.appendChild(card);
     });
     updateBatchReviewLinks();
@@ -17864,8 +17866,10 @@
       if (!response?.ok) { button.disabled = false; showToast(response?.error || "Could not stop the batch.", "error"); }
     });
 
-    body.querySelector(".batch-dismiss")?.addEventListener("click", async () => {
+    body.querySelector(".batch-dismiss")?.addEventListener("click", async event => {
+      const restore = lockBatchRecoveryActions(event.currentTarget, "Closing");
       const response = await sendMessage({ type: "DISCARD_BATCH_RECOVERY", batchId: batchProgressContext.batchId });
+      restore();
       if (!response?.ok) { showToast(response?.error || "Could not close the saved batch. Try again.", "error"); return; }
       closeBatchModal({ cleanup: false });
       if (status === "done" && pendingBatchReviewPrompt) {
@@ -17877,8 +17881,11 @@
     body.querySelector(".batch-recovery-resume")?.addEventListener("click", (event) => {
       resumeSavedBatch(event.currentTarget);
     });
-    body.querySelector(".batch-recovery-discard")?.addEventListener("click", async () => {
+    body.querySelector(".batch-recovery-discard")?.addEventListener("click", async event => {
+      const restore = lockBatchRecoveryActions(event.currentTarget, expired ? "Starting" : "Discarding");
       const response = await sendMessage({ type: "DISCARD_BATCH_RECOVERY", batchId: batchProgressContext.batchId });
+      restore();
+      if (response?.discardPending && response.recovery) { showBatchRecovery(response.recovery); return; }
       if (!response?.ok) { showToast(response?.error || "Could not clear the saved batch. Try again.", "error"); return; }
       closeBatchModal({ cleanup: false });
       if (expired) document.getElementById(PHONE_BTN_ID)?.click();
@@ -17915,7 +17922,7 @@
       generationAttemptId: recovery.generationAttemptId,
       itemIndex: recovery.itemIndex,
       inputSource: recovery.inputSource,
-      reason: recovery.reason,
+      reason: recovery.discardRequested ? "discard_pending" : recovery.reason,
       createdAt: recovery.createdAt,
     });
     if (trackedBatchRecoveryId !== recovery.batchId && recovery.status !== "running") {
@@ -17948,18 +17955,21 @@
     return true;
   }
 
-  function showBatchRecoveryNudge(status = "paused") {
-    const heading = status === "expired" ? "Upload expired" : "Your batch was interrupted";
-    const note = status === "expired" ? "Start a new upload with your original photos." : "Your progress is saved.";
+  function showBatchRecoveryNudge(status = "paused", batchId = "") {
+    const heading = status === "discard_pending" ? "Discard not finished" : status === "expired" ? "Upload expired" : "Your batch was interrupted";
+    const note = status === "expired" ? "Start a new upload with your original photos." : "";
     const existing = document.getElementById(BATCH_RECOVERY_NUDGE_ID);
     if (existing) {
       existing.querySelector("#quickvint-batch-recovery-title").textContent = heading;
       existing.querySelector("p").textContent = note;
+      existing.querySelector("p").hidden = !note;
+      existing.dataset.batchId = batchId || "";
       return true;
     }
     document.getElementById(RELEASE_UPDATE_WIDGET_ID)?.remove();
     const nudge = document.createElement("aside");
     nudge.id = BATCH_RECOVERY_NUDGE_ID;
+    nudge.dataset.batchId = batchId || "";
     nudge.innerHTML = `
       <div class="quickvint-batch-recovery-dialog" role="alertdialog" aria-modal="true" aria-labelledby="quickvint-batch-recovery-title">
         <div class="quickvint-batch-recovery-accent"></div>
@@ -17969,7 +17979,7 @@
             <span aria-hidden="true">!</span>
             <h2 id="quickvint-batch-recovery-title">${heading}</h2>
           </div>
-          <p>${note}</p>
+          <p${note ? "" : " hidden"}>${note}</p>
           <button class="quickvint-batch-recovery-return" type="button">Return to batch</button>
         </div>
       </div>
@@ -18002,8 +18012,19 @@
   async function maybeShowSavedBatchRecovery() {
     const result = await getSavedBatchRecovery();
     if (result?.nudge && result.ownerId !== batchAuthUserId) return false;
-    if (result?.nudge) return showBatchRecoveryNudge(result.recoveryStatus);
+    if (result?.nudge) return showBatchRecoveryNudge(result.recoveryStatus, result.batchId);
     return result?.recovery ? showBatchRecovery(result.recovery) : false;
+  }
+
+  function lockBatchRecoveryActions(button, label) {
+    const actions = Array.from(button?.closest(".batch-actions")?.querySelectorAll("button") || []);
+    const previous = actions.map(action => action.disabled);
+    const restore = setActionButtonLoading(button, label);
+    actions.forEach(action => { action.disabled = true; });
+    return () => {
+      restore();
+      actions.forEach((action, index) => { action.disabled = previous[index]; });
+    };
   }
 
   async function resumeSavedBatch(button) {
@@ -18017,10 +18038,11 @@
       }),
       completedCount,
     });
-    const restoreButton = setActionButtonLoading(button, "Resuming");
+    const restoreButton = lockBatchRecoveryActions(button, "Resuming");
     const response = await sendMessage({ type: "RESUME_BATCH_GENERATION", batchId: batchProgressContext.batchId });
     restoreButton();
     if (!response?.ok) {
+      if (response?.discardPending && response.recovery) { showBatchRecovery(response.recovery); return; }
       trackGrowthEvent("batch_resume_failed", {
         ...getBatchDiagnosticContext({
           batchId: response?.batchId,

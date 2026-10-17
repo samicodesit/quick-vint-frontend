@@ -12,6 +12,7 @@ let batchGenerationRequestQueue = Promise.resolve();
 let batchReviewQueue = Promise.resolve();
 let batchCheckpointQueue = Promise.resolve();
 let batchRecoveryQueue = Promise.resolve();
+let batchRecoveryControlQueue = Promise.resolve();
 let analyticsClientIdPromise;
 
 function createAnalyticsClientId() {
@@ -873,9 +874,16 @@ async function notifyBatchRecoveryNudge(job) {
       type: "SHOW_BATCH_RECOVERY_NUDGE",
       ownerId: job.ownerId,
       batchId: job.batchId,
-      status: job.status,
+      status: job.discardRequested ? "discard_pending" : job.status,
     }),
   ));
+}
+
+async function clearBatchRecoveryNudges(job) {
+  if ((await getStoredSession())?.user?.id !== job.ownerId) return;
+  await Promise.allSettled(getBatchWorkTabIds(job).map(tabId => sendTabMessage(tabId, {
+    type: "CLEAR_BATCH_RECOVERY_NUDGE", ownerId: job.ownerId, batchId: job.batchId,
+  })));
 }
 
 chrome.tabs.onRemoved?.addListener((tabId) => {
@@ -936,6 +944,7 @@ function persistBatchRecovery(job, updates = {}, options = {}) {
     const changed = () => Object.assign(new Error("This batch changed. Your photos are still saved."), { code: "BATCH_STATE_CHANGED" });
     if (!options.initialize) {
       if (!latest || latest.batchId !== job.batchId || latest.ownerId !== job.ownerId) throw changed();
+      if (latest.discardRequested && !job.discardRequested && !updates.discardRequested) throw changed();
       const proposedStatus = updates.status || job.status;
       if (latest.status === "paused" && ["running", "done"].includes(proposedStatus) && !options.resume) throw changed();
       if (latest.status === "done" && proposedStatus !== "done") throw changed();
@@ -971,6 +980,7 @@ async function writeBatchRecovery(job, updates) {
     message: job.message || null,
     reason: job.reason || null,
     hadIssues: job.hadIssues === true,
+    discardRequested: job.discardRequested === true,
     createdAt: Number(job.createdAt || Date.now()),
     updatedAt: Date.now(),
     expiresAt: Number(job.expiresAt || Date.now() + BATCH_RECOVERY_TTL_MS),
@@ -996,6 +1006,7 @@ function publicBatchRecovery(job) {
     message: job.message || null,
     reason: job.reason || null,
     hadIssues: job.hadIssues === true,
+    discardRequested: job.discardRequested === true,
     createdAt: job.createdAt,
     updatedAt: job.updatedAt,
     expiresAt: job.expiresAt,
@@ -1047,19 +1058,27 @@ function reattachRunningBatch(job) {
 }
 
 async function cleanupBatchUploadSession(job, reason = "completed") {
-  if (!job?.sessionId) return;
+  if (!job?.sessionId) return false;
   const v2 = job.inputSource !== "computer";
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 20000);
   try {
-    await fetch(
+    const response = await fetch(
       `${API_BASE}/api/phone-upload?action=cleanup${v2 ? `&v=2&reason=${encodeURIComponent(reason)}` : ""}&sessionId=${encodeURIComponent(job.sessionId)}`,
       {
         method: "POST",
+        signal: controller.signal,
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({}),
       },
     );
+    if (!response.ok) throw new Error(`Upload cleanup failed (HTTP ${response.status}).`);
+    return true;
   } catch (err) {
     console.warn("[Background] Batch cleanup failed:", err);
+    return false;
+  } finally {
+    clearTimeout(timeout);
   }
 }
 
@@ -1179,7 +1198,6 @@ async function runBatchGenerationJob(job) {
     // The last item checkpoints its count and terminal status atomically before
     // releasing the exact request or source photos. No second terminal write
     // may turn a completed batch into an interruption.
-    await cleanupBatchUploadSession(job);
     notifyBatchProgress(job, {
       status: "done",
       reason: "completed",
@@ -1196,6 +1214,11 @@ async function runBatchGenerationJob(job) {
         console.debug("Batch review prompt unavailable:", error),
       );
     }
+    // Listing completion is already durable. Housekeeping cannot hold the
+    // ready UI or the next explicit Start. Conditional cleanup below cannot
+    // remove a newer batch or its exact request.
+    if (activeTabJob === job) activeTabJob = null;
+    await cleanupBatchUploadSession(job);
     const requestCleared = await clearBatchGenerationRequest(job).catch(() => false);
     if (requestCleared) await removeBatchRecoveryIfCurrent(job).catch(error => {
       // A retained done checkpoint is safe to show and does not block a new
@@ -1237,7 +1260,8 @@ async function savedBatchStartBlock(ownerId, sourceTabId) {
   }
   const owned = saved.ownerId === ownerId;
   return { ok: false, code: "saved_batch_exists", error: owned
-    ? "Resume or discard your saved batch before starting another one."
+    ? saved.discardRequested ? "Finish discarding the previous batch before starting another one."
+      : "Resume or discard your saved batch before starting another one."
     : "Another account has a saved batch in this browser. Finish it with that account before starting another batch.",
     ...(owned && saved.sourceTabId === sourceTabId ? { recovery: publicBatchRecovery(saved) } : {}) };
 }
@@ -1409,7 +1433,7 @@ async function completeBatchItemCheckpoint(message, sender) {
   // generated result into a failure. Keep its proof until cleanup can finish.
   await clearBatchGenerationRequest(job).catch(() => false);
   if (!isActive && completedCount === job.groups.length) {
-    await cleanupBatchUploadSession(job);
+    void cleanupBatchUploadSession(job);
     notifyBatchProgress(job, { status: "done", current: completedCount, total: job.groups.length, reason: "completed" });
   }
   if (autoContinue) {
@@ -1541,23 +1565,33 @@ async function batchReviewAction(message, sender) {
 
 async function refreshBatchRecoveryGroups(job) {
   const v2Query = job.inputSource === "computer" ? "" : "&v=2&includeUrls=1&fromOrder=0";
-  const response = await fetch(
-    `${API_BASE}/api/phone-upload?sessionId=${encodeURIComponent(job.sessionId)}${v2Query}&t=${Date.now()}`,
-  );
-  if (!response.ok) throw Object.assign(new Error(response.status === 410
-    ? "This saved upload expired. Start a new batch with your original photos."
-    : response.status === 404 ? "This saved upload could not be found. Use your original photos to start a new batch."
-      : `Could not check saved photos (HTTP ${response.status}). Please try again.`), { expired: response.status === 410 });
-  const data = await response.json();
-  const files = Array.isArray(data?.files) ? data.files : [];
-  const byKey = new Map(files.map((file) => [getBatchFileKey(file), file]));
-  const groups = job.groups.map((group) =>
-    group.map((oldFile) => byKey.get(getBatchFileKey(oldFile))),
-  );
-  if (!files.length || groups.some((group) => group.some((file) => !file))) {
-    throw new Error("Could not load every saved photo. Please try again before starting a new batch.");
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 20000);
+  try {
+    const response = await fetch(
+      `${API_BASE}/api/phone-upload?sessionId=${encodeURIComponent(job.sessionId)}${v2Query}&t=${Date.now()}`,
+      { signal: controller.signal },
+    );
+    if (!response.ok) throw Object.assign(new Error(response.status === 410
+      ? "This saved upload expired. Start a new batch with your original photos."
+      : response.status === 404 ? "This saved upload could not be found. Use your original photos to start a new batch."
+        : `Could not check saved photos (HTTP ${response.status}). Please try again.`), { expired: response.status === 410 });
+    const data = await response.json();
+    const files = Array.isArray(data?.files) ? data.files : [];
+    const byKey = new Map(files.map((file) => [getBatchFileKey(file), file]));
+    const groups = job.groups.map((group) =>
+      group.map((oldFile) => byKey.get(getBatchFileKey(oldFile))),
+    );
+    if (!files.length || groups.some((group) => group.some((file) => !file))) {
+      throw new Error("Could not load every saved photo. Please try again before starting a new batch.");
+    }
+    return groups;
+  } catch (error) {
+    if (controller.signal.aborted) throw new Error("Checking saved photos timed out. Try again.");
+    throw error;
+  } finally {
+    clearTimeout(timeout);
   }
-  return groups;
 }
 
 async function getBatchRecovery(sender) {
@@ -1571,7 +1605,7 @@ async function getBatchRecovery(sender) {
       ok: true,
       recovery: null,
       nudge: ["paused", "expired"].includes(job.status) && getBatchWorkTabIds(job).includes(sourceTabId),
-      recoveryStatus: job.status,
+      recoveryStatus: job.discardRequested ? "discard_pending" : job.status,
       ownerId: job.ownerId,
       batchId: job.batchId,
     };
@@ -1584,7 +1618,17 @@ async function getBatchRecovery(sender) {
   return { ok: true, recovery: publicBatchRecovery(job) };
 }
 
-async function focusBatchRecovery(sender) {
+function withBatchRecoveryControl(operation) {
+  const result = batchRecoveryControlQueue.then(operation);
+  batchRecoveryControlQueue = result.catch(() => {});
+  return result;
+}
+
+function focusBatchRecovery(sender) {
+  return withBatchRecoveryControl(() => focusBatchRecoveryIntent(sender));
+}
+
+async function focusBatchRecoveryIntent(sender) {
   const job = await getStoredBatchRecovery();
   const accountId = (await getStoredSession())?.user?.id;
   const callerTabId = sender?.tab?.id;
@@ -1634,7 +1678,11 @@ async function focusBatchRecovery(sender) {
   return { ok: true, sourceTabId: sourceTab.id, recreated: true };
 }
 
-async function resumeBatchGeneration(message, sender) {
+function resumeBatchGeneration(message, sender) {
+  return withBatchRecoveryControl(() => resumeBatchGenerationIntent(message, sender));
+}
+
+async function resumeBatchGenerationIntent(message, sender) {
   if (activeTabJob) return { ok: false, error: "Another batch is already running." };
   const job = await getStoredBatchRecovery();
   if (!job) return { ok: false, error: "This saved batch is no longer available." };
@@ -1644,6 +1692,8 @@ async function resumeBatchGeneration(message, sender) {
   if (message.batchId !== job.batchId || (sender?.tab?.id !== job.sourceTabId && !getBatchWorkTabIds(job).includes(sender?.tab?.id))) {
     return { ok: false, error: "This saved batch is no longer available from this control." };
   }
+  if (job.discardRequested) return { ok: false, discardPending: true,
+    error: "Finish discarding this batch.", recovery: publicBatchRecovery(job) };
   if (job.completedCount >= job.groups.length) {
     return {
       ok: true,
@@ -1671,6 +1721,7 @@ async function resumeBatchGeneration(message, sender) {
       error: error.message,
     };
   }
+  await clearBatchRecoveryNudges(job);
   job.sourceTabId = sender?.tab?.id || job.sourceTabId;
   await persistBatchRecovery(job, {
     status: "running",
@@ -1690,7 +1741,11 @@ async function resumeBatchGeneration(message, sender) {
   };
 }
 
-async function discardBatchRecovery(message, sender) {
+function discardBatchRecovery(message, sender) {
+  return withBatchRecoveryControl(() => discardBatchRecoveryIntent(message, sender));
+}
+
+async function discardBatchRecoveryIntent(message, sender) {
   const job = await getStoredBatchRecovery();
   if (!job) return { ok: true };
   const accountId = (await getStoredSession())?.user?.id;
@@ -1702,12 +1757,25 @@ async function discardBatchRecovery(message, sender) {
   if (activeTabJob?.kind === "batch") {
     return { ok: false, error: "The batch is still running." };
   }
+  if (job.status !== "done") await persistBatchRecovery(job, {
+    discardRequested: true, reason: "discard_pending", message: "Discard not finished.",
+  });
+  if (job.status !== "done" && !await cleanupBatchUploadSession(job, "cancelled")) {
+    return incompleteBatchDiscard(job, "Could not finish discarding. Try again.");
+  }
   const requestCleared = await clearBatchGenerationRequest(job, { discard: true }).catch(() => false);
-  if (!requestCleared) return { ok: false, error: "Could not clear the saved batch. Try again." };
-  if (job.status !== "done") await cleanupBatchUploadSession(job, "cancelled");
+  if (!requestCleared) return incompleteBatchDiscard(job, "Could not clear the saved batch. Try again.");
   const removed = await removeBatchRecoveryIfCurrent(job).catch(() => false);
-  if (!removed) return { ok: false, error: "Could not clear the saved batch. Try again." };
+  if (!removed) return incompleteBatchDiscard(job, "Could not clear the saved batch. Try again.");
+  await clearBatchRecoveryNudges(job);
   return { ok: true };
+}
+
+async function incompleteBatchDiscard(job, error) {
+  if (job.status === "done") return { ok: false, error };
+  await persistBatchRecovery(job, { reason: "discard_pending", message: error }).catch(() => {});
+  await notifyBatchRecoveryNudge(job);
+  return { ok: false, error, discardPending: true, recovery: publicBatchRecovery(job) };
 }
 
 function mutateBatchGenerationRequest(operation) {
@@ -2402,6 +2470,10 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         if (!job || !accountId || job.ownerId !== accountId || job.batchId !== message.batchId ||
             (job.sourceTabId !== sender?.tab?.id && !getBatchWorkTabIds(job).includes(sender?.tab?.id))) {
           sendResponse({ ok: false, error: "This batch is unavailable for this tab and account." });
+          break;
+        }
+        if (job.discardRequested) {
+          sendResponse({ ok: false, error: "Finish discarding this batch." });
           break;
         }
         job.stopRequested = true;

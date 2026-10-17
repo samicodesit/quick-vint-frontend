@@ -23,6 +23,21 @@ No new services, migrations, extension permissions, paid AI, live Vinted actions
   controller was closed. Discard must be acknowledged before its screen closes.
   Closing a paused or expired controller restores the existing Return control.
   Completed checkpoints never trigger interruption guidance.
+- Return, Resume and Discard serialize their recovery intent across tabs.
+  Conflicting recovery buttons are temporarily disabled during the request.
+  Metadata and cleanup fetches abort after 20 seconds, including metadata body
+  reading. A failed discard keeps its exact request and checkpoint until cleanup
+  is acknowledged. Completion cleanup remains best effort and cannot relabel a
+  confirmed generated listing as failed.
+- Discard intent is durable before remote cleanup. An unknown or partially
+  completed discard offers only Retry discard, never Resume or an assurance that
+  temporary photos remain saved. Successful resume/discard clears only matching
+  owner/batch recovery guidance from retained listing tabs.
+- Confirmed listing readiness and Done never wait on remote housekeeping.
+  A later batch is protected from late cleanup by owner/batch-bound request
+  clearing and serialized conditional checkpoint removal. Pending user discard
+  is cancellation evidence, preserving the original generation rejection without
+  inventing a second generation pause on reload.
 - A user closing or editing a tab must not cause an automatic reload or overwrite of their work.
 - Slow, progressing uploads and suspended hidden tabs must not be mistaken for failed work.
 
