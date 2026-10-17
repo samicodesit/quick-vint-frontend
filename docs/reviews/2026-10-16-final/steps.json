@@ -270,6 +270,24 @@
     "capturedAt": "2026-10-16T20:40:52.841Z"
   },
   {
+    "flow": "web",
+    "id": "fresh-entry-failed",
+    "title": "Reopening the web app preserves failed-item review",
+    "note": "Primary-operated Chromium at 390px. Fresh app entry restored the exact batch review order. Next ready stayed disabled between unresolved failures. Copy previous copied the retained title without generation. The rejection was a controlled HTTP 422, not a live provider request.",
+    "filename": "web-fresh-entry-failed.png",
+    "detail": null,
+    "capturedAt": "2026-10-17T03:36:54.513269+00:00"
+  },
+  {
+    "flow": "web",
+    "id": "fresh-entry-retried",
+    "title": "Explicit Retry restores ordinary controls",
+    "note": "Primary clicked the existing paid-cost Retry in the local fixture. Normal Copy and Mark as listed returned. The single-item retry hides Next; the other failed draft remains Needs attention. Both photos stayed present. Layout was inspected at 320px and 390px.",
+    "filename": "web-fresh-entry-retried.png",
+    "detail": null,
+    "capturedAt": "2026-10-17T03:36:54.513285+00:00"
+  },
+  {
     "flow": "web-single",
     "id": "01",
     "title": "Single web item with photos",

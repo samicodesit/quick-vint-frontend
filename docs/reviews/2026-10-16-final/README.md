@@ -303,25 +303,37 @@ At 320px the progress, Copy controls and Mark as listed fit without horizontal o
 
 ![Small phone review](web-10.png)
 
-### 45. Failed replacement identifies the previous text
+### 45. Reopening the web app preserves failed-item review
+
+Primary-operated Chromium at 390px. Fresh app entry restored the exact batch review order. Next ready stayed disabled between unresolved failures. Copy previous copied the retained title without generation. The rejection was a controlled HTTP 422, not a live provider request.
+
+![Reopening the web app preserves failed-item review](web-fresh-entry-failed.png)
+
+### 46. Explicit Retry restores ordinary controls
+
+Primary clicked the existing paid-cost Retry in the local fixture. Normal Copy and Mark as listed returned. The single-item retry hides Next; the other failed draft remains Needs attention. Both photos stayed present. Layout was inspected at 320px and 390px.
+
+![Explicit Retry restores ordinary controls](web-fresh-entry-retried.png)
+
+### 47. Failed replacement identifies the previous text
 
 Primary-operated browser with a controlled HTTP422. Existing Copy previous buttons preserve earlier work without another paid generation. Needs attention remains visible; the footer offers an optional explicit Retry with its cost.
 
 ![Failed replacement identifies the previous text](web-failed-replacement.png)
 
-### 46. The failure state at 320 pixels
+### 48. The failure state at 320 pixels
 
 Primary-operated viewport check. No horizontal overflow or extra recovery panel.
 
 ![The failure state at 320 pixels](web-failed-small.png)
 
-### 47. Explicit retry restores the normal review screen
+### 49. Explicit retry restores the normal review screen
 
 Primary clicked Retry against the local model. Photos remained, the new text appeared, and ordinary Copy and Mark as listed returned.
 
 ![Explicit retry restores the normal review screen](web-retry-ready.png)
 
-### 48. Other failed items remain visible after retry and reload
+### 50. Other failed items remain visible after retry and reload
 
 Automated real-browser evidence, separately inspected. One item was retried successfully. The other still shows Needs attention after reload.
 
@@ -329,19 +341,19 @@ Automated real-browser evidence, separately inspected. One item was retried succ
 
 ## Web app single item
 
-### 49. Single web item with photos
+### 51. Single web item with photos
 
 Existing compact single-item workspace and Generate.
 
 ![Single web item with photos](web-single-01.png)
 
-### 50. Single web item prepares in place
+### 52. Single web item prepares in place
 
 Photos stay visible and there is no batch navigation.
 
 ![Single web item prepares in place](web-single-02.png)
 
-### 51. Single web result ready to Copy
+### 53. Single web result ready to Copy
 
 Existing compact review screen, clipboard works, photos retained.
 
@@ -349,25 +361,25 @@ Existing compact review screen, clipboard works, photos retained.
 
 ## Phone transport
 
-### 52. Connection loss keeps the selected photos
+### 54. Connection loss keeps the selected photos
 
 Passed. Actual multipart upload over loopback HTTP with controlled socket loss. Automatic retry and explicit Cancel remain available.
 
 ![Connection loss keeps the selected photos](phone-transport-01.png)
 
-### 53. Progressing slow upload completes
+### 55. Progressing slow upload completes
 
 Passed. One actual upload took about 60 seconds without a retry. The noise image is deliberate high-entropy test data.
 
 ![Progressing slow upload completes](phone-transport-02.png)
 
-### 54. Expired session is terminal
+### 56. Expired session is terminal
 
 Passed. Explicit HTTP 410 shows clear expiry guidance without revived Retry or Cancel controls.
 
 ![Expired session is terminal](phone-transport-03.png)
 
-### 55. Seller cancellation stops retrying
+### 57. Seller cancellation stops retrying
 
 Passed. Actual browser Cancel stops retries and leaves the cancelled screen. The disabled photo control cannot restart this session.
 
