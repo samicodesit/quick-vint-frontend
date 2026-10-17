@@ -15,6 +15,14 @@ No new services, migrations, extension permissions, paid AI, live Vinted actions
 - A completed server request whose response is lost must not charge or generate again after a new work tab or worker.
 - Changing accounts during waiting must not execute saved photos or replay another account's result.
 - A checkpoint write failure, duplicate message or late reply must not reset completion or start another item.
+- Final completion count and done status are one durable checkpoint before cleanup.
+  Request cleanup is owner-bound and repeatable. Keep the completed checkpoint
+  until its saved request is cleared. Serialize conditional checkpoint deletion
+  with writes so a late dismissal cannot erase a newer batch.
+- An expired batch remains reachable from its bound listing tab if its original
+  controller was closed. Discard must be acknowledged before its screen closes.
+  Closing a paused or expired controller restores the existing Return control.
+  Completed checkpoints never trigger interruption guidance.
 - A user closing or editing a tab must not cause an automatic reload or overwrite of their work.
 - Slow, progressing uploads and suspended hidden tabs must not be mistaken for failed work.
 

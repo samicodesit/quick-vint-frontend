@@ -873,9 +873,19 @@ async function notifyBatchRecoveryNudge(job) {
       type: "SHOW_BATCH_RECOVERY_NUDGE",
       ownerId: job.ownerId,
       batchId: job.batchId,
+      status: job.status,
     }),
   ));
 }
+
+chrome.tabs.onRemoved?.addListener((tabId) => {
+  void (async () => {
+    const job = await getStoredBatchRecovery();
+    if (job?.sourceTabId === tabId && ["paused", "expired"].includes(job.status)) {
+      await notifyBatchRecoveryNudge(job);
+    }
+  })().catch(error => console.debug("Batch return control unavailable:", error));
+});
 
 function notifyWardrobeRewriteProgress(job, payload) {
   if (!job?.sourceTabId) return;
@@ -902,10 +912,22 @@ async function getStoredBatchRecovery() {
     return null;
   }
   if (Number(stored.expiresAt || 0) <= Date.now()) {
-    await chrome.storage.local.remove(BATCH_RECOVERY_STORAGE_KEY);
+    await removeBatchRecoveryIfCurrent(stored);
     return null;
   }
   return stored;
+}
+
+function removeBatchRecoveryIfCurrent(job) {
+  const operation = batchRecoveryQueue.then(async () => {
+    const latest = (await chrome.storage.local.get(BATCH_RECOVERY_STORAGE_KEY))[BATCH_RECOVERY_STORAGE_KEY];
+    if (!latest) return true;
+    if (latest.batchId !== job.batchId || latest.ownerId !== job.ownerId) return false;
+    await chrome.storage.local.remove(BATCH_RECOVERY_STORAGE_KEY);
+    return true;
+  });
+  batchRecoveryQueue = operation.catch(() => {});
+  return operation;
 }
 
 function persistBatchRecovery(job, updates = {}, options = {}) {
@@ -1174,7 +1196,8 @@ async function runBatchGenerationJob(job) {
         console.debug("Batch review prompt unavailable:", error),
       );
     }
-    await chrome.storage.local.remove(BATCH_RECOVERY_STORAGE_KEY).catch(error => {
+    const requestCleared = await clearBatchGenerationRequest(job).catch(() => false);
+    if (requestCleared) await removeBatchRecoveryIfCurrent(job).catch(error => {
       // A retained done checkpoint is safe to show and does not block a new
       // batch. Failure to remove it must not report a generation failure.
       console.debug("Completed batch checkpoint retained:", error);
@@ -1206,7 +1229,12 @@ async function runBatchGenerationJob(job) {
 
 async function savedBatchStartBlock(ownerId, sourceTabId) {
   const saved = await getStoredBatchRecovery();
-  if (!saved?.ownerId || saved.status === "done") return null;
+  if (!saved?.ownerId) return null;
+  if (saved.status === "done") {
+    const cleared = await clearBatchGenerationRequest(saved).catch(() => false);
+    return cleared ? null : { ok: false, code: "batch_cleanup_failed",
+      error: "Could not clear the completed batch. Try again." };
+  }
   const owned = saved.ownerId === ownerId;
   return { ok: false, code: "saved_batch_exists", error: owned
     ? "Resume or discard your saved batch before starting another one."
@@ -1340,9 +1368,11 @@ async function completeBatchItemCheckpoint(message, sender) {
     return { ok: false, error: "Batch checkpoint is unavailable." };
   }
   if (itemIndex <= job.completedCount) {
-    return itemIndex === job.completedCount && completedWorkTabId === job.lastCompletedWorkTabId
-      ? { ok: true, completedCount: job.completedCount, total: job.groups.length }
-      : { ok: false, error: "This listing is no longer the active batch item." };
+    if (itemIndex !== job.completedCount || completedWorkTabId !== job.lastCompletedWorkTabId) {
+      return { ok: false, error: "This listing is no longer the active batch item." };
+    }
+    await clearBatchGenerationRequest(job).catch(() => false);
+    return { ok: true, completedCount: job.completedCount, total: job.groups.length };
   }
   if (completedWorkTabId !== job.currentWorkTabId || itemIndex !== job.currentItemIndex) {
     return { ok: false, error: "Only the active listing tab can confirm this batch item." };
@@ -1375,12 +1405,9 @@ async function completeBatchItemCheckpoint(message, sender) {
   await recordBatchReviewCompletion(job, itemIndex, completedWorkTabId).catch(error => {
     console.debug("Batch review navigation unavailable:", error);
   });
-  await mutateBatchGenerationRequest(async () => {
-    const pending = (await chrome.storage.local.get(BATCH_GENERATION_REQUEST_KEY))[BATCH_GENERATION_REQUEST_KEY];
-    if (pending?.batchId === job.batchId && pending.itemIndex <= completedCount) {
-      await chrome.storage.local.remove(BATCH_GENERATION_REQUEST_KEY);
-    }
-  });
+  // Completion is already durable. A housekeeping failure must not turn the
+  // generated result into a failure. Keep its proof until cleanup can finish.
+  await clearBatchGenerationRequest(job).catch(() => false);
   if (!isActive && completedCount === job.groups.length) {
     await cleanupBatchUploadSession(job);
     notifyBatchProgress(job, { status: "done", current: completedCount, total: job.groups.length, reason: "completed" });
@@ -1543,7 +1570,8 @@ async function getBatchRecovery(sender) {
     return {
       ok: true,
       recovery: null,
-      nudge: job.status !== "running" && getBatchWorkTabIds(job).includes(sourceTabId),
+      nudge: ["paused", "expired"].includes(job.status) && getBatchWorkTabIds(job).includes(sourceTabId),
+      recoveryStatus: job.status,
       ownerId: job.ownerId,
       batchId: job.batchId,
     };
@@ -1563,7 +1591,7 @@ async function focusBatchRecovery(sender) {
   if (
     !job ||
     !accountId || job.ownerId !== accountId ||
-    job.status !== "paused" ||
+    !["paused", "expired"].includes(job.status) ||
     !getBatchWorkTabIds(job).includes(callerTabId)
   ) {
     return { ok: false, error: "Batch recovery is unavailable from this tab." };
@@ -1674,9 +1702,11 @@ async function discardBatchRecovery(message, sender) {
   if (activeTabJob?.kind === "batch") {
     return { ok: false, error: "The batch is still running." };
   }
+  const requestCleared = await clearBatchGenerationRequest(job, { discard: true }).catch(() => false);
+  if (!requestCleared) return { ok: false, error: "Could not clear the saved batch. Try again." };
   if (job.status !== "done") await cleanupBatchUploadSession(job, "cancelled");
-  await chrome.storage.local.remove(BATCH_RECOVERY_STORAGE_KEY);
-  await mutateBatchGenerationRequest(() => chrome.storage.local.remove(BATCH_GENERATION_REQUEST_KEY));
+  const removed = await removeBatchRecoveryIfCurrent(job).catch(() => false);
+  if (!removed) return { ok: false, error: "Could not clear the saved batch. Try again." };
   return { ok: true };
 }
 
@@ -1684,6 +1714,25 @@ function mutateBatchGenerationRequest(operation) {
   const result = batchGenerationRequestQueue.then(operation);
   batchGenerationRequestQueue = result.catch(() => {});
   return result;
+}
+
+function isCompletedBatchGenerationRequest(pending, job) {
+  return pending?.accountId === job.ownerId && pending.batchId === job.batchId &&
+    Number(pending.itemIndex) > 0 && Number(pending.itemIndex) <= Number(job.completedCount || 0);
+}
+
+function clearBatchGenerationRequest(job, { discard = false } = {}) {
+  return mutateBatchGenerationRequest(async () => {
+    const pending = (await chrome.storage.local.get(BATCH_GENERATION_REQUEST_KEY))[BATCH_GENERATION_REQUEST_KEY];
+    if (!pending) return true;
+    if (pending.accountId !== job.ownerId || pending.batchId !== job.batchId) return false;
+    if (!discard && !isCompletedBatchGenerationRequest(pending, job)) return false;
+    // Retry only this local, idempotent removal. Never replay generation or
+    // discard another account's or an unfinished item's prepared request.
+    await chrome.storage.local.remove(BATCH_GENERATION_REQUEST_KEY).catch(() =>
+      chrome.storage.local.remove(BATCH_GENERATION_REQUEST_KEY));
+    return true;
+  });
 }
 
 async function batchGenerationRequest(message, sender, save = false) {
@@ -1697,7 +1746,7 @@ async function batchGenerationRequest(message, sender, save = false) {
       return { ok: false, error: "This batch item is no longer active for the signed-in account." };
     }
     let pending = (await chrome.storage.local.get(BATCH_GENERATION_REQUEST_KEY))[BATCH_GENERATION_REQUEST_KEY];
-    if (pending && Number(pending.expiresAt) <= Date.now()) {
+    if (pending && (Number(pending.expiresAt) <= Date.now() || isCompletedBatchGenerationRequest(pending, job))) {
       await chrome.storage.local.remove(BATCH_GENERATION_REQUEST_KEY);
       pending = null;
     }
