@@ -13,6 +13,7 @@ let batchReviewQueue = Promise.resolve();
 let batchCheckpointQueue = Promise.resolve();
 let batchRecoveryQueue = Promise.resolve();
 let batchRecoveryControlQueue = Promise.resolve();
+let tabJobAdmissionQueue = Promise.resolve();
 let analyticsClientIdPromise;
 
 function createAnalyticsClientId() {
@@ -944,6 +945,11 @@ function persistBatchRecovery(job, updates = {}, options = {}) {
     const changed = () => Object.assign(new Error("This batch changed. Your photos are still saved."), { code: "BATCH_STATE_CHANGED" });
     if (!options.initialize) {
       if (!latest || latest.batchId !== job.batchId || latest.ownerId !== job.ownerId) throw changed();
+      // A Stop accepted during an asynchronous Resume invalidates the older
+      // intent, including its later metadata, progress and terminal writes.
+      if (!options.stopIntent && Number(latest.stopRevision || 0) !== Number(options.expectedStopRevision ?? job.stopRevision ?? 0)) {
+        throw Object.assign(new Error("Batch stopped."), { code: "BATCH_STATE_CHANGED", stopped: true });
+      }
       if (latest.discardRequested && !job.discardRequested && !updates.discardRequested) throw changed();
       const proposedStatus = updates.status || job.status;
       if (latest.status === "paused" && ["running", "done"].includes(proposedStatus) && !options.resume) throw changed();
@@ -951,7 +957,8 @@ function persistBatchRecovery(job, updates = {}, options = {}) {
       if (Number(latest.completedCount || 0) > Math.max(Number(job.completedCount || 0), Number(updates.completedCount || 0)) ||
           Number(latest.currentItemIndex || 0) > Math.max(Number(job.currentItemIndex || 0), Number(updates.currentItemIndex || 0))) throw changed();
     }
-    return writeBatchRecovery(job, updates);
+    return writeBatchRecovery(job, options.stopIntent
+      ? { ...updates, stopRevision: Number(latest.stopRevision || 0) + 1 } : updates);
   });
   batchRecoveryQueue = operation.catch(() => {});
   return operation;
@@ -981,6 +988,7 @@ async function writeBatchRecovery(job, updates) {
     reason: job.reason || null,
     hadIssues: job.hadIssues === true,
     discardRequested: job.discardRequested === true,
+    stopRevision: Number(job.stopRevision || 0),
     createdAt: Number(job.createdAt || Date.now()),
     updatedAt: Date.now(),
     expiresAt: Number(job.expiresAt || Date.now() + BATCH_RECOVERY_TTL_MS),
@@ -1128,6 +1136,7 @@ async function runBatchGenerationJob(job) {
         console.debug("Batch navigation unavailable:", error);
       });
       await waitForBatchTabReady(workTab.id);
+      if (job.stopRequested) throw new Error("Batch stopped. Your photos are saved.");
 
       if (!retainedWorkTab) notifyBatchProgress(job, {
         status: "tab_ready",
@@ -1323,46 +1332,48 @@ async function startBatchGeneration(message, sender) {
     };
   }
 
-  if ((await getStoredSession())?.user?.id !== ownerId) return { ok: false, error: "Your account changed. Start the batch again when ready." };
-  await batchCheckpointQueue;
-  const finalSavedBlock = await savedBatchStartBlock(ownerId, sourceTabId);
-  if (finalSavedBlock) return finalSavedBlock;
-  if (activeTabJob) return { ok: false, error: "Another tab job is already running." };
-  const job = {
-    kind: "batch",
-    ownerId,
-    batchId: createAnalyticsClientId(),
-    sourceTabId,
-    sessionId: message.sessionId,
-    inputSource: message.inputSource === "computer" ? "computer" : "phone",
-    groups,
-    completedCount: 0,
-    currentItemIndex: 0,
-    currentWorkTabId: null,
-    lastCompletedWorkTabId: null,
-    status: "running",
-    reason: null,
-    hadIssues: false,
-    createdAt: Date.now(),
-    expiresAt: Date.now() + BATCH_RECOVERY_TTL_MS,
-  };
+  return withTabJobAdmission(async () => {
+    if ((await getStoredSession())?.user?.id !== ownerId) return { ok: false, error: "Your account changed. Start the batch again when ready." };
+    await batchCheckpointQueue;
+    const finalSavedBlock = await savedBatchStartBlock(ownerId, sourceTabId);
+    if (finalSavedBlock) return finalSavedBlock;
+    if (activeTabJob) return { ok: false, error: "Another tab job is already running." };
+    const job = {
+      kind: "batch",
+      ownerId,
+      batchId: createAnalyticsClientId(),
+      sourceTabId,
+      sessionId: message.sessionId,
+      inputSource: message.inputSource === "computer" ? "computer" : "phone",
+      groups,
+      completedCount: 0,
+      currentItemIndex: 0,
+      currentWorkTabId: null,
+      lastCompletedWorkTabId: null,
+      status: "running",
+      reason: null,
+      hadIssues: false,
+      createdAt: Date.now(),
+      expiresAt: Date.now() + BATCH_RECOVERY_TTL_MS,
+    };
 
-  activeTabJob = job;
-  try {
-    await persistBatchRecovery(job, {}, { initialize: true });
-  } catch (error) {
-    if (activeTabJob === job) activeTabJob = null;
-    return { ok: false, error: "Could not save this batch for recovery." };
-  }
-  runBatchGenerationJob(job);
-  return {
-    ok: true,
-    batchId: job.batchId,
-    inputSource: job.inputSource,
-    requestedCount,
-    startedCount: groups.length,
-    limited: groups.length < requestedCount,
-  };
+    activeTabJob = job;
+    try {
+      await persistBatchRecovery(job, {}, { initialize: true });
+    } catch (error) {
+      if (activeTabJob === job) activeTabJob = null;
+      return { ok: false, error: "Could not save this batch for recovery." };
+    }
+    runBatchGenerationJob(job);
+    return {
+      ok: true,
+      batchId: job.batchId,
+      inputSource: job.inputSource,
+      requestedCount,
+      startedCount: groups.length,
+      limited: groups.length < requestedCount,
+    };
+  });
 }
 
 function markBatchItemComplete(message, sender = null) {
@@ -1624,6 +1635,14 @@ function withBatchRecoveryControl(operation) {
   return result;
 }
 
+// Only admission is serialized. Capacity checks, running work and Stop never
+// wait behind a long-running job or a recovery metadata request.
+function withTabJobAdmission(operation) {
+  const result = tabJobAdmissionQueue.then(operation);
+  tabJobAdmissionQueue = result.catch(() => {});
+  return result;
+}
+
 function focusBatchRecovery(sender) {
   return withBatchRecoveryControl(() => focusBatchRecoveryIntent(sender));
 }
@@ -1679,7 +1698,8 @@ async function focusBatchRecoveryIntent(sender) {
 }
 
 function resumeBatchGeneration(message, sender) {
-  return withBatchRecoveryControl(() => resumeBatchGenerationIntent(message, sender));
+  return withBatchRecoveryControl(() => resumeBatchGenerationIntent(message, sender))
+    .catch(error => ({ ok: false, stopped: error.stopped === true, error: error.message || "Could not resume this batch." }));
 }
 
 async function resumeBatchGenerationIntent(message, sender) {
@@ -1694,6 +1714,7 @@ async function resumeBatchGenerationIntent(message, sender) {
   }
   if (job.discardRequested) return { ok: false, discardPending: true,
     error: "Finish discarding this batch.", recovery: publicBatchRecovery(job) };
+  const resumeStopRevision = Number(job.stopRevision || 0);
   if (job.completedCount >= job.groups.length) {
     return {
       ok: true,
@@ -1721,24 +1742,34 @@ async function resumeBatchGenerationIntent(message, sender) {
       error: error.message,
     };
   }
-  await clearBatchRecoveryNudges(job);
-  job.sourceTabId = sender?.tab?.id || job.sourceTabId;
-  await persistBatchRecovery(job, {
-    status: "running",
-    message: null,
-    reason: null,
-    sourceTabId: job.sourceTabId,
-    currentWorkTabId: null,
-  }, { resume: true });
-  activeTabJob = job;
-  runBatchGenerationJob(job);
-  return {
-    ok: true,
-    batchId: job.batchId,
-    inputSource: job.inputSource,
-    completedCount: job.completedCount,
-    total: job.groups.length,
-  };
+  return withTabJobAdmission(async () => {
+    if (activeTabJob) return { ok: false, error: "Another tab job is already running." };
+    if ((await getStoredSession())?.user?.id !== job.ownerId) return { ok: false, error: "Sign in with the account that started this batch before continuing." };
+    if (activeTabJob) return { ok: false, error: "Another tab job is already running." };
+    activeTabJob = job;
+    try {
+      await clearBatchRecoveryNudges(job);
+      job.sourceTabId = sender?.tab?.id || job.sourceTabId;
+      await persistBatchRecovery(job, {
+        status: "running",
+        message: null,
+        reason: null,
+        sourceTabId: job.sourceTabId,
+        currentWorkTabId: null,
+      }, { resume: true, expectedStopRevision: resumeStopRevision });
+    } catch (error) {
+      if (activeTabJob === job) activeTabJob = null;
+      throw error;
+    }
+    runBatchGenerationJob(job);
+    return {
+      ok: true,
+      batchId: job.batchId,
+      inputSource: job.inputSource,
+      completedCount: job.completedCount,
+      total: job.groups.length,
+    };
+  });
 }
 
 function discardBatchRecovery(message, sender) {
@@ -2028,22 +2059,24 @@ async function startWardrobeRewrite(message, sender) {
   const request = validateWardrobeRewriteRequest(message, sender, available);
   if (!request.ok) return request;
 
-  if (activeTabJob) {
-    return { ok: false, error: "Another tab job is already running." };
-  }
-
-  const job = {
-    kind: "wardrobe-rewrite",
-    sourceTabId: request.sourceTabId,
-    items: request.items,
-    applyMode: message.applyMode,
-    titleLanguageCode: message.titleLanguageCode,
-    descriptionLanguageCode: message.descriptionLanguageCode,
-    descriptionFooterIncluded: message.descriptionFooterIncluded !== false,
-  };
-  activeTabJob = job;
-  runWardrobeRewriteJob(job);
-  return { ok: true, startedCount: job.items.length };
+  return withTabJobAdmission(async () => {
+    const saved = await getStoredBatchRecovery();
+    if (activeTabJob || saved?.status === "running") {
+      return { ok: false, error: "Another tab job is already running." };
+    }
+    const job = {
+      kind: "wardrobe-rewrite",
+      sourceTabId: request.sourceTabId,
+      items: request.items,
+      applyMode: message.applyMode,
+      titleLanguageCode: message.titleLanguageCode,
+      descriptionLanguageCode: message.descriptionLanguageCode,
+      descriptionFooterIncluded: message.descriptionFooterIncluded !== false,
+    };
+    activeTabJob = job;
+    runWardrobeRewriteJob(job);
+    return { ok: true, startedCount: job.items.length };
+  });
 }
 
 async function getBatchCapacity() {
@@ -2477,11 +2510,13 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
           break;
         }
         job.stopRequested = true;
+        if (activeTabJob?.kind === "batch" && activeTabJob.batchId === job.batchId) activeTabJob.stopRequested = true;
         const stoppedWork = job.currentWorkTabId
           ? sendTabMessage(job.currentWorkTabId, { type: "STOP_BATCH_ITEM", batchId: job.batchId }).catch(() => {})
           : Promise.resolve();
         let savedStop = true;
-        await persistBatchRecovery(job, { status: "paused", reason: "user_stopped", message: "Batch stopped. Your photos are saved." }).catch(() => { savedStop = false; });
+        await persistBatchRecovery(job, { status: "paused", reason: "user_stopped", message: "Batch stopped. Your photos are saved." }, { stopIntent: true }).catch(() => { savedStop = false; });
+        if (activeTabJob?.kind === "batch" && activeTabJob.batchId === job.batchId) activeTabJob.stopRequested = true;
         await stoppedWork;
         if (!savedStop) {
           sendResponse({ ok: false, error: "Could not save the stop. Keep this tab open and try Stop again." });

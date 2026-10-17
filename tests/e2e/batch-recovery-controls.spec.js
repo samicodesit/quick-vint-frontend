@@ -90,6 +90,56 @@ test("duplicate bound Resume messages during metadata refresh start only one run
   }
 });
 
+test("acknowledged Stop invalidates an in-flight Resume without another generation", async () => {
+  const flow = await pausedBatch();
+  const metadata = holdRecoveryMetadata(flow);
+  let resume;
+  try {
+    await metadata.installed;
+    const saved = (await flow.worker.evaluate(() => chrome.storage.local.get("quickvintBatchRecovery"))).quickvintBatchRecovery;
+    const work = flow.context.pages().find(page => page !== flow.controller && page.url().includes("/items/new"));
+    resume = sendFromExtensionContent(flow.context, flow.controller, { type: "RESUME_BATCH_GENERATION", batchId: saved.batchId });
+    await expect.poll(() => metadata.hits).toBe(1);
+    const stop = await sendFromExtensionContent(flow.context, work, { type: "STOP_BATCH_GENERATION", batchId: saved.batchId });
+    expect(stop.ok).toBe(true);
+    metadata.release();
+    expect((await resume).ok).toBe(false);
+    await flow.controller.waitForTimeout(250);
+    const after = (await flow.worker.evaluate(() => chrome.storage.local.get("quickvintBatchRecovery"))).quickvintBatchRecovery;
+    expect(after.status).toBe("paused");
+    expect(after.reason).toBe("user_stopped");
+    expect(flow.requests).toHaveLength(1);
+    expect(flow.cleanup).toHaveLength(0);
+    expect(await work.locator('input[type="file"]').evaluate(input => input.files.length)).toBe(2);
+    await flow.controller.locator(".batch-recovery-resume").click();
+    await expect(flow.controller.locator(".batch-title")).toHaveText("Listings ready");
+    expect(flow.requests).toHaveLength(2);
+    expect(new Set(flow.requests.map(request => request.id)).size).toBe(1);
+  } finally { metadata.release(); await Promise.allSettled([resume]); await flow.close(); }
+});
+
+test("Stop superseding a visible Resume is cancellation evidence, not another recovery failure", async () => {
+  const flow = await pausedBatch();
+  const metadata = holdRecoveryMetadata(flow);
+  try {
+    await metadata.installed;
+    const saved = (await flow.worker.evaluate(() => chrome.storage.local.get("quickvintBatchRecovery"))).quickvintBatchRecovery;
+    const work = flow.context.pages().find(page => page !== flow.controller && page.url().includes("/items/new"));
+    await flow.controller.locator(".batch-recovery-resume").click();
+    await expect.poll(() => metadata.hits).toBe(1);
+    expect((await sendFromExtensionContent(flow.context, work, { type: "STOP_BATCH_GENERATION", batchId: saved.batchId })).ok).toBe(true);
+    metadata.release();
+    await expect(flow.controller.locator(".batch-recovery-resume")).toBeEnabled();
+    await expect(flow.controller.locator(".batch-status")).toContainText("Batch stopped.");
+    await flow.worker.evaluate(() => AutoListerTelemetry.flush());
+    expect(flow.requests).toHaveLength(1);
+    expect(flow.events.filter(event => event.event === "batch_paused")).toHaveLength(1);
+    expect(flow.events.some(event => event.event === "batch_resume_failed")).toBe(false);
+    expect(flow.events.some(event => event.event === "batch_cancelled" && event.context.reason === "user_stopped"
+      && event.context.generationAttemptId === flow.requests[0].body.generationAttemptId)).toBe(true);
+  } finally { metadata.release(); await flow.close(); }
+});
+
 test("Resume disables conflicting Discard while recovery metadata is pending", async () => {
   const flow = await pausedBatch();
   const metadata = holdRecoveryMetadata(flow);
@@ -103,6 +153,78 @@ test("Resume disables conflicting Discard while recovery metadata is pending", a
     await expect(flow.controller.locator(".batch-title")).toHaveText("Listings ready");
     await expect.poll(() => flow.cleanup.length).toBe(1);
   } finally { metadata.release(); await flow.close(); }
+});
+
+test("Stop also wins after Resume reserves the runner and is clearing its old guidance", async () => {
+  const flow = await pausedBatch();
+  let resume;
+  try {
+    await flow.worker.evaluate(() => {
+      const send = chrome.tabs.sendMessage.bind(chrome.tabs);
+      globalThis.__qaClearingNudge = false;
+      const gate = new Promise(resolve => { globalThis.__qaReleaseClearNudge = resolve; });
+      chrome.tabs.sendMessage = async (tabId, message, callback) => {
+        if (message.type === "CLEAR_BATCH_RECOVERY_NUDGE") {
+          globalThis.__qaClearingNudge = true;
+          await gate;
+        }
+        return callback ? send(tabId, message, callback) : send(tabId, message);
+      };
+    });
+    const saved = (await flow.worker.evaluate(() => chrome.storage.local.get("quickvintBatchRecovery"))).quickvintBatchRecovery;
+    const work = flow.context.pages().find(page => page !== flow.controller && page.url().includes("/items/new"));
+    resume = sendFromExtensionContent(flow.context, flow.controller, { type: "RESUME_BATCH_GENERATION", batchId: saved.batchId });
+    await expect.poll(() => flow.worker.evaluate(() => globalThis.__qaClearingNudge)).toBe(true);
+    expect((await sendFromExtensionContent(flow.context, work, { type: "STOP_BATCH_GENERATION", batchId: saved.batchId })).ok).toBe(true);
+    await flow.worker.evaluate(() => globalThis.__qaReleaseClearNudge());
+    expect((await resume).ok).toBe(false);
+    await flow.controller.waitForTimeout(200);
+    const after = (await flow.worker.evaluate(() => chrome.storage.local.get("quickvintBatchRecovery"))).quickvintBatchRecovery;
+    expect(after.status).toBe("paused");
+    expect(after.reason).toBe("user_stopped");
+    expect(flow.requests).toHaveLength(1);
+    expect(flow.cleanup).toHaveLength(0);
+    await flow.controller.locator(".batch-recovery-resume").click();
+    await expect(flow.controller.locator(".batch-title")).toHaveText("Listings ready");
+    expect(flow.requests).toHaveLength(2);
+  } finally {
+    await flow.worker.evaluate(() => globalThis.__qaReleaseClearNudge?.()).catch(() => {});
+    await Promise.allSettled([resume]);
+    await flow.close();
+  }
+});
+
+test("Stop before the opened listing tab is ready issues no generation request", async () => {
+  const flow = await openBatchJourney();
+  try {
+    await flow.worker.evaluate(() => {
+      const send = chrome.tabs.sendMessage.bind(chrome.tabs);
+      globalThis.__qaBatchReadyHeld = false;
+      const gate = new Promise(resolve => { globalThis.__qaReleaseBatchReady = resolve; });
+      chrome.tabs.sendMessage = async (tabId, message, callback) => {
+        if (message.type === "BATCH_PING") {
+          globalThis.__qaBatchReadyHeld = true;
+          await gate;
+        }
+        return callback ? send(tabId, message, callback) : send(tabId, message);
+      };
+    });
+    await flow.start();
+    await expect.poll(() => flow.worker.evaluate(() => globalThis.__qaBatchReadyHeld)).toBe(true);
+    // This is the real source modal's visible Stop control, before content work.
+    await flow.controller.locator(".batch-stop").click();
+    await expect(flow.controller.locator(".batch-recovery-resume")).toBeVisible();
+    await flow.worker.evaluate(() => globalThis.__qaReleaseBatchReady());
+    await flow.controller.waitForTimeout(250);
+    expect(flow.requests).toHaveLength(0);
+    expect(flow.cleanup).toHaveLength(0);
+    await flow.controller.locator(".batch-recovery-resume").click();
+    await expect(flow.controller.locator(".batch-title")).toHaveText("Listings ready");
+    expect(flow.requests).toHaveLength(1);
+  } finally {
+    await flow.worker.evaluate(() => globalThis.__qaReleaseBatchReady?.()).catch(() => {});
+    await flow.close();
+  }
 });
 
 test("failed discard cleanup retains its exact request and supports an explicit retry", async () => {

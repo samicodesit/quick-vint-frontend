@@ -29,6 +29,14 @@ No new services, migrations, extension permissions, paid AI, live Vinted actions
   reading. A failed discard keeps its exact request and checkpoint until cleanup
   is acknowledged. Completion cleanup remains best effort and cannot relabel a
   confirmed generated listing as failed.
+- Batch Start, Resume and wardrobe rewrite share admission ownership after
+  their asynchronous checks. A durable running batch reserves ownership even
+  before a restarted worker receives its first heartbeat. Stop does not wait
+  behind Resume metadata. Its durable revision invalidates earlier Resume and
+  stale progress writes. An explicit later Resume uses the new revision.
+  Stop before a listing tab becomes ready prevents generation dispatch.
+  A Resume superseded by Stop records cancellation against the same attempt,
+  preserving the original rejection without reporting a new resume failure.
 - Discard intent is durable before remote cleanup. An unknown or partially
   completed discard offers only Retry discard, never Resume or an assurance that
   temporary photos remain saved. Successful resume/discard clears only matching

@@ -18043,6 +18043,16 @@
     restoreButton();
     if (!response?.ok) {
       if (response?.discardPending && response.recovery) { showBatchRecovery(response.recovery); return; }
+      if (response?.stopped) {
+        trackGrowthEvent("batch_cancelled", {
+          ...getBatchDiagnosticContext({ reason: "user_stopped", current: completedCount, total: batchProgressGroups.length }),
+          completedCount,
+        });
+        renderBatchProgress({ status: "paused", current: completedCount, total: batchProgressGroups.length,
+          message: response.error, reason: "user_stopped" });
+        void flushGrowthEvents();
+        return;
+      }
       trackGrowthEvent("batch_resume_failed", {
         ...getBatchDiagnosticContext({
           batchId: response?.batchId,

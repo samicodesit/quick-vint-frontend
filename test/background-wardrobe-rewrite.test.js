@@ -39,6 +39,7 @@ async function runBackground(options = {}) {
     ? []
     : [[sourceTab.id, { ...sourceTab, status: "complete" }]]);
   const runResolvers = [];
+  const batchReadyResolvers = [];
   const capacityResolvers = [];
   const pingCounts = new Map();
   const settleDelays = [];
@@ -104,6 +105,10 @@ async function runBackground(options = {}) {
       onUpdated: { addListener() {}, removeListener() {} },
       sendMessage(tabId, message, callback) {
         sentTabMessages.push({ tabId, message });
+        if (message.type === "BATCH_PING" && options.holdBatchReady) {
+          batchReadyResolvers.push(() => callback?.({ ok: true }));
+          return;
+        }
         if (tabId === sourceTab.id && message.type === "WARDROBE_REWRITE_PROGRESS") {
           sourceProgress.push(message);
           return;
@@ -218,6 +223,7 @@ async function runBackground(options = {}) {
     get recoveryWriteHeld() { return recoveryWriteHeld; },
     releaseRecoveryWrite,
     resolveRun: () => runResolvers.shift()?.(),
+    releaseBatchReady: () => batchReadyResolvers.splice(0).forEach(resolve => resolve()),
     releaseCapacity: () => capacityResolvers.splice(0).forEach((resolve) => resolve()),
     dispatchRuntimeMessage(message, sender = { tab: sourceTab }) {
       return new Promise((resolve) => listener(message, sender, resolve));
@@ -551,6 +557,59 @@ test("concurrent batch and wardrobe starts recheck the lock after capacity", asy
   assert.equal(harness.createdTabs.length, 1);
   assert.equal(harness.createdTabs[0].active, wardrobeResponse.ok);
   assert.equal(harness.sentToWorkTab.some(({ message }) => message.type === (batchResponse.ok ? "RUN_WARDROBE_REWRITE_ITEM" : "RUN_BATCH_ITEM")), false);
+});
+
+test("Stop while a new listing tab is becoming ready prevents dispatching generation", async () => {
+  const harness = await runBackground({ holdBatchReady: true, holdBatchRuns: true });
+  assert.equal((await harness.sendRuntimeMessage({ type: "START_BATCH_GENERATION", sessionId: "batch-1", groups: [["photo"]] })).ok, true);
+  const saved = harness.storageData.quickvintBatchRecovery;
+  assert.equal((await harness.sendRuntimeMessage({ type: "STOP_BATCH_GENERATION", batchId: saved.batchId })).ok, true);
+  harness.releaseBatchReady();
+  await flush();
+  assert.equal(harness.sentToWorkTab.some(({ message }) => message.type === "RUN_BATCH_ITEM"), false);
+  assert.equal(harness.storageData.quickvintBatchRecovery.status, "paused");
+  assert.equal(harness.storageData.quickvintBatchRecovery.reason, "user_stopped");
+  assert.equal(harness.cleanupCalls.length, 0);
+});
+
+test("persisted running batch reserves ownership against wardrobe after worker restart", async () => {
+  const recovery = {
+    version: 1, kind: "batch", batchId: "saved-running", ownerId: "user-1", sourceTabId: 7,
+    sessionId: "session-1", groups: [[{ name: "photo.jpg" }]], completedCount: 0,
+    currentItemIndex: 1, currentWorkTabId: null, currentGenerationAttemptId: "attempt-1",
+    status: "running", expiresAt: Date.now() + 60000,
+  };
+  const harness = await runBackground({ holdBatchRuns: true, storageData: {
+    supabaseSession: { access_token: "local-token", user: { id: "user-1" } },
+    quickvintBatchRecovery: recovery,
+  } });
+  const rewrite = await harness.sendRuntimeMessage(rewriteMessage(), { tab: { id: 8, url: sourceTab.url } });
+  assert.equal(rewrite.ok, false);
+  const heartbeat = await harness.sendRuntimeMessage({ type: "QUICKVINT_TAB_JOB_HEARTBEAT", kind: "batch" });
+  assert.equal(heartbeat.active, true);
+  assert.equal(harness.sentToWorkTab.some(({ message }) => message.type === "RUN_WARDROBE_REWRITE_ITEM"), false);
+  assert.equal(harness.sentToWorkTab.filter(({ message }) => message.type === "RUN_BATCH_ITEM").length, 1);
+});
+
+test("concurrent Resume and wardrobe admission select one owner after their asynchronous checks", async () => {
+  const photo = { name: "photo.jpg", url: "https://storage.example/photo.jpg" };
+  const harness = await runBackground({ holdBatchRuns: true, holdRuns: true, phoneFiles: [photo], storageData: {
+    supabaseSession: { access_token: "local-token", user: { id: "user-1" } },
+    quickvintBatchRecovery: {
+      version: 1, kind: "batch", batchId: "saved-paused", ownerId: "user-1", sourceTabId: 7,
+      sessionId: "session-1", groups: [[photo]], completedCount: 0, currentItemIndex: 1,
+      status: "paused", expiresAt: Date.now() + 60000,
+    },
+  } });
+  const [resume, rewrite] = await Promise.all([
+    harness.dispatchRuntimeMessage({ type: "RESUME_BATCH_GENERATION", batchId: "saved-paused" }),
+    harness.dispatchRuntimeMessage(rewriteMessage(), { tab: { id: 8, url: sourceTab.url } }),
+  ]);
+  await flush();
+  assert.notEqual(resume.ok, rewrite.ok);
+  assert.equal(harness.createdTabs.length, 1);
+  assert.equal(harness.sentToWorkTab.filter(({ message }) => message.type.startsWith("RUN_")).length, 1);
+  assert.equal(harness.storageData.quickvintBatchRecovery.status, resume.ok ? "running" : "paused");
 });
 
 test("wardrobe rewrite waits for each edit tab and reports sequential progress", async () => {
