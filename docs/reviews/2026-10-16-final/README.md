@@ -1,6 +1,6 @@
 # AutoLister flow review
 
-Current local candidate, captured 16-17 October 2026 (Amsterdam time). **Nothing here is production delivery proof.**
+Captured from the final verified candidate on 16-17 October 2026 (Amsterdam time). See [delivery status and verification](acceptance.md). Screenshots show local controlled tests.
 
 The primary agent operated and inspected the extension batch, single computer, single phone and separate web app flows. AI, auth and marketplace services were isolated. The phone transport section is from the real HTTP fault-test run and was visually inspected separately. No paid generation or live marketplace actions were used.
 
@@ -85,7 +85,7 @@ Second result keeps both photos and generated fields. Exactly two logical model 
 
 ### 10. Batch overview keeps review links
 
-Each prepared listing remains accessible; no duplicate navigation banner.
+One completed count and explicit Review links. The duplicate completion summary and progress bar are omitted.
 
 ![Batch overview keeps review links](batch-10-detail.png)
 
@@ -303,11 +303,11 @@ At 320px the progress, Copy controls and Mark as listed fit without horizontal o
 
 ![Small phone review](web-10.png)
 
-### 45. Reopening the web app preserves failed-item review
+### 45. Reload preserves failed-item review
 
-Primary-operated Chromium at 390px. Fresh app entry restored the exact batch review order. Next ready stayed disabled between unresolved failures. Copy previous copied the retained title without generation. The rejection was a controlled HTTP 422, not a live provider request.
+Primary-operated Chromium at390px. Reload kept the failed item open with the batch failure count. Next ready remained disabled between failures. Copy previous copied retained text without generation. The HTTP422 was controlled.
 
-![Reopening the web app preserves failed-item review](web-fresh-entry-failed.png)
+![Reload preserves failed-item review](web-fresh-entry-failed.png)
 
 ### 46. Explicit Retry restores ordinary controls
 
@@ -317,13 +317,13 @@ Primary clicked the existing paid-cost Retry in the local fixture. Normal Copy a
 
 ### 47. Failed replacement identifies the previous text
 
-Primary-operated browser with a controlled HTTP422. Existing Copy previous buttons preserve earlier work without another paid generation. Needs attention remains visible; the footer offers an optional explicit Retry with its cost.
+Primary-operated Chromium with a controlled HTTP422. The error is shown once; Copy previous preserves earlier work without generation. The batch count stays visible and Retry shows its cost.
 
 ![Failed replacement identifies the previous text](web-failed-replacement.png)
 
 ### 48. The failure state at 320 pixels
 
-Primary-operated viewport check. No horizontal overflow or extra recovery panel.
+Primary-operated320px viewport check after final copy cleanup. Copy previous and Retry remain reachable, with no horizontal overflow.
 
 ![The failure state at 320 pixels](web-failed-small.png)
 

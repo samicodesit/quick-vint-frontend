@@ -84,7 +84,7 @@
     "flow": "batch",
     "id": "10",
     "title": "Batch overview keeps review links",
-    "note": "Each prepared listing remains accessible; no duplicate navigation banner.",
+    "note": "One completed count and explicit Review links. The duplicate completion summary and progress bar are omitted.",
     "filename": "batch-10.png",
     "detail": "batch-10-detail.png",
     "capturedAt": "2026-10-16T20:37:46.365Z"
@@ -272,8 +272,8 @@
   {
     "flow": "web",
     "id": "fresh-entry-failed",
-    "title": "Reopening the web app preserves failed-item review",
-    "note": "Primary-operated Chromium at 390px. Fresh app entry restored the exact batch review order. Next ready stayed disabled between unresolved failures. Copy previous copied the retained title without generation. The rejection was a controlled HTTP 422, not a live provider request.",
+    "title": "Reload preserves failed-item review",
+    "note": "Primary-operated Chromium at390px. Reload kept the failed item open with the batch failure count. Next ready remained disabled between failures. Copy previous copied retained text without generation. The HTTP422 was controlled.",
     "filename": "web-fresh-entry-failed.png",
     "detail": null,
     "capturedAt": "2026-10-17T03:36:54.513269+00:00"
@@ -360,7 +360,7 @@
     "flow": "web",
     "id": "failed",
     "title": "Failed replacement identifies the previous text",
-    "note": "Primary-operated browser with a controlled HTTP422. Existing Copy previous buttons preserve earlier work without another paid generation. Needs attention remains visible; the footer offers an optional explicit Retry with its cost.",
+    "note": "Primary-operated Chromium with a controlled HTTP422. The error is shown once; Copy previous preserves earlier work without generation. The batch count stays visible and Retry shows its cost.",
     "filename": "web-failed-replacement.png",
     "detail": null
   },
@@ -368,7 +368,7 @@
     "flow": "web",
     "id": "failed-small",
     "title": "The failure state at 320 pixels",
-    "note": "Primary-operated viewport check. No horizontal overflow or extra recovery panel.",
+    "note": "Primary-operated320px viewport check after final copy cleanup. Copy previous and Retry remain reachable, with no horizontal overflow.",
     "filename": "web-failed-small.png",
     "detail": null
   },
