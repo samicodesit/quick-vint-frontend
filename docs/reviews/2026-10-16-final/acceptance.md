@@ -1,6 +1,6 @@
 # Verification and limits
 
-The final source and package passed root verification and a totally fresh independent review: **GO, no open confirmed findings**. Both minor copy findings were corrected and independently rechecked on the exact final commits. API `ea5966b` is deployed to production. Deployment 7136156767 succeeded in Production quick-vint-api, and the public app bundle plus all four shared helpers byte-match the final build. The extension production pipeline passed and pushed frontend `b1088b1`. The [Chrome Store upload-and-submit workflow](https://github.com/samicodesit/quick-vint-frontend/actions/runs/39012948783) is running its own checks. Upload and submission are not yet confirmed; Store version 1.4.16 remains live. See the [independent report](independent-review.md) for scope and limits.
+The final source and package passed root verification and a totally fresh independent review: **GO, no open confirmed findings**. Both minor copy findings were corrected and independently rechecked on the exact final commits. API `ea5966b` is deployed to production. Deployment 7136156767 succeeded in Production quick-vint-api, and the public app bundle plus all four shared helpers byte-match the final build. The extension production pipeline passed and pushed frontend `b1088b1`. The [Chrome Store release workflow](https://github.com/samicodesit/quick-vint-frontend/actions/runs/39012948783) passed, uploaded and submitted version **1.4.17**. All 35 files in its actual package match the tested package. The [post-upload status check](https://github.com/samicodesit/quick-vint-frontend/actions/runs/39014146139) confirms **PENDING_REVIEW** for 1.4.17; version **1.4.16 remains live**. The subsequent `61d635d` commit only records the uploaded version. See the [independent report](independent-review.md) for scope and limits.
 
 ## Intended experience
 
@@ -9,12 +9,15 @@ The final source and package passed root verification and a totally fresh indepe
 - Single-item upload remains reusable. Original photos, cancellation, account isolation and uncertain request identity stay protected.
 - Helper text is omitted unless it explains a necessary action, consequence or recovery. The paused web caption and duplicate extension completion summary were removed. Waiting and failure explanations remain.
 
+The original Chromium flow already activated duplicated listing tabs. Active-tab opening itself is not a new improvement. The navigation changes add explicit follow/pause controls, editing and other-tab focus protection, and ready-listing navigation. An earlier chat comparison incorrectly inferred background behavior from an `active: false` update and was withdrawn.
+
 ## Current verification
 
 | Scope | Evidence |
 | --- | --- |
 | API/site production gate | 994 tests passed, four existing opt-in skips. Lint, types, formatting and build passed on the final caption change. |
 | Frontend full gate | 124 unit checks and 290 browser checks passed, two existing opt-in skips; production build passed. |
+| Store CI | 124 unit and 275 browser tests passed, with 17 skips. Fifteen require the coordinated API checkout absent in frontend-only CI and passed in the local 290-test gate. Two are existing opt-in fault harnesses. Standard GitHub CI also passed. |
 | Actual release ZIP | 35 payload files match the validation package. Its extracted, minified extension passed 48 browser checks over three rounds. |
 | Recovery and ownership | 108 recovery checks over three rounds; 20 ownership unit tests. |
 | Final repair matrix | 51 final browser checks over three rounds, including closed controllers, delayed or missing completion, another active batch, cleanup failure, cancellation, stale progress and tracking. |
@@ -68,3 +71,7 @@ The batch summary uses a compact failed count, while the item keeps its failure 
 ## Change size
 
 Compared with the previous production commits, runtime product code changed by +1,905 / -398 lines across ten files. Tests, QA tools and documentation account for +5,711 / -344 lines, with 79 screenshot files in the production diff. Release configuration and agent rules account for +18 / -4 lines. The final screenshot walkthrough is maintained on this separate documentation branch.
+
+## Live monitoring gap discovered during delivery
+
+The 17 October watchdog email is attributable to a missing daily canary result. Dedicated canary History records Friday 16 October at 16:43 UTC redirecting from the Vinted create page to `/terms_and_conditions`, dropping the current-run marker. It used extension 1.4.16. The old extension watchdog only reports while that marker exists, and the installed Windows launcher exits zero after waiting without checking for a committed result. No Friday result reached the backend. This is a confirmed monitoring gap, not proof of a customer generation failure. The reason Vinted selected that terms screen and the required account action have not been established from a live screen. No fresh live canary or terms acceptance was performed. The latest successful selector/injection proof remains 15 October.
