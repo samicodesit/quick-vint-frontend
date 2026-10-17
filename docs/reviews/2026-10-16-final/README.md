@@ -23,13 +23,13 @@ The extension opens each new tab while preparing. It stops following automatical
 
 ### 1. Compact entry
 
-Healthy. Actual loaded extension; the existing compact entry remains.
+Actual loaded extension; the existing compact entry remains.
 
 ![Compact entry](batch-01.png)
 
 ### 2. Choose single or batch
 
-Healthy. Sellers choose single or multiple listings.
+Sellers choose single or multiple listings.
 
 ![Choose single or batch](batch-02-detail.png)
 
@@ -37,7 +37,7 @@ Healthy. Sellers choose single or multiple listings.
 
 ### 3. Photos ready to group
 
-Healthy. Four actual local image files. No permanent scrollbar in this viewport.
+Four actual local image files. No permanent scrollbar in this viewport.
 
 ![Photos ready to group](batch-03-detail.png)
 
@@ -45,7 +45,7 @@ Healthy. Four actual local image files. No permanent scrollbar in this viewport.
 
 ### 4. Group an item
 
-Healthy. Select the photos belonging to one item.
+Select the photos belonging to one item.
 
 ![Group an item](batch-04-detail.png)
 
@@ -53,7 +53,7 @@ Healthy. Select the photos belonging to one item.
 
 ### 5. Ready for one Start
 
-Healthy. Two grouped items; the seller explicitly starts generation once.
+Two grouped items; the seller explicitly starts generation once.
 
 ![Ready for one Start](batch-05-detail.png)
 
@@ -61,31 +61,31 @@ Healthy. Two grouped items; the seller explicitly starts generation once.
 
 ### 6. First tab opens while preparing
 
-Healthy. Active immediately, before controlled generation completes. Fields temporarily locked to protect edits.
+Active immediately, before controlled generation completes. Fields temporarily locked to protect edits.
 
 ![First tab opens while preparing](batch-06.png)
 
 ### 7. Second tab opens while preparing
 
-Healthy. No extra Next or Start click; the second tab is active before its response completes.
+No extra Next or Start click; the second tab is active before its response completes.
 
 ![Second tab opens while preparing](batch-07.png)
 
 ### 8. Review while the next item prepares
 
-Healthy. First result is editable; one existing banner contains navigation. Editing pauses auto-follow.
+First result is editable; one existing banner contains navigation. Editing pauses auto-follow.
 
 ![Review while the next item prepares](batch-08.png)
 
 ### 9. Batch finished and ready to review
 
-Healthy. Second result keeps both photos and generated fields. Exactly two logical model results and one final cleanup.
+Second result keeps both photos and generated fields. Exactly two logical model results and one final cleanup.
 
 ![Batch finished and ready to review](batch-09.png)
 
 ### 10. Batch overview keeps review links
 
-Healthy. Each prepared listing remains accessible; no duplicate navigation banner.
+Each prepared listing remains accessible; no duplicate navigation banner.
 
 ![Batch overview keeps review links](batch-10-detail.png)
 
@@ -95,19 +95,19 @@ Healthy. Each prepared listing remains accessible; no duplicate navigation banne
 
 ### 11. Single computer photo ready
 
-Healthy. One actual file selected and retained. The standard Generate control remains.
+One actual file selected and retained. The standard Generate control remains.
 
 ![Single computer photo ready](single-computer-01.png)
 
 ### 12. Single item generating
 
-Healthy. Same page and photo remain; the request is held by the local model fixture.
+Same page and photo remain; the request is held by the local model fixture.
 
 ![Single item generating](single-computer-02.png)
 
 ### 13. Single result is editable
 
-Healthy. Photo retained, generated title and description visible, Generate reusable.
+Photo retained, generated title and description visible, Generate reusable.
 
 ![Single result is editable](single-computer-03.png)
 
@@ -115,19 +115,19 @@ Healthy. Photo retained, generated title and description visible, Generate reusa
 
 ### 14. Single phone photos received
 
-Healthy. Actual browser downloads and file attachment; the phone session metadata is controlled locally.
+Actual browser downloads and file attachment; the phone session metadata is controlled locally.
 
 ![Single phone photos received](single-phone-01.png)
 
 ### 15. Phone photos generating on the same listing
 
-Healthy. Both photos remain on the listing while generation runs.
+Both photos remain on the listing while generation runs.
 
 ![Phone photos generating on the same listing](single-phone-02.png)
 
 ### 16. Single phone result ready
 
-Healthy. Both retained photos and editable output remain. Generate is usable again.
+Both retained photos and editable output remain. Generate is usable again.
 
 ![Single phone result ready](single-phone-03.png)
 
@@ -135,31 +135,31 @@ Healthy. Both retained photos and editable output remain. Generate is usable aga
 
 ### 17. Connection wait
 
-Healthy. Automatic retry, retained photos and honest Waiting display. No forced Resume click.
+Automatic retry, retained photos and honest Waiting display. No forced Resume click. Refreshed by the primary on 17 October after the final copy reduction.
 
 ![Connection wait](recovery-01.png)
 
 ### 18. Explicit Stop preserves photos
 
-Healthy. Seller Stop pauses the batch and preserves the exact saved request and photos.
+Seller Stop pauses the batch and preserves the exact saved request and photos. Refreshed by the primary on 17 October after the final copy reduction.
 
 ![Explicit Stop preserves photos](recovery-02.png)
 
 ### 19. Explicit recovery finishes once
 
-Healthy. New work tab replays the saved request. One exact request ID, one identical payload and one modeled result.
+New work tab replays the saved request. One exact request ID, one identical payload and one modeled result. Refreshed by the primary on 17 October after the final copy reduction.
 
 ![Explicit recovery finishes once](recovery-03.png)
 
 ### 20. Server result still finishing
 
-Healthy. Controlled server commit-pending response shows Waiting and Finishing generation, with the exact ready count. Automatic replay continues.
+Controlled server commit-pending response shows Waiting and Finishing generation, with the exact ready count. Automatic replay continues. Refreshed by the primary on 17 October after the final copy reduction.
 
 ![Server result still finishing](recovery-04.png)
 
 ### 21. Photo download waits automatically
 
-Actual extension and files. One source-photo fetch was interrupted locally. No generation request was made while waiting.
+Actual extension and clothing files. Controlled source-photo fetch aborts keep the batch waiting, with no generation request while downloads are unavailable.
 
 ![Photo download waits automatically](photo-download-wait.png)
 
@@ -171,7 +171,7 @@ One existing status banner. This controlled interruption requires no Resume clic
 
 ### 23. Photo download recovers after a worker restart
 
-Primary-operated browser journey. The connection returned and the batch finished automatically: two photos, one injection, one modeled generation and one cleanup.
+Primary-operated Chromium with controlled fetch aborts and actual worker termination. The client heartbeat message wakes the worker. Fetches resume automatically: two photos, one injection, one modeled generation and one cleanup.
 
 ![Photo download recovers after a worker restart](photo-download-recovered.png)
 
@@ -193,87 +193,105 @@ Primary clicked Start new batch, then the batch upload choice. The old checkpoin
 
 ![Start a fresh upload without losing the listing tab](expired-fresh-upload.png)
 
+### 27. Recovery controls act once across tabs
+
+One controller after Return from both retained listing tabs. During explicit Resume, conflicting actions are disabled. The earlier listing photos remain.
+
+![Recovery controls act once across tabs](recovery-control-pending.png)
+
+### 28. An unconfirmed discard offers only Retry discard
+
+Cleanup HTTP 500 was controlled. Reload offers only Retry discard. Successful retry clears obsolete guidance and retains both listing photos. Remote storage retention after a production error is untested.
+
+![An unconfirmed discard offers only Retry discard](recovery-discard-failed.png)
+
+### 29. Completed listings do not wait for housekeeping
+
+Both listings reached ready and Done worked while the cleanup response was held. A separate MV3 regression protects the next batch from late cleanup.
+
+![Completed listings do not wait for housekeeping](completion-cleanup-pending.png)
+
 ## Web app batch
 
-### 27. First-use style preferences
+### 30. First-use style preferences
 
-Healthy. Existing compact preference setup; no batch redesign.
+Existing compact preference setup; no batch redesign.
 
 ![First-use style preferences](web-01.png)
 
-### 28. Web batch photos ready to group
+### 31. Web batch photos ready to group
 
-Healthy. Existing compact web grouping. Four actual local photos.
+Existing compact web grouping. Four actual local photos.
 
 ![Web batch photos ready to group](web-02.png)
 
-### 29. Web batch ready for Start
+### 32. Web batch ready for Start
 
-Healthy. Two grouped drafts. Start stays explicit.
+Two grouped drafts. Start stays explicit.
 
 ![Web batch ready for Start](web-03.png)
 
-### 30. Batch starts in place
+### 33. Batch starts in place
 
-Healthy. No automatic navigation on mobile.
+No automatic navigation on mobile.
 
 ![Batch starts in place](web-04.png)
 
-### 31. First item ready before the batch finishes
+### 34. First item ready before the batch finishes
 
-Healthy. Ready row offers Review instead of settings; second item continues.
+Ready row offers Review instead of settings; second item continues.
 
 ![First item ready before the batch finishes](web-05.png)
 
-### 32. Review and Copy while the batch continues
+### 35. Review and Copy while the batch continues
 
-Healthy. Compact progress remains; Copy works, unfinished Next is disabled.
+Compact progress remains; Copy works, unfinished Next is disabled.
 
 ![Review and Copy while the batch continues](web-06.png)
 
-### 33. Batch finishes without moving the seller
+### 36. Batch finishes without moving the seller
 
-Healthy. Text edits and focus remain; Next ready item is now available.
+Text edits and focus remain; Next ready item is now available.
 
 ![Batch finishes without moving the seller](web-07.png)
 
-### 34. Explicit next ready item
+### 37. Explicit next ready item
 
-Healthy. Next opens Dress 2. Seller chooses when to move; Copy and Mark as listed remain accessible.
+Next opens Dress 2. Seller chooses when to move; Copy and Mark as listed remain accessible.
 
 ![Explicit next ready item](web-08.png)
 
-### 35. Both ready rows offer Review
+### 38. Both ready rows offer Review
 
-Healthy. Settings icons are replaced by Review on ready items.
+Settings icons are replaced by Review on ready items.
 
 ![Both ready rows offer Review](web-09.png)
 
-### 36. Small phone review
+### 39. Small phone review
 
-Healthy. At 320px the progress, Copy controls and Mark as listed fit without horizontal overflow.
+At 320px the progress, Copy controls and Mark as listed fit without horizontal overflow.
 
 ![Small phone review](web-10.png)
 
-### 37. Failed replacement identifies the previous text
+### 40. Failed replacement identifies the previous text
 
 Primary-operated browser with a controlled HTTP422. Existing Copy previous buttons preserve earlier work without another paid generation. Needs attention remains visible; the footer offers an optional explicit Retry with its cost.
 
 ![Failed replacement identifies the previous text](web-failed-replacement.png)
 
-### 38. The failure state at 320 pixels
+### 41. The failure state at 320 pixels
 
 Primary-operated viewport check. No horizontal overflow or extra recovery panel.
 
 ![The failure state at 320 pixels](web-failed-small.png)
 
-### 39. Explicit retry restores the normal review screen
+### 42. Explicit retry restores the normal review screen
 
 Primary clicked Retry against the local model. Photos remained, the new text appeared, and ordinary Copy and Mark as listed returned.
 
 ![Explicit retry restores the normal review screen](web-retry-ready.png)
 
-### 40. Other failed items remain visible after retry and reload
+### 43. Other failed items remain visible after retry and reload
 
 Automated real-browser evidence, separately inspected. One item was retried successfully. The other still shows Needs attention after reload.
 
@@ -281,45 +299,45 @@ Automated real-browser evidence, separately inspected. One item was retried succ
 
 ## Web app single item
 
-### 41. Single web item with photos
+### 44. Single web item with photos
 
-Healthy. Existing compact single-item workspace and Generate.
+Existing compact single-item workspace and Generate.
 
 ![Single web item with photos](web-single-01.png)
 
-### 42. Single web item prepares in place
+### 45. Single web item prepares in place
 
-Healthy. Photos stay visible and there is no batch navigation.
+Photos stay visible and there is no batch navigation.
 
 ![Single web item prepares in place](web-single-02.png)
 
-### 43. Single web result ready to Copy
+### 46. Single web result ready to Copy
 
-Healthy. Existing compact review screen, clipboard works, photos retained.
+Existing compact review screen, clipboard works, photos retained.
 
 ![Single web result ready to Copy](web-single-03.png)
 
 ## Phone transport
 
-### 44. Connection loss keeps the selected photos
+### 47. Connection loss keeps the selected photos
 
 Passed. Actual multipart upload over loopback HTTP with controlled socket loss. Automatic retry and explicit Cancel remain available.
 
 ![Connection loss keeps the selected photos](phone-transport-01.png)
 
-### 45. Progressing slow upload completes
+### 48. Progressing slow upload completes
 
 Passed. One actual upload took about 60 seconds without a retry. The noise image is deliberate high-entropy test data.
 
 ![Progressing slow upload completes](phone-transport-02.png)
 
-### 46. Expired session is terminal
+### 49. Expired session is terminal
 
 Passed. Explicit HTTP 410 shows clear expiry guidance without revived Retry or Cancel controls.
 
 ![Expired session is terminal](phone-transport-03.png)
 
-### 47. Seller cancellation stops retrying
+### 50. Seller cancellation stops retrying
 
 Passed. Actual browser Cancel stops retries and leaves the cancelled screen. The disabled photo control cannot restart this session.
 

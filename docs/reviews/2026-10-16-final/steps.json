@@ -3,7 +3,7 @@
     "flow": "batch",
     "id": "01",
     "title": "Compact entry",
-    "note": "Healthy. Actual loaded extension; the existing compact entry remains.",
+    "note": "Actual loaded extension; the existing compact entry remains.",
     "filename": "batch-01.png",
     "detail": null,
     "capturedAt": "2026-10-16T20:36:29.850Z"
@@ -12,7 +12,7 @@
     "flow": "batch",
     "id": "02",
     "title": "Choose single or batch",
-    "note": "Healthy. Sellers choose single or multiple listings.",
+    "note": "Sellers choose single or multiple listings.",
     "filename": "batch-02.png",
     "detail": "batch-02-detail.png",
     "capturedAt": "2026-10-16T20:36:30.168Z"
@@ -21,7 +21,7 @@
     "flow": "batch",
     "id": "03",
     "title": "Photos ready to group",
-    "note": "Healthy. Four actual local image files. No permanent scrollbar in this viewport.",
+    "note": "Four actual local image files. No permanent scrollbar in this viewport.",
     "filename": "batch-03.png",
     "detail": "batch-03-detail.png",
     "capturedAt": "2026-10-16T20:36:54.993Z"
@@ -30,7 +30,7 @@
     "flow": "batch",
     "id": "04",
     "title": "Group an item",
-    "note": "Healthy. Select the photos belonging to one item.",
+    "note": "Select the photos belonging to one item.",
     "filename": "batch-04.png",
     "detail": "batch-04-detail.png",
     "capturedAt": "2026-10-16T20:36:55.298Z"
@@ -39,7 +39,7 @@
     "flow": "batch",
     "id": "05",
     "title": "Ready for one Start",
-    "note": "Healthy. Two grouped items; the seller explicitly starts generation once.",
+    "note": "Two grouped items; the seller explicitly starts generation once.",
     "filename": "batch-05.png",
     "detail": "batch-05-detail.png",
     "capturedAt": "2026-10-16T20:37:01.589Z"
@@ -48,7 +48,7 @@
     "flow": "batch",
     "id": "06",
     "title": "First tab opens while preparing",
-    "note": "Healthy. Active immediately, before controlled generation completes. Fields temporarily locked to protect edits.",
+    "note": "Active immediately, before controlled generation completes. Fields temporarily locked to protect edits.",
     "filename": "batch-06.png",
     "detail": null,
     "capturedAt": "2026-10-16T20:37:08.132Z"
@@ -57,7 +57,7 @@
     "flow": "batch",
     "id": "07",
     "title": "Second tab opens while preparing",
-    "note": "Healthy. No extra Next or Start click; the second tab is active before its response completes.",
+    "note": "No extra Next or Start click; the second tab is active before its response completes.",
     "filename": "batch-07.png",
     "detail": null,
     "capturedAt": "2026-10-16T20:37:18.061Z"
@@ -66,7 +66,7 @@
     "flow": "batch",
     "id": "08",
     "title": "Review while the next item prepares",
-    "note": "Healthy. First result is editable; one existing banner contains navigation. Editing pauses auto-follow.",
+    "note": "First result is editable; one existing banner contains navigation. Editing pauses auto-follow.",
     "filename": "batch-08.png",
     "detail": null,
     "capturedAt": "2026-10-16T20:37:34.854Z"
@@ -75,7 +75,7 @@
     "flow": "batch",
     "id": "09",
     "title": "Batch finished and ready to review",
-    "note": "Healthy. Second result keeps both photos and generated fields. Exactly two logical model results and one final cleanup.",
+    "note": "Second result keeps both photos and generated fields. Exactly two logical model results and one final cleanup.",
     "filename": "batch-09.png",
     "detail": null,
     "capturedAt": "2026-10-16T20:37:40.062Z"
@@ -84,7 +84,7 @@
     "flow": "batch",
     "id": "10",
     "title": "Batch overview keeps review links",
-    "note": "Healthy. Each prepared listing remains accessible; no duplicate navigation banner.",
+    "note": "Each prepared listing remains accessible; no duplicate navigation banner.",
     "filename": "batch-10.png",
     "detail": "batch-10-detail.png",
     "capturedAt": "2026-10-16T20:37:46.365Z"
@@ -93,7 +93,7 @@
     "flow": "single-computer",
     "id": "01",
     "title": "Single computer photo ready",
-    "note": "Healthy. One actual file selected and retained. The standard Generate control remains.",
+    "note": "One actual file selected and retained. The standard Generate control remains.",
     "filename": "single-computer-01.png",
     "detail": null,
     "capturedAt": "2026-10-16T20:37:53.840Z"
@@ -102,7 +102,7 @@
     "flow": "single-computer",
     "id": "02",
     "title": "Single item generating",
-    "note": "Healthy. Same page and photo remain; the request is held by the local model fixture.",
+    "note": "Same page and photo remain; the request is held by the local model fixture.",
     "filename": "single-computer-02.png",
     "detail": null,
     "capturedAt": "2026-10-16T20:38:00.394Z"
@@ -111,7 +111,7 @@
     "flow": "single-computer",
     "id": "03",
     "title": "Single result is editable",
-    "note": "Healthy. Photo retained, generated title and description visible, Generate reusable.",
+    "note": "Photo retained, generated title and description visible, Generate reusable.",
     "filename": "single-computer-03.png",
     "detail": null,
     "capturedAt": "2026-10-16T20:38:08.536Z"
@@ -120,7 +120,7 @@
     "flow": "single-phone",
     "id": "01",
     "title": "Single phone photos received",
-    "note": "Healthy. Actual browser downloads and file attachment; the phone session metadata is controlled locally.",
+    "note": "Actual browser downloads and file attachment; the phone session metadata is controlled locally.",
     "filename": "single-phone-01.png",
     "detail": null,
     "capturedAt": "2026-10-16T20:38:27.965Z"
@@ -129,7 +129,7 @@
     "flow": "single-phone",
     "id": "02",
     "title": "Phone photos generating on the same listing",
-    "note": "Healthy. Both photos remain on the listing while generation runs.",
+    "note": "Both photos remain on the listing while generation runs.",
     "filename": "single-phone-02.png",
     "detail": null,
     "capturedAt": "2026-10-16T20:38:28.197Z"
@@ -138,7 +138,7 @@
     "flow": "single-phone",
     "id": "03",
     "title": "Single phone result ready",
-    "note": "Healthy. Both retained photos and editable output remain. Generate is usable again.",
+    "note": "Both retained photos and editable output remain. Generate is usable again.",
     "filename": "single-phone-03.png",
     "detail": null,
     "capturedAt": "2026-10-16T20:38:34.417Z"
@@ -147,7 +147,7 @@
     "flow": "recovery",
     "id": "01",
     "title": "Connection wait",
-    "note": "Healthy. Automatic retry, retained photos and honest Waiting display. No forced Resume click.",
+    "note": "Automatic retry, retained photos and honest Waiting display. No forced Resume click. Refreshed by the primary on 17 October after the final copy reduction.",
     "filename": "recovery-01.png",
     "detail": null,
     "capturedAt": "2026-10-16T20:47:32.861Z"
@@ -156,7 +156,7 @@
     "flow": "recovery",
     "id": "02",
     "title": "Explicit Stop preserves photos",
-    "note": "Healthy. Seller Stop pauses the batch and preserves the exact saved request and photos.",
+    "note": "Seller Stop pauses the batch and preserves the exact saved request and photos. Refreshed by the primary on 17 October after the final copy reduction.",
     "filename": "recovery-02.png",
     "detail": null,
     "capturedAt": "2026-10-16T20:47:46.152Z"
@@ -165,7 +165,7 @@
     "flow": "web",
     "id": "01",
     "title": "First-use style preferences",
-    "note": "Healthy. Existing compact preference setup; no batch redesign.",
+    "note": "Existing compact preference setup; no batch redesign.",
     "filename": "web-01.png",
     "detail": null,
     "capturedAt": "2026-10-16T20:39:56.981Z"
@@ -174,7 +174,7 @@
     "flow": "web",
     "id": "02",
     "title": "Web batch photos ready to group",
-    "note": "Healthy. Existing compact web grouping. Four actual local photos.",
+    "note": "Existing compact web grouping. Four actual local photos.",
     "filename": "web-02.png",
     "detail": null,
     "capturedAt": "2026-10-16T20:40:04.067Z"
@@ -183,7 +183,7 @@
     "flow": "web",
     "id": "03",
     "title": "Web batch ready for Start",
-    "note": "Healthy. Two grouped drafts. Start stays explicit.",
+    "note": "Two grouped drafts. Start stays explicit.",
     "filename": "web-03.png",
     "detail": null,
     "capturedAt": "2026-10-16T20:40:20.955Z"
@@ -192,7 +192,7 @@
     "flow": "web",
     "id": "04",
     "title": "Batch starts in place",
-    "note": "Healthy. No automatic navigation on mobile.",
+    "note": "No automatic navigation on mobile.",
     "filename": "web-04.png",
     "detail": null,
     "capturedAt": "2026-10-16T20:40:26.374Z"
@@ -201,7 +201,7 @@
     "flow": "web",
     "id": "05",
     "title": "First item ready before the batch finishes",
-    "note": "Healthy. Ready row offers Review instead of settings; second item continues.",
+    "note": "Ready row offers Review instead of settings; second item continues.",
     "filename": "web-05.png",
     "detail": null,
     "capturedAt": "2026-10-16T20:40:26.508Z"
@@ -210,7 +210,7 @@
     "flow": "web",
     "id": "06",
     "title": "Review and Copy while the batch continues",
-    "note": "Healthy. Compact progress remains; Copy works, unfinished Next is disabled.",
+    "note": "Compact progress remains; Copy works, unfinished Next is disabled.",
     "filename": "web-06.png",
     "detail": null,
     "capturedAt": "2026-10-16T20:40:33.280Z"
@@ -219,7 +219,7 @@
     "flow": "web",
     "id": "07",
     "title": "Batch finishes without moving the seller",
-    "note": "Healthy. Text edits and focus remain; Next ready item is now available.",
+    "note": "Text edits and focus remain; Next ready item is now available.",
     "filename": "web-07.png",
     "detail": null,
     "capturedAt": "2026-10-16T20:40:39.299Z"
@@ -228,7 +228,7 @@
     "flow": "web",
     "id": "08",
     "title": "Explicit next ready item",
-    "note": "Healthy. Next opens Dress 2. Seller chooses when to move; Copy and Mark as listed remain accessible.",
+    "note": "Next opens Dress 2. Seller chooses when to move; Copy and Mark as listed remain accessible.",
     "filename": "web-08.png",
     "detail": null,
     "capturedAt": "2026-10-16T20:40:46.254Z"
@@ -237,7 +237,7 @@
     "flow": "web",
     "id": "09",
     "title": "Both ready rows offer Review",
-    "note": "Healthy. Settings icons are replaced by Review on ready items.",
+    "note": "Settings icons are replaced by Review on ready items.",
     "filename": "web-09.png",
     "detail": null,
     "capturedAt": "2026-10-16T20:40:46.353Z"
@@ -246,7 +246,7 @@
     "flow": "web",
     "id": "10",
     "title": "Small phone review",
-    "note": "Healthy. At 320px the progress, Copy controls and Mark as listed fit without horizontal overflow.",
+    "note": "At 320px the progress, Copy controls and Mark as listed fit without horizontal overflow.",
     "filename": "web-10.png",
     "detail": null,
     "capturedAt": "2026-10-16T20:40:52.841Z"
@@ -255,7 +255,7 @@
     "flow": "web-single",
     "id": "01",
     "title": "Single web item with photos",
-    "note": "Healthy. Existing compact single-item workspace and Generate.",
+    "note": "Existing compact single-item workspace and Generate.",
     "filename": "web-single-01.png",
     "detail": null,
     "capturedAt": "2026-10-16T20:41:07.725Z"
@@ -264,7 +264,7 @@
     "flow": "web-single",
     "id": "02",
     "title": "Single web item prepares in place",
-    "note": "Healthy. Photos stay visible and there is no batch navigation.",
+    "note": "Photos stay visible and there is no batch navigation.",
     "filename": "web-single-02.png",
     "detail": null,
     "capturedAt": "2026-10-16T20:41:22.617Z"
@@ -273,7 +273,7 @@
     "flow": "web-single",
     "id": "03",
     "title": "Single web result ready to Copy",
-    "note": "Healthy. Existing compact review screen, clipboard works, photos retained.",
+    "note": "Existing compact review screen, clipboard works, photos retained.",
     "filename": "web-single-03.png",
     "detail": null,
     "capturedAt": "2026-10-16T20:41:22.744Z"
@@ -282,7 +282,7 @@
     "flow": "recovery",
     "id": "03",
     "title": "Explicit recovery finishes once",
-    "note": "Healthy. New work tab replays the saved request. One exact request ID, one identical payload and one modeled result.",
+    "note": "New work tab replays the saved request. One exact request ID, one identical payload and one modeled result. Refreshed by the primary on 17 October after the final copy reduction.",
     "filename": "recovery-03.png",
     "detail": null,
     "capturedAt": "2026-10-16T20:47:54.627Z"
@@ -291,7 +291,7 @@
     "flow": "recovery",
     "id": "04",
     "title": "Server result still finishing",
-    "note": "Healthy. Controlled server commit-pending response shows Waiting and Finishing generation, with the exact ready count. Automatic replay continues.",
+    "note": "Controlled server commit-pending response shows Waiting and Finishing generation, with the exact ready count. Automatic replay continues. Refreshed by the primary on 17 October after the final copy reduction.",
     "filename": "recovery-04.png",
     "detail": null,
     "capturedAt": "2026-10-16T21:03:02.908Z"
@@ -300,7 +300,7 @@
     "flow": "recovery",
     "id": "photo-wait",
     "title": "Photo download waits automatically",
-    "note": "Actual extension and files. One source-photo fetch was interrupted locally. No generation request was made while waiting.",
+    "note": "Actual extension and clothing files. Controlled source-photo fetch aborts keep the batch waiting, with no generation request while downloads are unavailable.",
     "filename": "photo-download-wait.png",
     "detail": null
   },
@@ -316,7 +316,7 @@
     "flow": "recovery",
     "id": "photo-recovered",
     "title": "Photo download recovers after a worker restart",
-    "note": "Primary-operated browser journey. The connection returned and the batch finished automatically: two photos, one injection, one modeled generation and one cleanup.",
+    "note": "Primary-operated Chromium with controlled fetch aborts and actual worker termination. The client heartbeat message wakes the worker. Fetches resume automatically: two photos, one injection, one modeled generation and one cleanup.",
     "filename": "photo-download-recovered.png",
     "detail": null
   },
@@ -374,6 +374,30 @@
     "title": "Start a fresh upload without losing the listing tab",
     "note": "Primary clicked Start new batch, then the batch upload choice. The old checkpoint was cleared; two fixture photos appeared in the fresh upload and both earlier listing photos remained. No generation was started by these actions. New fixture files are controlled, not proof of a real phone transfer.",
     "filename": "expired-fresh-upload.png",
+    "detail": null
+  },
+  {
+    "flow": "recovery",
+    "id": "control-pending",
+    "title": "Recovery controls act once across tabs",
+    "note": "One controller after Return from both retained listing tabs. During explicit Resume, conflicting actions are disabled. The earlier listing photos remain.",
+    "filename": "recovery-control-pending.png",
+    "detail": null
+  },
+  {
+    "flow": "recovery",
+    "id": "discard-pending",
+    "title": "An unconfirmed discard offers only Retry discard",
+    "note": "Cleanup HTTP 500 was controlled. Reload offers only Retry discard. Successful retry clears obsolete guidance and retains both listing photos. Remote storage retention after a production error is untested.",
+    "filename": "recovery-discard-failed.png",
+    "detail": null
+  },
+  {
+    "flow": "recovery",
+    "id": "cleanup-ready",
+    "title": "Completed listings do not wait for housekeeping",
+    "note": "Both listings reached ready and Done worked while the cleanup response was held. A separate MV3 regression protects the next batch from late cleanup.",
+    "filename": "completion-cleanup-pending.png",
     "detail": null
   },
   {

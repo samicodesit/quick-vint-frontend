@@ -17,7 +17,7 @@ Status: local candidate. Nothing in this review establishes production delivery 
 
 | Check | Result |
 | --- | --- |
-| Final frontend full production verification | Passed: 117 unit tests, 251 browser tests, two legacy opt-in skips, production build |
+| Final frontend full production verification | Passed: 117 unit tests, 263 browser tests, two legacy opt-in skips, production build. Also 93 focused checks over three rounds and six final copy checks. |
 | Backend full production verification | Passed, 994 tests, 4 opt-in skips; lint, types, format and build passed |
 | Established web browser suite | 24 checks passed, no page errors |
 | Web early-review, queued-replacement and failed-replacement journeys | Passed three rounds each; separate earlier 20-item batch passed |
@@ -36,8 +36,8 @@ An older saved record with no verifiable owner is not adopted by guessing an acc
 
 ## Remaining acceptance
 
-- Current frontend verification passed: 117 unit tests, 251 browser tests, two legacy opt-in skips, production build. The refreshed 1.4.17 package matches the committed source, production minified content, shared helpers and loaded offline worker. The established registry generator repaired frontend/backend helper parity without changing backend policy.
-- Primary-agent manual acceptance is complete for normal extension batch, computer single, phone single, worker restart during waiting, explicit Stop/Resume, web batch early review/Copy/edit retention/Next/Mark as listed, 320px layout and web single. The 47-step screenshot review includes the separately inspected real-HTTP phone fault-run screenshots. The primary's scripted browser actions were chosen step by step; the automated suites remain separate evidence. The review caught an overloaded waiting-state calculation showing 99% and Queued. Failing regressions established this for both connection and server-commit waiting. The corrected Waiting display passed 15 targeted checks across three rounds and both pictured manual recovery variants were inspected. Exact ready counts remain visible.
+- The final frontend gate passed on 25b3bf2. The refreshed 1.4.17 package matches the committed source, production minified content, shared helpers and loaded offline worker. The established registry generator repaired frontend/backend helper parity without changing backend policy.
+- Primary-agent manual acceptance is complete for normal extension batch, computer single, phone single, worker restart during waiting, explicit Stop/Resume, web batch early review/Copy/edit retention/Next/Mark as listed, 320px layout and web single. The 50-step screenshot review includes separately inspected real-HTTP phone fault-run screenshots. The primary chose the scripted browser actions step by step; automated suites remain separate evidence. The review caught an overloaded waiting-state calculation showing 99% and Queued. Failing regressions established this for both connection and server-commit waiting. The corrected Waiting display passed 15 targeted checks across three rounds and both pictured manual recovery variants were inspected. Exact ready counts remain visible.
 - Earlier independent reviews found real blockers. The terminal checkpoint, completed-request cleanup and missing expired-controller entry point are repaired and regressed as described below. Another totally fresh independent review of the final candidate is still required.
 - Production and extension Store delivery, with actual public artifact/status verification, remain separate.
 
@@ -51,7 +51,7 @@ An older saved record with no verifiable owner is not adopted by guessing an acc
 
 ## Prepared release
 
-Version 1.4.17 is packaged from frontend c61f422 and coordinated with backend 4a082c0. Its 35-file payload matches the validation package; SHA256 is 7d47d9cf411d430e3557e35e417b0e5cee1147b698a1542ae9f313897e03d76d. No upload or production push has occurred. The actual Store status query reports 1.4.16 published at 100%, with no submitted revision. A totally fresh independent review of this repaired candidate is required before deployment.
+Version 1.4.17 is packaged from frontend 25b3bf2, coordinated with unchanged backend 4a082c0. Its 35-file payload matches the validation package. SHA256: 8e83603f703dbb539c59aaf4fd7082e80988eef69c454b13b27d4845dd408376. No upload or production push has occurred. The last actual Store status query reports 1.4.16 published at 100%, with no submitted revision. Another totally fresh independent review must finish before production delivery.
 
 ## Existing live selector evidence
 
@@ -74,3 +74,19 @@ The final 48-check MV3 fault/replay/owner matrix passed three rounds in /tmp/aut
 The backend full gate passed 994 tests with four opt-in skips. One test fixture used the database session date while production budget logic uses UTC. The fixture was corrected, then its 22 tests passed in each of two opposite timezone environments and the complete gate passed. No production budget logic or migration changed.
 
 The frontend full run caught one stale assertion expecting the previous, longer recovery message. The assertion now checks the brief message and passed three repeated browser checks. It did not require a product change.
+
+## Fourth-review follow-through
+
+Concurrent Return clicks and Resume messages reproduced duplicate controllers and competing runners. Recovery controls now serialize across tabs. Conflicting buttons lock while metadata is checked. Metadata and cleanup use real AbortController cancellation with 20-second deadlines, including metadata body reading. Deadline regressions accelerate only that timer; the primary also observed the real 20-second metadata deadline and a successful subsequent explicit Resume.
+
+Cleanup HTTP 500 reproduced loss of both local discard records. Discard intent is now durable before remote cleanup. An unknown or partially completed discard offers only Retry discard, including after reload or local removal failure. It retains the exact request until acknowledgement. It does not promise that temporary server photos survived a failed cleanup. Successful retry removes matching recovery guidance and retains existing listing-tab photos. Wrong-account or stale-batch clear messages cannot hide another recovery notice.
+
+The primary manually confirmed one controller after Return from both retained listing tabs, disabled conflicting actions during Resume, discard-only recovery after reload, successful discard retry, and removal of obsolete Return guidance. Both prior listing photos stayed present. The pictured discard state omits redundant status rows, percentages and helper text.
+
+A held completion cleanup reproduced unnecessary waiting after generation was already durably complete. Listings ready and Done now proceed before housekeeping; late cleanup cannot erase a later batch. The primary operated a completed two-item batch while its cleanup response was held, then used Done before acknowledgement. Separate MV3 regressions cover the following batch and exact request isolation.
+
+Pending user discard is cancellation evidence. Its reload does not invent a second generation pause, while the original genuine rejection remains visible with its generation attempt. The final focused suites passed 45 current control/tracking/cleanup checks and 48 terminal/replay checks, each over three rounds. Six additional copy/discard checks passed after removing redundant helper text. Full frontend v9 verification passed: 117 unit tests, 263 browser checks, two legacy opt-in skips and the production build.
+
+The primary refreshed connection waiting, Stop, commit waiting and photo-recovery screenshots on the final copy. The photo journey uses actual clothing files, controlled fetch aborts and actual worker termination. The same client heartbeat message wakes the worker. Recovery completed with two listing photos, one injection, one modeled generation and one cleanup. This does not certify arbitrary OS suspension or native iOS behavior.
+
+The fourth reviewer withdrew the ownerless-pointer finding after confirming it matches the accepted policy: explicit fresh upload can replace inaccessible, unverifiable legacy recovery without adopting its account, reusing or deleting its server photos, or closing existing listing tabs. No such deletion or reuse was demonstrated.
