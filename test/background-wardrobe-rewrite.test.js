@@ -227,6 +227,11 @@ async function runBackground(options = {}) {
     addTab: tab => tabs.set(tab.id, { status: "complete", ...tab }),
     releaseBatchReady: () => batchReadyResolvers.splice(0).forEach(resolve => resolve()),
     releaseCapacity: () => capacityResolvers.splice(0).forEach((resolve) => resolve()),
+    notifyProgress(job, payload) {
+      sandbox.qaProgressJob = job;
+      sandbox.qaProgressPayload = payload;
+      return vm.runInContext("notifyBatchProgress(qaProgressJob, qaProgressPayload)", sandbox);
+    },
     dispatchRuntimeMessage(message, sender = { tab: sourceTab }) {
       return new Promise((resolve) => listener(message, sender, resolve));
     },
@@ -237,6 +242,40 @@ async function runBackground(options = {}) {
     },
   };
 }
+
+test("progress sender joins the current durable owner, batch, controller, item, attempt and Stop revision", async () => {
+  const harness = await runBackground();
+  const current = { ownerId: "user-1", batchId: "current", sourceTabId: sourceTab.id,
+    currentItemIndex: 2, currentGenerationAttemptId: "attempt-current", status: "running", stopRevision: 1 };
+  harness.storageData.quickvintBatchRecovery = structuredClone(current);
+  for (const change of [{ ownerId: "other" }, { batchId: "old" }, { sourceTabId: 999 },
+    { currentItemIndex: 1 }, { currentGenerationAttemptId: "attempt-old" }, { stopRevision: 0 }, { status: "paused" }, { discardRequested: true }]) {
+    await harness.notifyProgress({ ...current, ...change }, { status: "waiting", current: 1, total: 2 });
+  }
+  assert.equal(harness.sentTabMessages.filter(row => row.message.type === "BATCH_PROGRESS").length, 0);
+  await harness.notifyProgress(current, { status: "waiting", current: 1, total: 2 });
+  const sent = harness.sentTabMessages.filter(row => row.message.type === "BATCH_PROGRESS");
+  assert.equal(sent.length, 1);
+  assert.equal(sent[0].message.batchId, "current");
+  assert.equal(sent[0].message.itemIndex, 2);
+  assert.equal(sent[0].message.generationAttemptId, "attempt-current");
+});
+
+test("completed heartbeat proof is scoped to its account, batch, source and expiry", async () => {
+  const harness = await runBackground();
+  const completion = { ownerId: "user-1", batchId: "completed", sourceTabId: sourceTab.id, status: "done" };
+  const receipt = { ...completion, completion, expiresAt: Date.now() + 60_000 };
+  harness.storageData.quickvintBatchReviews = { completed: receipt };
+  const message = { type: "QUICKVINT_TAB_JOB_HEARTBEAT", kind: "batch", batchId: "completed" };
+  assert.equal((await harness.sendRuntimeMessage(message)).completion.batchId, "completed");
+  assert.equal((await harness.sendRuntimeMessage(message, { tab: { id: 999 } })).completion, undefined);
+  assert.equal((await harness.sendRuntimeMessage({ ...message, batchId: "different" })).completion, undefined);
+  receipt.ownerId = "other";
+  assert.equal((await harness.sendRuntimeMessage(message)).completion, undefined);
+  receipt.ownerId = "user-1";
+  receipt.expiresAt = Date.now() - 1;
+  assert.equal((await harness.sendRuntimeMessage(message)).completion, undefined);
+});
 
 test("concurrent duplicate completion messages clean up a recovered item only once", async () => {
   const harness = await runBackground({ storageData: {

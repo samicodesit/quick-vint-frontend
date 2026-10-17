@@ -1379,21 +1379,41 @@ test.describe("AutoLister extension smoke flows", () => {
       },
     });
 
-    await page.evaluate(() => {
-      for (const listener of window.__extensionHarness.runtimeListeners) {
-        listener({
-          type: "BATCH_PROGRESS",
-          status: "done",
-          current: 1,
-          total: 1,
-          batchId: "batch-observability",
-          inputSource: "computer",
-          reason: "completed",
-          createdAt: Date.now() - 5000,
-        }, {}, () => {});
-      }
+    const receipt = await page.evaluate(async () => {
+      const checkpoint = {
+        version: 1, kind: "batch", ownerId: "test-user",
+        batchId: "batch-observability", sourceTabId: 7,
+        sessionId: "saved-session", status: "done", completedCount: 1,
+        currentItemIndex: 1, currentGenerationAttemptId: "gen-observability",
+        stopRevision: 0, discardRequested: false,
+        groups: [[{ name: "one.jpg", path: "saved/one.jpg" }]],
+      };
+      await chrome.storage.local.set({ quickvintBatchRecovery: checkpoint });
+      return new Promise(resolve => {
+        for (const listener of window.__extensionHarness.runtimeListeners) {
+          listener({
+            type: "BATCH_PROGRESS",
+            ownerId: checkpoint.ownerId,
+            sourceTabId: checkpoint.sourceTabId,
+            itemIndex: checkpoint.currentItemIndex,
+            generationAttemptId: checkpoint.currentGenerationAttemptId,
+            checkpointStatus: checkpoint.status,
+            stopRevision: checkpoint.stopRevision,
+            discardRequested: checkpoint.discardRequested,
+            status: "done",
+            current: 1,
+            total: 1,
+            batchId: "batch-observability",
+            inputSource: "computer",
+            reason: "completed",
+            createdAt: Date.now() - 5000,
+          }, {}, resolve);
+        }
+      });
     });
-    await page.waitForTimeout(100);
+    expect(receipt.ok).toBe(true);
+    await expect.poll(() => page.evaluate(() => window.__eventFetches.some(({body}) =>
+      JSON.parse(body).events.some(event => event.event === "batch_done")))).toBe(true);
 
     const eventFetches = await page.evaluate(() => window.__eventFetches);
     const events = eventFetches.flatMap(({ body }) => JSON.parse(body).events);

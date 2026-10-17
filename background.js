@@ -848,20 +848,46 @@ async function waitForWardrobeRewriteTabReady(tabId, itemId, timeoutMs = 30000) 
 }
 
 async function notifyBatchProgress(job, payload) {
-  if (!job?.sourceTabId) return;
-  if ((await getStoredSession())?.user?.id !== job.ownerId) return;
+  if (!job?.sourceTabId) return false;
+  // Capture before yielding: the runner advances this job object in place.
+  const message = { type: "BATCH_PROGRESS", ownerId: job.ownerId, batchId: job.batchId,
+    sourceTabId: job.sourceTabId, itemIndex: job.currentItemIndex,
+    generationAttemptId: job.currentGenerationAttemptId || null,
+    stopRevision: Number(job.stopRevision || 0), checkpointStatus: job.status,
+    discardRequested: job.discardRequested === true,
+    inputSource: job.inputSource, reason: job.reason || null, createdAt: job.createdAt, ...payload };
+  const [session, records] = await Promise.all([
+    getStoredSession(), chrome.storage.local.get([BATCH_RECOVERY_STORAGE_KEY, BATCH_REVIEW_STORAGE_KEY]),
+  ]).catch(() => []);
+  const receipt = records?.[BATCH_REVIEW_STORAGE_KEY]?.[message.batchId];
+  const current = message.status === "done" && receipt?.completion?.status === "done" && Number(receipt.expiresAt) > Date.now()
+    ? receipt.completion : records?.[BATCH_RECOVERY_STORAGE_KEY];
+  if (session?.user?.id !== message.ownerId || !current ||
+      current.ownerId !== message.ownerId || current.batchId !== message.batchId ||
+      current.sourceTabId !== message.sourceTabId || current.status !== message.checkpointStatus ||
+      (current.discardRequested === true) !== message.discardRequested ||
+      Number(current.stopRevision || 0) !== message.stopRevision ||
+      Number(current.currentItemIndex || 0) !== Number(message.itemIndex || 0) ||
+      (current.currentGenerationAttemptId || null) !== message.generationAttemptId) return false;
   if (!["done", "paused", "failed"].includes(payload.status)) {
     void globalThis.AutoListerTelemetry?.track(payload.status === "waiting" ? "batch_worker_waiting" : "batch_worker_progress", { batchId: job.batchId, generationAttemptId: job.currentGenerationAttemptId, reason: payload.reason, inputSource: job.inputSource, phase: payload.status, itemIndex: payload.itemIndex, completedCount: job.completedCount, total: payload.total }, "extension_background", false, job.ownerId);
   }
-  const message = { type: "BATCH_PROGRESS", ownerId: job.ownerId, batchId: job.batchId, generationAttemptId: job.currentGenerationAttemptId, inputSource: job.inputSource, reason: job.reason || null, createdAt: job.createdAt, ...payload };
-  const delivery = chrome.tabs.sendMessage(job.sourceTabId, message);
-  delivery?.catch?.(() => {
+  let timeout;
+  try {
+    // A suspended controller cannot hold generation or terminal cleanup.
+    const response = await Promise.race([
+      sendTabMessage(message.sourceTabId, message),
+      new Promise((_, reject) => { timeout = setTimeout(() => reject(new Error("Progress controller unavailable")), 1000); }),
+    ]);
+    return response?.ok === true;
+  } catch {
     // A closed controller is an interruption, not a host crash. Keep terminal
     // evidence even when its content-script tracking call can no longer run.
     if (["done", "paused", "failed"].includes(payload.status)) {
       void globalThis.AutoListerTelemetry?.track(message.reason === "user_stopped" ? "batch_cancelled" : `batch_${payload.status}`, { batchId: job.batchId, generationAttemptId: job.currentGenerationAttemptId, itemIndex: job.currentItemIndex, inputSource: job.inputSource, reason: message.reason, message: payload.message, completedCount: job.completedCount, total: payload.total }, "extension_background", false, job.ownerId);
     }
-  });
+    return false;
+  } finally { clearTimeout(timeout); }
 }
 
 function getBatchWorkTabIds(job) {
@@ -1010,11 +1036,30 @@ async function writeBatchRecovery(job, updates) {
       values[BATCH_REVIEW_STORAGE_KEY] = records;
       reboundReview = review;
     }
+    if (stored.status === "done") {
+      // Completion belongs to this batch even after a later batch replaces the
+      // active recovery slot. Store no photos, generated text or credentials.
+      const next = review?.ownerId === stored.ownerId ? review : {
+        ownerId: stored.ownerId, batchId: stored.batchId, sourceTabId: stored.sourceTabId,
+        total: stored.groups.length, tabs: [], expiresAt: stored.expiresAt,
+      };
+      next.completion = {
+        ownerId: stored.ownerId, batchId: stored.batchId, sourceTabId: stored.sourceTabId,
+        status: "done", checkpointStatus: "done", current: stored.completedCount,
+        total: stored.groups.length, currentItemIndex: stored.currentItemIndex,
+        itemIndex: stored.currentItemIndex, currentGenerationAttemptId: stored.currentGenerationAttemptId,
+        generationAttemptId: stored.currentGenerationAttemptId, stopRevision: stored.stopRevision,
+        discardRequested: stored.discardRequested, inputSource: stored.inputSource,
+        reason: "completed", createdAt: stored.createdAt,
+      };
+      records[stored.batchId] = next;
+      values[BATCH_REVIEW_STORAGE_KEY] = Object.fromEntries(Object.entries(records).slice(-10));
+    }
     // Recovery controls and Back to batch must see the same controller.
     await chrome.storage.local.set(values);
     Object.assign(job, stored);
   };
-  if (Number.isInteger(updates.sourceTabId) && updates.sourceTabId !== job.sourceTabId) {
+  if (stored.status === "done" || (Number.isInteger(updates.sourceTabId) && updates.sourceTabId !== job.sourceTabId)) {
     await mutateBatchReviews(save);
   } else await save();
   if (reboundReview) void notifyBatchReview(reboundReview).catch(error => console.debug("Batch navigation unavailable:", error));
@@ -1055,13 +1100,22 @@ async function getTabJobHeartbeat(message, sender) {
   if (message.kind === "batch" && (!accountId || (activeTabJob?.kind === "batch" && activeTabJob.ownerId !== accountId))) {
     return { ok: true, active: false };
   }
+  if (message.kind === "batch" && message.batchId) {
+    const receipt = (await chrome.storage.local.get(BATCH_REVIEW_STORAGE_KEY))[BATCH_REVIEW_STORAGE_KEY]?.[message.batchId];
+    if (receipt?.ownerId === accountId && receipt.sourceTabId === sourceTabId &&
+        Number(receipt.expiresAt) > Date.now() && receipt.completion?.status === "done") {
+      return { ok: true, active: false, completion: receipt.completion };
+    }
+  }
   const active =
     activeTabJob?.kind === message.kind &&
-    activeTabJob.sourceTabId === sourceTabId;
+    activeTabJob.sourceTabId === sourceTabId &&
+    (!message.batchId || activeTabJob.batchId === message.batchId);
   if (active || message.kind !== "batch") return { ok: true, active };
 
   const recovery = await getStoredBatchRecovery();
-  if (!recovery || recovery.ownerId !== accountId || recovery.sourceTabId !== sourceTabId) {
+  if (!recovery || recovery.ownerId !== accountId || recovery.sourceTabId !== sourceTabId ||
+      (message.batchId && recovery.batchId !== message.batchId)) {
     return { ok: true, active: false };
   }
   if (recovery.status === "running") {
@@ -1118,7 +1172,7 @@ async function runBatchGenerationJob(job) {
   let lastWorkTabId = null;
   const offersByCampaign = new Map();
 
-  notifyBatchProgress(job, {
+  await notifyBatchProgress(job, {
     status: job.currentWorkTabId && job.message ? "waiting" : "queued",
     message: job.message || undefined,
     reason: job.reason || undefined,
@@ -1145,13 +1199,14 @@ async function runBatchGenerationJob(job) {
         currentGenerationAttemptId: retainedWorkTabId ? job.currentGenerationAttemptId : null,
         currentWorkTabId: retainedWorkTabId,
       });
-      if (!retainedWorkTab) notifyBatchProgress(job, {
+      if (!retainedWorkTab) await notifyBatchProgress(job, {
         status: "opening_tab",
         current: index + 1,
         total: groups.length,
         itemIndex: index + 1,
       });
 
+      if (job.stopRequested) throw new Error("Batch stopped. Your photos are saved.");
       const workTab = retainedWorkTab || await createBatchWorkTab(job);
       await persistBatchRecovery(job, { currentWorkTabId: workTab.id });
       if (!retainedWorkTab) await recordBatchWorkStart(job, index + 1, workTab.id).catch(error => {
@@ -1160,14 +1215,14 @@ async function runBatchGenerationJob(job) {
       await waitForBatchTabReady(workTab.id);
       if (job.stopRequested) throw new Error("Batch stopped. Your photos are saved.");
 
-      if (!retainedWorkTab) notifyBatchProgress(job, {
+      if (!retainedWorkTab) await notifyBatchProgress(job, {
         status: "tab_ready",
         current: index + 1,
         total: groups.length,
         itemIndex: index + 1,
       });
 
-      notifyBatchProgress(job, {
+      await notifyBatchProgress(job, {
         status: retainedWaiting ? "waiting" : "generating",
         message: retainedWaiting ? job.message : undefined,
         reason: retainedWaiting ? job.reason : undefined,
@@ -1176,6 +1231,7 @@ async function runBatchGenerationJob(job) {
         itemIndex: index + 1,
       });
 
+      if (job.stopRequested) throw new Error("Batch stopped. Your photos are saved.");
       const result = await sendTabMessage(workTab.id, {
         type: "RUN_BATCH_ITEM",
         ownerId: job.ownerId,
@@ -1207,7 +1263,7 @@ async function runBatchGenerationJob(job) {
         });
       }
 
-      notifyBatchProgress(job, {
+      await notifyBatchProgress(job, {
         status: "item_done",
         current: index + 1,
         total: groups.length,
@@ -1215,7 +1271,7 @@ async function runBatchGenerationJob(job) {
       });
 
       if (index < groups.length - 1) {
-        notifyBatchProgress(job, {
+        await notifyBatchProgress(job, {
           status: "waiting",
           current: index + 1,
           total: groups.length,
@@ -1229,7 +1285,7 @@ async function runBatchGenerationJob(job) {
     // The last item checkpoints its count and terminal status atomically before
     // releasing the exact request or source photos. No second terminal write
     // may turn a completed batch into an interruption.
-    notifyBatchProgress(job, {
+    await notifyBatchProgress(job, {
       status: "done",
       reason: "completed",
       current: groups.length,
@@ -1272,7 +1328,7 @@ async function runBatchGenerationJob(job) {
     });
     if (!paused) return;
     if (!job.stopRequested) await notifyBatchRecoveryNudge(job);
-    notifyBatchProgress(job, {
+    await notifyBatchProgress(job, {
       status: "paused",
       current: job.completedCount,
       total: groups.length,
@@ -1367,7 +1423,8 @@ async function startBatchGeneration(message, sender) {
     const job = {
       kind: "batch",
       ownerId,
-      batchId: createAnalyticsClientId(),
+      batchId: typeof message.batchId === "string" && /^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/i.test(message.batchId)
+        ? message.batchId : createAnalyticsClientId(),
       sourceTabId,
       sessionId: message.sessionId,
       inputSource: message.inputSource === "computer" ? "computer" : "phone",
@@ -1471,7 +1528,7 @@ async function completeBatchItemCheckpoint(message, sender) {
   await clearBatchGenerationRequest(job).catch(() => false);
   if (!isActive && completedCount === job.groups.length) {
     void cleanupBatchUploadSession(job);
-    notifyBatchProgress(job, { status: "done", current: completedCount, total: job.groups.length, reason: "completed" });
+    await notifyBatchProgress(job, { status: "done", current: completedCount, total: job.groups.length, reason: "completed" });
   }
   if (autoContinue) {
     activeTabJob = job;
@@ -1690,6 +1747,7 @@ async function getBatchRecoveryForTab(sender) {
   if (job.sourceTabId !== sourceTabId) job = await restoreBatchControllerIfOrphaned(job, sender, accountId);
   if (!job || job.ownerId !== accountId) return { ok: true, recovery: null };
   if (job.sourceTabId !== sourceTabId) {
+    if (job.status === "done") return { ok: true, recovery: null, nudge: false };
     return {
       ok: true,
       recovery: null,
@@ -1859,9 +1917,15 @@ function discardBatchRecovery(message, sender) {
 
 async function discardBatchRecoveryIntent(message, sender) {
   const job = await getStoredBatchRecovery();
-  if (!job) return { ok: true };
   const accountId = (await getStoredSession())?.user?.id;
   const callerId = sender?.tab?.id;
+  // Closing an older completed overview never discards a newer active batch.
+  if (message.batchId && job?.batchId !== message.batchId) {
+    const record = (await chrome.storage.local.get(BATCH_REVIEW_STORAGE_KEY))[BATCH_REVIEW_STORAGE_KEY]?.[message.batchId];
+    if (accountId && record?.ownerId === accountId && record.sourceTabId === callerId &&
+        Number(record.expiresAt) > Date.now() && record.completion?.status === "done") return { ok: true };
+  }
+  if (!job) return { ok: true };
   if (!accountId || job.ownerId !== accountId || message.batchId !== job.batchId ||
       (callerId !== job.sourceTabId && !getBatchWorkTabIds(job).includes(callerId))) {
     return { ok: false, error: "This batch is unavailable for this tab and account." };
@@ -2604,7 +2668,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
           sendResponse({ ok: false, error: "Could not save the stop. Keep this tab open and try Stop again." });
           break;
         }
-        notifyBatchProgress(job, { status: "paused", current: job.completedCount, total: job.groups.length, reason: "user_stopped", message: "Batch stopped. Your photos are saved." });
+        await notifyBatchProgress(job, { status: "paused", current: job.completedCount, total: job.groups.length, reason: "user_stopped", message: "Batch stopped. Your photos are saved." });
         sendResponse({ ok: true });
         break;
       }
@@ -2628,7 +2692,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         }
         const saved = await persistBatchRecovery(job, { reason: message.reason, message: message.message }).catch(() => null);
         if (!saved) { sendResponse({ ok: false }); break; }
-        notifyBatchProgress(job, { status: "waiting", current: job.completedCount, itemIndex: job.currentItemIndex,
+        await notifyBatchProgress(job, { status: "waiting", current: job.completedCount, itemIndex: job.currentItemIndex,
           total: job.groups.length, reason: message.reason, message: message.message });
         sendResponse({ ok: true });
         break;

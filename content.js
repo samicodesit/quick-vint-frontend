@@ -2448,6 +2448,7 @@
     stopTabJobHeartbeat();
     const state = {
       kind,
+      batchId: kind === "batch" ? batchProgressContext.batchId : null,
       timer: null,
       checking: false,
       pagehide: stopTabJobHeartbeat,
@@ -2460,10 +2461,20 @@
       const response = await sendMessage({
         type: "QUICKVINT_TAB_JOB_HEARTBEAT",
         kind,
+        ...(state.batchId ? { batchId: state.batchId } : {}),
       });
       state.checking = false;
       if (activeTabJobHeartbeat !== state || response?.active) return;
+      if (kind === "batch" && (state.batchId !== batchProgressContext.batchId ||
+          (document.getElementById(BATCH_MODAL_ID) && !batchProgressStatus))) {
+        stopTabJobHeartbeat();
+        return;
+      }
       stopTabJobHeartbeat();
+      if (response?.completion?.ownerId === batchAuthUserId && response.completion.batchId === state.batchId) {
+        handleBatchProgress(response.completion);
+        return;
+      }
       onGone(
         response?.error || "The background job stopped unexpectedly.",
         response?.recovery || null,
@@ -4145,10 +4156,8 @@
     }
 
     if (message?.type === "BATCH_PROGRESS") {
-      if (message.ownerId && message.ownerId !== batchAuthUserId) { sendResponse({ ok: false }); return false; }
-      handleBatchProgress(message);
-      sendResponse({ ok: true });
-      return false;
+      receiveBatchProgress(message).then(ok => sendResponse({ ok }), () => sendResponse({ ok: false }));
+      return true;
     }
 
     if (message?.type === "WARDROBE_REWRITE_PING") {
@@ -17524,6 +17533,7 @@
 
     batchProgressGroups = groupsWithKeys;
     batchProgressContext = {
+      batchId: createGenerationRequestId(),
       inputSource: batchInputSource === "computer" ? "computer" : "phone",
       createdAt: Date.now(),
     };
@@ -17532,6 +17542,7 @@
 
     const response = await sendMessage({
       type: "START_BATCH_GENERATION",
+      batchId: batchProgressContext.batchId,
       sessionId: batchUploadSessionId,
       inputSource: batchInputSource === "computer" ? "computer" : "phone",
       groups,
@@ -17722,7 +17733,6 @@
     createdAt,
   }) {
     const body = getBatchBody();
-    if (!body) return;
 
     const diagnostics = getBatchDiagnosticContext({
       batchId,
@@ -17744,6 +17754,7 @@
       });
       void flushGrowthEvents();
     }
+    if (!body) return;
     const modal = document.getElementById(BATCH_MODAL_ID);
     modal?.classList.remove("organizing");
     modal?.classList.add("generating");
@@ -17781,8 +17792,7 @@
     const statusText = getBatchProgressCopy({ status, current, total, message, delayMs });
     const running = isBatchProgressActive(status);
     const remaining = Math.max(0, total - current);
-    const progressTitle = status === "done" ? "Review tabs before publishing"
-      : status === "failed" ? "Generation stopped" : "";
+    const progressTitle = status === "failed" ? "Generation stopped" : "";
     const progressNote = paused || expired
       ? ""
         : status === "failed"
@@ -17800,7 +17810,7 @@
     body.innerHTML = `
       <div class="batch-progress-stage ${running ? "is-live" : ""}">
         <div class="batch-ambient" aria-hidden="true"></div>
-        ${discardPending ? "" : `<div class="batch-progress-head">
+        ${discardPending || status === "done" ? "" : `<div class="batch-progress-head">
           <div>
             <div class="batch-status ${status === "done" ? "done" : ["failed", "paused", "expired"].includes(status) ? "warning" : ""}">${escapeHtml(statusText)}</div>
             ${progressTitle ? `<div class="batch-progress-title">${progressTitle}</div>` : ""}
@@ -18107,15 +18117,35 @@
     });
   }
 
+  async function receiveBatchProgress(message) {
+    if (!message.ownerId || message.ownerId !== batchAuthUserId ||
+        !message.batchId || message.batchId !== batchProgressContext.batchId) return false;
+    if (document.getElementById(BATCH_MODAL_ID) && !batchProgressStatus) return false;
+    const records = await chrome.storage.local.get(["quickvintBatchRecovery", "quickvintBatchReviews"]);
+    const receipt = records.quickvintBatchReviews?.[message.batchId];
+    const saved = message.status === "done" && receipt?.completion?.status === "done" && Number(receipt.expiresAt) > Date.now()
+      ? receipt.completion : records.quickvintBatchRecovery;
+    if (!saved || saved.ownerId !== message.ownerId || saved.batchId !== message.batchId ||
+        saved.sourceTabId !== message.sourceTabId ||
+        (saved.discardRequested === true) !== (message.discardRequested === true) ||
+        Number(saved.stopRevision || 0) !== Number(message.stopRevision || 0) ||
+        Number(saved.currentItemIndex || 0) !== Number(message.itemIndex || 0) ||
+        (saved.currentGenerationAttemptId || null) !== (message.generationAttemptId || null) ||
+        saved.status !== message.checkpointStatus ||
+        message.batchId !== batchProgressContext.batchId || message.ownerId !== batchAuthUserId) return false;
+    handleBatchProgress(message);
+    return true;
+  }
+
   function handleBatchProgress(message) {
-    if (["done", "failed", "paused"].includes(message.status)) stopTabJobHeartbeat();
+    if (["done", "failed", "paused"].includes(message.status) && activeTabJobHeartbeat?.kind === "batch" &&
+        (!message.batchId || activeTabJobHeartbeat.batchId === message.batchId)) stopTabJobHeartbeat();
     const hasBatchModal = Boolean(document.getElementById(BATCH_MODAL_ID));
     if (message.status === "done" && Array.isArray(message.offers)) {
       queueGenerationOffers(message.offers);
     }
-    if (!hasBatchModal) return;
     renderBatchProgress(message);
-    if (message.status === "failed") {
+    if (hasBatchModal && message.status === "failed") {
       showToast(message.message || "Batch generation stopped.", "error");
     }
   }
