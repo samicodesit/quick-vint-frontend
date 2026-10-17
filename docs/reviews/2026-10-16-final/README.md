@@ -181,87 +181,99 @@ Primary-operated actual MV3 batch. One controlled final storage write failed, th
 
 ![Completion survives a temporary checkpoint failure](terminal-complete.png)
 
+### 25. Expired upload remains reachable after its controller closes
+
+Primary-operated actual Chromium tabs. After one Return action, a controlled HTTP410 expired the original session. Closing the controller restored the existing Return button with expiry guidance. Clicking it recreated this screen without refreshing the listing tab.
+
+![Expired upload remains reachable after its controller closes](expired-controller-return.png)
+
+### 26. Start a fresh upload without losing the listing tab
+
+Primary clicked Start new batch, then the batch upload choice. The old checkpoint was cleared; two fixture photos appeared in the fresh upload and both earlier listing photos remained. No generation was started by these actions. New fixture files are controlled, not proof of a real phone transfer.
+
+![Start a fresh upload without losing the listing tab](expired-fresh-upload.png)
+
 ## Web app batch
 
-### 25. First-use style preferences
+### 27. First-use style preferences
 
 Healthy. Existing compact preference setup; no batch redesign.
 
 ![First-use style preferences](web-01.png)
 
-### 26. Web batch photos ready to group
+### 28. Web batch photos ready to group
 
 Healthy. Existing compact web grouping. Four actual local photos.
 
 ![Web batch photos ready to group](web-02.png)
 
-### 27. Web batch ready for Start
+### 29. Web batch ready for Start
 
 Healthy. Two grouped drafts. Start stays explicit.
 
 ![Web batch ready for Start](web-03.png)
 
-### 28. Batch starts in place
+### 30. Batch starts in place
 
 Healthy. No automatic navigation on mobile.
 
 ![Batch starts in place](web-04.png)
 
-### 29. First item ready before the batch finishes
+### 31. First item ready before the batch finishes
 
 Healthy. Ready row offers Review instead of settings; second item continues.
 
 ![First item ready before the batch finishes](web-05.png)
 
-### 30. Review and Copy while the batch continues
+### 32. Review and Copy while the batch continues
 
 Healthy. Compact progress remains; Copy works, unfinished Next is disabled.
 
 ![Review and Copy while the batch continues](web-06.png)
 
-### 31. Batch finishes without moving the seller
+### 33. Batch finishes without moving the seller
 
 Healthy. Text edits and focus remain; Next ready item is now available.
 
 ![Batch finishes without moving the seller](web-07.png)
 
-### 32. Explicit next ready item
+### 34. Explicit next ready item
 
 Healthy. Next opens Dress 2. Seller chooses when to move; Copy and Mark as listed remain accessible.
 
 ![Explicit next ready item](web-08.png)
 
-### 33. Both ready rows offer Review
+### 35. Both ready rows offer Review
 
 Healthy. Settings icons are replaced by Review on ready items.
 
 ![Both ready rows offer Review](web-09.png)
 
-### 34. Small phone review
+### 36. Small phone review
 
 Healthy. At 320px the progress, Copy controls and Mark as listed fit without horizontal overflow.
 
 ![Small phone review](web-10.png)
 
-### 35. Failed replacement identifies the previous text
+### 37. Failed replacement identifies the previous text
 
 Primary-operated browser with a controlled HTTP422. Existing Copy previous buttons preserve earlier work without another paid generation. Needs attention remains visible; the footer offers an optional explicit Retry with its cost.
 
 ![Failed replacement identifies the previous text](web-failed-replacement.png)
 
-### 36. The failure state at 320 pixels
+### 38. The failure state at 320 pixels
 
 Primary-operated viewport check. No horizontal overflow or extra recovery panel.
 
 ![The failure state at 320 pixels](web-failed-small.png)
 
-### 37. Explicit retry restores the normal review screen
+### 39. Explicit retry restores the normal review screen
 
 Primary clicked Retry against the local model. Photos remained, the new text appeared, and ordinary Copy and Mark as listed returned.
 
 ![Explicit retry restores the normal review screen](web-retry-ready.png)
 
-### 38. Other failed items remain visible after retry and reload
+### 40. Other failed items remain visible after retry and reload
 
 Automated real-browser evidence, separately inspected. One item was retried successfully. The other still shows Needs attention after reload.
 
@@ -269,19 +281,19 @@ Automated real-browser evidence, separately inspected. One item was retried succ
 
 ## Web app single item
 
-### 39. Single web item with photos
+### 41. Single web item with photos
 
 Healthy. Existing compact single-item workspace and Generate.
 
 ![Single web item with photos](web-single-01.png)
 
-### 40. Single web item prepares in place
+### 42. Single web item prepares in place
 
 Healthy. Photos stay visible and there is no batch navigation.
 
 ![Single web item prepares in place](web-single-02.png)
 
-### 41. Single web result ready to Copy
+### 43. Single web result ready to Copy
 
 Healthy. Existing compact review screen, clipboard works, photos retained.
 
@@ -289,25 +301,25 @@ Healthy. Existing compact review screen, clipboard works, photos retained.
 
 ## Phone transport
 
-### 42. Connection loss keeps the selected photos
+### 44. Connection loss keeps the selected photos
 
 Passed. Actual multipart upload over loopback HTTP with controlled socket loss. Automatic retry and explicit Cancel remain available.
 
 ![Connection loss keeps the selected photos](phone-transport-01.png)
 
-### 43. Progressing slow upload completes
+### 45. Progressing slow upload completes
 
 Passed. One actual upload took about 60 seconds without a retry. The noise image is deliberate high-entropy test data.
 
 ![Progressing slow upload completes](phone-transport-02.png)
 
-### 44. Expired session is terminal
+### 46. Expired session is terminal
 
 Passed. Explicit HTTP 410 shows clear expiry guidance without revived Retry or Cancel controls.
 
 ![Expired session is terminal](phone-transport-03.png)
 
-### 45. Seller cancellation stops retrying
+### 47. Seller cancellation stops retrying
 
 Passed. Actual browser Cancel stops retries and leaves the cancelled screen. The disabled photo control cannot restart this session.
 

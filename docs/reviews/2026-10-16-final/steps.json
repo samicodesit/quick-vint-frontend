@@ -361,6 +361,22 @@
     "detail": null
   },
   {
+    "flow": "recovery",
+    "id": "expired-return",
+    "title": "Expired upload remains reachable after its controller closes",
+    "note": "Primary-operated actual Chromium tabs. After one Return action, a controlled HTTP410 expired the original session. Closing the controller restored the existing Return button with expiry guidance. Clicking it recreated this screen without refreshing the listing tab.",
+    "filename": "expired-controller-return.png",
+    "detail": null
+  },
+  {
+    "flow": "recovery",
+    "id": "expired-new",
+    "title": "Start a fresh upload without losing the listing tab",
+    "note": "Primary clicked Start new batch, then the batch upload choice. The old checkpoint was cleared; two fixture photos appeared in the fresh upload and both earlier listing photos remained. No generation was started by these actions. New fixture files are controlled, not proof of a real phone transfer.",
+    "filename": "expired-fresh-upload.png",
+    "detail": null
+  },
+  {
     "flow": "phone-transport",
     "id": "01",
     "title": "Connection loss keeps the selected photos",

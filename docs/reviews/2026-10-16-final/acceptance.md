@@ -17,7 +17,7 @@ Status: local candidate. Nothing in this review establishes production delivery 
 
 | Check | Result |
 | --- | --- |
-| Final frontend full production verification | Passed, 117 unit tests, 247 browser tests, 2 legacy opt-in fault harnesses skipped, production build passed |
+| Final frontend full production verification | Passed: 117 unit tests, 251 browser tests, two legacy opt-in skips, production build |
 | Backend full production verification | Passed, 994 tests, 4 opt-in skips; lint, types, format and build passed |
 | Established web browser suite | 24 checks passed, no page errors |
 | Web early-review, queued-replacement and failed-replacement journeys | Passed three rounds each; separate earlier 20-item batch passed |
@@ -36,9 +36,9 @@ An older saved record with no verifiable owner is not adopted by guessing an acc
 
 ## Remaining acceptance
 
-- Final frontend verification passed on the recorded source: 117 units, 247 browser tests, two legacy opt-in fault harnesses skipped, production build. Package validation exposed generated-registry drift from the canonical website registry; the established sync generator repaired parity without changing the backend registry or policy. The final offline package passes shared-helper, manifest/script and loaded-worker checks at prepared release version 1.4.17. Its background and manifest match the source, and its content script matches the minified production build.
-- Primary-agent manual acceptance is complete for normal extension batch, computer single, phone single, worker restart during waiting, explicit Stop/Resume, web batch early review/Copy/edit retention/Next/Mark as listed, 320px layout and web single. The 45-step screenshot review includes the separately inspected real-HTTP phone fault-run screenshots. The primary's scripted browser actions were chosen step by step; the automated suites remain separate evidence. The review caught an overloaded waiting-state calculation showing 99% and Queued. Failing regressions established this for both connection and server-commit waiting. The corrected Waiting display passed 15 targeted checks across three rounds and both pictured manual recovery variants were inspected. Exact ready counts remain visible.
-- The second fresh review blocked the earlier candidate: a final checkpoint failure produced a false paused1/1 state after cleanup. The repair now records the final count and done status together before request/photo cleanup. Three browser fault cases each passed three rounds. Both full production gates passed. The primary repeated the checkpoint-failure completion/reload and the failed replacement Copy previous/explicit Retry journeys. Another totally fresh independent review is still required.
+- Current frontend verification passed: 117 unit tests, 251 browser tests, two legacy opt-in skips, production build. The refreshed 1.4.17 package matches the committed source, production minified content, shared helpers and loaded offline worker. The established registry generator repaired frontend/backend helper parity without changing backend policy.
+- Primary-agent manual acceptance is complete for normal extension batch, computer single, phone single, worker restart during waiting, explicit Stop/Resume, web batch early review/Copy/edit retention/Next/Mark as listed, 320px layout and web single. The 47-step screenshot review includes the separately inspected real-HTTP phone fault-run screenshots. The primary's scripted browser actions were chosen step by step; the automated suites remain separate evidence. The review caught an overloaded waiting-state calculation showing 99% and Queued. Failing regressions established this for both connection and server-commit waiting. The corrected Waiting display passed 15 targeted checks across three rounds and both pictured manual recovery variants were inspected. Exact ready counts remain visible.
+- Earlier independent reviews found real blockers. The terminal checkpoint, completed-request cleanup and missing expired-controller entry point are repaired and regressed as described below. Another totally fresh independent review of the final candidate is still required.
 - Production and extension Store delivery, with actual public artifact/status verification, remain separate.
 
 ## Repairs following independent review
@@ -51,7 +51,7 @@ An older saved record with no verifiable owner is not adopted by guessing an acc
 
 ## Prepared release
 
-Version 1.4.17 is packaged locally. The actual Store status query reports 1.4.16 published at 100%, with no submitted revision. Packaging, shared-helper parity and the loaded packaged worker passed. No upload or production push has occurred. A second fresh review found the terminal checkpoint defect above. Another totally fresh independent review of the repaired candidate is required before deployment.
+Version 1.4.17 is packaged from frontend c61f422 and coordinated with backend 4a082c0. Its 35-file payload matches the validation package; SHA256 is 7d47d9cf411d430e3557e35e417b0e5cee1147b698a1542ae9f313897e03d76d. No upload or production push has occurred. The actual Store status query reports 1.4.16 published at 100%, with no submitted revision. A totally fresh independent review of this repaired candidate is required before deployment.
 
 ## Existing live selector evidence
 
@@ -62,3 +62,15 @@ The latest available saved daily DOM-canary detail is dated 2026-10-15T16:43:02.
 Extension events retain the generation attempt, batch and item joins. Mobile web uses its durable operation ID as the server request ID, joined through the authenticated request log and idempotency record. Its general analytics outcome event does not independently include the operation ID. Phone transport carries per-file operation IDs with a session-key join. Current controlled success does not establish historical recovery or credit refunds.
 
 The primary discarded a Retry screenshot captured while the queue was still preparing, then repeated the journey until the new title, enabled Copy, enabled Mark as listed and final ready count were observed. The retained screenshot shows the completed state.
+
+## Third-review follow-through
+
+The third fresh review blocked the prior candidate for completed-request cleanup and expired-controller recovery. Actual Chromium red regressions reproduced both. Cleanup now preserves durable done proof until its owner-bound request is cleared, retries only local idempotent removal, and can finish on a duplicate completion or later start. Recovery deletion is conditional and shares the write queue; a separate red regression proved an old dismissal could otherwise erase a newer checkpoint.
+
+Primary manual operation also found that returning once and then closing an expired controller removed the remaining return entry point. Controller closure now restores the existing control only for paused/expired work, with status-aware brief guidance. A completed checkpoint retained during cleanup never shows interruption guidance. The expiry screen omits repeated instructions and marks unfinished rows Expired.
+
+The final 48-check MV3 fault/replay/owner matrix passed three rounds in /tmp/autolister-terminal-cleanup-green-v3.log. The primary repeated the expiry Return and Start new batch UI with actual foreground tabs; two prior listing photos stayed present. An earlier background-tab click timeout was corrected by foregrounding the controller. No product change was based on that automation timeout.
+
+The backend full gate passed 994 tests with four opt-in skips. One test fixture used the database session date while production budget logic uses UTC. The fixture was corrected, then its 22 tests passed in each of two opposite timezone environments and the complete gate passed. No production budget logic or migration changed.
+
+The frontend full run caught one stale assertion expecting the previous, longer recovery message. The assertion now checks the brief message and passed three repeated browser checks. It did not require a product change.
