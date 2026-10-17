@@ -126,7 +126,11 @@ test("Return recreates a controller whose old tab navigated away", async () => {
     await work[0].locator(".quickvint-batch-recovery-return").click();
     await expect.poll(async () => (await flow.worker.evaluate(() => chrome.storage.local.get("quickvintBatchRecovery"))).quickvintBatchRecovery.sourceTabId).not.toBe(before.sourceTabId);
     const saved = (await flow.worker.evaluate(() => chrome.storage.local.get("quickvintBatchRecovery"))).quickvintBatchRecovery;
-    const restored = flow.context.pages().find(page => page !== flow.controller && page !== work[0] && page.url().includes("/items/new"));
+    let restored;
+    await expect.poll(() => {
+      restored = flow.context.pages().find(page => page !== flow.controller && page !== work[0] && page.url().includes("/items/new"));
+      return Boolean(restored);
+    }).toBe(true);
     await expect(restored.locator(".batch-recovery-resume")).toBeVisible();
     await work[0].bringToFront();
     await work[0].getByRole("button", { name: "Back to batch", exact: true }).click();
