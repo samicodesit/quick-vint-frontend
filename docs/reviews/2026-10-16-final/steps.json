@@ -401,6 +401,33 @@
     "detail": null
   },
   {
+    "flow": "recovery",
+    "id": "stop-precedence",
+    "title": "Stop takes priority over an older Resume",
+    "note": "Primary-operated Chromium. A metadata response was held, then Stop was accepted from the bound work-tab protocol. Releasing that response started no generation. This specifically exercises stale-control handling.",
+    "filename": "recovery-stop-precedence.png",
+    "detail": null,
+    "capturedAt": "2026-10-17T01:34:15.886261+00:00"
+  },
+  {
+    "flow": "recovery",
+    "id": "stop-before-ready",
+    "title": "Stop before the opened tab becomes ready",
+    "note": "Primary clicked the visible Stop batch button while tab readiness messaging was held. Releasing readiness issued zero generation requests and no cleanup. Both source photos remained available.",
+    "filename": "recovery-stop-before-ready.png",
+    "detail": null,
+    "capturedAt": "2026-10-17T01:34:15.886273+00:00"
+  },
+  {
+    "flow": "recovery",
+    "id": "stop-explicit-resume",
+    "title": "Only explicit Resume continues the stopped batch",
+    "note": "Primary clicked Resume afterward. One logical request produced the retained two-photo listing. Model, auth and host services were controlled fixtures.",
+    "filename": "recovery-stop-explicit-resume.png",
+    "detail": null,
+    "capturedAt": "2026-10-17T01:34:15.886278+00:00"
+  },
+  {
     "flow": "phone-transport",
     "id": "01",
     "title": "Connection loss keeps the selected photos",

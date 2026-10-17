@@ -211,87 +211,105 @@ Both listings reached ready and Done worked while the cleanup response was held.
 
 ![Completed listings do not wait for housekeeping](completion-cleanup-pending.png)
 
+### 30. Stop takes priority over an older Resume
+
+Primary-operated Chromium. A metadata response was held, then Stop was accepted from the bound work-tab protocol. Releasing that response started no generation. This specifically exercises stale-control handling.
+
+![Stop takes priority over an older Resume](recovery-stop-precedence.png)
+
+### 31. Stop before the opened tab becomes ready
+
+Primary clicked the visible Stop batch button while tab readiness messaging was held. Releasing readiness issued zero generation requests and no cleanup. Both source photos remained available.
+
+![Stop before the opened tab becomes ready](recovery-stop-before-ready.png)
+
+### 32. Only explicit Resume continues the stopped batch
+
+Primary clicked Resume afterward. One logical request produced the retained two-photo listing. Model, auth and host services were controlled fixtures.
+
+![Only explicit Resume continues the stopped batch](recovery-stop-explicit-resume.png)
+
 ## Web app batch
 
-### 30. First-use style preferences
+### 33. First-use style preferences
 
 Existing compact preference setup; no batch redesign.
 
 ![First-use style preferences](web-01.png)
 
-### 31. Web batch photos ready to group
+### 34. Web batch photos ready to group
 
 Existing compact web grouping. Four actual local photos.
 
 ![Web batch photos ready to group](web-02.png)
 
-### 32. Web batch ready for Start
+### 35. Web batch ready for Start
 
 Two grouped drafts. Start stays explicit.
 
 ![Web batch ready for Start](web-03.png)
 
-### 33. Batch starts in place
+### 36. Batch starts in place
 
 No automatic navigation on mobile.
 
 ![Batch starts in place](web-04.png)
 
-### 34. First item ready before the batch finishes
+### 37. First item ready before the batch finishes
 
 Ready row offers Review instead of settings; second item continues.
 
 ![First item ready before the batch finishes](web-05.png)
 
-### 35. Review and Copy while the batch continues
+### 38. Review and Copy while the batch continues
 
 Compact progress remains; Copy works, unfinished Next is disabled.
 
 ![Review and Copy while the batch continues](web-06.png)
 
-### 36. Batch finishes without moving the seller
+### 39. Batch finishes without moving the seller
 
 Text edits and focus remain; Next ready item is now available.
 
 ![Batch finishes without moving the seller](web-07.png)
 
-### 37. Explicit next ready item
+### 40. Explicit next ready item
 
 Next opens Dress 2. Seller chooses when to move; Copy and Mark as listed remain accessible.
 
 ![Explicit next ready item](web-08.png)
 
-### 38. Both ready rows offer Review
+### 41. Both ready rows offer Review
 
 Settings icons are replaced by Review on ready items.
 
 ![Both ready rows offer Review](web-09.png)
 
-### 39. Small phone review
+### 42. Small phone review
 
 At 320px the progress, Copy controls and Mark as listed fit without horizontal overflow.
 
 ![Small phone review](web-10.png)
 
-### 40. Failed replacement identifies the previous text
+### 43. Failed replacement identifies the previous text
 
 Primary-operated browser with a controlled HTTP422. Existing Copy previous buttons preserve earlier work without another paid generation. Needs attention remains visible; the footer offers an optional explicit Retry with its cost.
 
 ![Failed replacement identifies the previous text](web-failed-replacement.png)
 
-### 41. The failure state at 320 pixels
+### 44. The failure state at 320 pixels
 
 Primary-operated viewport check. No horizontal overflow or extra recovery panel.
 
 ![The failure state at 320 pixels](web-failed-small.png)
 
-### 42. Explicit retry restores the normal review screen
+### 45. Explicit retry restores the normal review screen
 
 Primary clicked Retry against the local model. Photos remained, the new text appeared, and ordinary Copy and Mark as listed returned.
 
 ![Explicit retry restores the normal review screen](web-retry-ready.png)
 
-### 43. Other failed items remain visible after retry and reload
+### 46. Other failed items remain visible after retry and reload
 
 Automated real-browser evidence, separately inspected. One item was retried successfully. The other still shows Needs attention after reload.
 
@@ -299,19 +317,19 @@ Automated real-browser evidence, separately inspected. One item was retried succ
 
 ## Web app single item
 
-### 44. Single web item with photos
+### 47. Single web item with photos
 
 Existing compact single-item workspace and Generate.
 
 ![Single web item with photos](web-single-01.png)
 
-### 45. Single web item prepares in place
+### 48. Single web item prepares in place
 
 Photos stay visible and there is no batch navigation.
 
 ![Single web item prepares in place](web-single-02.png)
 
-### 46. Single web result ready to Copy
+### 49. Single web result ready to Copy
 
 Existing compact review screen, clipboard works, photos retained.
 
@@ -319,25 +337,25 @@ Existing compact review screen, clipboard works, photos retained.
 
 ## Phone transport
 
-### 47. Connection loss keeps the selected photos
+### 50. Connection loss keeps the selected photos
 
 Passed. Actual multipart upload over loopback HTTP with controlled socket loss. Automatic retry and explicit Cancel remain available.
 
 ![Connection loss keeps the selected photos](phone-transport-01.png)
 
-### 48. Progressing slow upload completes
+### 51. Progressing slow upload completes
 
 Passed. One actual upload took about 60 seconds without a retry. The noise image is deliberate high-entropy test data.
 
 ![Progressing slow upload completes](phone-transport-02.png)
 
-### 49. Expired session is terminal
+### 52. Expired session is terminal
 
 Passed. Explicit HTTP 410 shows clear expiry guidance without revived Retry or Cancel controls.
 
 ![Expired session is terminal](phone-transport-03.png)
 
-### 50. Seller cancellation stops retrying
+### 53. Seller cancellation stops retrying
 
 Passed. Actual browser Cancel stops retries and leaves the cancelled screen. The disabled photo control cannot restart this session.
 

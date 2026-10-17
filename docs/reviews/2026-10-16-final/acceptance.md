@@ -17,7 +17,7 @@ Status: local candidate. Nothing in this review establishes production delivery 
 
 | Check | Result |
 | --- | --- |
-| Final frontend full production verification | Passed: 117 unit tests, 263 browser tests, two legacy opt-in skips, production build. Also 93 focused checks over three rounds and six final copy checks. |
+| Final frontend full production verification | Passed: 120 unit tests, 267 browser tests, two legacy opt-in skips, production build. Final focused matrix: 105 browser checks across three rounds. |
 | Backend full production verification | Passed, 994 tests, 4 opt-in skips; lint, types, format and build passed |
 | Established web browser suite | 24 checks passed, no page errors |
 | Web early-review, queued-replacement and failed-replacement journeys | Passed three rounds each; separate earlier 20-item batch passed |
@@ -36,8 +36,8 @@ An older saved record with no verifiable owner is not adopted by guessing an acc
 
 ## Remaining acceptance
 
-- The final frontend gate passed on 25b3bf2. The refreshed 1.4.17 package matches the committed source, production minified content, shared helpers and loaded offline worker. The established registry generator repaired frontend/backend helper parity without changing backend policy.
-- Primary-agent manual acceptance is complete for normal extension batch, computer single, phone single, worker restart during waiting, explicit Stop/Resume, web batch early review/Copy/edit retention/Next/Mark as listed, 320px layout and web single. The 50-step screenshot review includes separately inspected real-HTTP phone fault-run screenshots. The primary chose the scripted browser actions step by step; automated suites remain separate evidence. The review caught an overloaded waiting-state calculation showing 99% and Queued. Failing regressions established this for both connection and server-commit waiting. The corrected Waiting display passed 15 targeted checks across three rounds and both pictured manual recovery variants were inspected. Exact ready counts remain visible.
+- The final frontend gate passed on 3af5f83. The refreshed 1.4.17 package matches the committed source, production minified content, six shared helpers and loaded offline worker. Another totally fresh independent review is required before production delivery.
+- Primary-agent manual acceptance is complete for normal extension batch, computer single, phone single, worker restart during waiting, explicit Stop/Resume, web batch early review/Copy/edit retention/Next/Mark as listed, 320px layout and web single. The 53-step screenshot review includes separately inspected real-HTTP phone fault-run screenshots. The primary chose the scripted browser actions step by step; automated suites remain separate evidence. The review caught an overloaded waiting-state calculation showing 99% and Queued. Failing regressions established this for both connection and server-commit waiting. The corrected Waiting display passed 15 targeted checks across three rounds and both pictured manual recovery variants were inspected. Exact ready counts remain visible.
 - Earlier independent reviews found real blockers. The terminal checkpoint, completed-request cleanup and missing expired-controller entry point are repaired and regressed as described below. Another totally fresh independent review of the final candidate is still required.
 - Production and extension Store delivery, with actual public artifact/status verification, remain separate.
 
@@ -51,7 +51,7 @@ An older saved record with no verifiable owner is not adopted by guessing an acc
 
 ## Prepared release
 
-Version 1.4.17 is packaged from frontend 25b3bf2, coordinated with unchanged backend 4a082c0. Its 35-file payload matches the validation package. SHA256: 8e83603f703dbb539c59aaf4fd7082e80988eef69c454b13b27d4845dd408376. No upload or production push has occurred. The last actual Store status query reports 1.4.16 published at 100%, with no submitted revision. Another totally fresh independent review must finish before production delivery.
+Version 1.4.17 is packaged from frontend 3af5f837c64f144fcec9046d3ae7e061c7b491e9, coordinated with unchanged backend 4a082c052b223c819444640d0c28fec90cde86ee. Its 35-file payload matches the validation package. SHA256: c7f2243cb83f1437c816309a040257dce044eb41eeaa00fe404fd88c5ebc83eb. No upload or production push has occurred. Actual Store query 38993029024 reports 1.4.16 published at 100%, with no submitted revision. Another totally fresh independent review must finish before production delivery.
 
 ## Existing live selector evidence
 
@@ -90,3 +90,15 @@ Pending user discard is cancellation evidence. Its reload does not invent a seco
 The primary refreshed connection waiting, Stop, commit waiting and photo-recovery screenshots on the final copy. The photo journey uses actual clothing files, controlled fetch aborts and actual worker termination. The same client heartbeat message wakes the worker. Recovery completed with two listing photos, one injection, one modeled generation and one cleanup. This does not certify arbitrary OS suspension or native iOS behavior.
 
 The fourth reviewer withdrew the ownerless-pointer finding after confirming it matches the accepted policy: explicit fresh upload can replace inaccessible, unverifiable legacy recovery without adopting its account, reusing or deleting its server photos, or closing existing listing tabs. No such deletion or reuse was demonstrated.
+
+## Fifth-review follow-through
+
+A fresh background-context reproduction confirmed that wardrobe rewrite could take ownership while a batch remained durably running after worker restart. Batch Start, Resume and wardrobe admission now share a short serialized ownership check. The saved running record also blocks wardrobe admission before the first batch heartbeat. Concurrent Resume and wardrobe requests admit one runner.
+
+Actual Chromium confirmed that an older Resume could overwrite acknowledged Stop after held metadata returned. Stop now advances a durable revision, invalidating the older Resume and stale writes. A separate regression covers Stop after Resume reserves its runner, while old guidance is being cleared. A newly demonstrated tab-readiness race is also repaired: Stop before readiness prevents generation dispatch.
+
+The primary clicked the visible Resume and Stop controls in isolated Chromium. One exceptional stale-control check sent Stop from the authorized work-tab protocol while metadata was held. Releasing metadata started no new generation. A subsequent explicit Resume completed the same logical request with both photos. A real source-modal Stop before tab readiness issued zero generation requests and no cleanup. The primary inspected all three added screenshots.
+
+The UI previously labelled a Resume superseded by Stop as a resume failure. It now records the existing cancellation event with the same generation attempt. The original definitive rejection stays visible. This is verified against the captured event stream, not inferred from the wording on screen.
+
+The final focused matrix passed 105 browser checks over three rounds. The ownership suite passed 48 unit checks across three rounds. Full frontend verification then passed: 120 unit tests, 267 browser tests, two legacy opt-in skips and the production build. Another totally fresh independent review remains required before production delivery.
