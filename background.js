@@ -927,7 +927,7 @@ function notifyWardrobeRewriteProgress(job, payload) {
   if (!job?.sourceTabId) return;
   job.telemetryOperationId ||= createAnalyticsClientId();
   const event = payload.status === "failed" ? "wardrobe_rewrite_failed" : payload.status === "done" ? "wardrobe_rewrite_done" : "wardrobe_rewrite_progress";
-  void globalThis.AutoListerTelemetry?.track(event, { operationId: job.telemetryOperationId, mode: "wardrobe_rewrite", phase: payload.status, itemIndex: payload.itemIndex || payload.current, total: payload.total, message: payload.message }, "extension_background");
+  void globalThis.AutoListerTelemetry?.track(event, { operationId: job.telemetryOperationId, mode: "wardrobe_rewrite", phase: payload.status, itemIndex: payload.itemIndex || payload.current, total: payload.total, completedCount: payload.completedCount, reason: payload.reason, errorCode: payload.errorCode, message: payload.message }, "extension_background");
   chrome.tabs.sendMessage(job.sourceTabId, {
     type: "WARDROBE_REWRITE_PROGRESS",
     ...payload,
@@ -2094,8 +2094,40 @@ function validateWardrobeRewriteRequest(message, sender, available) {
   return { ok: true, sourceTabId, items };
 }
 
+async function sendWardrobeRewriteItem(tabId, message) {
+  let loadingObserved = false;
+  const onUpdated = (updatedTabId, changeInfo) => {
+    if (updatedTabId === tabId && changeInfo.status === "loading") loadingObserved = true;
+  };
+  // Observe only this in-flight edit tab. Do not infer a navigation from a
+  // generic port failure, or replay a generation whose result may be charged.
+  chrome.tabs.onUpdated.addListener(onUpdated);
+  try {
+    return await sendTabMessage(tabId, message);
+  } catch (error) {
+    if (/message (?:channel|port) closed|receiving end does not exist|no tab with id/i.test(error.message || "")) {
+      const state = await new Promise(resolve => {
+        chrome.tabs.get(tabId, tab => {
+          const lookupError = chrome.runtime.lastError;
+          resolve({
+            tab: lookupError ? null : tab,
+            closed: /no tab with id/i.test(lookupError?.message || ""),
+          });
+        });
+      });
+      error.errorCode = "WARDROBE_MESSAGE_CHANNEL_CLOSED";
+      error.reason = state.closed ? "work_tab_closed" : state.tab && loadingObserved
+        ? "work_tab_loading" : "message_channel_closed";
+    }
+    throw error;
+  } finally {
+    chrome.tabs.onUpdated.removeListener(onUpdated);
+  }
+}
+
 async function runWardrobeRewriteJob(job) {
   let activeItemIndex = 0;
+  let completedCount = 0;
 
   notifyWardrobeRewriteProgress(job, {
     status: "queued",
@@ -2134,7 +2166,7 @@ async function runWardrobeRewriteJob(job) {
         itemId: item.id,
       });
 
-      const result = await sendTabMessage(workTab.id, {
+      const result = await sendWardrobeRewriteItem(workTab.id, {
         type: "RUN_WARDROBE_REWRITE_ITEM",
         itemId: item.id,
         itemIndex: activeItemIndex,
@@ -2148,6 +2180,7 @@ async function runWardrobeRewriteJob(job) {
         throw new Error(result?.error || `Listing ${activeItemIndex} could not be rewritten.`);
       }
 
+      completedCount = activeItemIndex;
       notifyWardrobeRewriteProgress(job, {
         status: "item_done",
         current: activeItemIndex,
@@ -2172,6 +2205,9 @@ async function runWardrobeRewriteJob(job) {
       current: activeItemIndex,
       total: job.items.length,
       itemIndex: activeItemIndex,
+      completedCount,
+      reason: err.reason,
+      errorCode: err.errorCode,
       message: err.message || "Wardrobe rewrite stopped.",
     });
   } finally {

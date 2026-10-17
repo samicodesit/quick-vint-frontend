@@ -18798,9 +18798,19 @@
     if (controller) {
       const current = Math.max(0, Number(message.current || 0));
       const total = Math.max(current, Number(message.total || 0));
+      let failureMessage = message.message;
+      if (message.status === "failed" && message.errorCode === "WARDROBE_MESSAGE_CHANNEL_CLOSED") {
+        const reason = message.reason === "work_tab_closed"
+          ? "Listing tab closed."
+          : "Listing tab stopped responding.";
+        const completed = Math.max(0, Math.min(total, Number(message.completedCount || 0)));
+        failureMessage = completed ? `${reason} ${completed} of ${total} ready.` : reason;
+      } else if (message.status === "failed" && message.reason === "background_job_stopped") {
+        failureMessage = "Rewrite interrupted. Check the open listing tabs.";
+      }
       setWardrobeSelectionFeedback(
         controller,
-        message.message ||
+        failureMessage ||
           (message.status === "done"
             ? `${total} listing${total === 1 ? "" : "s"} ready`
             : message.status === "failed"
@@ -18823,11 +18833,13 @@
           capacity,
         ),
       );
-      setTimeout(() => {
-        if (wardrobeSelectionController !== controller) return;
-        stopWardrobeSelection();
-        setWardrobeRewriteStep("intro");
-      }, message.status === "done" ? 1400 : 2400);
+      if (message.status === "done") {
+        setTimeout(() => {
+          if (wardrobeSelectionController !== controller) return;
+          stopWardrobeSelection();
+          setWardrobeRewriteStep("intro");
+        }, 1400);
+      }
     }
   }
 
@@ -20445,6 +20457,7 @@
           status: "failed",
           current: 0,
           total: wardrobeRewriteSelectedItems.size,
+          reason: "background_job_stopped",
           message: error,
         }),
       );

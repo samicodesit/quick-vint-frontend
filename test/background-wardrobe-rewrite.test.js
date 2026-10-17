@@ -43,10 +43,12 @@ async function runBackground(options = {}) {
   const capacityResolvers = [];
   const pingCounts = new Map();
   const settleDelays = [];
+  const tabUpdatedListeners = new Set();
   let recoveryWriteHeld = false;
   let releaseRecoveryWrite;
   const recoveryWriteMayFinish = new Promise(resolve => { releaseRecoveryWrite = resolve; });
   let listener;
+  let channelFailed = false;
   let nextTabId = options.nextTabId || 100;
 
   const chrome = {
@@ -100,9 +102,19 @@ async function runBackground(options = {}) {
         if (tab) Object.assign(tab, details);
         callback?.(tab);
       },
-      get(tabId, callback) { callback(tabs.get(tabId)); },
+      get(tabId, callback) {
+        const tab = tabs.get(tabId);
+        chrome.runtime.lastError = channelFailed && options.tabLookupError
+          ? { message: options.tabLookupError }
+          : !tab ? { message: `No tab with id: ${tabId}.` } : null;
+        callback(tab);
+        chrome.runtime.lastError = null;
+      },
       remove(tabId, callback) { removedTabs.push(tabId); callback?.(); },
-      onUpdated: { addListener() {}, removeListener() {} },
+      onUpdated: {
+        addListener(listener) { tabUpdatedListeners.add(listener); },
+        removeListener(listener) { tabUpdatedListeners.delete(listener); },
+      },
       sendMessage(tabId, message, callback) {
         sentTabMessages.push({ tabId, message });
         if (message.type === "BATCH_PING" && options.holdBatchReady) {
@@ -121,7 +133,16 @@ async function runBackground(options = {}) {
         }
         if (message.type === "RUN_WARDROBE_REWRITE_ITEM") {
           sentToWorkTab.push({ tabId, message });
-          if (options.failFirstRun && sentToWorkTab.length === 1) {
+          if (options.failChannelRun === sentToWorkTab.length) {
+            channelFailed = true;
+            if (options.workTabLifecycle === "closed") tabs.delete(tabId);
+            if (options.workTabLifecycle === "document_changed") {
+              for (const listener of tabUpdatedListeners) listener(tabId, { status: "loading" });
+            }
+            chrome.runtime.lastError = { message: "A listener indicated an asynchronous response by returning true, but the message channel closed before a response was received" };
+            callback?.();
+            chrome.runtime.lastError = null;
+          } else if (options.failFirstRun && sentToWorkTab.length === 1) {
             callback?.({ ok: false, error: "generation failed" });
           } else if (options.holdRuns) {
             runResolvers.push(() => callback?.({ ok: true }));
@@ -716,6 +737,34 @@ test("wardrobe rewrite waits for each edit tab and reports sequential progress",
     "queued", "opening_tab", "tab_ready", "generating", "item_done",
     "opening_tab", "tab_ready", "generating", "item_done", "done",
   ]);
+});
+
+for (const [lifecycle, reason] of [
+  ["closed", "work_tab_closed"],
+  ["document_changed", "work_tab_loading"],
+  ["unknown", "message_channel_closed"],
+]) {
+  test(`wardrobe channel failure records ${lifecycle} and preserves confirmed progress without replay`, async () => {
+    const harness = await runBackground({ available: 9, failChannelRun: 3, workTabLifecycle: lifecycle });
+    const items = ["42", "43", "44", "45"].map(id => ({ id, editUrl: `https://www.vinted.nl/items/${id}/edit` }));
+    assert.equal((await harness.sendRuntimeMessage(rewriteMessage(items))).ok, true);
+    await flush();
+    const failure = harness.sourceProgress.at(-1);
+    assert.equal(failure.status, "failed");
+    assert.equal(failure.reason, reason);
+    assert.equal(failure.errorCode, "WARDROBE_MESSAGE_CHANNEL_CLOSED");
+    assert.equal(failure.completedCount, 2);
+    assert.equal(failure.itemIndex, 3);
+    assert.equal(harness.sentToWorkTab.length, 3);
+    assert.equal(harness.createdTabs.length, 3);
+  });
+}
+
+test("a failed tab lookup does not claim that the wardrobe tab closed", async () => {
+  const harness = await runBackground({ failChannelRun: 1, tabLookupError: "Temporary tab lookup failure" });
+  assert.equal((await harness.sendRuntimeMessage(rewriteMessage())).ok, true);
+  await flush();
+  assert.equal(harness.sourceProgress.at(-1).reason, "message_channel_closed");
 });
 
 test("wardrobe rewrite stops after the first failed item and leaves its tab open", async () => {

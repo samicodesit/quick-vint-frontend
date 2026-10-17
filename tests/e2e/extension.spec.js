@@ -7993,6 +7993,27 @@ test.describe("wardrobe rewrite tab", () => {
 });
 
 test.describe("wardrobe rewrite progress", () => {
+  test("retains a clear partial-failure message until the seller exits selection", async ({ page }) => {
+    await openWardrobeHarness(page, {
+      capacityResponse: { allowed: true, available: 9 },
+      wardrobeItems: wardrobeItemFixture({ id: "9443601541" }),
+    });
+    await enterWardrobeSelection(page);
+    await sendContentMessage(page, {
+      type: "WARDROBE_REWRITE_PROGRESS", status: "failed", current: 3,
+      total: 9, completedCount: 2, reason: "work_tab_closed",
+      errorCode: "WARDROBE_MESSAGE_CHANNEL_CLOSED",
+      message: "A listener indicated an asynchronous response by returning true, but the message channel closed before a response was received",
+    });
+    const feedback = page.locator(".quickvint-wardrobe-selection-feedback");
+    await expect(feedback).toHaveText("Listing tab closed. 2 of 9 ready.");
+    await expect(page.getByRole("button", { name: "Start rewrite", exact: true })).toBeDisabled();
+    await page.waitForTimeout(3000);
+    await expect(feedback).toBeVisible();
+    await page.getByRole("button", { name: "Exit selection", exact: true }).click();
+    await expect(feedback).toHaveCount(0);
+  });
+
   test("updates the sticky controller and refreshes capacity without a batch modal", async ({ page }) => {
     await openWardrobeHarness(page, {
       capacityResponse: [
