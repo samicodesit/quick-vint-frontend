@@ -49,8 +49,10 @@ action event. This gap was not already fixed by the wardrobe release.
   known account, listing/batch item, photos and generation settings, within the
   15-minute retry window. A worker restart does not reset that content record.
 - Different inputs, accounts, stale attempts, ordinary provider failures and
-  duplicate completion callbacks cannot manufacture recovery. The actual durable
-  generation attempt ID is retained when it supersedes a newly allocated ID.
+  duplicate completion callbacks cannot manufacture recovery. The auth result's
+  generation ID comes from the prepared HTTP payload, including durable and
+  same-tab uncertain replays. Existing Generate events carry the parent action
+  ID so they can be joined without confusing an allocated ID with a saved payload.
 - Client and server allowlists retain both correlation fields. The authenticated
   events endpoint stores action records in `api_logs`, retains transport IDs and
   deduplicates delivery through the existing SQL ingest path. The new event is
@@ -77,6 +79,12 @@ The permanent regression is `tests/e2e/auth-action-correlation.spec.js`:
    Generate succeeds, and tracking does not claim a blocked user or recovery.
 6. Telemetry transport fails while auth and Generate succeed. Output, request
    count, sign-in state and the photo are unaffected.
+7. Two controlled lost responses leave an uncertain request. A later retry gets
+   a controlled 401, then succeeds after authentication recovers. All four HTTP
+   attempts retain the same request identity and original generation ID. The
+   blocked/recovered records use that payload ID and the same action ID. The first
+   local candidate failed this check by reporting its newly allocated ID; the
+   final correction changes observation only, without rebuilding the request.
 
 ## Real, controlled and untested
 
@@ -101,17 +109,21 @@ Offline or dropped telemetry cannot provide an absolute delivery guarantee.
 
 ## Verification record
 
-Both `npm run verify:production` gates passed: frontend 137 unit tests,
+The preliminary `npm run verify:production` gates passed: frontend 137 unit tests,
 297 browser tests with 2 existing skips, and production build; backend lint,
 type check, build, formatting and 1,015 tests with 4 existing skips. The first
 frontend attempt exposed the old ordered manifest assertion, which omitted the
 new observer. Adding that required script to the expected list cleared it; the
 full gate was then rerun successfully. No runtime correction was needed.
 
-Targeted source cases passed 18/18 (six cases repeated three times). The
-strengthened same-photo recovery and manifest cases passed 6/6. The actual
-compiled 1.4.19 ZIP passed 9/9 checks: block/recovery, shared refresh and manifest,
-each repeated three times. Raw local QA evidence is in
+The replay follow-up then added case 7. Final targeted source cases passed 21/21
+(seven cases repeated three times). The strengthened same-photo recovery and
+manifest cases passed 6/6. The final compiled 1.4.19 ZIP passed 12/12 checks for
+block/recovery, shared refresh, saved-payload replay and manifest, each repeated
+three times.
+Final integration/build checks run again through the required production push
+and Store workflow gates. Their completion receipts are recorded in the workspace
+checkpoint and QA logs. Raw local QA evidence is in
 `/tmp/autolister-auth-action-2026-10-17/`.
 
 The first captured retry completed before the existing error toast timed out.
@@ -129,17 +141,18 @@ Repeated-run evidence (run 1):
 | Exact recovery | Same action ID and refresh reference, `recovered`, second attempt, successful output after worker restart, one retained photo. |
 | Background joined | Action `0d3932b6-0271-4e5c-99b4-7ea1e36d0800` first records `refresh_joined`, then `blocked`, both linked to scheduled refresh `c5903c95-9e97-4e1c-ac10-3df3570421a8`. |
 
-`proof-summary.json` retains the compact events, IDs, timestamps and request
-counts for all three repetitions. `candidate-source.sha256` identifies the local
+`proof-summary.json` retains the initial compact events, IDs, timestamps and
+request counts. `final-targeted/` and `packaged-final/` contain final records.
+`candidate-source.sha256` identifies the earlier local
 modified code used by the full gate, initially carrying manifest version 1.4.18
-solely for the isolated test. Only the candidate version then changed to 1.4.19
-before the official local packaging command and packaged-browser checks.
+solely for the isolated test. The candidate became 1.4.19, and the replay metadata
+correction was applied before the final packaging and packaged-browser checks.
 Version alone must not be used to confuse the earlier local candidate with the
 unchanged Store package.
 
 `package-proof.json` records 36 files, the included observer and unchanged
 permissions. The compiled ZIP SHA-256 is
-`f0f89836bc3f4db6f33aa717be5ce28717e02d561b49be71f1161af0e635fc8c`.
+`65a0b5140f84ea100436dd59028aa5e24228c61c48994ebb970af3c954655456`.
 The published 1.4.18 ZIP remains
 `be3b8df167e561f243c4be13dfffe1712718d174999485312231e96204991594`.
 Packaging alone is not proof of upload, Store approval or installed-client update.

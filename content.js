@@ -19076,7 +19076,8 @@
     let generationOwnerId = batchAuthUserId || undefined;
     let authAction;
     let authBlockReason;
-    const trackGenerationEvent = (name, context) => trackGrowthEvent(name, { ...batchContext, generationAttemptId, ...context }, generationOwnerId);
+    let authRequestGenerationAttemptId = generationAttemptId;
+    const trackGenerationEvent = (name, context) => trackGrowthEvent(name, { ...batchContext, generationAttemptId, parentOperationId: authAction?.operationId, ...context }, generationOwnerId);
 
     if (!imageUrls.length) {
       trackGenerationEvent("generate_missing_photo", { mode });
@@ -19328,6 +19329,8 @@
 
       let generationResponseData;
       const sendGenerateRequest = async (retryReason = null, previousRequestId = null) => {
+        // Observe the preserved payload ID without changing its replay identity.
+        authRequestGenerationAttemptId = preparedGeneratePayload.requestBody.generationAttemptId || generationAttemptId;
         if (batchContext) {
           const saved = await sendMessage({
             type: "SAVE_BATCH_GENERATION_REQUEST", ...batchContext, userId,
@@ -19675,11 +19678,11 @@
         await maybeShowEmojiRetryPrompt(descInput);
       }
 
-      authAction?.finish("succeeded", { generationAttemptId, statusCode: response.status });
+      authAction?.finish("succeeded", { generationAttemptId: authRequestGenerationAttemptId, statusCode: response.status });
       return { ok: true, title, description, measurementAdvice, offers, generationAttemptId };
     } catch (err) {
       authAction?.finish(authBlockReason ? "blocked" : batchSignal?.aborted ? "cancelled" : "failed", {
-        generationAttemptId,
+        generationAttemptId: authRequestGenerationAttemptId,
         ...(authBlockReason ? { reason: authBlockReason, statusCode: authBlockReason === "unauthorized" ? 401 : 0 } : {}),
       });
       if (!batchSignal?.aborted) console.error("AutoLister AI Error:", err);

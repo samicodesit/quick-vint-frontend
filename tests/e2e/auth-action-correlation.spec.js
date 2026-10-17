@@ -20,9 +20,11 @@ async function authJourney(options = {}) {
   const session = { access_token: oldAccess, refresh_token: "local-refresh", expires_at: Math.floor(Date.now() / 1000) + 60, user };
   const renewed = { ...session, access_token: jwt(Math.floor(Date.now() / 1000) + 3600), expires_at: Math.floor(Date.now() / 1000) + 3600, expires_in: 3600, token_type: "bearer" };
   const flow = await openBatchJourney({ photoPaths: [path.resolve(__dirname, "../../images/quickvint-upload-single.jpg")],
-    session: { ...session, expires_at: renewed.expires_at }, generate: ({ route, request, commits }) =>
-    route.fulfill({ status: !options.acceptOld && route.request().headers().authorization === `Bearer ${oldAccess}` ? 401 : 200,
-      json: !options.acceptOld && route.request().headers().authorization === `Bearer ${oldAccess}` ? { error: "Local expired access" } : commits.get(request.id) }) });
+    session: { ...session, expires_at: renewed.expires_at }, generate: ({ route, request, requests, commits }) => {
+      if (requests.length <= (options.loseFirstResponses || 0)) return route.abort("connectionreset");
+      return route.fulfill({ status: !options.acceptOld && route.request().headers().authorization === `Bearer ${oldAccess}` ? 401 : 200,
+        json: !options.acceptOld && route.request().headers().authorization === `Bearer ${oldAccess}` ? { error: "Local expired access" } : commits.get(request.id) });
+    } });
   await flow.context.route("https://autolister.app/api/events/track", route => {
     const body = route.request().postDataJSON(); events.push(...body.events);
     return route.fulfill({ json: { acknowledgedIds: body.events.map(event => event.id), duplicateIds: [], rejections: [] } });
@@ -202,5 +204,35 @@ test("unavailable telemetry cannot change auth, Generate output or retained phot
     expect(flow.requests).toHaveLength(1);
     await expect(flow.controller.locator('[data-testid="media-upload-grid"] img')).toHaveCount(1);
     await expect(flow.controller.getByRole("button", { name: /Sign in to enable AI Tools/ })).toHaveCount(0);
+  } finally { await flow.close(); }
+});
+
+test("an auth-blocked uncertain replay records the generation ID from the saved HTTP payload", async ({}, testInfo) => {
+  test.setTimeout(90000);
+  const flow = await authJourney({ loseFirstResponses: 2 });
+  try {
+    await flow.controller.locator("#quickvint-gen-btn").click();
+    await expect.poll(() => flow.requests.length).toBe(2);
+    await expect(flow.controller.locator("#quickvint-gen-btn")).toBeEnabled();
+    await flow.worker.evaluate(session => chrome.storage.local.set({ supabaseSession: session }), flow.session);
+    await flow.controller.locator("#quickvint-gen-btn").click();
+    await expect(flow.controller.getByRole("button", { name: /Sign in to enable AI Tools/ })).toBeVisible({ timeout: 35000 });
+    const data = await evidence(testInfo, flow, "uncertain-replay-blocked");
+    expect(flow.requests).toHaveLength(3);
+    expect(flow.requests[2].id).toBe(flow.requests[0].id);
+    expect(flow.requests[2].rawBody).toBe(flow.requests[0].rawBody);
+    const result = data.events.find(event => event.event === "auth_action_result" && event.context.resultStatus === "blocked");
+    expect(result.context.generationAttemptId).toBe(flow.requests[2].body.generationAttemptId);
+    const failure = data.events.find(event => event.event === "generate_error" && event.context.statusCode === 401);
+    expect(failure.context.parentOperationId).toBe(result.context.operationId);
+    flow.reconnect(); expect((await flow.verifyCode()).ok).toBe(true);
+    await flow.controller.locator("#quickvint-gen-btn").click();
+    await expect(flow.controller.locator('[data-testid="title--input"]')).not.toHaveValue("");
+    const recovered = await evidence(testInfo, flow, "uncertain-replay-recovered");
+    const recovery = recovered.events.find(event => event.event === "auth_action_result" && event.context.resultStatus === "recovered");
+    expect(recovery.context.operationId).toBe(result.context.operationId);
+    expect(recovery.context.generationAttemptId).toBe(flow.requests[3].body.generationAttemptId);
+    expect(recovered.generationRequests).toHaveLength(4);
+    expect(recovered.photos).toBe(1);
   } finally { await flow.close(); }
 });
