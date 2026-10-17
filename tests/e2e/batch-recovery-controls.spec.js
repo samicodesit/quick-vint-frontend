@@ -118,6 +118,36 @@ test("acknowledged Stop invalidates an in-flight Resume without another generati
   } finally { metadata.release(); await Promise.allSettled([resume]); await flow.close(); }
 });
 
+for (const queuedCount of [2, 4]) test(`${queuedCount} Resume messages queued before Stop all stay cancelled`, async () => {
+  const flow = await pausedBatch();
+  const metadata = holdRecoveryMetadata(flow);
+  const pending = [];
+  try {
+    await metadata.installed;
+    const saved = (await flow.worker.evaluate(() => chrome.storage.local.get("quickvintBatchRecovery"))).quickvintBatchRecovery;
+    const work = flow.context.pages().find(page => page !== flow.controller && page.url().includes("/items/new"));
+    const message = { type: "RESUME_BATCH_GENERATION", batchId: saved.batchId };
+    pending.push(sendFromExtensionContent(flow.context, flow.controller, message));
+    await expect.poll(() => metadata.hits).toBe(1);
+    for (let i = 1; i < queuedCount; i++) pending.push(sendFromExtensionContent(flow.context, flow.controller, message));
+    await flow.controller.waitForTimeout(150);
+    expect((await sendFromExtensionContent(flow.context, work, { type: "STOP_BATCH_GENERATION", batchId: saved.batchId })).ok).toBe(true);
+    metadata.release();
+    const results = await Promise.all(pending);
+    expect(results.every(result => result.ok === false && result.stopped === true)).toBe(true);
+    await flow.controller.waitForTimeout(250);
+    expect(flow.requests).toHaveLength(1);
+    expect(flow.cleanup).toHaveLength(0);
+    const after = (await flow.worker.evaluate(() => chrome.storage.local.get("quickvintBatchRecovery"))).quickvintBatchRecovery;
+    expect(after.status).toBe("paused");
+    expect(after.reason).toBe("user_stopped");
+    await flow.controller.locator(".batch-recovery-resume").click();
+    await expect(flow.controller.locator(".batch-title")).toHaveText("Listings ready");
+    expect(flow.requests).toHaveLength(2);
+    expect(new Set(flow.requests.map(request => request.id)).size).toBe(1);
+  } finally { metadata.release(); await Promise.allSettled(pending); await flow.close(); }
+});
+
 test("Stop superseding a visible Resume is cancellation evidence, not another recovery failure", async () => {
   const flow = await pausedBatch();
   const metadata = holdRecoveryMetadata(flow);
@@ -138,6 +168,32 @@ test("Stop superseding a visible Resume is cancellation evidence, not another re
     expect(flow.events.some(event => event.event === "batch_cancelled" && event.context.reason === "user_stopped"
       && event.context.generationAttemptId === flow.requests[0].body.generationAttemptId)).toBe(true);
   } finally { metadata.release(); await flow.close(); }
+});
+
+test("Stop also cancels an older queued Discard before it can delete source photos", async () => {
+  const flow = await pausedBatch();
+  const metadata = holdRecoveryMetadata(flow);
+  let resume, discard;
+  try {
+    await metadata.installed;
+    const saved = (await flow.worker.evaluate(() => chrome.storage.local.get("quickvintBatchRecovery"))).quickvintBatchRecovery;
+    const work = flow.context.pages().find(page => page !== flow.controller && page.url().includes("/items/new"));
+    resume = sendFromExtensionContent(flow.context, flow.controller, { type: "RESUME_BATCH_GENERATION", batchId: saved.batchId });
+    await expect.poll(() => metadata.hits).toBe(1);
+    discard = sendFromExtensionContent(flow.context, work, { type: "DISCARD_BATCH_RECOVERY", batchId: saved.batchId });
+    await flow.controller.waitForTimeout(150);
+    expect((await sendFromExtensionContent(flow.context, work, { type: "STOP_BATCH_GENERATION", batchId: saved.batchId })).ok).toBe(true);
+    metadata.release();
+    expect((await resume).stopped).toBe(true);
+    expect((await discard).stopped).toBe(true);
+    expect(flow.cleanup).toHaveLength(0);
+    expect(flow.requests).toHaveLength(1);
+    const after = (await flow.worker.evaluate(() => chrome.storage.local.get("quickvintBatchRecovery"))).quickvintBatchRecovery;
+    expect(after.batchId).toBe(saved.batchId);
+    expect(after.reason).toBe("user_stopped");
+    expect((await sendFromExtensionContent(flow.context, flow.controller, { type: "DISCARD_BATCH_RECOVERY", batchId: saved.batchId })).ok).toBe(true);
+    expect(flow.cleanup).toHaveLength(1);
+  } finally { metadata.release(); await Promise.allSettled([resume, discard]); await flow.close(); }
 });
 
 test("Resume disables conflicting Discard while recovery metadata is pending", async () => {

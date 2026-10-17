@@ -15647,6 +15647,10 @@
 
   async function onBatchUploadClick(capacity) {
     const saved = await getSavedBatchRecovery();
+    if (saved?.ok === false) {
+      showToast(saved.error || "Could not check the saved batch. Try again.", "error");
+      return;
+    }
     if (saved?.recovery && saved.recovery.status !== "done") {
       showBatchRecovery(saved.recovery);
       return;
@@ -17870,6 +17874,7 @@
       const restore = lockBatchRecoveryActions(event.currentTarget, "Closing");
       const response = await sendMessage({ type: "DISCARD_BATCH_RECOVERY", batchId: batchProgressContext.batchId });
       restore();
+      if (response?.stopped) return;
       if (!response?.ok) { showToast(response?.error || "Could not close the saved batch. Try again.", "error"); return; }
       closeBatchModal({ cleanup: false });
       if (status === "done" && pendingBatchReviewPrompt) {
@@ -17885,6 +17890,7 @@
       const restore = lockBatchRecoveryActions(event.currentTarget, expired ? "Starting" : "Discarding");
       const response = await sendMessage({ type: "DISCARD_BATCH_RECOVERY", batchId: batchProgressContext.batchId });
       restore();
+      if (response?.stopped) return;
       if (response?.discardPending && response.recovery) { showBatchRecovery(response.recovery); return; }
       if (!response?.ok) { showToast(response?.error || "Could not clear the saved batch. Try again.", "error"); return; }
       closeBatchModal({ cleanup: false });
@@ -18006,7 +18012,7 @@
 
   async function getSavedBatchRecovery() {
     const response = await sendMessage({ type: "GET_BATCH_RECOVERY" });
-    return response?.ok ? response : null;
+    return response || null;
   }
 
   async function maybeShowSavedBatchRecovery() {

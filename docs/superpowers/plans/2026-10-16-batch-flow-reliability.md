@@ -37,6 +37,16 @@ No new services, migrations, extension permissions, paid AI, live Vinted actions
   Stop before a listing tab becomes ready prevents generation dispatch.
   A Resume superseded by Stop records cancellation against the same attempt,
   preserving the original rejection without reporting a new resume failure.
+- A fresh same-account create tab can reclaim a saved batch only after its
+  source and bound work tabs are gone or have left the create page. Reclaiming pauses unfinished work and
+  requires explicit Resume. Recovery and review navigation change controller
+  together, preserving photos, the exact prepared request and completion count.
+  Concurrent fresh tabs cannot both claim it. A failed checkpoint write blocks
+  a conflicting upload and leaves the original recovery available for retry.
+- Stop cancels older queued Resume and not-yet-started Discard commands using
+  their arrival order. A later explicit control remains usable. Late callbacks
+  and Stop snapshots cannot overwrite a restored controller or newer progress.
+  A begun discard remains durable and offers only Retry discard.
 - Discard intent is durable before remote cleanup. An unknown or partially
   completed discard offers only Retry discard, never Resume or an assurance that
   temporary photos remain saved. Successful resume/discard clears only matching
@@ -48,6 +58,9 @@ No new services, migrations, extension permissions, paid AI, live Vinted actions
   inventing a second generation pause on reload.
 - A user closing or editing a tab must not cause an automatic reload or overwrite of their work.
 - Slow, progressing uploads and suspended hidden tabs must not be mistaken for failed work.
+- Omit helper text by default. Keep only brief text needed for an action,
+  consequence or error recovery. Do not repeat nearby labels or status. Include
+  this check in the final independent review.
 
 ## Tasks
 

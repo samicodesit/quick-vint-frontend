@@ -14,6 +14,7 @@ let batchCheckpointQueue = Promise.resolve();
 let batchRecoveryQueue = Promise.resolve();
 let batchRecoveryControlQueue = Promise.resolve();
 let tabJobAdmissionQueue = Promise.resolve();
+let batchStopEpoch = 0;
 let analyticsClientIdPromise;
 
 function createAnalyticsClientId() {
@@ -950,15 +951,21 @@ function persistBatchRecovery(job, updates = {}, options = {}) {
       if (!options.stopIntent && Number(latest.stopRevision || 0) !== Number(options.expectedStopRevision ?? job.stopRevision ?? 0)) {
         throw Object.assign(new Error("Batch stopped."), { code: "BATCH_STATE_CHANGED", stopped: true });
       }
-      if (latest.discardRequested && !job.discardRequested && !updates.discardRequested) throw changed();
+      if (latest.discardRequested && (options.stopIntent || (!job.discardRequested && !updates.discardRequested))) throw changed();
       const proposedStatus = updates.status || job.status;
       if (latest.status === "paused" && ["running", "done"].includes(proposedStatus) && !options.resume) throw changed();
       if (latest.status === "done" && proposedStatus !== "done") throw changed();
-      if (Number(latest.completedCount || 0) > Math.max(Number(job.completedCount || 0), Number(updates.completedCount || 0)) ||
-          Number(latest.currentItemIndex || 0) > Math.max(Number(job.currentItemIndex || 0), Number(updates.currentItemIndex || 0))) throw changed();
+      if (!options.stopIntent && (Number(latest.completedCount || 0) > Math.max(Number(job.completedCount || 0), Number(updates.completedCount || 0)) ||
+          Number(latest.currentItemIndex || 0) > Math.max(Number(job.currentItemIndex || 0), Number(updates.currentItemIndex || 0)))) throw changed();
     }
-    return writeBatchRecovery(job, options.stopIntent
-      ? { ...updates, stopRevision: Number(latest.stopRevision || 0) + 1 } : updates);
+    if (options.stopIntent) {
+      // Stop changes the latest batch status, never the old snapshot's routing,
+      // photo URLs or completed count while another control is being rebound.
+      const stored = await writeBatchRecovery(latest, { ...updates, stopRevision: Number(latest.stopRevision || 0) + 1 });
+      Object.assign(job, stored);
+      return stored;
+    }
+    return writeBatchRecovery(job, updates);
   });
   batchRecoveryQueue = operation.catch(() => {});
   return operation;
@@ -994,8 +1001,23 @@ async function writeBatchRecovery(job, updates) {
     expiresAt: Number(job.expiresAt || Date.now() + BATCH_RECOVERY_TTL_MS),
     ...updates,
   };
-  await chrome.storage.local.set({ [BATCH_RECOVERY_STORAGE_KEY]: stored });
-  Object.assign(job, stored);
+  let reboundReview = null;
+  const save = async (records = null) => {
+    const values = { [BATCH_RECOVERY_STORAGE_KEY]: stored };
+    const review = records?.[job.batchId];
+    if (review?.ownerId === job.ownerId) {
+      review.sourceTabId = stored.sourceTabId;
+      values[BATCH_REVIEW_STORAGE_KEY] = records;
+      reboundReview = review;
+    }
+    // Recovery controls and Back to batch must see the same controller.
+    await chrome.storage.local.set(values);
+    Object.assign(job, stored);
+  };
+  if (Number.isInteger(updates.sourceTabId) && updates.sourceTabId !== job.sourceTabId) {
+    await mutateBatchReviews(save);
+  } else await save();
+  if (reboundReview) void notifyBatchReview(reboundReview).catch(error => console.debug("Batch navigation unavailable:", error));
   return stored;
 }
 
@@ -1237,14 +1259,18 @@ async function runBatchGenerationJob(job) {
   } catch (err) {
     if (err.code === "BATCH_STATE_CHANGED") return;
     if (!job.stopRequested) console.error("[Background] Batch generation failed:", err);
-    await persistBatchRecovery(job, {
+    const paused = await persistBatchRecovery(job, {
       status: "paused",
       message: err.message || "Batch generation stopped.",
       reason: job.stopRequested ? "user_stopped" : "generation_error",
       hadIssues: true,
       currentItemIndex: activeItemIndex,
       currentWorkTabId: job.currentWorkTabId,
+    }).catch(error => {
+      if (error.code === "BATCH_STATE_CHANGED") return null;
+      throw error;
     });
+    if (!paused) return;
     if (!job.stopRequested) await notifyBatchRecoveryNudge(job);
     notifyBatchProgress(job, {
       status: "paused",
@@ -1605,12 +1631,64 @@ async function refreshBatchRecoveryGroups(job) {
   }
 }
 
-async function getBatchRecovery(sender) {
-  const job = await getStoredBatchRecovery();
+function getBatchRecovery(sender) {
+  return getBatchRecoveryForTab(sender).catch(() => ({ ok: false, error: "Could not restore the saved batch. Try again." }));
+}
+
+function isBatchCreateTab(tab) {
+  return [tab?.url, tab?.pendingUrl].some(value => {
+    try {
+      const url = new URL(value);
+      return url.protocol === "https:" && /(^|\.)vinted\.[a-z.]+$/i.test(url.hostname) && /^\/items\/new\/?$/.test(url.pathname);
+    } catch { return false; }
+  });
+}
+
+function restoreBatchControllerIfOrphaned(job, sender, accountId) {
+  const callerId = sender?.tab?.id;
+  if (!Number.isInteger(callerId) || callerId <= 0 || !isBatchCreateTab(sender?.tab)) return job;
+
+  return withTabJobAdmission(() => {
+    // Claim the existing controller under the same queue as checkpoint writes.
+    // This cannot race a second fresh tab or restore a stale completion count.
+    const operation = batchRecoveryQueue.then(async () => {
+      const latest = (await chrome.storage.local.get(BATCH_RECOVERY_STORAGE_KEY))[BATCH_RECOVERY_STORAGE_KEY];
+      if (!latest || latest.batchId !== job.batchId || latest.ownerId !== accountId ||
+          latest.status === "done" || Number(latest.expiresAt || 0) <= Date.now()) return latest || null;
+      if ((await getStoredSession())?.user?.id !== accountId) return null;
+      const ids = [...new Set([latest.sourceTabId, ...getBatchWorkTabIds(latest)])];
+      const tabs = await Promise.all(ids.map(getTabIfPresent));
+      if (tabs.some(isBatchCreateTab)) return latest;
+      if ((await getStoredSession())?.user?.id !== accountId) return null;
+
+      const matchesActive = () => activeTabJob?.kind === "batch" &&
+        activeTabJob.batchId === latest.batchId && activeTabJob.ownerId === accountId;
+      if (matchesActive()) activeTabJob.stopRequested = true;
+      batchStopEpoch++;
+      const restored = await writeBatchRecovery(latest, {
+        sourceTabId: callerId,
+        status: latest.status === "running" ? "paused" : latest.status,
+        reason: latest.status === "running" ? "tabs_closed" : latest.reason || "tabs_closed",
+        message: latest.status === "running" ? "Batch interrupted." : latest.message || "Batch interrupted.",
+        hadIssues: true,
+        stopRevision: Number(latest.stopRevision || 0) + 1,
+      });
+      if (matchesActive()) { activeTabJob.stopRequested = true; activeTabJob = null; }
+      return restored;
+    });
+    batchRecoveryQueue = operation.catch(() => {});
+    return operation;
+  });
+}
+
+async function getBatchRecoveryForTab(sender) {
+  let job = await getStoredBatchRecovery();
   const accountId = (await getStoredSession())?.user?.id;
   if (!job || !accountId || job.ownerId !== accountId) return { ok: true, recovery: null,
     savedBatchBlocked: Boolean(job?.ownerId && job.status !== "done") };
   const sourceTabId = sender?.tab?.id;
+  if (job.sourceTabId !== sourceTabId) job = await restoreBatchControllerIfOrphaned(job, sender, accountId);
+  if (!job || job.ownerId !== accountId) return { ok: true, recovery: null };
   if (job.sourceTabId !== sourceTabId) {
     return {
       ok: true,
@@ -1629,8 +1707,12 @@ async function getBatchRecovery(sender) {
   return { ok: true, recovery: publicBatchRecovery(job) };
 }
 
-function withBatchRecoveryControl(operation) {
-  const result = batchRecoveryControlQueue.then(operation);
+function withBatchRecoveryControl(operation, { cancelOnStop = false } = {}) {
+  // Capture arrival order before waiting behind another recovery request.
+  const stopEpoch = batchStopEpoch;
+  const result = batchRecoveryControlQueue.then(() => cancelOnStop && stopEpoch !== batchStopEpoch
+    ? { ok: false, stopped: true, error: "Batch stopped." }
+    : operation());
   batchRecoveryControlQueue = result.catch(() => {});
   return result;
 }
@@ -1661,7 +1743,7 @@ async function focusBatchRecoveryIntent(sender) {
   }
 
   const existingSource = await getTabIfPresent(job.sourceTabId);
-  if (existingSource) {
+  if (isBatchCreateTab(existingSource)) {
     await activateTab(existingSource.id);
     sendTabMessage(existingSource.id, {
       type: "SHOW_BATCH_RECOVERY",
@@ -1698,7 +1780,7 @@ async function focusBatchRecoveryIntent(sender) {
 }
 
 function resumeBatchGeneration(message, sender) {
-  return withBatchRecoveryControl(() => resumeBatchGenerationIntent(message, sender))
+  return withBatchRecoveryControl(() => resumeBatchGenerationIntent(message, sender), { cancelOnStop: true })
     .catch(error => ({ ok: false, stopped: error.stopped === true, error: error.message || "Could not resume this batch." }));
 }
 
@@ -1749,12 +1831,11 @@ async function resumeBatchGenerationIntent(message, sender) {
     activeTabJob = job;
     try {
       await clearBatchRecoveryNudges(job);
-      job.sourceTabId = sender?.tab?.id || job.sourceTabId;
       await persistBatchRecovery(job, {
         status: "running",
         message: null,
         reason: null,
-        sourceTabId: job.sourceTabId,
+        sourceTabId: sender?.tab?.id || job.sourceTabId,
         currentWorkTabId: null,
       }, { resume: true, expectedStopRevision: resumeStopRevision });
     } catch (error) {
@@ -1773,7 +1854,7 @@ async function resumeBatchGenerationIntent(message, sender) {
 }
 
 function discardBatchRecovery(message, sender) {
-  return withBatchRecoveryControl(() => discardBatchRecoveryIntent(message, sender));
+  return withBatchRecoveryControl(() => discardBatchRecoveryIntent(message, sender), { cancelOnStop: true });
 }
 
 async function discardBatchRecoveryIntent(message, sender) {
@@ -2510,6 +2591,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
           break;
         }
         job.stopRequested = true;
+        batchStopEpoch++;
         if (activeTabJob?.kind === "batch" && activeTabJob.batchId === job.batchId) activeTabJob.stopRequested = true;
         const stoppedWork = job.currentWorkTabId
           ? sendTabMessage(job.currentWorkTabId, { type: "STOP_BATCH_ITEM", batchId: job.batchId }).catch(() => {})

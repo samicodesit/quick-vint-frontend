@@ -137,7 +137,7 @@ async function runBackground(options = {}) {
             return;
           }
           if (options.holdBatchRuns) {
-            runResolvers.push(() => callback?.({ ok: true }));
+            runResolvers.push(result => callback?.(result || { ok: true }));
             return;
           }
         }
@@ -222,7 +222,9 @@ async function runBackground(options = {}) {
     settleDelays,
     get recoveryWriteHeld() { return recoveryWriteHeld; },
     releaseRecoveryWrite,
-    resolveRun: () => runResolvers.shift()?.(),
+    resolveRun: result => runResolvers.shift()?.(result),
+    closeTab: tabId => tabs.delete(tabId),
+    addTab: tab => tabs.set(tab.id, { status: "complete", ...tab }),
     releaseBatchReady: () => batchReadyResolvers.splice(0).forEach(resolve => resolve()),
     releaseCapacity: () => capacityResolvers.splice(0).forEach((resolve) => resolve()),
     dispatchRuntimeMessage(message, sender = { tab: sourceTab }) {
@@ -569,6 +571,47 @@ test("Stop while a new listing tab is becoming ready prevents dispatching genera
   assert.equal(harness.sentToWorkTab.some(({ message }) => message.type === "RUN_BATCH_ITEM"), false);
   assert.equal(harness.storageData.quickvintBatchRecovery.status, "paused");
   assert.equal(harness.storageData.quickvintBatchRecovery.reason, "user_stopped");
+  assert.equal(harness.cleanupCalls.length, 0);
+});
+
+test("a late closed-tab failure cannot reject or overwrite a restored controller", async () => {
+  const harness = await runBackground({ holdBatchRuns: true });
+  await harness.sendRuntimeMessage({ type: "START_BATCH_GENERATION", sessionId: "batch-1", groups: [["photo"]] });
+  const old = structuredClone(harness.storageData.quickvintBatchRecovery);
+  harness.closeTab(old.sourceTabId);
+  harness.closeTab(old.currentWorkTabId);
+  const fresh = { id: 8, url: "https://www.vinted.nl/items/new" };
+  harness.addTab(fresh);
+  const result = await harness.sendRuntimeMessage({ type: "GET_BATCH_RECOVERY" }, { tab: fresh });
+  assert.equal(result.recovery.batchId, old.batchId);
+  harness.resolveRun({ ok: false, error: "The old listing tab closed." });
+  await flush();
+  assert.equal(harness.storageData.quickvintBatchRecovery.sourceTabId, fresh.id);
+  assert.equal(harness.storageData.quickvintBatchRecovery.status, "paused");
+  assert.equal(harness.storageData.quickvintBatchRecovery.reason, "tabs_closed");
+  assert.equal(harness.cleanupCalls.length, 0);
+});
+
+test("an authorized late Stop preserves the new controller and current recovery fields", async () => {
+  const harness = await runBackground({ holdBatchRuns: true, holdRecoveryReason: "tabs_closed" });
+  await harness.sendRuntimeMessage({ type: "START_BATCH_GENERATION", sessionId: "batch-1", groups: [["photo"]] });
+  const old = structuredClone(harness.storageData.quickvintBatchRecovery);
+  harness.closeTab(old.sourceTabId);
+  harness.closeTab(old.currentWorkTabId);
+  const fresh = { id: 8, url: "https://www.vinted.nl/items/new" };
+  harness.addTab(fresh);
+  const restore = harness.dispatchRuntimeMessage({ type: "GET_BATCH_RECOVERY" }, { tab: fresh });
+  await flush();
+  assert.equal(harness.recoveryWriteHeld, true);
+  const stop = harness.dispatchRuntimeMessage({ type: "STOP_BATCH_GENERATION", batchId: old.batchId });
+  await flush();
+  harness.releaseRecoveryWrite();
+  assert.equal((await restore).recovery.batchId, old.batchId);
+  assert.equal((await stop).ok, true);
+  await flush();
+  assert.equal(harness.storageData.quickvintBatchRecovery.sourceTabId, fresh.id);
+  assert.equal(harness.storageData.quickvintBatchRecovery.reason, "user_stopped");
+  assert.equal(harness.storageData.quickvintBatchReviews[old.batchId].sourceTabId, fresh.id);
   assert.equal(harness.cleanupCalls.length, 0);
 });
 
