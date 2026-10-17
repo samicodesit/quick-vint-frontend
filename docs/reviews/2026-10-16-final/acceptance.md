@@ -17,7 +17,7 @@ Status: local candidate. Nothing in this review establishes production delivery 
 
 | Check | Result |
 | --- | --- |
-| Final frontend full production verification | Passed: 120 unit tests, 267 browser tests, two legacy opt-in skips, production build. Final focused matrix: 105 browser checks across three rounds. |
+| Final frontend full production verification | Passed: 122 unit tests, 281 browser tests, two legacy opt-in skips, production build. Final focused matrix: 84 browser checks across three rounds. |
 | Backend full production verification | Passed, 994 tests, 4 opt-in skips; lint, types, format and build passed |
 | Established web browser suite | 24 checks passed, no page errors |
 | Web early-review, queued-replacement and failed-replacement journeys | Passed three rounds each; separate earlier 20-item batch passed |
@@ -36,8 +36,8 @@ An older saved record with no verifiable owner is not adopted by guessing an acc
 
 ## Remaining acceptance
 
-- The final frontend gate passed on 3af5f83. The refreshed 1.4.17 package matches the committed source, production minified content, six shared helpers and loaded offline worker. Another totally fresh independent review is required before production delivery.
-- Primary-agent manual acceptance is complete for normal extension batch, computer single, phone single, worker restart during waiting, explicit Stop/Resume, web batch early review/Copy/edit retention/Next/Mark as listed, 320px layout and web single. The 53-step screenshot review includes separately inspected real-HTTP phone fault-run screenshots. The primary chose the scripted browser actions step by step; automated suites remain separate evidence. The review caught an overloaded waiting-state calculation showing 99% and Queued. Failing regressions established this for both connection and server-commit waiting. The corrected Waiting display passed 15 targeted checks across three rounds and both pictured manual recovery variants were inspected. Exact ready counts remain visible.
+- The final frontend gate passed on 0d76fb4. The refreshed 1.4.17 package matches the committed source, production minified content, six shared helpers and loaded offline worker. Another totally fresh independent review is required before production delivery.
+- Primary-agent manual acceptance is complete for normal extension batch, computer single, phone single, worker restart during waiting, explicit Stop/Resume, web batch early review/Copy/edit retention/Next/Mark as listed, 320px layout and web single. The 55-step screenshot review includes separately inspected real-HTTP phone fault-run screenshots. The primary chose the scripted browser actions step by step; automated suites remain separate evidence. The review caught an overloaded waiting-state calculation showing 99% and Queued. Failing regressions established this for both connection and server-commit waiting. The corrected Waiting display passed 15 targeted checks across three rounds and both pictured manual recovery variants were inspected. Exact ready counts remain visible.
 - Earlier independent reviews found real blockers. The terminal checkpoint, completed-request cleanup and missing expired-controller entry point are repaired and regressed as described below. Another totally fresh independent review of the final candidate is still required.
 - Production and extension Store delivery, with actual public artifact/status verification, remain separate.
 
@@ -102,3 +102,15 @@ The primary clicked the visible Resume and Stop controls in isolated Chromium. O
 The UI previously labelled a Resume superseded by Stop as a resume failure. It now records the existing cancellation event with the same generation attempt. The original definitive rejection stays visible. This is verified against the captured event stream, not inferred from the wording on screen.
 
 The final focused matrix passed 105 browser checks over three rounds. The ownership suite passed 48 unit checks across three rounds. Full frontend verification then passed: 120 unit tests, 267 browser tests, two legacy opt-in skips and the production build. Another totally fresh independent review remains required before production delivery.
+
+## Sixth-review follow-through
+
+The sixth reviewer reproduced two blockers: losing all original tabs stranded a saved batch, and a second Resume queued before Stop could restart work after Stop was acknowledged. Both were reproduced on the loaded extension before repair. A fresh same-account create page can now reclaim the existing batch when no bound create page remains. It pauses unfinished work and offers explicit Resume or Discard, preserving the exact prepared request and photos. Concurrent fresh pages cannot both claim the controller. Expired and unfinished-discard states retain their existing restricted actions.
+
+Root checks also reproduced an open source tab on another page being mistaken for a reachable controller. Fresh recovery and Return now check the actual create-page URL, including a pending create navigation. Review navigation and recovery change controller in the same storage write, so Back to batch reaches the restored page. A failed restoration write blocks conflicting upload rather than silently ignoring saved recovery.
+
+Stop cancels all older queued Resume and not-yet-started Discard commands. A later explicit Resume or Discard remains usable. Late work-tab callbacks and Stop snapshots cannot overwrite a restored controller or newer progress. An already-begun discard remains durable and cannot be relabelled as safely stopped. These cross-tab race checks use controlled protocol messages from authorized extension content contexts; they are not claims that the ordinary UI exposes conflicting buttons.
+
+One repeated expiry check read storage when the cleanup request arrived, before its response and local removal finished. The assertion now waits for checkpoint removal and the recovery screen to close. That driver correction required no product change. No permanent panel or helper paragraph was added by these repairs.
+
+The final sixth-repair matrix passed 84 actual Chromium checks and 54 unit ownership/control checks across three rounds. The complete frontend gate then passed 122 unit tests, 281 browser tests, two opt-in skips and the production build. Root operated worker interruption, closure of every original tab, fresh-page recovery, explicit Resume and Back to batch. The exact prepared body was replayed, two logical items completed with one photo each, and actual native focus returned to the restored controller. Root also confirmed that Stop cancelled two old queued Resumes and a queued Discard without generation or cleanup, while a later explicit Discard succeeded. The new recovery screenshots were inspected. A fresh independent review is still required.

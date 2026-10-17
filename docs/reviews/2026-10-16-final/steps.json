@@ -162,6 +162,24 @@
     "capturedAt": "2026-10-16T20:47:46.152Z"
   },
   {
+    "flow": "recovery",
+    "id": "all-tabs-lost",
+    "title": "Recovery after losing every original tab",
+    "note": "Primary-operated Chromium. The real MV3 worker was terminated and both original create tabs were closed. A fresh same-account create page restored the existing batch without starting generation. The brief recovery screen offers explicit Resume or Discard.",
+    "filename": "recovery-all-tabs-lost.png",
+    "detail": null,
+    "capturedAt": "2026-10-17T02:54:58.890555+00:00"
+  },
+  {
+    "flow": "recovery",
+    "id": "restored-back",
+    "title": "Resume and Back use the restored controller",
+    "note": "Primary clicked Resume, confirmed the exact prepared body was replayed, two logical items completed with one retained photo each, and clicked Back to batch from the actual foreground listing. It activated this restored controller. External model, auth and storage were controlled fixtures.",
+    "filename": "recovery-restored-back.png",
+    "detail": null,
+    "capturedAt": "2026-10-17T02:54:58.890587+00:00"
+  },
+  {
     "flow": "web",
     "id": "01",
     "title": "First-use style preferences",
