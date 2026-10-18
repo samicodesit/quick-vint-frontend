@@ -14,7 +14,7 @@ async function authJourney(options = {}) {
   const events = [];
   const authRequests = [];
   let releaseAuth;
-  const authGate = options.holdAuth ? new Promise(resolve => { releaseAuth = resolve; }) : Promise.resolve();
+  let authGate = options.holdAuth ? new Promise(resolve => { releaseAuth = resolve; }) : Promise.resolve();
   let disconnected = true;
   let rejectRefresh = false;
   const oldAccess = jwt(Math.floor(Date.now() / 1000) + 60);
@@ -42,6 +42,7 @@ async function authJourney(options = {}) {
     const url = new URL(route.request().url());
     if (url.pathname.startsWith("/auth/")) { authRequests.push(url.pathname); await authGate; }
     if (disconnected && url.pathname.startsWith("/auth/")) return route.abort("internetdisconnected");
+    if (options.failOtp && url.pathname.endsWith("/verify")) return route.fulfill({ status: 400, json: { code: "otp_expired", message: "Invalid code" } });
     if (rejectRefresh && url.pathname.endsWith("/token")) return route.fulfill({ status: 400,
       json: { code: "refresh_token_not_found", message: "Invalid Refresh Token: Refresh Token Not Found" } });
     if (url.pathname.endsWith("/verify") || url.pathname.endsWith("/token")) return route.fulfill({ json: renewed });
@@ -53,9 +54,33 @@ async function authJourney(options = {}) {
   await expect(flow.controller.locator('[data-testid="media-upload-grid"] img')).toHaveAttribute("src", /images1.vinted.net/);
   return { ...flow, get worker() { return flow.worker; }, events, authRequests, session,
     releaseAuth: () => releaseAuth?.(), reconnect: () => { disconnected = false; },
+    holdAuth: () => { authGate = new Promise(resolve => { releaseAuth = resolve; }); },
     rejectRefresh: () => { disconnected = false; rejectRefresh = true; },
     async verifyCode() { return sendFromExtensionContent(flow.context, flow.controller, { type: "VERIFY_EMAIL_OTP", email: user.email, token: "123456" }); } };
 }
+
+test("failed overlapping sign-in cannot hide a successful SDK renewal", async ({}, testInfo) => {
+  const flow = await authJourney({ failOtp: true });
+  try {
+    await flow.worker.evaluate(session => chrome.storage.local.set({ supabaseSession: session }), flow.session);
+    await flow.worker.evaluate(() => refreshTokenWithRetry(1, { entryPoint: "startup_restore" }));
+    await flow.worker.evaluate(() => authSessionObserver.drain());
+    flow.reconnect(); flow.holdAuth();
+    const renewal = flow.worker.evaluate(session => supabaseClient.auth.refreshSession({ refresh_token: session.refresh_token }), flow.session);
+    const signin = flow.verifyCode();
+    await expect.poll(() => flow.worker.evaluate(() => interactiveAuthObservations > 0)).toBe(true);
+    flow.releaseAuth();
+    await Promise.all([renewal, signin]);
+    await expect.poll(async () => {
+      await flow.worker.evaluate(() => AutoListerTelemetry.flush());
+      return unique(flow.events).filter(e => e.event === "auth_session_result").length;
+    }).toBe(1);
+    const data = await evidence(testInfo, flow, "background-overlapping-failed-signin");
+    expect(data.events.find(e => e.event === "auth_session_result").context.resultStatus).toBe("silent_renewed");
+    expect(data.generationRequests).toHaveLength(0);
+    expect(data.photos).toBe(1);
+  } finally { flow.releaseAuth(); await flow.close(); }
+});
 
 test("a confirmed session rejection records required fresh sign-in without generating", async ({}, testInfo) => {
   const flow = await authJourney();

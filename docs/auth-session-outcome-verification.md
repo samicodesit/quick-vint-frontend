@@ -41,9 +41,11 @@ collector events, paid generation or live marketplace actions are used.
 
 The checks cover silent renewal after restart, autonomous SDK renewal, explicit
 fresh OTP sign-in, expired-token full-tab callback handoff, confirmed
-rejected-session sign-in and ordinary renewal with no extra record. All six
-passed three times in source and again in the actual 37-file packaged 1.4.21
-extension (18 source and 18 packaged checks). Photos remain present and these background cases
+rejected-session sign-in and ordinary renewal with no extra record. A seventh
+case reproduces an overlapping failed sign-in hiding a successful SDK renewal.
+That regression failed before the ordering correction. All seven are repeated
+three times in source and in the actual 37-file packaged 1.4.21 extension.
+Photos remain present and these background cases
 send no Generate request. Unit checks cover account isolation, expiry, stable
 delivery identity and fail-open storage. Endpoint checks use the actual
 ingestion function and local PostgreSQL-compatible storage to verify retention,

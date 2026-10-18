@@ -21,10 +21,24 @@ function observeAuthSession(event, owner) {
   } catch { /* Observation cannot fail or delay authentication. */ }
 }
 let interactiveAuthObservations = 0;
+let interactiveAuthObservation;
 async function observeInteractiveAuth(work) {
+  const observation = { previous: interactiveAuthObservation, renewals: [], settled: false, failed: false };
+  interactiveAuthObservation = observation;
   interactiveAuthObservations++;
-  try { return await work(); }
-  finally { interactiveAuthObservations--; }
+  try {
+    const result = await work();
+    observation.failed = Boolean(result?.error || !result?.data?.session);
+    return result;
+  } catch (error) {
+    observation.failed = true;
+    throw error;
+  } finally {
+    observation.settled = true;
+    interactiveAuthObservations--;
+    while (interactiveAuthObservation?.settled) interactiveAuthObservation = interactiveAuthObservation.previous;
+    if (observation.failed) for (const renewal of observation.renewals) observeAuthSession(renewal.event, renewal.owner);
+  }
 }
 void chrome.storage.local.get("supabaseSession").then(({ supabaseSession }) =>
   authSessionObserver.resume(supabaseSession?.user?.id)).catch(() => {});
@@ -2969,7 +2983,8 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
  * Listens for Supabase auth state changes to keep storage and profile in sync.
  */
 supabaseClient.auth.onAuthStateChange((event, session) => {
-  const observeSdkRenewal = event === "TOKEN_REFRESHED" && !tokenRefreshPromise && !interactiveAuthObservations;
+  const sdkRenewal = event === "TOKEN_REFRESHED" && !tokenRefreshPromise
+    ? { interactive: interactiveAuthObservation } : null;
   (async () => {
     try {
       // The SDK also emits SIGNED_OUT for some provider failures (HTTP 500).
@@ -2988,9 +3003,11 @@ supabaseClient.auth.onAuthStateChange((event, session) => {
         await setAutolisterUninstallUrl();
       } else if (event === "SIGNED_IN" || event === "TOKEN_REFRESHED") {
         await setStoredSession(session);
-        if (observeSdkRenewal && session?.user?.id) observeAuthSession({
-          event: "token_refresh_success", context: { entryPoint: "sdk_refresh" },
-        }, session.user.id);
+        if (sdkRenewal && session?.user?.id) {
+          const renewal = { event: { event: "token_refresh_success", context: { entryPoint: "sdk_refresh" } }, owner: session.user.id };
+          if (!sdkRenewal.interactive || (sdkRenewal.interactive.settled && sdkRenewal.interactive.failed)) observeAuthSession(renewal.event, renewal.owner);
+          else if (!sdkRenewal.interactive.settled) sdkRenewal.interactive.renewals.push(renewal);
+        }
         await updateAndStoreUserProfile();
       } else if (session) {
         await setStoredSession(session);
