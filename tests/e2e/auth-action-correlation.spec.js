@@ -295,6 +295,10 @@ test("a failed refresh is not a blocked action when the retained access still co
   test.setTimeout(90000);
   const flow = await authJourney({ acceptOld: true });
   try {
+    // An unrelated background failure may already be in the same event batch.
+    await flow.worker.evaluate(session => chrome.storage.local.set({ supabaseSession: session }), flow.session);
+    await flow.worker.evaluate(() => refreshTokenWithRetry(1, { entryPoint: "scheduled_refresh" }));
+    await flow.worker.evaluate(() => AutoListerTelemetry.flush());
     await flow.worker.evaluate(session => chrome.storage.local.set({ supabaseSession: session }), flow.session);
     await flow.controller.locator("#quickvint-gen-btn").click();
     await expect(flow.controller.locator('[data-testid="title--input"]')).toHaveValue("Item 1", { timeout: 35000 });
@@ -303,10 +307,15 @@ test("a failed refresh is not a blocked action when the retained access still co
       return unique(flow.events).some(event => event.event === "token_refresh_failed");
     }).toBe(true);
     const data = await evidence(testInfo, flow, "retained-access-success");
-    const failure = data.events.find(event => event.event === "token_refresh_failed");
-    expect(failure).toBeTruthy();
     const result = data.events.find(event => event.event === "auth_action_result" && event.context.resultStatus === "succeeded");
+    expect(result).toBeTruthy();
+    const failure = data.events.find(event => event.event === "token_refresh_failed" &&
+      event.context.parentOperationId === result.context.operationId);
+    expect(failure, "match the Generate action, not an unrelated background failure").toBeTruthy();
     expect(result.context.authRefreshOperationId).toBe(failure.context.operationId);
+    expect(data.events.some(event => event.event === "token_refresh_failed" &&
+      event.context.entryPoint === "scheduled_refresh" && event.context.operationId !== failure.context.operationId)).toBe(true);
+    expect(result.context.generationAttemptId).toBe(flow.requests[0].body.generationAttemptId);
     expect(data.events.some(event => ["blocked", "recovered"].includes(event.context.resultStatus))).toBe(false);
     expect(data.generationRequests).toHaveLength(1);
     expect(data.photos).toBe(1);
