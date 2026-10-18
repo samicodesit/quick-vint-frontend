@@ -144,6 +144,7 @@ const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
 });
 let tokenRefreshPromise = null;
 let tokenRefreshTimeout = null;
+let requestedSignOuts = 0;
 let activeTabJob = null;
 
 // Website source data travels separately from auth. Never change the OAuth
@@ -308,6 +309,11 @@ function scheduleTokenRefresh(session) {
  * @returns {Promise<object|null>} The new session object or null on failure.
  */
 let tokenRefreshDiagnostic;
+function isRejectedRefreshSession(error) {
+  return error?.name === "AuthSessionMissingError" ||
+    ["refresh_token_not_found", "refresh_token_already_used", "session_not_found", "session_expired"].includes(error?.code) ||
+    (error?.status === 400 && /Invalid Refresh Token|refresh_token_not_found/i.test(error.message || ""));
+}
 async function refreshTokenWithRetry(maxRetries = 3, diagnostic = {}) {
   if (tokenRefreshPromise) {
     diagnostic.authRefreshOperationId = tokenRefreshDiagnostic?.operationId;
@@ -340,6 +346,8 @@ async function refreshTokenWithRetry(maxRetries = 3, diagnostic = {}) {
     try {
       const session = await getStoredSession();
       if (!session?.refresh_token) return null;
+      tokenRefreshDiagnostic.ownerId = session.user?.id;
+      const sameOwner = async () => (await getStoredSession())?.user?.id === session.user?.id;
 
       trackRefresh("token_refresh_start");
       refreshPhase = "restore_session";
@@ -347,9 +355,12 @@ async function refreshTokenWithRetry(maxRetries = 3, diagnostic = {}) {
         access_token: session.access_token,
         refresh_token: session.refresh_token,
       });
+      if (!(await sameOwner())) {
+        if (restored.error) throw restored.error;
+        return null;
+      }
       if (restored.error) {
-        if (restored.error.message?.includes("Invalid Refresh Token") ||
-            restored.error.message?.includes("refresh_token_not_found")) {
+        if (isRejectedRefreshSession(restored.error)) {
           trackRefresh("token_refresh_expired", { ...refreshErrorContext(restored.error), attempts });
           await handleSignOut({ clearAccountEmail: false });
           return null;
@@ -367,6 +378,10 @@ async function refreshTokenWithRetry(maxRetries = 3, diagnostic = {}) {
         const { data, error } = await supabaseClient.auth.refreshSession({
           refresh_token: session.refresh_token,
         });
+        if (!(await sameOwner())) {
+          if (error) throw error;
+          return null;
+        }
 
         if (!error && data.session) {
           refreshPhase = "persist_session";
@@ -377,10 +392,7 @@ async function refreshTokenWithRetry(maxRetries = 3, diagnostic = {}) {
 
         lastRefreshError = error;
         console.warn(`Token refresh attempt ${attempt} failed:`, error?.message);
-        if (
-          error?.message?.includes("Invalid Refresh Token") ||
-          error?.message?.includes("refresh_token_not_found")
-        ) {
+        if (isRejectedRefreshSession(error)) {
           trackRefresh("token_refresh_expired", { ...refreshErrorContext(error), attempts });
           await handleSignOut({ clearAccountEmail: false });
           return null;
@@ -412,13 +424,34 @@ async function refreshTokenWithRetry(maxRetries = 3, diagnostic = {}) {
  * Ensures the current session token is valid, refreshing it if necessary.
  * @returns {Promise<object|null>} A valid session object or null.
  */
-async function ensureValidToken(diagnostic = {}) {
+async function ensureValidToken(diagnostic = {}, options = {}) {
   const session = await getStoredSession();
   if (!session) return null;
   diagnostic.ownerId = session.user?.id;
+  if (options.expectedUserId && session.user?.id !== options.expectedUserId) {
+    diagnostic.accountChanged = true;
+    return null;
+  }
 
-  if (isTokenNearExpiry(session)) {
-    return (await refreshTokenWithRetry(3, diagnostic)) || (await getStoredSession());
+  if (options.allowUsable && !options.forceRefresh && session.access_token &&
+      session.expires_at * 1000 > Date.now() + 30000) {
+    if (isTokenNearExpiry(session)) void refreshTokenWithRetry(3, diagnostic);
+    return session;
+  }
+  if (options.forceRefresh || isTokenNearExpiry(session)) {
+    const renewed = await refreshTokenWithRetry(3, diagnostic);
+    const current = await getStoredSession();
+    if (current && current.user?.id !== diagnostic.ownerId) {
+      diagnostic.accountChanged = true;
+      return null;
+    }
+    if (!current) return null;
+    if (renewed) return renewed;
+    if (!options.allowUsable) return current;
+    // A failed renewal is not a rejected session. Never hand Generate an
+    // expired token, or the token its API request already rejected.
+    diagnostic.renewalPending = Boolean(current.refresh_token);
+    return null;
   }
   return session;
 }
@@ -639,6 +672,7 @@ async function fetchUserUsageCount() {
  */
 async function handleSignOut({ clearAccountEmail = true } = {}) {
   if (tokenRefreshTimeout) clearTimeout(tokenRefreshTimeout);
+  requestedSignOuts++;
   try {
     const { error } = await supabaseClient.auth.signOut();
     if (error) throw error;
@@ -648,6 +682,8 @@ async function handleSignOut({ clearAccountEmail = true } = {}) {
     return { ok: true };
   } catch (err) {
     return { error: err.message };
+  } finally {
+    requestedSignOuts--;
   }
 }
 
@@ -2631,7 +2667,10 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
       case "GET_ACCESS_TOKEN":
         const accessDiagnostic = authRequestDiagnostic(message, "access_token_request");
-        const session = await ensureValidToken(accessDiagnostic);
+        const session = await ensureValidToken(accessDiagnostic, {
+          allowUsable: true, forceRefresh: message.forceRefresh === true,
+          expectedUserId: message.expectedUserId,
+        });
         observeAuthAction(accessDiagnostic, session?.access_token ? "credentials_returned" : "credentials_unavailable");
         sendResponse(
           session
@@ -2642,7 +2681,11 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
                 ...(accessDiagnostic.parentOperationId && session.user?.id === accessDiagnostic.ownerId && accessDiagnostic.authRefreshOperationId
                   ? { authRefreshOperationId: accessDiagnostic.authRefreshOperationId } : {}),
               }
-            : null,
+            : accessDiagnostic.accountChanged ? { accountChanged: true }
+              : accessDiagnostic.renewalPending ? {
+                  renewalPending: true, userId: accessDiagnostic.ownerId,
+                  ...(accessDiagnostic.authRefreshOperationId ? { authRefreshOperationId: accessDiagnostic.authRefreshOperationId } : {}),
+                } : null,
         );
         break;
 
@@ -2894,6 +2937,14 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 supabaseClient.auth.onAuthStateChange((event, session) => {
   (async () => {
     try {
+      // The SDK also emits SIGNED_OUT for some provider failures (HTTP 500).
+      // Only our explicit sign-out or confirmed refresh rejection may clear
+      // the saved product session. USER_DELETED remains authoritative.
+      if (event === "SIGNED_OUT" && !requestedSignOuts) return;
+      // An old in-flight renewal cannot sign out or overwrite the account
+      // selected while its network request was pending.
+      const refreshingOwnerId = tokenRefreshDiagnostic?.ownerId;
+      if (refreshingOwnerId && (await getStoredSession())?.user?.id !== refreshingOwnerId) return;
       if (event === "SIGNED_OUT" || event === "USER_DELETED") {
         if (tokenRefreshTimeout) clearTimeout(tokenRefreshTimeout);
         const keysToRemove = ["supabaseSession", "userProfile"];

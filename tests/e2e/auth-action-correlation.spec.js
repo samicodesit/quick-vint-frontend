@@ -93,7 +93,8 @@ test("a real Generate action reports its auth block and same-input recovery with
     await flow.worker.evaluate(session => chrome.storage.local.set({ supabaseSession: session }), flow.session);
     await flow.controller.locator("#quickvint-gen-btn").click();
     await expect.poll(() => flow.requests.length, { timeout: 35000 }).toBe(1);
-    await expect(flow.controller.getByRole("button", { name: /Sign in to enable AI Tools/ })).toBeVisible();
+    await expect(flow.controller.locator("#quickvint-gen-btn")).toHaveText(/Waiting for connection/);
+    await expect(flow.controller.getByRole("button", { name: /Sign in to enable AI Tools/ })).toHaveCount(0);
     const blocked = await evidence(testInfo, flow, "action-blocked");
     const result = blocked.events.find(event => event.event === "auth_action_result" && event.context.resultStatus === "blocked");
     expect(result, "actual unauthorized Generate result needs an auth action record").toBeTruthy();
@@ -104,15 +105,13 @@ test("a real Generate action reports its auth block and same-input recovery with
     if (process.env.AUTH_QA_DIR) await flow.controller.screenshot({ path: path.join(process.env.AUTH_QA_DIR, `blocked-${testInfo.repeatEachIndex}.png`) });
     flow.reconnect();
     await flow.restartWorker();
-    expect((await flow.verifyCode()).ok).toBe(true);
-    await flow.controller.locator("#quickvint-gen-btn").click();
-    await expect(flow.controller.locator('[data-testid="title--input"]')).toHaveValue("Item 2");
+    await expect(flow.controller.locator('[data-testid="title--input"]')).toHaveValue("Item 1");
     const recovered = await evidence(testInfo, flow, "action-recovered");
     const recovery = recovered.events.find(event => event.event === "auth_action_result" && event.context.resultStatus === "recovered");
     expect(recovery).toBeTruthy();
     expect(recovery.context.operationId).toBe(result.context.operationId);
     expect(recovery.context.attempt).toBe(2);
-    expect(recovery.context.authRefreshOperationId).toBe(failure.context.operationId);
+    expect(typeof recovery.context.authRefreshOperationId).toBe("string");
     expect(recovered.generationRequests).toHaveLength(2);
     expect(flow.requests[1].body.imageUrls).toEqual(flow.requests[0].body.imageUrls);
     expect(recovered.photos).toBe(1);
@@ -140,7 +139,8 @@ test("a user action joining a background refresh links to that one refresh", asy
     }).toBe(true);
     flow.releaseAuth();
     await expect.poll(() => flow.requests.length, { timeout: 35000 }).toBe(1);
-    await expect(flow.controller.getByRole("button", { name: /Sign in to enable AI Tools/ })).toBeVisible();
+    await expect(flow.controller.locator("#quickvint-gen-btn")).toHaveText(/Waiting for connection/);
+    await expect(flow.controller.getByRole("button", { name: /Sign in to enable AI Tools/ })).toHaveCount(0);
     const data = await evidence(testInfo, flow, "shared-refresh");
     const starts = data.events.filter(event => event.event === "token_refresh_start" && event.context.entryPoint === "scheduled_refresh");
     expect(starts).toHaveLength(1);
@@ -158,12 +158,13 @@ test("success with changed photos cannot recover the earlier blocked action", as
   try {
     await flow.worker.evaluate(session => chrome.storage.local.set({ supabaseSession: session }), flow.session);
     await flow.controller.locator("#quickvint-gen-btn").click();
-    await expect(flow.controller.getByRole("button", { name: /Sign in to enable AI Tools/ })).toBeVisible({ timeout: 35000 });
+    await expect(flow.controller.locator("#quickvint-gen-btn")).toHaveText(/Waiting for connection/, { timeout: 35000 });
     await evidence(testInfo, flow, "changed-input-blocked");
-    flow.reconnect(); expect((await flow.verifyCode()).ok).toBe(true);
     await flow.controller.locator('[data-testid="media-upload-grid"] .photo-box').evaluateAll(boxes => boxes.forEach(box => box.remove()));
     await flow.controller.locator('[data-testid="add-photos-input"]').setInputFiles(path.resolve(__dirname, "../../images/quickvint-upload-multiple.jpg"));
     await expect(flow.controller.locator('[data-testid="media-upload-grid"] img')).toHaveAttribute("src", /images1.vinted.net/);
+    flow.reconnect();
+    await expect(flow.controller.locator("#quickvint-gen-btn")).toBeEnabled();
     await flow.controller.locator("#quickvint-gen-btn").click();
     await expect(flow.controller.locator('[data-testid="title--input"]')).toHaveValue("Item 2");
     const data = await evidence(testInfo, flow, "changed-input-success");
@@ -181,6 +182,10 @@ test("a failed refresh is not a blocked action when the retained access still co
     await flow.worker.evaluate(session => chrome.storage.local.set({ supabaseSession: session }), flow.session);
     await flow.controller.locator("#quickvint-gen-btn").click();
     await expect(flow.controller.locator('[data-testid="title--input"]')).toHaveValue("Item 1", { timeout: 35000 });
+    await expect.poll(async () => {
+      await flow.worker.evaluate(() => AutoListerTelemetry.flush());
+      return unique(flow.events).some(event => event.event === "token_refresh_failed");
+    }).toBe(true);
     const data = await evidence(testInfo, flow, "retained-access-success");
     const failure = data.events.find(event => event.event === "token_refresh_failed");
     expect(failure).toBeTruthy();
@@ -201,7 +206,9 @@ test("unavailable telemetry cannot change auth, Generate output or retained phot
     await flow.worker.evaluate(session => chrome.storage.local.set({ supabaseSession: session }), flow.session);
     await flow.controller.locator("#quickvint-gen-btn").click();
     await expect(flow.controller.locator('[data-testid="title--input"]')).toHaveValue("Item 1", { timeout: 35000 });
-    expect(flow.requests).toHaveLength(1);
+    expect(flow.requests).toHaveLength(2);
+    expect(flow.requests[1].id).toBe(flow.requests[0].id);
+    expect(flow.requests[1].rawBody).toBe(flow.requests[0].rawBody);
     await expect(flow.controller.locator('[data-testid="media-upload-grid"] img')).toHaveCount(1);
     await expect(flow.controller.getByRole("button", { name: /Sign in to enable AI Tools/ })).toHaveCount(0);
   } finally { await flow.close(); }
@@ -216,7 +223,7 @@ test("an auth-blocked uncertain replay records the generation ID from the saved 
     await expect(flow.controller.locator("#quickvint-gen-btn")).toBeEnabled();
     await flow.worker.evaluate(session => chrome.storage.local.set({ supabaseSession: session }), flow.session);
     await flow.controller.locator("#quickvint-gen-btn").click();
-    await expect(flow.controller.getByRole("button", { name: /Sign in to enable AI Tools/ })).toBeVisible({ timeout: 35000 });
+    await expect(flow.controller.locator("#quickvint-gen-btn")).toHaveText(/Waiting for connection/, { timeout: 35000 });
     const data = await evidence(testInfo, flow, "uncertain-replay-blocked");
     expect(flow.requests).toHaveLength(3);
     expect(flow.requests[2].id).toBe(flow.requests[0].id);
@@ -225,8 +232,7 @@ test("an auth-blocked uncertain replay records the generation ID from the saved 
     expect(result.context.generationAttemptId).toBe(flow.requests[2].body.generationAttemptId);
     const failure = data.events.find(event => event.event === "generate_error" && event.context.statusCode === 401);
     expect(failure.context.parentOperationId).toBe(result.context.operationId);
-    flow.reconnect(); expect((await flow.verifyCode()).ok).toBe(true);
-    await flow.controller.locator("#quickvint-gen-btn").click();
+    flow.reconnect();
     await expect(flow.controller.locator('[data-testid="title--input"]')).not.toHaveValue("");
     const recovered = await evidence(testInfo, flow, "uncertain-replay-recovered");
     const recovery = recovered.events.find(event => event.event === "auth_action_result" && event.context.resultStatus === "recovered");

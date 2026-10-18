@@ -19137,7 +19137,7 @@
       imageUrls = imageEntries.map((entry) => entry.url);
       imageSourceTelemetry = buildImageSourceTelemetry(imageEntries);
 
-      const storage = await chrome.storage.local.get([
+      const generationPreferenceKeys = [
         "selectedLanguage",
         "selectedTitleLanguage",
         "selectedDescriptionLanguage",
@@ -19148,8 +19148,8 @@
         DESCRIPTION_FOOTER_STORAGE_KEY,
         OUTPUT_SHAPE_STORAGE_KEY,
         DESCRIPTION_LENGTH_STORAGE_KEY,
-        "userProfile",
-      ]);
+      ];
+      const storage = await chrome.storage.local.get([...generationPreferenceKeys, "userProfile"]);
       const {
         tone = "standard",
         useEmojis = true,
@@ -19200,20 +19200,71 @@
       const legacyLanguageCode = descriptionLanguageCode || titleLanguageCode;
       const imageSourceSummary =
         summarizeImageSourcesForTelemetry(imageSourceTelemetry);
-      authAction = authActionObserver?.begin({ entryPoint: "generate", generationAttemptId,
+      const authActionSpec = { entryPoint: "generate", generationAttemptId,
         scope: [window.location.pathname, batchContext?.batchId, batchContext?.itemIndex,
           mode, requestGenerationMode, Boolean(emojiRetry), descriptionApplyChoice, applyGeneratedOutput,
           titleLanguageCode, descriptionLanguageCode, tone,
-          effectiveUseEmojis, useHashtags, useBulletPoints, descriptionLength, effectiveDescriptionFooterText, ...imageUrls] });
-      const credentials = (await sendMessage({ type: "GET_ACCESS_TOKEN",
-        ...(authAction?.operationId ? { authContext: { operationId: authAction.operationId, entryPoint: "generate" } } : {}) })) || {};
-      authAction?.observe(credentials);
-      const { access_token, userId } = credentials;
-      generationOwnerId = userId || generationOwnerId;
-      if (!access_token) {
-        authBlockReason = "session_missing";
-        throw new Error("Your session has expired. Please sign in again via the extension.");
-      }
+          effectiveUseEmojis, useHashtags, useBulletPoints, descriptionLength, effectiveDescriptionFooterText, ...imageUrls] };
+      authAction = authActionObserver?.begin(authActionSpec);
+      let renewalBlocked = false;
+      const settingsKeys = generationPreferenceKeys;
+      const settingsSnapshot = JSON.stringify(settingsKeys.map(key => storage[key]));
+      const checkRenewalInputs = async () => {
+        if (JSON.stringify(getUploadedImageEntries().map(entry => entry.url)) !== JSON.stringify(imageUrls)) {
+          throw new Error("Photos changed. Click Generate to use the current photos.");
+        }
+        if (manageButtonState) {
+          const current = await chrome.storage.local.get(settingsKeys);
+          if (JSON.stringify(settingsKeys.map(key => current[key])) !== settingsSnapshot) {
+            throw new Error("Settings changed. Click Generate to use the current settings.");
+          }
+        }
+      };
+      const noteAuthBlock = (reason, statusCode) => {
+        authBlockReason = reason;
+        if (renewalBlocked) return;
+        renewalBlocked = true;
+        authAction?.finish("blocked", { reason, statusCode, generationAttemptId: authRequestGenerationAttemptId });
+        authAction = authActionObserver?.begin({ ...authActionSpec, generationAttemptId: authRequestGenerationAttemptId });
+      };
+      const getGenerationCredentials = async (forceRefresh = false) => {
+        const startedAt = Date.now();
+        for (;;) {
+          if (batchSignal?.aborted) throw new Error("Batch stopped. Your photos are saved.");
+          if (generationOwnerId && batchAuthUserId !== generationOwnerId) throw new Error("Your account changed. This generation has not been applied.");
+          const reply = await sendMessage({ type: "GET_ACCESS_TOKEN", forceRefresh,
+            expectedUserId: generationOwnerId,
+            ...(authAction?.operationId ? { authContext: { operationId: authAction.operationId, entryPoint: "generate" } } : {}) });
+          // Worker termination closes its message port with undefined. That
+          // is unavailable transport, distinct from an explicit null session.
+          const credentials = reply === undefined ? { renewalPending: true, userId: generationOwnerId } : reply || {};
+          authAction?.observe(credentials);
+          if (batchSignal?.aborted) throw new Error("Batch stopped. Your photos are saved.");
+          if (credentials.accountChanged || (generationOwnerId &&
+              (batchAuthUserId !== generationOwnerId || (credentials.userId && credentials.userId !== generationOwnerId)))) {
+            throw new Error("Your account changed. This generation has not been applied.");
+          }
+          generationOwnerId = credentials.userId || generationOwnerId;
+          await checkRenewalInputs();
+          if (credentials.access_token) { authBlockReason = null; return credentials; }
+          noteAuthBlock(reply === undefined ? "background_unavailable" : "session_missing", 0);
+          if (!credentials.renewalPending) {
+            isAuthenticated = false;
+            throw new Error("Please sign in again.");
+          }
+          if (Date.now() - startedAt >= 120000) throw new Error("Connection unavailable. Please try again.");
+          if (manageButtonState) setGenerateBusyLabel("Waiting for connection...");
+          else showBatchTabStatus("Waiting for connection...");
+          await new Promise((resolve, reject) => {
+            const abort = () => { clearTimeout(timer); batchSignal?.removeEventListener("abort", abort); reject(new Error("Batch stopped. Your photos are saved.")); };
+            const timer = setTimeout(() => { batchSignal?.removeEventListener("abort", abort); resolve(); }, 1500);
+            batchSignal?.addEventListener("abort", abort, { once: true });
+            if (batchSignal?.aborted) abort();
+          });
+        }
+      };
+      let { access_token, userId } = await getGenerationCredentials();
+      if (manageButtonState) setGenerateBusyLabel("Generating");
       let durableRequest = null;
       if (batchContext) {
         const saved = await sendMessage({ type: "GET_BATCH_GENERATION_REQUEST", ...batchContext, userId });
@@ -19428,7 +19479,7 @@
         }
         // A new input/limit rejection can start afresh. Once a prior outcome
         // is uncertain, even an expired sign-in must not discard its identity.
-        if (definitiveFailure && !generationRequest.uncertain) {
+        if (definitiveFailure && generateResponse.status !== 401 && !generationRequest.uncertain) {
           if (pendingGenerationRequest === generationRequest) {
             pendingGenerationRequest = null;
           }
@@ -19443,16 +19494,20 @@
       if (generationOwnerId && batchAuthUserId !== generationOwnerId) throw new Error("Your account changed. This generation has not been applied.");
 
       if (response.status === 401) {
-        authBlockReason = "unauthorized";
         trackGenerationEvent("generate_error", { mode, status: 401 });
-        isAuthenticated = false;
-        showToast("Session expired. Please sign in again.", "error");
-        if (manageButtonState) {
-          isBusy = false;
+        noteAuthBlock("unauthorized", 401);
+        ({ access_token, userId } = await getGenerationCredentials(true));
+        if (manageButtonState) setGenerateBusyLabel("Generating");
+        // A 401 did not authorize generation. Replay once with the renewed
+        // token and the exact saved body/ID, including any uncertain request.
+        response = await sendGenerateRequest("auth_renewal");
+        if (response.status === 401) {
+          authBlockReason = "unauthorized";
+          throw new Error("Could not authorize generation. Please try again.");
         }
-        updateButtonUI();
-        throw new Error("Session expired. Please sign in again.");
       }
+      if (batchSignal?.aborted) throw new Error("Batch stopped. Your photos are saved.");
+      if (generationOwnerId && batchAuthUserId !== generationOwnerId) throw new Error("Your account changed. This generation has not been applied.");
       if (response.status === 429 || response.status === 403) {
         const errData = await response.json();
         if (response.status === 403 && errData.code !== "account_paused") {

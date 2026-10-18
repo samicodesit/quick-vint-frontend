@@ -43,6 +43,7 @@ async function runBackgroundHandoff(
     auth: {
       setSession: async (session) => {
         setSessionArgs = session;
+        if (options.onSetSession) return options.onSetSession(session);
         if (options.setSessionError) throw options.setSessionError;
         return {
           ...setSessionResult,
@@ -348,6 +349,75 @@ test("successful auth responses keep their status, headers and body without retr
   assert.equal(calls, 1);
 });
 
+const accessReply = (harness, extra = {}) => new Promise(resolve =>
+  harness.internalListener({ type: "GET_ACCESS_TOKEN", ...extra }, {}, resolve));
+
+test("a still-valid access token does not wait for a stalled renewal", async () => {
+  const options = { runScheduledTimers: false };
+  const harness = await runBackgroundHandoff({ type: "PING" }, undefined, options);
+  harness.storageData.supabaseSession = { access_token: "usable", refresh_token: "renewable",
+    expires_at: Math.floor(Date.now() / 1000) + 60, user: { id: "user-1" } };
+  let release;
+  options.onSetSession = () => new Promise(resolve => { release = resolve; });
+  const reply = await Promise.race([accessReply(harness), new Promise(resolve => setImmediate(() => resolve("waited")))]);
+  assert.equal(reply.access_token, "usable");
+  release?.({ data: { session: null }, error: { status: 0, message: "Failed to fetch" } });
+});
+
+test("an expired retained session returns temporary unavailability instead of expired credentials", async () => {
+  const options = { runScheduledTimers: false };
+  const harness = await runBackgroundHandoff({ type: "PING" }, undefined, options);
+  harness.storageData.supabaseSession = { access_token: "expired", refresh_token: "renewable",
+    expires_at: Math.floor(Date.now() / 1000) - 60, user: { id: "user-1" } };
+  options.setSessionError = Object.assign(new Error("Failed to fetch"), { status: 0 });
+  const reply = await accessReply(harness);
+  assert.equal(reply.access_token, undefined);
+  assert.equal(reply.renewalPending, true);
+  assert.equal(reply.userId, "user-1");
+  assert.equal(harness.storageData.supabaseSession.refresh_token, "renewable");
+});
+
+test("forced renewal after HTTP 401 cannot fall back to the rejected token", async () => {
+  const options = { runScheduledTimers: false };
+  const harness = await runBackgroundHandoff({ type: "PING" }, undefined, options);
+  harness.storageData.supabaseSession = { access_token: "server-rejected", refresh_token: "renewable",
+    expires_at: Math.floor(Date.now() / 1000) + 3600, user: { id: "user-1" } };
+  options.setSessionError = new Error("Failed to fetch");
+  const reply = await accessReply(harness, { forceRefresh: true, expectedUserId: "user-1" });
+  assert.equal(reply.access_token, undefined);
+  assert.equal(reply.renewalPending, true);
+});
+
+test("credential retry cannot switch to another account", async () => {
+  const harness = await runBackgroundHandoff({ type: "PING" }, undefined, { runScheduledTimers: false });
+  harness.storageData.supabaseSession = { access_token: "other-access", refresh_token: "other-refresh",
+    expires_at: 2000000000, user: { id: "user-2" } };
+  const reply = await accessReply(harness, { forceRefresh: true, expectedUserId: "user-1" });
+  assert.equal(reply.access_token, undefined);
+  assert.equal(reply.accountChanged, true);
+  assert.equal(harness.storageData.supabaseSession.user.id, "user-2");
+});
+
+test("an in-flight old renewal cannot overwrite or sign out the newly selected account", async () => {
+  const options = { runScheduledTimers: false };
+  const harness = await runBackgroundHandoff({ type: "PING" }, undefined, options);
+  const original = { access_token: "old", refresh_token: "old-refresh", expires_at: 1, user: { id: "user-1" } };
+  harness.storageData.supabaseSession = original;
+  let release;
+  options.onSetSession = () => new Promise(resolve => { release = resolve; });
+  const pending = accessReply(harness, { expectedUserId: "user-1" });
+  await new Promise(resolve => setImmediate(resolve));
+  harness.storageData.supabaseSession = { ...original, access_token: "other", user: { id: "user-2" } };
+  harness.emitAuthState("TOKEN_REFRESHED", original);
+  harness.emitAuthState("SIGNED_OUT", null);
+  await new Promise(resolve => setImmediate(resolve));
+  release({ data: { session: original }, error: null });
+  const reply = await pending;
+  assert.equal(reply.accountChanged, true);
+  assert.equal(harness.storageData.supabaseSession.user.id, "user-2");
+  assert.equal(harness.storageData.supabaseSession.access_token, "other");
+});
+
 test("a session-restoration error ends refresh without extra requests or clearing the stored session", async () => {
   let requests = 0;
   const session = { access_token: "saved-access", refresh_token: "saved-refresh", expires_at: 2000000000, user: { id: "user-1" } };
@@ -402,6 +472,19 @@ test("restoration does not bypass invalid-signature or generic forbidden JWT err
   }
 });
 
+test("documented rejected-session codes clear the saved login without relying on provider wording", async () => {
+  for (const code of ["refresh_token_not_found", "refresh_token_already_used", "session_not_found", "session_expired"]) {
+    const harness = await runBackgroundHandoff({ type: "PING" }, undefined, {
+      initialStorage: { supabaseSession: { access_token: "expired", refresh_token: "revoked", expires_at: 1, user: { id: "user-1" } } },
+      runScheduledTimers: false,
+      setSessionResult: { data: { session: null }, error: { name: "AuthApiError", code, status: 400, message: "Saved session rejected" } },
+    });
+    await harness.refreshToken();
+    await new Promise(resolve => setImmediate(resolve));
+    assert.equal(harness.storageData.supabaseSession, undefined, code);
+  }
+});
+
 test("a confirmed invalid refresh token during restoration keeps the normal sign-out behavior", async () => {
   const harness = await runBackgroundHandoff({ type: "PING" }, undefined, {
     initialStorage: { accountEmail: "seller@example.com", supabaseSession: {
@@ -416,7 +499,7 @@ test("a confirmed invalid refresh token during restoration keeps the normal sign
   assert.ok(harness.telemetryEvents.some(event => event.event === "token_refresh_expired"));
 });
 
-test("refresh failures keep their stage and original error after the SDK signs out", async () => {
+test("an SDK sign-out on provider failure preserves the session and original diagnostic", async () => {
   let harness;
   const providerError = Object.assign(new Error("Provider unavailable"), { code: "unexpected_failure", status: 500 });
   harness = await runBackgroundHandoff({ type: "PING" }, undefined, {
@@ -434,12 +517,12 @@ test("refresh failures keep their stage and original error after the SDK signs o
   assert.equal(await harness.refreshToken(), null);
   await new Promise(resolve => setImmediate(resolve));
   const failure = harness.telemetryEvents.find(event => event.event === "token_refresh_failed");
-  assert.equal(failure.accountId, null);
+  assert.equal(failure.accountId, "user-1");
   assert.equal(failure.context.stage, "authenticating");
   assert.equal(failure.context.phase, "refresh_session");
   assert.equal(failure.context.errorCode, "unexpected_failure");
   assert.equal(failure.context.operationId, harness.telemetryEvents[0].context.operationId);
-  assert.equal(harness.storageData.supabaseSession, undefined);
+  assert.equal(harness.storageData.supabaseSession.access_token, "existing-access");
 });
 
 test("refresh diagnostics distinguish session restoration exceptions without making refresh requests", async () => {
@@ -898,7 +981,7 @@ test("a server acknowledgement stays with the original account if auth changes d
   });
   harness.emitAuthState("SIGNED_IN", signedInSession);
   await settleAcquisition();
-  harness.emitAuthState("SIGNED_OUT", null);
+  await new Promise(resolve => harness.internalListener({ type: "SIGN_OUT" }, {}, resolve));
   await settleAcquisition();
   resolveRequest({ ok: true, status: 200 });
   await settleAcquisition();

@@ -88,29 +88,25 @@ for (const change of ["account", "settings"]) {
   });
 }
 
-test("keeps an uncertain operation through a later authentication failure", async ({ page }) => {
+test("keeps an uncertain operation through a later HTTP 401 and automatic auth replay", async ({ page }) => {
   await page.route("https://autolister.app/api/events/track", (route) => route.fulfill({ status: 204, body: "" }));
   const requests = [];
+  const bodies = [];
   await page.route("https://autolister.app/api/generate", (route) => {
     requests.push(route.request().headers());
+    bodies.push(route.request().postData());
     if (requests.length <= 2) return route.abort("connectionreset");
-    return route.fulfill({ status: requests.length === 3 ? 401 : 200, contentType: "application/json", body: JSON.stringify(requests.length === 3 ? { error: "Session expired" } : { title: "Recovered after sign-in", description: "Original operation" }) });
+    return route.fulfill({ status: requests.length === 3 ? 401 : 200, contentType: "application/json", body: JSON.stringify(requests.length === 3 ? { error: "Session expired" } : { title: "Recovered after auth retry", description: "Original operation" }) });
   });
   await openContentHarness(page);
-  for (const expectedCount of [2, 3, 4]) {
+  for (const expectedCount of [2, 4]) {
     await page.locator("#quickvint-gen-btn").click();
     await expect.poll(() => requests.length).toBe(expectedCount);
-    if (expectedCount === 3) {
-      await expect(page.locator("#quickvint-toast")).toContainText("Session expired");
-      await page.evaluate(async () => {
-        const { supabaseSession } = await chrome.storage.local.get("supabaseSession");
-        await chrome.storage.local.set({ supabaseSession: { ...supabaseSession, access_token: "signed-in-again" } });
-      });
-    }
     await expect(page.locator("#quickvint-gen-btn")).toBeEnabled();
   }
-  await expect(page.locator('[data-testid="title--input"]')).toHaveValue("Recovered after sign-in");
+  await expect(page.locator('[data-testid="title--input"]')).toHaveValue("Recovered after auth retry");
   expect(new Set(requests.map((headers) => headers["x-autolister-request-id"])).size).toBe(1);
+  expect(new Set(bodies).size).toBe(1);
 });
 
 test("recovers an unreadable success response without changing the operation", async ({ page }) => {
