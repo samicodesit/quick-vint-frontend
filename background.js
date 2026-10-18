@@ -1,5 +1,33 @@
 // --- IMPORTS & INITIALIZATION ---
-importScripts("lib/supabase.js", "lib/telemetry-registry.js", "lib/telemetry-core.js", "lib/telemetry-client.js", "lib/telemetry-background.js");
+importScripts("lib/supabase.js", "lib/telemetry-registry.js", "lib/telemetry-core.js", "lib/telemetry-client.js", "lib/telemetry-background.js", "lib/auth-session-observer.js");
+
+// Observation only: one bounded pending failure, independent of auth decisions.
+const AUTH_SESSION_OBSERVATION_KEY = "autolisterAuthSessionObservation";
+const authSessionObserver = AutoListerAuthSessions.createObserver({
+  load: async () => (await chrome.storage.local.get(AUTH_SESSION_OBSERVATION_KEY))[AUTH_SESSION_OBSERVATION_KEY],
+  save: value => chrome.storage.local.set({ [AUTH_SESSION_OBSERVATION_KEY]: value }),
+  emit: async (outcome, owner) => {
+    AutoListerTelemetry.setAccount(owner);
+    const prepared = AutoListerTelemetry.prepare("auth_session_result", outcome.context, "extension_background");
+    prepared.event.id = outcome.id;
+    prepared.event.occurredAt = outcome.occurredAt;
+    return AutoListerBackgroundTelemetry.accept(prepared.event, owner, true, false);
+  },
+});
+function observeAuthSession(event, owner) {
+  try {
+    if (event.event === "token_refresh_success" && !event.context.operationId) event.context.operationId = crypto.randomUUID();
+    void authSessionObserver.observe(event, owner);
+  } catch { /* Observation cannot fail or delay authentication. */ }
+}
+let interactiveAuthObservations = 0;
+async function observeInteractiveAuth(work) {
+  interactiveAuthObservations++;
+  try { return await work(); }
+  finally { interactiveAuthObservations--; }
+}
+void chrome.storage.local.get("supabaseSession").then(({ supabaseSession }) =>
+  authSessionObserver.resume(supabaseSession?.user?.id)).catch(() => {});
 
 const ANALYTICS_CLIENT_ID_KEY = "analyticsClientId";
 const ACCOUNT_EMAIL_STORAGE_KEY = "accountEmail";
@@ -323,7 +351,11 @@ async function refreshTokenWithRetry(maxRetries = 3, diagnostic = {}) {
   const telemetryOperation = crypto.randomUUID();
   tokenRefreshDiagnostic = { operationId: telemetryOperation };
   diagnostic.authRefreshOperationId = telemetryOperation;
-  const trackRefresh = (event, context = {}) => { void globalThis.AutoListerTelemetry?.track(event, {
+  const trackRefresh = (event, context = {}) => {
+    observeAuthSession({ event, id: `${telemetryOperation}:${event}`, context: {
+      operationId: telemetryOperation, entryPoint: diagnostic.entryPoint || "unspecified",
+    } }, tokenRefreshDiagnostic?.ownerId);
+    void globalThis.AutoListerTelemetry?.track(event, {
     operationId: telemetryOperation, entryPoint: diagnostic.entryPoint || "unspecified",
     parentOperationId: diagnostic.parentOperationId, target: diagnostic.target,
     navigatorOnline: globalThis.navigator?.onLine, ...context,
@@ -2426,6 +2458,8 @@ function buildPublicUserProfileResponse(supabaseSession, userProfile) {
 
 async function trackAuthHandoffSuccess(session, authEvent = "auth_handoff") {
   if (!session?.user?.id) return;
+  observeAuthSession({ event: "auth_success",
+    context: { reason: authEvent } }, session.user.id);
   try {
     const prepared = globalThis.AutoListerTelemetry?.prepare("auth_success", { reason: authEvent }, "extension_external_auth");
     if (prepared) void globalThis.AutoListerBackgroundTelemetry?.accept(prepared.event, session.user.id, false, true).catch(() => {});
@@ -2444,10 +2478,10 @@ async function acceptExternalAuthHandoff(rawSession) {
   }
 
   const previousSession = await getStoredSession();
-  const { data, error } = await supabaseClient.auth.setSession({
+  const { data, error } = await observeInteractiveAuth(() => supabaseClient.auth.setSession({
     access_token: accessToken,
     refresh_token: refreshToken,
-  });
+  }));
   if (error || !data?.session) {
     if (previousSession) await setStoredSession(previousSession);
     return {
@@ -2469,11 +2503,11 @@ async function verifyEmailOtp({ email, token }) {
     return { ok: false, error: "invalid_otp" };
   }
 
-  const { data, error } = await supabaseClient.auth.verifyOtp({
+  const { data, error } = await observeInteractiveAuth(() => supabaseClient.auth.verifyOtp({
     email: normalizedEmail,
     token: normalizedToken,
     type: "email",
-  });
+  }));
   if (error || !data?.session) {
     return {
       ok: false,
@@ -2935,6 +2969,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
  * Listens for Supabase auth state changes to keep storage and profile in sync.
  */
 supabaseClient.auth.onAuthStateChange((event, session) => {
+  const observeSdkRenewal = event === "TOKEN_REFRESHED" && !tokenRefreshPromise && !interactiveAuthObservations;
   (async () => {
     try {
       // The SDK also emits SIGNED_OUT for some provider failures (HTTP 500).
@@ -2953,6 +2988,9 @@ supabaseClient.auth.onAuthStateChange((event, session) => {
         await setAutolisterUninstallUrl();
       } else if (event === "SIGNED_IN" || event === "TOKEN_REFRESHED") {
         await setStoredSession(session);
+        if (observeSdkRenewal && session?.user?.id) observeAuthSession({
+          event: "token_refresh_success", context: { entryPoint: "sdk_refresh" },
+        }, session.user.id);
         await updateAndStoreUserProfile();
       } else if (session) {
         await setStoredSession(session);

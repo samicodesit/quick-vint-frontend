@@ -16,6 +16,7 @@ async function authJourney(options = {}) {
   let releaseAuth;
   const authGate = options.holdAuth ? new Promise(resolve => { releaseAuth = resolve; }) : Promise.resolve();
   let disconnected = true;
+  let rejectRefresh = false;
   const oldAccess = jwt(Math.floor(Date.now() / 1000) + 60);
   const session = { access_token: oldAccess, refresh_token: "local-refresh", expires_at: Math.floor(Date.now() / 1000) + 60, user };
   const renewed = { ...session, access_token: jwt(Math.floor(Date.now() / 1000) + 3600), expires_at: Math.floor(Date.now() / 1000) + 3600, expires_in: 3600, token_type: "bearer" };
@@ -41,6 +42,8 @@ async function authJourney(options = {}) {
     const url = new URL(route.request().url());
     if (url.pathname.startsWith("/auth/")) { authRequests.push(url.pathname); await authGate; }
     if (disconnected && url.pathname.startsWith("/auth/")) return route.abort("internetdisconnected");
+    if (rejectRefresh && url.pathname.endsWith("/token")) return route.fulfill({ status: 400,
+      json: { code: "refresh_token_not_found", message: "Invalid Refresh Token: Refresh Token Not Found" } });
     if (url.pathname.endsWith("/verify") || url.pathname.endsWith("/token")) return route.fulfill({ json: renewed });
     if (url.pathname.endsWith("/user")) return route.fulfill({ json: user });
     return route.fulfill({ json: { subscription_status: "active", subscription_tier: "pro", api_calls_this_month: 0, pack_credits: 0 } });
@@ -50,8 +53,46 @@ async function authJourney(options = {}) {
   await expect(flow.controller.locator('[data-testid="media-upload-grid"] img')).toHaveAttribute("src", /images1.vinted.net/);
   return { ...flow, get worker() { return flow.worker; }, events, authRequests, session,
     releaseAuth: () => releaseAuth?.(), reconnect: () => { disconnected = false; },
+    rejectRefresh: () => { disconnected = false; rejectRefresh = true; },
     async verifyCode() { return sendFromExtensionContent(flow.context, flow.controller, { type: "VERIFY_EMAIL_OTP", email: user.email, token: "123456" }); } };
 }
+
+test("a confirmed session rejection records required fresh sign-in without generating", async ({}, testInfo) => {
+  const flow = await authJourney();
+  try {
+    await flow.worker.evaluate(session => chrome.storage.local.set({ supabaseSession: session }), flow.session);
+    flow.rejectRefresh();
+    await flow.worker.evaluate(() => refreshTokenWithRetry(1, { entryPoint: "startup_restore" }));
+    await flow.worker.evaluate(() => authSessionObserver.drain());
+    expect(await flow.worker.evaluate(async () => (await chrome.storage.local.get("supabaseSession")).supabaseSession)).toBeUndefined();
+    await flow.verifyCode();
+    await expect.poll(async () => {
+      await flow.worker.evaluate(() => AutoListerTelemetry.flush());
+      return unique(flow.events).filter(e => e.event === "auth_session_result").length;
+    }).toBe(1);
+    const data = await evidence(testInfo, flow, "background-required-signin");
+    const result = data.events.find(e => e.event === "auth_session_result");
+    expect(result.context.resultStatus).toBe("signed_in");
+    expect(result.context.signInRequired).toBe(true);
+    expect(result.context.reason).toBe("email_otp");
+    expect(data.generationRequests).toHaveLength(0);
+    expect(data.photos).toBe(1);
+  } finally { await flow.close(); }
+});
+
+test("ordinary silent renewal adds no session outcome record", async ({}, testInfo) => {
+  const flow = await authJourney();
+  try {
+    flow.reconnect();
+    await flow.worker.evaluate(() => refreshTokenWithRetry(1, { entryPoint: "scheduled_refresh" }));
+    await flow.worker.evaluate(() => authSessionObserver.drain());
+    const data = await evidence(testInfo, flow, "background-ordinary-renewal");
+    expect(data.events.some(e => e.event === "token_refresh_success")).toBe(true);
+    expect(data.events.filter(e => e.event === "auth_session_result")).toEqual([]);
+    expect(data.generationRequests).toHaveLength(0);
+    expect(data.photos).toBe(1);
+  } finally { await flow.close(); }
+});
 
 async function evidence(testInfo, flow, name) {
   await flow.worker.evaluate(() => AutoListerTelemetry.flush());
@@ -85,6 +126,56 @@ test("a real scheduled refresh failure identifies its background trigger without
     expect(data.photos).toBe(1);
   } finally { await flow.close(); }
 });
+
+for (const outcome of ["silent_renewed", "signed_in", "sdk_renewed", "handoff_signed_in"]) {
+  test(`background failure survives a worker restart and records ${outcome} without generating`, async ({}, testInfo) => {
+    test.setTimeout(90000);
+    const flow = await authJourney();
+    try {
+      await flow.worker.evaluate(session => chrome.storage.local.set({ supabaseSession: session }), flow.session);
+      await flow.worker.evaluate(() => refreshTokenWithRetry(1, { entryPoint: "startup_restore" }));
+      await flow.worker.evaluate(() => AutoListerTelemetry.flush());
+      const failure = unique(flow.events).find(e => e.event === "token_refresh_failed");
+      expect(failure).toBeTruthy();
+      await flow.worker.evaluate(() => authSessionObserver.drain());
+      flow.reconnect();
+      if (outcome === "signed_in" || outcome === "handoff_signed_in") await sendFromExtensionContent(flow.context, flow.controller, { type: "SIGN_OUT" });
+      if (outcome !== "sdk_renewed") await flow.restartWorker();
+      if (outcome === "signed_in") {
+        // A real successful OTP handler, SDK request and session persistence.
+        // Explicit sign-out prevents an unrelated SDK auto-renewal racing
+        // this fresh sign-in. It must not be labelled required sign-in.
+        await flow.verifyCode();
+      } else if (outcome === "handoff_signed_in") {
+        await flow.context.route("https://autolister.app/auth/callback", route => route.fulfill({ contentType: "text/html", body: "<!doctype html><title>Local callback</title>" }));
+        const callback = await flow.context.newPage();
+        await callback.goto("https://autolister.app/auth/callback");
+        const extensionId = new URL(flow.worker.url()).hostname;
+        const response = await callback.evaluate(({ extensionId, session }) => new Promise(resolve =>
+          chrome.runtime.sendMessage(extensionId, { type: "AUTH_HANDOFF", session, closeDelayMs: 500 }, resolve)), {
+          extensionId, session: { access_token: jwt(Math.floor(Date.now() / 1000) - 60), refresh_token: "local-refresh" },
+        });
+        expect(response.ok).toBe(true);
+      } else if (outcome === "sdk_renewed") {
+        await flow.worker.evaluate(session => supabaseClient.auth.refreshSession({ refresh_token: session.refresh_token }), flow.session);
+      } else {
+        await flow.worker.evaluate(() => refreshTokenWithRetry(1, { entryPoint: "startup_restore" }));
+      }
+      await expect.poll(async () => {
+        await flow.worker.evaluate(() => AutoListerTelemetry.flush());
+        return unique(flow.events).filter(e => e.event === "auth_session_result").length;
+      }).toBe(1);
+      const data = await evidence(testInfo, flow, `background-${outcome}`);
+      const result = data.events.find(e => e.event === "auth_session_result");
+      expect(result.context.operationId).toBe(failure.context.operationId);
+      expect(result.context.resultStatus).toBe(outcome.includes("signed_in") ? "signed_in" : "silent_renewed");
+      expect(result.context.signInRequired).toBe(false);
+      expect(result.context.analyticsClientId).toBe(failure.context.analyticsClientId);
+      expect(data.generationRequests).toHaveLength(0);
+      expect(data.photos).toBe(1);
+    } finally { await flow.close(); }
+  });
+}
 
 test("a real Generate action reports its auth block and same-input recovery with the same action ID", async ({}, testInfo) => {
   test.setTimeout(90000);

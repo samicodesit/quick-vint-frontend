@@ -194,6 +194,7 @@ async function runBackgroundHandoff(
     Response,
     crypto: { randomUUID: () => "cid-test" },
     importScripts(...files) {
+      if (files.includes("lib/auth-session-observer.js")) vm.runInContext(readFileSync("lib/auth-session-observer.js", "utf8"), sandbox);
       sandbox.supabase = {
         createClient: (_url, _key, config) => { clientOptions = config; return supabaseClient; },
       };

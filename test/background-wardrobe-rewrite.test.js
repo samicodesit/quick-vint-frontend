@@ -223,7 +223,10 @@ async function runBackground(options = {}) {
       return 1;
     },
     clearTimeout() {},
-    importScripts() { sandbox.supabase = { createClient: () => supabaseClient }; },
+    importScripts() {
+      sandbox.supabase = { createClient: () => supabaseClient };
+      vm.runInContext(readFileSync("lib/auth-session-observer.js", "utf8"), sandbox);
+    },
   };
 
   vm.createContext(sandbox);
