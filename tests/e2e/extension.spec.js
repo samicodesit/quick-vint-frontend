@@ -4546,7 +4546,7 @@ test.describe("AutoLister extension smoke flows", () => {
     });
   });
 
-  test("blocks manual generation after temp upload retries are exhausted", async ({
+  test("keeps manual generation blocked when storage is still unavailable on Generate retry", async ({
     page,
   }) => {
     const eventBatches = [];
@@ -4603,7 +4603,7 @@ test.describe("AutoLister extension smoke flows", () => {
     await expect(page.locator("#quickvint-toast.error")).toContainText(
       "Could not prepare photos. Try again.",
     );
-    expect(uploadAttempts).toBe(3);
+    expect(uploadAttempts).toBe(6);
     expect(generateRequests).toBe(0);
     const errorEvent = await expect
       .poll(
@@ -4625,6 +4625,43 @@ test.describe("AutoLister extension smoke flows", () => {
       status: 500,
       expectedCount: 1,
     });
+  });
+
+  test("retries only missing retained manual photos on Generate after storage returns", async ({ page }) => {
+    let storageAvailable = false;
+    const attempts = [0, 0, 0];
+    const requests = [];
+    const eventBatches = [];
+    await page.route("https://autolister.app/api/events/track", route => {
+      eventBatches.push(route.request().postDataJSON());
+      return route.fulfill({ status: 204, body: "" });
+    });
+    await page.route("https://autolister.app/api/phone-upload**", route => {
+      const request = route.request();
+      if (request.method() !== "POST") return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ files: [] }) });
+      const order = Number(request.postDataBuffer().toString("latin1").match(/name="uploadOrder"\r\n\r\n(\d+)/)?.[1]);
+      attempts[order]++;
+      if (order === 1 && !storageAvailable) return route.fulfill({ status: 503, contentType: "application/json", body: JSON.stringify({ error: "Controlled storage outage" }) });
+      return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ success: true, files: [{ order, name: `${order}.jpg`, path: `controlled/${order}.jpg`, url: `https://storage.test/${order}.jpg` }] }) });
+    });
+    await page.route("https://autolister.app/api/generate", route => {
+      requests.push(route.request().postDataJSON());
+      return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ title: "Retained photos recovered", description: "Controlled result" }) });
+    });
+    await openContentHarness(page);
+    await page.locator(".photo-box").evaluate(node => { for (let i=1;i<3;i++) { const copy=node.cloneNode(true); copy.querySelector("img").src += `#photo-${i}`; node.parentElement.appendChild(copy); } });
+    await page.setInputFiles('[data-testid="add-photos-input"]', [0,1,2].map(i => ({ name: `retained-${i}.png`, mimeType: "image/png", buffer: Buffer.from(tinyPngDataUrl.split(",")[1], "base64") })));
+    await expect.poll(() => attempts).toEqual([1, 3, 1]);
+    await expect(page.locator("#quickvint-gen-btn")).toBeEnabled();
+    await expect.poll(() => eventBatches.flatMap(batch => batch.events || []).some(event => event.event === "manual_upload_storage_error")).toBe(true);
+    expect(requests).toHaveLength(0);
+    storageAvailable = true;
+    await page.locator("#quickvint-gen-btn").click();
+    await expect(page.locator('[data-testid="title--input"]')).toHaveValue("Retained photos recovered");
+    expect(attempts).toEqual([1, 4, 1]);
+    expect(requests).toHaveLength(1);
+    expect(requests[0].imageUrls).toEqual([0,1,2].map(i => `https://storage.test/${i}.jpg`));
+    expect(await page.locator('[data-testid="add-photos-input"]').evaluate(node => node.files.length)).toBe(3);
   });
 
   test("limits manual temp uploads to three concurrent requests", async ({

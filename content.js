@@ -3131,6 +3131,8 @@
     }
 
     const upload = registration.upload;
+    const fileOrders = registration.fileOrders || registration.files.map((_file, offset) => registration.startIndex + offset);
+    const capturedEntries = fileOrders.map(order => upload.files[order]);
     const sessionId = upload.storageSessionId || generateSessionId();
     upload.storageSessionId = sessionId;
     upload.storageUploadError = null;
@@ -3141,25 +3143,35 @@
       const uploadedUrls = await mapWithConcurrency(
         registration.files,
         MANUAL_STORAGE_UPLOAD_CONCURRENCY,
-        (file, offset) =>
-          uploadManualFileToTempStorage(
+        async (file, offset) => {
+          const url = await uploadManualFileToTempStorage(
             sessionId,
             file,
-            registration.startIndex + offset,
-          ),
+            fileOrders[offset],
+          );
+          // Preserve each completed upload even when another photo exhausts
+          // its retries. A later Generate retries only the missing photos.
+          const entry = upload.files[fileOrders[offset]];
+          if (url && entry === capturedEntries[offset]) {
+            entry.generateUrl = url;
+            entry.generationUrlInvalidated = false;
+          }
+          return url;
+        },
       );
       let urls = uploadedUrls;
       if (urls.some((url) => !url)) {
         const listedUrls = await listManualTempStorageUrls(sessionId);
         urls = registration.files.map(
-          (_file, offset) => listedUrls[registration.startIndex + offset] || null,
+          (_file, offset) => listedUrls[fileOrders[offset]] || null,
         );
       }
 
       urls.forEach((url, offset) => {
-        if (url && upload.files[registration.startIndex + offset]) {
-          upload.files[registration.startIndex + offset].generateUrl = url;
-          upload.files[registration.startIndex + offset].generationUrlInvalidated = false;
+        const entry = upload.files[fileOrders[offset]];
+        if (url && entry === capturedEntries[offset]) {
+          entry.generateUrl = url;
+          entry.generationUrlInvalidated = false;
         }
       });
 
@@ -3212,7 +3224,21 @@
   async function waitForManualStorageUrlsForGenerate() {
     const upload = getActiveCapturedPromptUpload();
     if (upload?.source === "manual_file_input" && upload.storageUploadError) {
-      throw new Error("Could not prepare photos. Try again.");
+      const missing = upload.files.map((entry, order) => ({ entry, order }))
+        .filter(({ entry }) => !entry.generateUrl && !entry.generationUrlInvalidated);
+      if (!missing.length) return;
+      const files = await mapWithConcurrency(missing, MANUAL_STORAGE_UPLOAD_CONCURRENCY, async ({ entry }) => {
+        const response = await fetch(entry.objectUrl);
+        const blob = await response.blob();
+        return new File([blob], entry.metadata?.fileName || "manual-upload.jpg", {
+          type: blob.type, lastModified: entry.metadata?.fileLastModified || Date.now(),
+        });
+      });
+      if (getActiveCapturedPromptUpload() !== upload ||
+          missing.some(({ entry, order }) => upload.files[order] !== entry)) {
+        throw new Error("Could not prepare photos. Try again.");
+      }
+      startManualStorageUpload({ upload, files, fileOrders: missing.map(({ order }) => order) });
     }
     if (!hasManualCapturedFilesMissingStorageUrls(upload)) return;
 
