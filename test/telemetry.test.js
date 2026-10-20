@@ -88,6 +88,61 @@ test("a critical auth flood cannot evict a distinct generation failure or custom
   assert.equal(f.state().dropCounts.customerReports || 0, 0);
 });
 
+test("an offline auth flood retains distinct session and Generate auth outcomes", async () => {
+  const f = fixture(); const q = f.make();
+  const outcomes = [
+    { id: "session-result", event: "auth_session_result", context: { operationId: "refresh-original", resultStatus: "silent_renewed" } },
+    { id: "action-blocked", event: "auth_action_result", context: { operationId: "generate-action", resultStatus: "blocked" } },
+    { id: "action-recovered", event: "auth_action_result", context: { operationId: "generate-action", resultStatus: "recovered" } },
+  ];
+  for (const event of outcomes) await q.enqueue(event, "a", event.event === "auth_session_result");
+  for (let i = 0; i < 220; i++) await q.enqueue({ id: `failure-${i}`, event: "token_refresh_failed", source: "extension_background", context: { phase: "restore_session", operationId: `refresh-${i}` } }, "a", true);
+  const retained = new Set(f.state().events.map(entry => entry.event.id));
+  for (const event of outcomes) assert.ok(retained.has(event.id), `Lost ${event.id}`);
+});
+
+test("repeated offline sends preserve outcomes and exact drop accounting after reconnect", async () => {
+  const f = fixture(); const q = f.make();
+  f.respond({ status: 503, json: async () => ({}) });
+  await q.enqueue({ id: "generation-failure", event: "generate_error", context: { generationAttemptId: "listing-a" } }, "a", true);
+  await q.enqueue({ id: "customer-report", event: "listing_report_submitted" }, "a", true);
+  const outcomes = ["session-10", "session-100", "session-200"];
+  const emitted = new Set(["generation-failure", "customer-report"]);
+  for (let minute = 0; minute < 610; minute++) {
+    f.time(1000 + minute * 60000);
+    if ([10, 100, 200].includes(minute)) {
+      const id = `session-${minute}`; emitted.add(id);
+      // The released background session observer explicitly marks this critical.
+      await q.enqueue({ id, event: "auth_session_result", context: { operationId: id, resultStatus: "silent_renewed" } }, "a", true);
+    }
+    if (minute % 2 === 0) {
+      for (const [event, critical] of [["token_refresh_start", false], ["token_refresh_failed", true]]) {
+        const id = `${event}-${minute}`; emitted.add(id);
+        await q.enqueue({ id, event, source: "extension_background", context: { phase: "restore_session", operationId: `refresh-${minute}` } }, "a", critical);
+      }
+    }
+    await q.flush();
+  }
+  for (const id of ["generation-failure", "customer-report", ...outcomes])
+    assert.ok(f.state().events.some(entry => entry.event.id === id), `Lost ${id}`);
+  assert.ok(f.state().events.length <= 200);
+  assert.ok(Buffer.byteLength(JSON.stringify(f.state())) <= 524288);
+  const received = new Map();
+  f.respond({ status: 200, json: async () => {
+    const events = f.requests.at(-1).body.events;
+    for (const event of events) received.set(event.id, event);
+    return { acknowledgedIds: events.map(event => event.id) };
+  } });
+  f.time(40_000_000);
+  for (let i = 0; i < 20 && f.state().events.length; i++) await q.flush();
+  assert.equal(f.state().events.length, 0);
+  for (const id of ["generation-failure", "customer-report", ...outcomes]) assert.ok(received.has(id));
+  const dropped = [...received.values()].reduce((sum, event) => sum + (event.context?.queueDropped || 0), 0);
+  assert.equal(received.size + dropped, emitted.size);
+  assert.equal([...received.values()].reduce((sum, event) => sum + (event.context?.queueDroppedCustomerReports || 0), 0), 0);
+  assert.equal(f.state().dropped, 0);
+});
+
 test("byte overflow preserves distinct operations and accounts before repeated incident evidence", async () => {
   const f = fixture(); const q = f.make();
   await q.enqueue({ id: "other-account", event: "generate_error", context: { generationAttemptId: "first" } }, "b", true);
