@@ -106,6 +106,19 @@ test("recovery retains first-failure facts when the separate failure receipt rem
   } finally { await flow.close(); }
 });
 
+test("a throwing diagnostic sanitizer cannot change a successful credential renewal", async () => {
+  const flow = await authJourney();
+  try {
+    flow.reconnect();
+    await flow.worker.evaluate(() => { AutoListerTelemetry.sanitize = () => { throw Error("Controlled diagnostic fault"); }; });
+    const session = await flow.worker.evaluate(() => refreshTokenWithRetry(1, { entryPoint: "startup_restore" }));
+    expect(session?.user?.id).toBe(user.id);
+    expect(session?.access_token).not.toBe(flow.session.access_token);
+    expect(flow.requests).toHaveLength(0);
+    await expect(flow.controller.locator('[data-testid="media-upload-grid"] img')).toHaveCount(1);
+  } finally { await flow.close(); }
+});
+
 test("failed overlapping sign-in cannot hide a successful SDK renewal", async ({}, testInfo) => {
   const flow = await authJourney({ failOtp: true });
   try {

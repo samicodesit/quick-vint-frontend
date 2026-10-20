@@ -105,3 +105,11 @@ contract checks verify that ingestion retains the new bounded fields.
 
 No migration, permission or product UI is added. The email policy and cleanup
 index remain separate and held under their existing approvals and rollout gates.
+
+Pre-release review found that the new synchronous sanitizer call could escape
+the observation guard. A loaded-extension regression first failed with the
+sanitizer's exception reaching the credential caller. Sanitization now runs
+inside the existing observation guard. Three rounds confirm that a throwing
+sanitizer leaves renewal successful, one photo retained and zero generation
+requests. Three additional rounds retain the first-failure facts when their
+separate receipt is withheld. This review finding was never shipped.

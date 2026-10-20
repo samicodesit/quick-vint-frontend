@@ -22,7 +22,11 @@ const authSessionObserver = AutoListerAuthSessions.createObserver({
 function observeAuthSession(event, owner) {
   try {
     if (event.event === "token_refresh_success" && !event.context.operationId) event.context.operationId = crypto.randomUUID();
-    void authSessionObserver.observe(event, owner);
+    const context = globalThis.AutoListerTelemetry?.sanitize?.(event.context) || {
+      operationId: event.context?.operationId, entryPoint: event.context?.entryPoint,
+      reason: event.context?.reason,
+    };
+    void authSessionObserver.observe({ ...event, context }, owner);
   } catch { /* Observation cannot fail or delay authentication. */ }
 }
 let interactiveAuthObservations = 0;
@@ -374,7 +378,7 @@ async function refreshTokenWithRetry(maxRetries = 3, diagnostic = {}) {
     observeAuthSession({ event, id: `${telemetryOperation}:${event}`, context: {
       operationId: telemetryOperation, entryPoint: diagnostic.entryPoint || "unspecified",
       navigatorOnline: globalThis.navigator?.onLine,
-      ...globalThis.AutoListerTelemetry?.sanitize?.(context),
+      ...context,
     } }, tokenRefreshDiagnostic?.ownerId);
     void globalThis.AutoListerTelemetry?.track(event, {
     operationId: telemetryOperation, entryPoint: diagnostic.entryPoint || "unspecified",
