@@ -211,18 +211,25 @@ async function openBatchJourney(options = {}) {
   return {
     context, get worker() { return worker; }, controller, sourceTabId, requests, commits, events, eventRequests, cleanup, unexpected, files,
     async restartWorker() {
+      const phase = name => { if (process.env.AUTH_RESTART_TRACE) console.log(`[WORKER-RESTART] ${Date.now()} ${name}`); };
+      phase("cdp-start");
       const cdp = await context.newCDPSession(controller);
+      phase("cdp-ready");
       const versions = new Map();
       cdp.on("ServiceWorker.workerVersionUpdated", ({ versions: updated }) => updated.forEach(version => versions.set(version.versionId, version)));
       await cdp.send("ServiceWorker.enable");
+      phase("service-workers-enabled");
       await expect.poll(() => [...versions.values()].some(version => version.scriptURL === worker.url() && version.runningStatus === "running")).toBe(true);
       const version = [...versions.values()].find(version => version.scriptURL === worker.url() && version.runningStatus === "running");
       await worker.evaluate(() => { globalThis.__qaBeforeWorkerRestart = true; });
+      phase("old-worker-marked");
       const { targetInfos } = await cdp.send("Target.getTargets");
       const target = targetInfos.find(target => target.type === "service_worker" && target.url === version.scriptURL);
       if (!target) throw new Error("Extension worker target was not found");
       await cdp.send("Target.closeTarget", { targetId: target.targetId });
+      phase("close-command-returned");
       const response = await sendFromExtensionContent(context, controller, { type: "QUICKVINT_TAB_JOB_HEARTBEAT", kind: "batch" });
+      phase("heartbeat-returned");
       await expect.poll(async () => {
         const candidate = context.serviceWorkers().find(isExtensionWorker);
         try {
@@ -232,6 +239,7 @@ async function openBatchJourney(options = {}) {
         } catch { return false; }
       }).toBe(true);
       await cdp.detach();
+      phase("new-worker-confirmed");
       return response;
     },
     async start() {

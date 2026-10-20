@@ -155,17 +155,26 @@ test("a real scheduled refresh failure identifies its background trigger without
 for (const outcome of ["silent_renewed", "signed_in", "sdk_renewed", "handoff_signed_in"]) {
   test(`background failure survives a worker restart and records ${outcome} without generating`, async ({}, testInfo) => {
     test.setTimeout(90000);
+    const phase = name => { if (process.env.AUTH_RESTART_TRACE) console.log(`[AUTH-RESTART ${outcome}] ${Date.now()} ${name}`); };
+    phase("journey-start");
     const flow = await authJourney();
+    phase("journey-ready");
     try {
       await flow.worker.evaluate(session => chrome.storage.local.set({ supabaseSession: session }), flow.session);
+      phase("session-set");
       await flow.worker.evaluate(() => refreshTokenWithRetry(1, { entryPoint: "startup_restore" }));
+      phase("initial-refresh-failed");
       await flow.worker.evaluate(() => AutoListerTelemetry.flush());
+      phase("failure-flushed");
       const failure = unique(flow.events).find(e => e.event === "token_refresh_failed");
       expect(failure).toBeTruthy();
       await flow.worker.evaluate(() => authSessionObserver.drain());
+      phase("observer-drained");
       flow.reconnect();
       if (outcome === "signed_in" || outcome === "handoff_signed_in") await sendFromExtensionContent(flow.context, flow.controller, { type: "SIGN_OUT" });
+      phase("restart-start");
       if (outcome !== "sdk_renewed") await flow.restartWorker();
+      phase("restart-complete");
       if (outcome === "signed_in") {
         // A real successful OTP handler, SDK request and session persistence.
         // Explicit sign-out prevents an unrelated SDK auto-renewal racing
@@ -186,10 +195,12 @@ for (const outcome of ["silent_renewed", "signed_in", "sdk_renewed", "handoff_si
       } else {
         await flow.worker.evaluate(() => refreshTokenWithRetry(1, { entryPoint: "startup_restore" }));
       }
+      phase("renewal-complete");
       await expect.poll(async () => {
         await flow.worker.evaluate(() => AutoListerTelemetry.flush());
         return unique(flow.events).filter(e => e.event === "auth_session_result").length;
       }).toBe(1);
+      phase("outcome-received");
       const data = await evidence(testInfo, flow, `background-${outcome}`);
       const result = data.events.find(e => e.event === "auth_session_result");
       expect(result.context.operationId).toBe(failure.context.operationId);
@@ -198,7 +209,7 @@ for (const outcome of ["silent_renewed", "signed_in", "sdk_renewed", "handoff_si
       expect(result.context.analyticsClientId).toBe(failure.context.analyticsClientId);
       expect(data.generationRequests).toHaveLength(0);
       expect(data.photos).toBe(1);
-    } finally { await flow.close(); }
+    } finally { phase("close-start"); await flow.close(); phase("close-complete"); }
   });
 }
 
