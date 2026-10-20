@@ -52,3 +52,20 @@ the parent workspace under `ops/evidence/triage-2026-10-20T1107/`. The historica
 missing outcomes remain missing after a correction ships. Existing saved reports
 and genuine diagnostics must remain visible. The pending server email-policy
 migration is a separate change and is excluded from this delivery.
+
+The first Store CI run stopped before upload on a 90-second worker-restart
+timeout. Its trace was not retained, so that exact historical wait remains
+unproven. Three individual reruns and three complete local auth-group rounds
+passed. An isolated CI workflow then retained traces and exposed two separate
+fixture races: a legitimate background usage refresh completed before the
+intended voluntary sign-in or first rejected Generate request.
+
+The auth fixtures now keep renewal disconnected through voluntary sign-out and
+worker restart, verify that sign-out completed, and deliberately return the
+first Generate HTTP 401 even when a prior refresh already succeeded. The test
+still requires HTTP 401 then 200, identical request identity and body, retained
+photos and the correct recovery classification. Product authentication code is
+unchanged. Fifteen targeted local checks passed across three rounds. Cloud
+rechecks and the final release gates remain recorded in the parent evidence.
+The release workflow also retains failed browser traces for three days so a
+future timeout has an inspectable wait instead of only a whole-test deadline.

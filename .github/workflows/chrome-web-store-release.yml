@@ -69,6 +69,15 @@ jobs:
       - name: Run extension E2E tests
         run: xvfb-run -a npm run test:e2e
 
+      - name: Preserve failed browser diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: extension-browser-failure-${{ github.run_id }}
+          path: test-results/
+          retention-days: 3
+          if-no-files-found: warn
+
       - name: Show release status
         run: npm run release:status
 
