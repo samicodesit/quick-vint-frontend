@@ -69,3 +69,39 @@ unchanged. Fifteen targeted local checks passed across three rounds. Cloud
 rechecks and the final release gates remain recorded in the parent evidence.
 The release workflow also retains failed browser traces for three days so a
 future timeout has an inspectable wait instead of only a whole-test deadline.
+## First-failure facts carried by recovery
+
+During final verification, production recovery `90af26ed-9008-4e84-b66b-2860a30aaf62`
+from client 1.4.22 referenced operation `253e4aca-9709-4561-9342-c647a6d1bbdf`.
+Exact lookups across retained groups, all-owner ingest receipts and the verified
+owner's bounded log timeline found its recovery receipt but no original failure
+receipt. The later read was more than 30 minutes after recovery. Endpoint logs
+do not expose the original event body or establish which client made other
+requests. The customer's local queue and pre-ingest rejection response are
+unavailable, so the original delivery cause is not established.
+
+Three checks on the released 1.4.22 source exercised real Chromium workers,
+retained photos, two worker restarts and unmodified native retry delays. Recovery
+arrived before its original failure, which later arrived successfully. This
+establishes that retry ordering can produce a temporary gap; it does not prove
+the customer's historical cause. The raw driver's `nativeBackoffMsAtOutcome`
+field was computed after the final wait and is not used as an outcome-time
+measurement.
+
+The bounded observation now preserves the first observed failure's time, client
+ID, extension version, event, error code/name, phase, status and online flag. It
+carries these facts on the existing recovery event. Later attempts and upgrades
+cannot replace them. Older pending observations omit unavailable facts. Only
+allowlisted metadata is stored; error messages, credentials and session objects
+are excluded. The existing owner checks, 24-hour expiry and authentication
+decisions remain unchanged. Metadata lookup failure does not discard recovery.
+
+The released browser fails the new self-contained-facts assertion. The corrected
+loaded extension passes three rounds with a controlled collector withholding the
+separate failure receipt, a real worker restart, one retained photo and zero
+generation requests. This is a capture-contract check with isolated services,
+not a reproduction of the customer's network or lost-receipt cause. Server
+contract checks verify that ingestion retains the new bounded fields.
+
+No migration, permission or product UI is added. The email policy and cleanup
+index remain separate and held under their existing approvals and rollout gates.

@@ -6,6 +6,11 @@ const AUTH_SESSION_OBSERVATION_KEY = "autolisterAuthSessionObservation";
 const authSessionObserver = AutoListerAuthSessions.createObserver({
   load: async () => (await chrome.storage.local.get(AUTH_SESSION_OBSERVATION_KEY))[AUTH_SESSION_OBSERVATION_KEY],
   save: value => chrome.storage.local.set({ [AUTH_SESSION_OBSERVATION_KEY]: value }),
+  clientInfo: async () => {
+    const safe = AutoListerTelemetry.sanitize?.({ analyticsClientId: await getAnalyticsClientId(),
+      extensionVersion: chrome.runtime.getManifest().version }) || {};
+    return { clientId: safe.analyticsClientId, version: safe.extensionVersion };
+  },
   emit: async (outcome, owner) => {
     AutoListerTelemetry.setAccount(owner);
     const prepared = AutoListerTelemetry.prepare("auth_session_result", outcome.context, "extension_background");
@@ -368,6 +373,8 @@ async function refreshTokenWithRetry(maxRetries = 3, diagnostic = {}) {
   const trackRefresh = (event, context = {}) => {
     observeAuthSession({ event, id: `${telemetryOperation}:${event}`, context: {
       operationId: telemetryOperation, entryPoint: diagnostic.entryPoint || "unspecified",
+      navigatorOnline: globalThis.navigator?.onLine,
+      ...globalThis.AutoListerTelemetry?.sanitize?.(context),
     } }, tokenRefreshDiagnostic?.ownerId);
     void globalThis.AutoListerTelemetry?.track(event, {
     operationId: telemetryOperation, entryPoint: diagnostic.entryPoint || "unspecified",

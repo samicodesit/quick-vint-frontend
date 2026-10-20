@@ -29,8 +29,11 @@ async function authJourney(options = {}) {
         json: rejected ? { error: "Local expired access" } : commits.get(request.id) });
     } });
   await flow.context.route("https://autolister.app/api/events/track", route => {
-    const body = route.request().postDataJSON(); events.push(...body.events);
-    return route.fulfill({ json: { acknowledgedIds: body.events.map(event => event.id), duplicateIds: [], rejections: [] } });
+    const body = route.request().postDataJSON();
+    const accepted = body.events.filter(event => !options.withholdRefreshFailures || event.event !== "token_refresh_failed");
+    events.push(...accepted);
+    return route.fulfill({ status: accepted.length === body.events.length ? 200 : 503,
+      json: { acknowledgedIds: accepted.map(event => event.id), duplicateIds: [], rejections: [] } });
   });
   // Match the real upload contract: separate upload sessions have distinct URLs.
   await flow.context.route("https://autolister.app/api/phone-upload**", route => {
@@ -60,6 +63,48 @@ async function authJourney(options = {}) {
     rejectRefresh: () => { disconnected = false; rejectRefresh = true; },
     async verifyCode() { return sendFromExtensionContent(flow.context, flow.controller, { type: "VERIFY_EMAIL_OTP", email: user.email, token: "123456" }); } };
 }
+
+test("recovery retains first-failure facts when the separate failure receipt remains unavailable", async () => {
+  test.setTimeout(90000);
+  const flow = await authJourney({ withholdRefreshFailures: true });
+  try {
+    await flow.worker.evaluate(session => chrome.storage.local.set({ supabaseSession: session }), flow.session);
+    await flow.worker.evaluate(() => refreshTokenWithRetry(1, { entryPoint: "startup_restore" }));
+    await flow.worker.evaluate(() => authSessionObserver.drain());
+    await flow.worker.evaluate(() => AutoListerTelemetry.flush());
+    const saved = await flow.worker.evaluate(async () => chrome.storage.local.get([
+      "autolisterAuthSessionObservation", "autolisterTelemetryV2",
+    ]));
+    const operationId = saved.autolisterAuthSessionObservation.operationId;
+    const original = saved.autolisterTelemetryV2.events.find(entry =>
+      entry.event.event === "token_refresh_failed" && entry.event.context.operationId === operationId).event;
+    expect(unique(flow.events).filter(event => event.event === "token_refresh_failed")).toHaveLength(0);
+    await flow.restartWorker();
+    flow.reconnect();
+    await flow.worker.evaluate(() => refreshTokenWithRetry(1, { entryPoint: "startup_restore" }));
+    await expect.poll(async () => {
+      await flow.worker.evaluate(() => AutoListerTelemetry.flush());
+      return unique(flow.events).filter(event => event.event === "auth_session_result" &&
+        event.context.operationId === operationId).length;
+    }).toBe(1);
+    const result = unique(flow.events).find(event => event.event === "auth_session_result" &&
+      event.context.operationId === operationId);
+    expect(result.context.firstFailureClientId).toBe(original.context.analyticsClientId);
+    expect(result.context.firstFailureVersion).toBe(original.extensionVersion);
+    expect(result.context.firstFailureEvent).toBe(original.event);
+    expect(result.context.firstFailureErrorCode).toBe(original.context.errorCode);
+    expect(result.context.firstFailureErrorName).toBe(original.context.errorName);
+    expect(result.context.firstFailureStatusCode).toBe(original.context.statusCode);
+    expect(result.context.firstFailurePhase).toBe(original.context.phase);
+    expect(result.context.firstFailureOnline).toBe(original.context.navigatorOnline);
+    expect(Number.isFinite(Date.parse(result.context.firstFailureObservedAt))).toBe(true);
+    expect(result.context.resultStatus).toBe("silent_renewed");
+    expect(result.context.signInRequired).toBe(false);
+    expect(unique(flow.events).filter(event => event.event === "token_refresh_failed")).toHaveLength(0);
+    expect(flow.requests).toHaveLength(0);
+    await expect(flow.controller.locator('[data-testid="media-upload-grid"] img')).toHaveCount(1);
+  } finally { await flow.close(); }
+});
 
 test("failed overlapping sign-in cannot hide a successful SDK renewal", async ({}, testInfo) => {
   const flow = await authJourney({ failOtp: true });
@@ -208,6 +253,10 @@ for (const outcome of ["silent_renewed", "signed_in", "sdk_renewed", "handoff_si
       expect(result.context.resultStatus).toBe(outcome.includes("signed_in") ? "signed_in" : "silent_renewed");
       expect(result.context.signInRequired).toBe(false);
       expect(result.context.analyticsClientId).toBe(failure.context.analyticsClientId);
+      expect(result.context.firstFailureClientId).toBe(failure.context.analyticsClientId);
+      expect(result.context.firstFailureVersion).toBe(failure.extensionVersion);
+      expect(result.context.firstFailureEvent).toBe("token_refresh_failed");
+      expect(result.context.firstFailureErrorCode).toBe(failure.context.errorCode);
       expect(data.generationRequests).toHaveLength(0);
       expect(data.photos).toBe(1);
     } finally { await flow.close(); }
