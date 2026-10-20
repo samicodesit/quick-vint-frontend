@@ -23,8 +23,10 @@ async function authJourney(options = {}) {
   const flow = await openBatchJourney({ photoPaths: [path.resolve(__dirname, "../../images/quickvint-upload-single.jpg")],
     session: { ...session, expires_at: renewed.expires_at }, generate: ({ route, request, requests, commits }) => {
       if (requests.length <= (options.loseFirstResponses || 0)) return route.abort("connectionreset");
-      return route.fulfill({ status: !options.acceptOld && route.request().headers().authorization === `Bearer ${oldAccess}` ? 401 : 200,
-        json: !options.acceptOld && route.request().headers().authorization === `Bearer ${oldAccess}` ? { error: "Local expired access" } : commits.get(request.id) });
+      const rejected = (options.forceFirstGenerate401 && requests.length === 1) ||
+        (!options.acceptOld && route.request().headers().authorization === `Bearer ${oldAccess}`);
+      return route.fulfill({ status: rejected ? 401 : 200,
+        json: rejected ? { error: "Local expired access" } : commits.get(request.id) });
     } });
   await flow.context.route("https://autolister.app/api/events/track", route => {
     const body = route.request().postDataJSON(); events.push(...body.events);
@@ -170,11 +172,21 @@ for (const outcome of ["silent_renewed", "signed_in", "sdk_renewed", "handoff_si
       expect(failure).toBeTruthy();
       await flow.worker.evaluate(() => authSessionObserver.drain());
       phase("observer-drained");
-      flow.reconnect();
-      if (outcome === "signed_in" || outcome === "handoff_signed_in") await sendFromExtensionContent(flow.context, flow.controller, { type: "SIGN_OUT" });
+      if (outcome === "signed_in" || outcome === "handoff_signed_in") {
+        // Keep renewal disconnected until the voluntary sign-out and restart
+        // finish. Otherwise a legitimate usage refresh can win before sign-in.
+        await flow.context.route("https://jqloiovdwjaornnfvmyu.supabase.co/auth/v1/logout**", route => route.fulfill({ status: 204 }));
+        await flow.worker.evaluate(session => chrome.storage.local.set({ supabaseSession: {
+          ...session, expires_at: Math.floor(Date.now() / 1000) + 3600,
+        } }), flow.session);
+        const signedOut = await sendFromExtensionContent(flow.context, flow.controller, { type: "SIGN_OUT" });
+        expect(signedOut.ok).toBe(true);
+        await expect.poll(() => flow.worker.evaluate(async () => (await chrome.storage.local.get("supabaseSession")).supabaseSession)).toBeUndefined();
+      }
       phase("restart-start");
       if (outcome !== "sdk_renewed") await flow.restartWorker();
       phase("restart-complete");
+      flow.reconnect();
       if (outcome === "signed_in") {
         // A real successful OTP handler, SDK request and session persistence.
         // Explicit sign-out prevents an unrelated SDK auto-renewal racing
@@ -335,14 +347,21 @@ test("a failed refresh is not a blocked action when the retained access still co
 
 test("unavailable telemetry cannot change auth, Generate output or retained photos", async () => {
   test.setTimeout(90000);
-  const flow = await authJourney();
+  const flow = await authJourney({ forceFirstGenerate401: true });
   try {
     flow.reconnect();
+    const generationStatuses = [];
+    flow.context.on("response", response => { if (response.url().endsWith("/api/generate")) generationStatuses.push(response.status()); });
     await flow.context.route("https://autolister.app/api/events/track", route => route.abort("internetdisconnected"));
     await flow.worker.evaluate(session => chrome.storage.local.set({ supabaseSession: session }), flow.session);
+    // CI caught the normal usage refresh winning before Generate. Complete it
+    // explicitly, then require the selected API rejection and identical replay.
+    await flow.worker.evaluate(() => refreshTokenWithRetry(1, { entryPoint: "usage_count" }));
+    expect(await flow.worker.evaluate(() => getStoredSession().then(session => session.access_token))).not.toBe(flow.session.access_token);
     await flow.controller.locator("#quickvint-gen-btn").click();
     await expect(flow.controller.locator('[data-testid="title--input"]')).toHaveValue("Item 1", { timeout: 35000 });
     expect(flow.requests).toHaveLength(2);
+    expect(generationStatuses).toEqual([401, 200]);
     expect(flow.requests[1].id).toBe(flow.requests[0].id);
     expect(flow.requests[1].rawBody).toBe(flow.requests[0].rawBody);
     await expect(flow.controller.locator('[data-testid="media-upload-grid"] img')).toHaveCount(1);
