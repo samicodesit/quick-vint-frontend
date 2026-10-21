@@ -45,48 +45,70 @@ async function addPhoto(page) {
 }
 for (const mode of ["", "&mode=batch"]) {
   test(`legacy ${mode ? "batch" : "single"} retries confirmation without reuploading photos`, async ({ page }) => {
-    const calls = await openPhone(page, mode, (action, attempt) => action === "complete" && attempt <= 3 ? { network: true } : {});
+    await page.clock.install();
+    let recovered = false;
+    const calls = await openPhone(page, mode, action => action === "complete" && !recovered ? { network: true } : {});
     await addPhoto(page);
+    await expect.poll(() => calls.complete.length).toBeGreaterThan(0);
+    await expect(async () => {
+      await page.clock.runFor(1000);
+      expect(calls.complete.length).toBeGreaterThan(1);
+    }).toPass({ timeout: 5000, intervals: [50] });
+    await page.clock.fastForward(120001);
     await expect(page.locator("#sendBtn")).toHaveText("Retry confirmation", { timeout: 10000 });
     await expect(page.locator("#sendBtn")).toBeEnabled();
-    expect(calls.uploads).toBe(1); expect(calls.complete).toHaveLength(3);
+    expect(calls.uploads).toBe(1);
+    const attemptsBeforeRetry = calls.complete.length;
+    recovered = true;
     await page.locator("#sendBtn").click();
     await expect(page.locator("#sendBtn")).toBeHidden();
-    expect(calls.complete).toHaveLength(4); expect(calls.uploads).toBe(1); expect(calls.generation).toBe(0);
+    expect(calls.complete).toHaveLength(attemptsBeforeRetry + 1); expect(calls.uploads).toBe(1); expect(calls.generation).toBe(0);
     expect(new Set(calls.complete.map(call => call.url))).toHaveProperty("size", 1);
     expect(new Set(calls.complete.map(call => call.body))).toHaveProperty("size", 1);
   });
   test(`v2 ${mode ? "batch" : "single"} preserves selected photos after preparation exhausts`, async ({ page }) => {
-    const calls = await openPhone(page, `&v=2${mode}`, (action, attempt) => action === "prepare" && attempt <= 3 ? { status: 503, data: { code: "DatabaseError", retryable: true } } : {});
+    await page.clock.install();
+    let recovered = false;
+    const calls = await openPhone(page, `&v=2${mode}`, action => action === "prepare" && !recovered ? { status: 503, data: { code: "DatabaseError", retryable: true } } : {});
     await addPhoto(page);
+    await expect.poll(() => calls.prepare.length).toBeGreaterThan(0);
+    await expect(async () => {
+      await page.clock.runFor(1000);
+      expect(calls.prepare.length).toBeGreaterThan(1);
+    }).toPass({ timeout: 5000, intervals: [50] });
+    await page.clock.fastForward(120001);
     await expect(page.locator("#mainBtn")).toContainText("Retry 1 failed photo", { timeout: 10000 });
-    await expect(page.locator("#mainBtn")).toBeEnabled(); expect(calls.uploads).toBe(0); expect(calls.prepare).toHaveLength(3);
+    await expect(page.locator("#mainBtn")).toBeEnabled(); expect(calls.uploads).toBe(0);
     await expect(page.locator(".file-item")).toHaveCount(1);
+    const attemptsBeforeRetry = calls.prepare.length;
+    recovered = true;
     await page.locator("#mainBtn").click();
     await expect(page.locator("#pageCopy")).toHaveText("1 photos ready on your computer");
-    expect(calls.uploads).toBe(1); expect(calls.prepare).toHaveLength(4); expect(calls.generation).toBe(0);
+    expect(calls.uploads).toBe(1); expect(calls.prepare).toHaveLength(attemptsBeforeRetry + 1); expect(calls.generation).toBe(0);
     expect(new Set(calls.prepare.map(call => call.url)).size).toBe(1);
   });
 }
 test("v2 cancellation stops preparation recovery and retains the cancelled screen", async ({ page }) => {
   const calls = await openPhone(page, "&v=2&mode=batch", action => action === "prepare" ? { status: 503, data: { retryable: true } } : {});
   await addPhoto(page);
-  await expect(page.locator("#pageCopy")).toHaveText("Connection interrupted. Retrying…");
+  await expect(page.locator("#pageCopy")).toHaveText("Waiting for your connection. Your photos are kept here.");
   await page.locator("#cancelBtn").click();
   await expect(page.locator("#pageTitle")).toHaveText("Upload Cancelled");
   await page.waitForTimeout(1800);
   expect(calls.prepare).toHaveLength(1); expect(calls.uploads).toBe(0); expect(calls.cleanup).toBe(1);
   await expect(page.locator("#fileInput")).toBeDisabled();
 });
-test("long Retry-After preserves photos and disables Retry until permitted", async ({ page }) => {
+test("long Retry-After preserves photos and resumes only when permitted", async ({ page }) => {
   await page.clock.install();
   const calls = await openPhone(page, "&v=2", (action, attempt) => action === "prepare" && attempt === 1 ? { status: 429, data: { retryable: true }, headers: { "Retry-After": "60" } } : {});
   await addPhoto(page);
-  await expect(page.locator("#mainBtn")).toContainText("Retry 1 failed photo");
-  await expect(page.locator("#mainBtn")).toBeDisabled(); expect(calls.prepare).toHaveLength(1); expect(calls.uploads).toBe(0);
-  await page.clock.fastForward(60001);
-  await expect(page.locator("#mainBtn")).toBeEnabled();
-  await page.locator("#mainBtn").click();
+  await expect.poll(() => calls.prepare.length).toBe(1);
+  await expect(page.locator("#mainBtn")).toBeDisabled();
+  await expect(page.locator(".file-item")).toHaveCount(1);
+  await page.clock.fastForward(59000);
+  expect(calls.prepare).toHaveLength(1); expect(calls.uploads).toBe(0);
+  await expect(page.locator("#mainBtn")).toBeDisabled();
+  await page.clock.fastForward(1001);
   await expect(page.locator("#pageCopy")).toHaveText("1 photos ready on your computer");
   expect(calls.prepare).toHaveLength(2); expect(calls.uploads).toBe(1);
 });
