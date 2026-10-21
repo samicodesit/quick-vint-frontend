@@ -1,5 +1,5 @@
 // --- IMPORTS & INITIALIZATION ---
-importScripts("lib/supabase.js", "lib/telemetry-registry.js", "lib/telemetry-core.js", "lib/telemetry-client.js", "lib/telemetry-background.js", "lib/auth-session-observer.js");
+importScripts("lib/supabase.js", "lib/telemetry-registry.js", "lib/telemetry-core.js", "lib/telemetry-client.js", "lib/telemetry-background.js", "lib/telemetry-flow.js", "lib/auth-session-observer.js");
 
 // Observation only: one bounded pending failure, independent of auth decisions.
 const AUTH_SESSION_OBSERVATION_KEY = "autolisterAuthSessionObservation";
@@ -980,7 +980,8 @@ async function notifyBatchProgress(job, payload) {
     generationAttemptId: job.currentGenerationAttemptId || null,
     stopRevision: Number(job.stopRevision || 0), checkpointStatus: job.status,
     discardRequested: job.discardRequested === true,
-    inputSource: job.inputSource, reason: job.reason || null, createdAt: job.createdAt, ...payload };
+    inputSource: job.inputSource, reason: job.reason || null, createdAt: job.createdAt,
+    diagnostics: batchEvidenceContext(job), ...payload };
   const [session, records] = await Promise.all([
     getStoredSession(), chrome.storage.local.get([BATCH_RECOVERY_STORAGE_KEY, BATCH_REVIEW_STORAGE_KEY]),
   ]).catch(() => []);
@@ -1009,7 +1010,7 @@ async function notifyBatchProgress(job, payload) {
     // A closed controller is an interruption, not a host crash. Keep terminal
     // evidence even when its content-script tracking call can no longer run.
     if (["done", "paused", "failed"].includes(payload.status)) {
-      void globalThis.AutoListerTelemetry?.track(message.reason === "user_stopped" ? "batch_cancelled" : `batch_${payload.status}`, { batchId: job.batchId, generationAttemptId: job.currentGenerationAttemptId, itemIndex: job.currentItemIndex, inputSource: job.inputSource, reason: message.reason, message: payload.message, completedCount: job.completedCount, total: payload.total }, "extension_background", false, job.ownerId);
+      void globalThis.AutoListerTelemetry?.track(message.reason === "user_stopped" ? "batch_cancelled" : `batch_${payload.status}`, { ...message.diagnostics, batchId: job.batchId, generationAttemptId: job.currentGenerationAttemptId, itemIndex: job.currentItemIndex, inputSource: job.inputSource, reason: message.reason, message: payload.message, completedCount: job.completedCount, total: payload.total }, "extension_background", false, job.ownerId);
     }
     return false;
   } finally { clearTimeout(timeout); }
@@ -1091,6 +1092,11 @@ function removeBatchRecoveryIfCurrent(job) {
   return operation;
 }
 
+function batchEvidenceContext(job) {
+  try { return globalThis.AutoListerTelemetry?.sanitize?.(job.diagnostics || {}) || {}; }
+  catch { return {}; }
+}
+
 function persistBatchRecovery(job, updates = {}, options = {}) {
   const operation = batchRecoveryQueue.then(async () => {
     const latest = (await chrome.storage.local.get(BATCH_RECOVERY_STORAGE_KEY))[BATCH_RECOVERY_STORAGE_KEY];
@@ -1112,17 +1118,17 @@ function persistBatchRecovery(job, updates = {}, options = {}) {
     if (options.stopIntent) {
       // Stop changes the latest batch status, never the old snapshot's routing,
       // photo URLs or completed count while another control is being rebound.
-      const stored = await writeBatchRecovery(latest, { ...updates, stopRevision: Number(latest.stopRevision || 0) + 1 });
+      const stored = await writeBatchRecovery(latest, { ...updates, stopRevision: Number(latest.stopRevision || 0) + 1 }, options);
       Object.assign(job, stored);
       return stored;
     }
-    return writeBatchRecovery(job, updates);
+    return writeBatchRecovery(job, updates, options);
   });
   batchRecoveryQueue = operation.catch(() => {});
   return operation;
 }
 
-async function writeBatchRecovery(job, updates) {
+async function writeBatchRecovery(job, updates, options = {}) {
   const stored = {
     version: 1,
     kind: "batch",
@@ -1152,6 +1158,9 @@ async function writeBatchRecovery(job, updates) {
     expiresAt: Number(job.expiresAt || Date.now() + BATCH_RECOVERY_TTL_MS),
     ...updates,
   };
+  try {
+    stored.diagnostics = { ...stored.diagnostics, ...AutoListerFlowEvidence.batchTiming(job, stored, stored.updatedAt, options) };
+  } catch { /* Diagnostic metadata cannot prevent the existing checkpoint. */ }
   let reboundReview = null;
   const save = async (records = null) => {
     const values = { [BATCH_RECOVERY_STORAGE_KEY]: stored };
@@ -1259,7 +1268,11 @@ async function getTabJobHeartbeat(message, sender) {
 
 function reattachRunningBatch(job) {
   activeTabJob = job;
+  try {
+    job.diagnostics = { ...job.diagnostics, ...AutoListerFlowEvidence.batchTiming(job, job, Date.now(), { reattach: true }) };
+  } catch { /* Observation cannot prevent worker recovery. */ }
   void globalThis.AutoListerTelemetry?.track("batch_worker_progress", {
+    ...batchEvidenceContext(job),
     batchId: job.batchId, generationAttemptId: job.currentGenerationAttemptId,
     itemIndex: job.currentItemIndex, phase: "worker_reattached", reason: "service_worker_restarted",
   }, "extension_background", false, job.ownerId);
@@ -1368,9 +1381,11 @@ async function runBatchGenerationJob(job) {
       });
 
       if (!result?.ok) {
-        throw new Error(
+        const error = new Error(
           result?.error || `Listing ${index + 1} could not be generated.`,
         );
+        try { error.batchEvidence = globalThis.AutoListerTelemetry?.sanitize?.(result?.diagnostics || {}); } catch { /* Diagnostic only. */ }
+        throw error;
       }
       const checkpoint = await markBatchItemComplete({
         batchId: job.batchId,
@@ -1441,6 +1456,7 @@ async function runBatchGenerationJob(job) {
     if (err.code === "BATCH_STATE_CHANGED") return;
     if (!job.stopRequested) console.error("[Background] Batch generation failed:", err);
     const paused = await persistBatchRecovery(job, {
+      diagnostics: { ...job.diagnostics, ...err.batchEvidence },
       status: "paused",
       message: err.message || "Batch generation stopped.",
       reason: job.stopRequested ? "user_stopped" : "generation_error",
@@ -1643,7 +1659,7 @@ async function completeBatchItemCheckpoint(message, sender) {
     activeTabJob.reason = "completed";
   }
   if (completedCount === job.groups.length) {
-    void globalThis.AutoListerTelemetry?.track("batch_complete", { batchId: job.batchId, generationAttemptId: job.currentGenerationAttemptId, itemIndex, completedCount, total: job.groups.length }, "extension_background", false, job.ownerId);
+    void globalThis.AutoListerTelemetry?.track("batch_complete", { ...batchEvidenceContext(job), batchId: job.batchId, generationAttemptId: job.currentGenerationAttemptId, itemIndex, completedCount, total: job.groups.length }, "extension_background", false, job.ownerId);
   }
   await recordBatchReviewCompletion(job, itemIndex, completedWorkTabId).catch(error => {
     console.debug("Batch review navigation unavailable:", error);
@@ -2032,6 +2048,7 @@ async function resumeBatchGenerationIntent(message, sender) {
       inputSource: job.inputSource,
       completedCount: job.completedCount,
       total: job.groups.length,
+      diagnostics: batchEvidenceContext(job),
     };
   });
 }

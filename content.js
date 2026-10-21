@@ -4140,6 +4140,7 @@
           sendResponse({
             ok: false,
             error: err.message || "Batch item failed.",
+            diagnostics: err.batchEvidence,
           });
         });
       return true;
@@ -17762,6 +17763,7 @@
     inputSource,
     reason,
     createdAt,
+    diagnostics: observation = {},
   }) {
     const body = getBatchBody();
 
@@ -17779,6 +17781,7 @@
     batchProgressStatus = status;
     if (previousStatus !== status && ["done", "failed", "paused"].includes(status)) {
       trackGrowthEvent(status === "done" ? "batch_done" : status === "paused" && ["user_stopped", "discard_pending"].includes(reason) ? "batch_cancelled" : status === "paused" ? "batch_paused" : "batch_failed", {
+        ...observation,
         ...diagnostics,
         current,
         message: message || null,
@@ -18124,6 +18127,7 @@
       return;
     }
     trackGrowthEvent("batch_resume_started", {
+      ...response.diagnostics,
       ...getBatchDiagnosticContext({
         batchId: response.batchId,
         inputSource: response.inputSource,
@@ -18207,8 +18211,26 @@
     });
   }
 
+  function batchPhotoEvidence(targetCount) {
+    try {
+      const grid = document.querySelector(SELECTORS.mediaGrid);
+      const { confirmed, count, ...counts } = AutoListerFlowEvidence.photoState(Array.from(grid?.querySelectorAll(SELECTORS.mediaImage) || []), targetCount);
+      return { ...counts, expectedPhotoCount: targetCount, confirmedPhotoCount: count,
+        documentVisible: document.visibilityState === "visible", navigatorOnline: navigator.onLine, photoGridPresent: Boolean(grid) };
+    } catch { return {}; }
+  }
+
   function waitForHostUploadedPhotos(targetCount, timeoutMs = BATCH_UPLOAD_WAIT_TIMEOUT_MS, signal = null) {
     const startedAt = Date.now();
+    const failure = (message, code) => {
+      const error = new Error(message);
+      try {
+        error.batchEvidence = { ...batchPhotoEvidence(targetCount),
+          errorCode: code, phase: "host_photo_confirmation", durationMs: Math.max(0, Date.now() - startedAt),
+        };
+      } catch { /* Observation cannot change this error or its timing. */ }
+      return error;
+    };
     return new Promise((resolve, reject) => {
       const check = () => {
         if (signal?.aborted) { reject(new Error("Batch stopped. Your photos are saved.")); return; }
@@ -18216,7 +18238,7 @@
         const grid = document.querySelector(SELECTORS.mediaGrid);
         const visibleError = Array.from(grid?.querySelectorAll('[aria-invalid="true"]') || [])
           .find(element => element.getClientRects().length && element.textContent?.trim());
-        if (visibleError) return reject(new Error("Vinted could not upload these photos. Your generated details and source photos are saved."));
+        if (visibleError) return reject(failure("Vinted could not upload these photos. Your generated details and source photos are saved.", "HOST_PHOTO_FORM_ERROR"));
         for (const image of grid?.querySelectorAll(SELECTORS.mediaImage) || []) {
           try {
             const url = new URL(image.currentSrc || image.src);
@@ -18227,7 +18249,7 @@
         }
         if (confirmed.size >= targetCount) return resolve();
         if (Date.now() - startedAt >= timeoutMs) {
-          return reject(new Error("Your generated details are ready, but Vinted has not confirmed all photos. Your source photos are still saved."));
+          return reject(failure("Your generated details are ready, but Vinted has not confirmed all photos. Your source photos are still saved.", "HOST_PHOTO_CONFIRMATION_TIMEOUT"));
         }
         setTimeout(check, 500);
       };
@@ -18888,6 +18910,10 @@
   }
 
   async function executeBatchItem(message, task) {
+    const itemStartedAt = Date.now();
+    let diagnosticPhase = "source_photo_download";
+    let phaseStartedAt = itemStartedAt;
+    const observePhase = phase => { diagnosticPhase = phase; phaseStartedAt = Date.now(); };
     const checkActive = () => {
       if (task.controller.signal.aborted || batchAuthUserId !== task.ownerId) throw new Error("Batch stopped. Your photos are saved.");
     };
@@ -18977,6 +19003,7 @@
       }
 
       showBatchTabStatus(`${listingPrefix}: adding photos...`);
+      observePhase("photo_injection");
       if (
         !injectFilesIntoVinted(filesToInject, "phone_upload_batch", {
           generateUrls: successfulDownloads.map((result) => result.generateUrl),
@@ -18986,10 +19013,12 @@
       }
 
       showBatchTabStatus(`${listingPrefix}: waiting for Vinted to show photos...`);
+      observePhase("photo_preview");
       await waitForUploadedPhotoCount(initialPhotoCount + filesToInject.length, undefined, task.controller.signal);
       checkActive();
 
       showBatchTabStatus(`${listingPrefix}: writing title and description...`);
+      observePhase("generation");
       const generatedListing = await generateCurrentListing({
         descriptionApplyChoice: "replace",
         manageButtonState: false,
@@ -19001,9 +19030,11 @@
       });
       checkActive();
       showBatchTabStatus(`${listingPrefix}: waiting for photos to finish uploading...`);
+      observePhase("host_photo_confirmation");
       await waitForHostUploadedPhotos(initialPhotoCount + filesToInject.length, undefined, task.controller.signal);
       checkActive();
       showBatchTabStatus(`${listingPrefix}: checking listing details...`);
+      observePhase("field_confirmation");
       await waitForGeneratedListingFields(
         generatedListing?.title,
         generatedListing?.description,
@@ -19019,6 +19050,7 @@
       );
 
       if (message.batchId) {
+        observePhase("completion_checkpoint");
         let checkpoint = null;
         for (let attempt = 0; attempt < 2 && !checkpoint?.ok; attempt += 1) {
           checkpoint = await sendMessage({
@@ -19036,6 +19068,11 @@
       hideBatchTabStatus(3500);
       return { ok: true, offers: generatedListing?.offers || [] };
     } catch (err) {
+      try {
+        err.batchEvidence = { ...batchPhotoEvidence(initialPhotoCount + remoteFiles.length),
+          phase: diagnosticPhase, durationMs: Math.max(0, Date.now() - phaseStartedAt),
+          ...err.batchEvidence, itemDurationMs: Math.max(0, Date.now() - itemStartedAt) };
+      } catch { /* Diagnostic failure cannot replace the original interruption. */ }
       if (batchAuthUserId === task.ownerId) {
         showBatchTabStatus(err.message || `${listingPrefix}: generation failed.`, task.controller.signal.aborted ? "paused" : "error");
         hideBatchTabStatus(9000);
