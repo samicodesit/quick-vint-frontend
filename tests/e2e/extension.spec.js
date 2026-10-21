@@ -8,8 +8,32 @@ const extensionPath = process.env.AUTOLISTER_EXTENSION_PATH
   ? path.resolve(process.env.AUTOLISTER_EXTENSION_PATH)
   : path.resolve(__dirname, "../..");
 const languageDefaultsPath = path.join(extensionPath, "language-defaults.js");
+const billingCatalogPath = path.join(extensionPath, "lib/billing-catalog.js");
 const qrCodePath = path.join(extensionPath, "lib/qrcode.min.js");
 const contentScriptPath = path.join(extensionPath, "content.js");
+
+async function useActualPaywallIcon(page) {
+  const icon = "data:image/png;base64," + fs.readFileSync(path.join(extensionPath, "icons/icon48.png")).toString("base64");
+  await page.evaluate(icon => {
+    const originalGetURL = chrome.runtime.getURL;
+    chrome.runtime.getURL = asset => asset === "icons/icon48.png" ? icon : originalGetURL(asset);
+  }, icon);
+}
+
+async function expectPaywallColumns(paywall) {
+  const cards = await paywall.locator('.paywall-option:visible').evaluateAll(elements => elements.map(element => {
+    const left = element.querySelector('.paywall-option-main').getBoundingClientRect();
+    const right = element.querySelector('.paywall-option-side').getBoundingClientRect();
+    const limits = element.querySelector('.paywall-option-limits')?.getBoundingClientRect();
+    const name = element.querySelector('.paywall-option-name').getBoundingClientRect();
+    return { leftRight: left.right, rightLeft: right.left, leftBottom: left.bottom, rightTop: right.top, limitsTop: limits?.top, nameBottom: name.bottom };
+  }));
+  for (const card of cards) {
+    expect(card.rightLeft).toBeGreaterThan(card.leftRight);
+    expect(card.rightTop).toBeLessThan(card.leftBottom);
+    if (card.limitsTop !== undefined) expect(card.limitsTop).toBeGreaterThanOrEqual(card.nameBottom);
+  }
+}
 
 test("replays a dropped generation response with the same request and starts a fresh intentional generation", async ({ page }) => {
   await page.route("https://autolister.app/api/events/track", (route) => route.fulfill({ status: 204, body: "" }));
@@ -784,6 +808,7 @@ async function openContentHarness(page, capacityResponse = null, options = {}) {
       };
     });
   }
+  await page.addScriptTag({ path: billingCatalogPath });
   await page.addScriptTag({ path: languageDefaultsPath });
   await page.addScriptTag({ path: qrCodePath });
   await installTelemetryHarness(page, extensionPath);
@@ -840,6 +865,7 @@ async function openWardrobeEditHarness(page, itemId = "42", options = {}) {
         originalSetInterval(callback, delay === 20 * 1000 ? 25 : delay, ...args);
     });
   }
+  await page.addScriptTag({ path: billingCatalogPath });
   await page.addScriptTag({ path: languageDefaultsPath });
   await installTelemetryHarness(page, extensionPath);
   await page.addScriptTag({ path: contentScriptPath });
@@ -957,6 +983,7 @@ async function openWardrobeHarness(
       : { supabaseSession: null }),
     ...initialStorage,
   });
+  await page.addScriptTag({ path: billingCatalogPath });
   await page.addScriptTag({ path: languageDefaultsPath });
   await installTelemetryHarness(page, extensionPath);
   await page.addScriptTag({ path: contentScriptPath });
@@ -1249,6 +1276,7 @@ async function openImageCompressionHarness(page, proxyResponse) {
       originalSendMessage(message, callback);
     };
   }, proxyResponse);
+  await page.addScriptTag({ path: billingCatalogPath });
   await page.addScriptTag({ path: languageDefaultsPath });
   await installTelemetryHarness(page, extensionPath);
   await page.addScriptTag({ path: contentScriptPath });
@@ -3096,6 +3124,7 @@ test.describe("AutoLister extension smoke flows", () => {
       expect(manifest.content_scripts[0].js).toEqual([
         "canary-config.js",
         "language-defaults.js",
+        "lib/billing-catalog.js",
         "lib/qrcode.min.js",
         "lib/telemetry-registry.js",
         "lib/telemetry-client.js",
@@ -4005,7 +4034,8 @@ test.describe("AutoLister extension smoke flows", () => {
     expect(JSON.stringify(storage)).not.toContain(description);
     await page.reload({ waitUntil: "domcontentloaded" });
     await installChromeHarness(page, null, storage);
-    await page.addScriptTag({ path: languageDefaultsPath });
+    await page.addScriptTag({ path: billingCatalogPath });
+  await page.addScriptTag({ path: languageDefaultsPath });
     await page.addScriptTag({ path: qrCodePath });
     await installTelemetryHarness(page, extensionPath);
     await page.addScriptTag({ path: contentScriptPath });
@@ -7475,6 +7505,88 @@ test.describe("AutoLister extension smoke flows", () => {
     await expect(page.locator("#quickvint-limit-followup-modal")).toHaveCount(0);
   });
 
+  test("switches the paywall to one-time packs and checks out the selected quantity", async ({ page }) => {
+    await page.route("https://autolister.app/api/generate", route => route.fulfill({ status: 429, contentType: "application/json", body: JSON.stringify({ code: "free_lifetime_limit", currentTier: "free", nextTier: "starter" }) }));
+    await openContentHarness(page);
+    if (process.env.BILLING_QA_OUTPUT) await useActualPaywallIcon(page);
+    await page.locator("#quickvint-gen-btn").click();
+    const paywall = page.locator("#quickvint-toast.paywall");
+    await expect(paywall.getByRole("tab", { name: "Monthly", exact: true })).toHaveAttribute("aria-selected", "true");
+    await expect(paywall).toContainText("€0.053");
+    await expectPaywallColumns(paywall);
+    const bounds = await paywall.boundingBox();
+    expect(bounds.x + bounds.width).toBeLessThanOrEqual((await page.viewportSize()).width);
+    if (process.env.BILLING_QA_OUTPUT) {
+      fs.mkdirSync(process.env.BILLING_QA_OUTPUT, { recursive: true });
+      await paywall.screenshot({ path: path.join(process.env.BILLING_QA_OUTPUT, "extension-monthly-en.jpg") });
+      const originalViewport = page.viewportSize();
+      for (const width of [320, 390]) {
+        await page.setViewportSize({ width, height: 844 });
+        await paywall.screenshot({ path: path.join(process.env.BILLING_QA_OUTPUT, `extension-monthly-en-${width}.jpg`) });
+      }
+      await page.setViewportSize(originalViewport);
+    }
+    await paywall.getByRole("tab", { name: "One-time", exact: true }).click();
+    await expect(paywall.locator('.paywall-option:visible')).toHaveCount(3);
+    await expect(paywall.locator('.paywall-option:visible')).toContainText(["€5.99", "€9.99", "€16.99"]);
+    if (process.env.BILLING_QA_OUTPUT) await paywall.screenshot({ path: path.join(process.env.BILLING_QA_OUTPUT, "extension-once-en.jpg") });
+    await paywall.getByRole("button", { name: /50 listing credits/ }).click();
+    await expect.poll(() => page.evaluate(() => window.__extensionHarness.runtimeMessages.filter(message => message.type === "CREATE_CHECKOUT"))).toEqual([{ type: "CREATE_CHECKOUT", checkoutType: "credit_pack", tier: "credit_pack", packId: "credits_50", source: "extension_paywall" }]);
+  });
+
+  test("resets scroll when reopening the paywall", async ({ page }) => {
+    await page.route("https://autolister.app/api/generate", route => route.fulfill({ status: 429, contentType: "application/json", body: JSON.stringify({ code: "free_lifetime_limit", currentTier: "free", nextTier: "starter" }) }));
+    await page.setViewportSize({ width: 390, height: 420 });
+    await openContentHarness(page);
+    await page.locator("#quickvint-gen-btn").click();
+    const paywall = page.locator("#quickvint-toast.paywall");
+    await expect(paywall).toBeVisible();
+    await paywall.evaluate(el => {
+      el.scrollTop = el.scrollHeight;
+      el.querySelector(".paywall-close").click();
+    });
+    await page.locator("#quickvint-gen-btn").click();
+    await expect(paywall).toBeVisible();
+    await expect.poll(() => paywall.evaluate(el => el.scrollTop)).toBe(0);
+  });
+
+  test("keeps translated paywall tabs and prices readable at narrow widths", async ({ page }) => {
+    await page.route("https://autolister.app/api/generate", route => route.fulfill({ status: 429, contentType: "application/json", body: JSON.stringify({ code: "free_lifetime_limit", currentTier: "free", nextTier: "starter" }) }));
+    await openContentHarness(page);
+    if (process.env.BILLING_QA_OUTPUT) await useActualPaywallIcon(page);
+    for (const language of ["en", "fr", "cz", "da", "nl", "de", "el", "hr", "fi", "hu", "it", "lt", "pl", "pt", "ro", "es", "sk", "sv"]) {
+      await page.evaluate(language => chrome.storage.local.set({ selectedLanguage: language, selectedTitleLanguage: language, selectedDescriptionLanguage: language, quickvintLanguagePreferenceTouched: true }), language);
+      await page.setViewportSize({ width: 390, height: 844 });
+      await page.locator("#quickvint-gen-btn").click();
+      const paywall = page.locator("#quickvint-toast.paywall");
+      await expect(paywall).toBeVisible();
+      const tabs = paywall.getByRole("tab");
+      const translated = require(billingCatalogPath).getCopy(language);
+      await expect(tabs.first()).toHaveText(translated.monthly);
+      await expect(tabs.first()).toHaveAttribute("aria-selected", "true");
+      for (const width of [320, 390]) {
+        await page.setViewportSize({ width, height: 844 });
+        await expectPaywallColumns(paywall);
+        await expect.poll(() => paywall.evaluate(el => el.scrollWidth <= el.clientWidth + 1)).toBe(true);
+      }
+      if (process.env.BILLING_QA_OUTPUT && ["de", "el"].includes(language)) await paywall.screenshot({ path: path.join(process.env.BILLING_QA_OUTPUT, `extension-monthly-${language}-390.jpg`) });
+      await tabs.first().press("ArrowRight");
+      await expect(tabs.nth(1)).toHaveAttribute("aria-selected", "true");
+      await expect(paywall.locator('.paywall-option:visible')).toHaveCount(3);
+      for (const width of [320, 390]) {
+        await page.setViewportSize({ width, height: 844 });
+        await expectPaywallColumns(paywall);
+        await expect.poll(() => paywall.evaluate(el => el.scrollWidth <= el.clientWidth + 1)).toBe(true);
+      }
+      const headerBounds = await paywall.locator(".paywall-header").boundingBox();
+      const cardBounds = await paywall.boundingBox();
+      expect(headerBounds.y).toBeGreaterThanOrEqual(cardBounds.y);
+      expect(headerBounds.y + headerBounds.height).toBeLessThanOrEqual(cardBounds.y + cardBounds.height);
+      if (process.env.BILLING_QA_OUTPUT && ["de", "el"].includes(language)) await paywall.screenshot({ path: path.join(process.env.BILLING_QA_OUTPUT, `extension-once-${language}-390.jpg`) });
+      await paywall.locator(".paywall-close").click();
+    }
+  });
+
   test("opens checkout from the free-limit paywall when a plan is clicked", async ({
     page,
   }) => {
@@ -7707,7 +7819,8 @@ test.describe("wardrobe rewrite tab", () => {
     await expect(ping()).resolves.toEqual({ ok: false, itemId: "42" });
     await page.reload({ waitUntil: "domcontentloaded" });
     await installChromeHarness(page);
-    await page.addScriptTag({ path: languageDefaultsPath });
+    await page.addScriptTag({ path: billingCatalogPath });
+  await page.addScriptTag({ path: languageDefaultsPath });
     await installTelemetryHarness(page, extensionPath);
     await page.addScriptTag({ path: contentScriptPath });
     await page.locator('[data-testid^="image-wrapper-"] img').evaluate((image) => image.remove());

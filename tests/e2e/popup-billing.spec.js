@@ -6,6 +6,7 @@ const { test, expect } = require("@playwright/test");
 const extensionPath = path.resolve(__dirname, "../..");
 const popupHtml = fs.readFileSync(path.join(extensionPath, "popup.html"), "utf8");
 const languageDefaultsPath = path.join(extensionPath, "language-defaults.js");
+const billingCatalogPath = path.join(extensionPath, "lib/billing-catalog.js");
 const popupScriptPath = path.join(extensionPath, "popup.js");
 
 function createSession(email = "seller@example.com") {
@@ -202,6 +203,7 @@ async function installPopupHarness(page, options = {}) {
     { storageSeed: initialStorage, validSessionFixture: validSessionResponse },
   );
 
+  await page.addScriptTag({ path: billingCatalogPath });
   await page.addScriptTag({ path: languageDefaultsPath });
   await installTelemetryHarness(page, extensionPath);
   await page.addScriptTag({ path: popupScriptPath });
@@ -588,7 +590,7 @@ test.describe("popup billing portal", () => {
     expect(supabaseSessionCalls).toBe(0);
   });
 
-  test("credit checkout uses the stored extension session, not popup Supabase memory", async ({
+  test("credit chooser opens One-time pricing with the verified stored session", async ({
     page,
   }) => {
     const checkoutRequests = [];
@@ -617,18 +619,16 @@ test.describe("popup billing portal", () => {
     await expect(page.locator("#creditPackBtn")).toBeVisible();
     await page.locator("#creditPackBtn").click();
 
-    await expect
-      .poll(() => checkoutRequests.length, {
-        message: "credit checkout request count",
-      })
-      .toBe(1);
-    expect(checkoutRequests[0]).toEqual({
-      email: "seller@example.com",
-      source: "extension_popup",
-    });
-
+    await expect.poll(() => page.evaluate(() => window.__popupHarness.openedUrls.length)).toBe(1);
     const openedUrls = await page.evaluate(() => window.__popupHarness.openedUrls);
-    expect(openedUrls).toEqual(["https://checkout.test/credits"]);
+    const pricingUrl = new URL(openedUrls[0]);
+    expect(pricingUrl.pathname).toBe("/pricing");
+    expect(pricingUrl.searchParams.get("billing")).toBe("once");
+    const token = pricingUrl.searchParams.get("token");
+    const profile = JSON.parse(Buffer.from(token, "base64").toString("utf8"));
+    expect(profile.email).toBe("seller@example.com");
+    expect(profile.signed_in).toBe(true);
+    expect(checkoutRequests).toHaveLength(0);
     const supabaseSessionCalls = await page.evaluate(() =>
       window.__popupHarness.getSupabaseGetSessionCalls(),
     );

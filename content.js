@@ -1509,7 +1509,7 @@
     }, LIMIT_FOLLOWUP_RETURN_DELAY_MS);
   }
 
-  function showLimitPaywall({
+  async function showLimitPaywall({
     title,
     message,
     options = [],
@@ -1533,6 +1533,27 @@
       return;
     }
 
+    let billingLocale = "en";
+    try {
+      const storage = await chrome.storage.local.get(["selectedLanguage", "selectedTitleLanguage", "selectedDescriptionLanguage", "quickvintLanguagePreferenceTouched"]);
+      billingLocale = resolveLanguageProfile(storage).uiLanguageCode;
+    } catch (_) {}
+    const billing = window.AutoListerBilling;
+    const billingCopy = billing.getCopy(billingLocale);
+    options = [
+      ...options.filter((option) => option.checkoutType !== "credit_pack"),
+      ...billing.packs.map((pack) => ({
+        tier: "credit_pack", checkoutType: "credit_pack", packId: pack.id,
+        name: billingCopy.pack.replace("{credits}", String(pack.credits)),
+        price: billing.formatPrice(pack.priceEur, billingLocale), limits: "",
+        unitPrice: billing.formatUnitPrice(pack.priceEur, pack.credits, billingLocale),
+      })),
+    ].map((option) => {
+      const plan = PLAN_LIMITS[option.tier];
+      return option.checkoutType === "subscription" && plan
+        ? { ...option, unitPrice: billing.formatUnitPrice(Number(plan.price.match(/[\d.]+/)[0]), plan.monthly, billingLocale) }
+        : option;
+    });
     removeDescriptionApplyPrompt();
     if (activeLimitFollowupOfferCleanup) {
       activeLimitFollowupOfferCleanup("cancel");
@@ -1571,6 +1592,8 @@
                   class="paywall-option${option.featured ? " featured" : ""}${option.muted ? " muted" : ""}"
                   type="button"
                   data-paywall-option-index="${index}"
+                  data-paywall-billing="${option.checkoutType === "credit_pack" ? "once" : "monthly"}"
+                  ${option.checkoutType === "credit_pack" ? "hidden" : ""}
                   ${isSelectable ? "" : "disabled"}
                 >
                   <div class="paywall-option-main">
@@ -1580,10 +1603,11 @@
                         ? `<span class="paywall-option-badge${option.badge.toLowerCase() === "most popular" ? " most-popular" : ""}">${escapeHtml(option.badge)}</span>`
                         : ""
                     }
+                    ${option.limits ? `<span class="paywall-option-limits">${escapeHtml(option.limits)}</span>` : ""}
                   </div>
                   <div class="paywall-option-side">
                     <span class="paywall-option-price">${escapeHtml(option.price)}</span>
-                    <span class="paywall-option-limits">${escapeHtml(option.limits)}</span>
+                    ${option.unitPrice ? `<span class="paywall-unit-price">≈${escapeHtml(option.unitPrice)} ${escapeHtml(billingCopy.perListing)}</span>` : ""}
                   </div>
                 </button>
               `;
@@ -1606,7 +1630,12 @@
           </div>
         </div>
         <div class="paywall-message">${escapeHtml(message)}</div>
+        <div class="paywall-billing-toggle" role="tablist" aria-label="${escapeHtml(billingCopy.title)}">
+          <button type="button" role="tab" aria-selected="true" data-paywall-mode="monthly">${escapeHtml(billingCopy.monthly)}</button>
+          <button type="button" role="tab" aria-selected="false" tabindex="-1" data-paywall-mode="once">${escapeHtml(billingCopy.oneTime)}</button>
+        </div>
         ${optionsHtml}
+        <p class="paywall-unit-note">${escapeHtml(billingCopy.qualifier)}</p>
         ${
           !options.length && actionText
             ? `<button class="paywall-action" type="button">
@@ -1632,6 +1661,7 @@
     const anchorInput = getPromptAnchorInput();
     const onReposition = () => positionAnchoredFloatingCard(toast, anchorInput, 430);
     onReposition();
+    toast.scrollTop = 0;
     window.addEventListener("resize", onReposition);
     window.addEventListener("scroll", onReposition, true);
     activePaywallCleanup = () => {
@@ -1647,6 +1677,7 @@
     if (closeBtn) {
       closeBtn.onclick = () => {
         toast.classList.remove("visible");
+        toast.style.visibility = "hidden";
         clearPaywallPositioning();
         if (window.quickvintToastTimeout)
           clearTimeout(window.quickvintToastTimeout);
@@ -1666,6 +1697,29 @@
     const optionButtons = Array.from(
       toast.querySelectorAll("[data-paywall-option-index]"),
     );
+    const billingTabs = Array.from(toast.querySelectorAll("[data-paywall-mode]"));
+    function selectBillingMode(mode) {
+      billingTabs.forEach((tab) => {
+        const selected = tab.dataset.paywallMode === mode;
+        tab.setAttribute("aria-selected", String(selected));
+        tab.tabIndex = selected ? 0 : -1;
+      });
+      optionButtons.forEach((button) => { button.hidden = button.dataset.paywallBilling !== mode; });
+      toast.querySelector(".paywall-unit-note").textContent = mode === "monthly" ? billingCopy.qualifier : billingCopy.terms;
+      const trust = toast.querySelector(".paywall-trust");
+      if (trust) { trust.hidden = mode === "once"; }
+      onReposition();
+    }
+    billingTabs.forEach((tab) => {
+      tab.addEventListener("click", () => selectBillingMode(tab.dataset.paywallMode));
+      tab.addEventListener("keydown", (event) => {
+        if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
+        event.preventDefault();
+        const next = event.key === "Home" ? billingTabs[0] : event.key === "End" ? billingTabs[1] : billingTabs[tab.dataset.paywallMode === "monthly" ? 1 : 0];
+        selectBillingMode(next.dataset.paywallMode);
+        next.focus();
+      });
+    });
 
     async function openPaywallOption(option, triggerButton) {
       if (!option || triggerButton?.dataset.checkoutPending === "true") return;
@@ -2294,6 +2348,7 @@
       checkoutType: option.checkoutType,
       tier: option.tier,
       source,
+      ...(option.packId ? { packId: option.packId } : {}),
     });
     if (!response?.ok || !response.url) {
       const error = new Error(
@@ -9559,6 +9614,7 @@
       }
 
       #quickvint-toast.paywall {
+        box-sizing: border-box;
         background: linear-gradient(180deg, #ffffff 0%, #fbfcff 100%);
         color: #111827;
         border: 1px solid rgba(79, 70, 229, 0.14);
@@ -9568,7 +9624,8 @@
         max-width: 450px;
         gap: 10px;
         box-shadow: 0 26px 80px rgba(17, 24, 39, 0.2), 0 10px 26px rgba(79, 70, 229, 0.14);
-        overflow: hidden;
+        max-height: calc(100dvh - 32px);
+        overflow-y: auto;
       }
 
       #quickvint-toast.paywall::before {
@@ -9722,10 +9779,17 @@
         gap: 9px;
         margin: 2px 0 13px;
       }
+      #quickvint-toast.paywall [hidden] { display: none !important; }
+      #quickvint-toast.paywall .paywall-billing-toggle { display: flex; gap: 4px; margin: 10px 0; padding: 3px; background: #f1f3f7; border-radius: 9px; }
+      #quickvint-toast.paywall .paywall-billing-toggle button { flex: 1; min-width: 0; min-height: 44px; padding: 8px; border: 0; border-radius: 7px; background: transparent; color: #374151; font: inherit; font-size: 13px; font-weight: 700; cursor: pointer; overflow-wrap: anywhere; }
+      #quickvint-toast.paywall .paywall-billing-toggle button[aria-selected="true"] { background: white; color: #4338ca; box-shadow: 0 1px 3px #0001; }
+      #quickvint-toast.paywall .paywall-billing-toggle button:focus-visible { outline: 2px solid #4f46e5; }
+      #quickvint-toast.paywall .paywall-unit-price { color: #525e70; font-size: 12px; line-height: 1.4; white-space: normal; }
+      #quickvint-toast.paywall .paywall-unit-note { color: #525e70; font-size: 12px; line-height: 1.5; margin: 6px 0; }
 
       #quickvint-toast.paywall .paywall-option {
         display: grid;
-        grid-template-columns: minmax(0, 1fr) auto;
+        grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
         align-items: center;
         gap: 10px;
         width: 100%;
@@ -9770,6 +9834,7 @@
 
       #quickvint-toast.paywall .paywall-option-main {
         display: flex;
+        flex-wrap: wrap;
         align-items: center;
         gap: 7px;
         min-width: 0;
@@ -9782,7 +9847,7 @@
         line-height: 1.2;
         overflow: hidden;
         text-overflow: ellipsis;
-        white-space: nowrap;
+        white-space: normal;
       }
 
       #quickvint-toast.paywall .paywall-option-badge {
@@ -9821,6 +9886,8 @@
       }
 
       #quickvint-toast.paywall .paywall-option-limits {
+        flex-basis: 100%;
+        white-space: normal;
         color: #667085;
         font-size: 11px;
         font-weight: 720;
@@ -10630,15 +10697,6 @@
           max-width: none;
         }
 
-        #quickvint-toast.paywall .paywall-option {
-          grid-template-columns: 1fr;
-          gap: 5px;
-        }
-
-        #quickvint-toast.paywall .paywall-option-side {
-          align-items: flex-start;
-          text-align: left;
-        }
       }
 
       .quickvint-wardrobe-rewrite-host,

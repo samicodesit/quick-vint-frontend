@@ -92,6 +92,7 @@
       "js": [
         "canary-config.js",
         "language-defaults.js",
+        "lib/billing-catalog.js",
         "lib/qrcode.min.js",
         "lib/telemetry-registry.js",
         "lib/telemetry-client.js",

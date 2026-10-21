@@ -600,7 +600,8 @@ document.addEventListener("DOMContentLoaded", () => {
   function restoreCreditPackButtonContent() {
     if (!creditPackBtn) return;
     creditPackBtn.disabled = false;
-    creditPackBtn.textContent = `Buy ${CREDIT_PACK.credits} credits - ${CREDIT_PACK.price} one-time`;
+    creditPackBtn.textContent = window.AutoListerBilling.getCopy(navigator.language).buyCredits;
+    creditPackBtn.setAttribute("aria-label", creditPackBtn.textContent);
   }
 
   function setPaidUpgradeButton(tier) {
@@ -623,9 +624,9 @@ document.addEventListener("DOMContentLoaded", () => {
       oneTimeSeparator.classList.toggle("hidden", !show || !showSeparator);
     if (oneTimePurchase) oneTimePurchase.classList.toggle("hidden", !show);
     if (creditPackBtn) {
-      creditPackBtn.textContent =
-        label ||
-        `Buy ${CREDIT_PACK.credits} credits - ${CREDIT_PACK.price} one-time`;
+      restoreCreditPackButtonContent();
+      const caption = oneTimePurchase?.querySelector(".one-time-caption");
+      if (caption) caption.textContent = window.AutoListerBilling.getCopy(navigator.language).terms;
     }
   }
 
@@ -1268,68 +1269,35 @@ document.addEventListener("DOMContentLoaded", () => {
 
   async function handleCreditPackPurchase() {
     setLoading(creditPackBtn, true, "Loading…");
-    showMessage(null);
     try {
       const checkoutState = await getVerifiedSignedInBillingState();
       if (!checkoutState.ok) {
-        trackGrowthEvent("pricing_signin_required", {
-          source: "extension_popup_credit_pack",
-          reason: checkoutState.reason,
-        });
         showMessage("Please sign in to buy credits.", "error");
         await updateFromStorage();
         return;
       }
-
-      trackGrowthEvent("credit_pack_click", { source: "extension_popup" });
-      trackGrowthEvent("checkout_start", {
-        source: "extension_popup",
-        tier: "credit_pack",
-        checkoutType: "credit_pack",
-      });
-      const res = await fetch(`${API_BASE}/api/stripe/create-credit-checkout`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          email: checkoutState.email,
-          source: "extension_popup",
-        }),
-      });
-      const { url, error } = await res.json();
-      if (res.ok && url) {
-        trackGrowthEvent("checkout_opened", {
-          source: "extension_popup",
-          tier: "credit_pack",
-          checkoutType: "credit_pack",
-        });
-        await chrome.tabs.create({ url });
-      } else {
-        showMessage(error || "Unable to open the payment page.", "error");
-      }
-    } catch (err) {
-      console.error("Credit checkout error:", err);
-      showMessage("Connection issue. Please try again.", "error");
+      handleViewAllPlans(null, "once", checkoutState.email);
     } finally {
       restoreCreditPackButtonContent();
     }
   }
 
-  function handleViewAllPlans(e) {
+  function handleViewAllPlans(e, billingMode = "monthly", checkoutEmail = null) {
     if (e) e.preventDefault();
     trackGrowthEvent("pricing_view_all_click", { source: "extension_popup" });
     chrome.runtime.sendMessage({ type: "GET_USER_PROFILE" }, (resp) => {
       const userData = {
         source: "extension",
-        signed_in: !!resp?.user,
+        signed_in: !!checkoutEmail || !!resp?.user,
         plan: resp?.profile?.subscription_tier || "free",
         subscription_status: resp?.profile?.subscription_status || "free",
-        email: resp?.user?.email || "",
+        email: checkoutEmail || resp?.user?.email || "",
         timestamp: Date.now(),
       };
       const token = encodeUserData(userData);
       if (token) {
         const url = `${API_BASE}/pricing?token=${token}`;
-        chrome.tabs.create({ url });
+        chrome.tabs.create({ url: billingMode === "once" ? url + "&billing=once" : url });
       }
     });
   }

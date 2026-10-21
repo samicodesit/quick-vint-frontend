@@ -789,6 +789,8 @@ async function createCheckout(message = {}) {
   };
   if (!isCreditPack) {
     body.tier = tier;
+  } else if (message.packId !== undefined) {
+    body.packId = message.packId;
   }
 
   try {
