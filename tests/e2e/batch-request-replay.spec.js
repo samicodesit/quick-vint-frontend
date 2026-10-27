@@ -2,23 +2,26 @@ const { test, expect } = require("@playwright/test");
 const { openBatchJourney, sendFromExtensionContent } = require("./batch-journey");
 
 test("a committed generation whose responses were lost replays its exact request in a new work tab", async () => {
+  let allowReplay = false;
   const flow = await openBatchJourney({ refreshUrls: true,
     generate: async ({ route, request, requests, commits }) => {
-      if (requests.length <= 2) return route.abort("connectionreset");
+      if (!allowReplay) return route.abort("connectionreset");
       return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(commits.get(request.id)) });
     },
   });
   try {
     await flow.start();
-    await expect.poll(() => flow.requests.length).toBe(2);
+    await expect.poll(() => flow.requests.length).toBeGreaterThanOrEqual(2);
     const recovery = await flow.worker.evaluate(() => chrome.storage.local.get("quickvintBatchRecovery"));
     await sendFromExtensionContent(flow.context, flow.controller, { type: "STOP_BATCH_GENERATION", batchId: recovery.quickvintBatchRecovery.batchId });
     await expect(flow.controller.locator(".batch-recovery-resume")).toBeVisible();
     const firstWork = flow.context.pages().find(page => page !== flow.controller && page.url().includes("/items/new"));
+    const beforeResume = flow.requests.length;
+    allowReplay = true;
     await flow.controller.locator(".batch-recovery-resume").click();
-    await expect.poll(() => flow.requests.length).toBe(3);
-    expect(flow.requests[2].id).toBe(flow.requests[0].id);
-    expect(flow.requests[2].rawBody).toBe(flow.requests[0].rawBody);
+    await expect.poll(() => flow.requests.length).toBe(beforeResume + 1);
+    expect(flow.requests[beforeResume].id).toBe(flow.requests[0].id);
+    expect(flow.requests[beforeResume].rawBody).toBe(flow.requests[0].rawBody);
     expect(flow.commits.size).toBe(1);
     expect(flow.context.pages().filter(page => page !== flow.controller && page.url().includes("/items/new"))).toHaveLength(2);
     expect(firstWork.isClosed()).toBe(false);

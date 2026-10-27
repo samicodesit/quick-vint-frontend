@@ -288,7 +288,9 @@ test("a real Generate action reports its auth block and same-input recovery with
     const blocked = await evidence(testInfo, flow, "action-blocked");
     const result = blocked.events.find(event => event.event === "auth_action_result" && event.context.resultStatus === "blocked");
     expect(result, "actual unauthorized Generate result needs an auth action record").toBeTruthy();
-    const failure = blocked.events.find(event => event.event === "token_refresh_failed");
+    const failure = blocked.events.find(event => event.event === "token_refresh_failed" &&
+      event.context.parentOperationId === result.context.operationId);
+    expect(failure, "match this Generate action rather than an earlier usage refresh").toBeTruthy();
     expect(result.context.authRefreshOperationId).toBe(failure.context.operationId);
     expect(result.context.generationAttemptId).toBe(flow.requests[0].body.generationAttemptId);
     expect(blocked.photos).toBe(1);
