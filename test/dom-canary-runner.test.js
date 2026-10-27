@@ -120,7 +120,15 @@ test("DOM canary runner classifies Vinted auth redirects", async () => {
   );
 });
 
-test("DOM canary runner can treat reported failures as process success", async () => {
+test("DOM canary distinguishes the actual Vinted terms gate from selector drift", async () => {
+  const { classifyCanaryFailure } = await import("../scripts/run-dom-canary.mjs");
+  assert.deepEqual(
+    classifyCanaryFailure("https://www.vinted.nl/terms_and_conditions?ref_url=%2Fitems%2Fnew"),
+    { reason: "terms_required" },
+  );
+});
+
+test("DOM canary keeps reported failures nonzero even with the legacy override", async () => {
   const { getProcessExitCode } = await import("../scripts/run-dom-canary.mjs");
 
   assert.equal(getProcessExitCode({ status: "passed" }, {}), 0);
@@ -130,7 +138,7 @@ test("DOM canary runner can treat reported failures as process success", async (
       { status: "failed" },
       { DOM_CANARY_EXIT_ZERO_ON_REPORTED_FAILURE: "1" },
     ),
-    0,
+    1,
   );
 });
 

@@ -1,4 +1,4 @@
-import { readFileSync, mkdirSync } from "node:fs";
+import { readFileSync, mkdirSync, writeFileSync, renameSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { chromium } from "@playwright/test";
@@ -42,6 +42,7 @@ export function getConfig(env = process.env) {
     executablePath: env.DOM_CANARY_BROWSER_EXECUTABLE || "",
     profileDirectory: env.DOM_CANARY_PROFILE_DIRECTORY || "",
     extensionPath: env.DOM_CANARY_EXTENSION_PATH || extensionPath,
+    resultPath: env.DOM_CANARY_RESULT_PATH || "",
   };
 }
 
@@ -66,9 +67,9 @@ export function buildCanaryPayload({
   };
 }
 
-function getExtensionVersion() {
+function getExtensionVersion(directory) {
   const manifest = JSON.parse(
-    readFileSync(path.join(extensionPath, "manifest.json"), "utf8"),
+    readFileSync(path.join(directory, "manifest.json"), "utf8"),
   );
   return manifest.version || "";
 }
@@ -83,14 +84,15 @@ function pathnameFromUrl(value) {
 
 export function classifyCanaryFailure(currentUrl = "") {
   const pathname = pathnameFromUrl(currentUrl);
+  if (/^\/terms_and_conditions(?:\/|$)/.test(pathname))
+    return { reason: "terms_required" };
   return /\/member\/(?:signup|register|login)|\/auth\//.test(pathname)
     ? { reason: "auth_required" }
     : { reason: "selector_timeout" };
 }
 
-export function getProcessExitCode(payload, env = process.env) {
-  if (payload.status === "passed") return 0;
-  return env.DOM_CANARY_EXIT_ZERO_ON_REPORTED_FAILURE === "1" ? 0 : 1;
+export function getProcessExitCode(payload) {
+  return payload.status === "passed" ? 0 : 1;
 }
 
 async function collectDomState(page) {
@@ -152,6 +154,7 @@ async function postPayload(config, payload) {
       "Content-Type": "application/json",
     },
     body: JSON.stringify(payload),
+    signal: AbortSignal.timeout(15000),
   });
 
   if (!response.ok) {
@@ -161,8 +164,10 @@ async function postPayload(config, payload) {
 }
 
 export async function runDomCanary(config = getConfig()) {
-  mkdirSync(config.profileDir, { recursive: true });
-  const extensionVersion = getExtensionVersion();
+  let extensionVersion = "";
+  let context;
+  let page;
+  let phase = "extension_load";
   const launchOptions = {
     channel: config.executablePath ? undefined : config.channel,
     executablePath: config.executablePath || undefined,
@@ -175,24 +180,26 @@ export async function runDomCanary(config = getConfig()) {
         : []),
     ],
   };
-  const context = await chromium.launchPersistentContext(config.profileDir, {
-    ...launchOptions,
-  });
-
-  const page = await context.newPage();
   let payload;
 
   try {
+    extensionVersion = getExtensionVersion(config.extensionPath);
+    mkdirSync(config.profileDir, { recursive: true });
+    phase = "browser_launch";
+    context = await chromium.launchPersistentContext(config.profileDir, launchOptions);
+    page = context.pages()[0] || await context.newPage();
+    phase = "navigation";
     await page.goto(config.url, {
       waitUntil: "domcontentloaded",
       timeout: config.timeoutMs,
     });
     await page.waitForLoadState("networkidle", { timeout: 10000 }).catch(() => {});
     await dismissVintedDomainModal(page);
-    if (config.keepOpenMs > 0) {
-      await page.waitForTimeout(config.keepOpenMs);
-      await dismissVintedDomainModal(page);
-    }
+    // Setup mode leaves this same profile open for human review/sign-in. Never
+    // accept terms, enter credentials or bypass a challenge automatically.
+    if (!config.keepOpenMs && ["terms_required", "auth_required"].includes(classifyCanaryFailure(page.url()).reason))
+      throw new Error("Vinted requires account review before the create page");
+    phase = "selectors";
     const handle = await page.waitForFunction(
       (selectors) => {
         const title = Boolean(document.querySelector(selectors.title));
@@ -211,36 +218,49 @@ export async function runDomCanary(config = getConfig()) {
           : false;
       },
       selectors,
-      { timeout: config.timeoutMs },
+      { timeout: config.keepOpenMs || config.timeoutMs },
     );
-    const result = await handle.jsonValue();
+    await handle.dispose();
     const currentUrl = page.url();
     payload = buildCanaryPayload({
       status: "passed",
       url: currentUrl,
       path: pathnameFromUrl(currentUrl),
       extensionVersion,
-      result,
+      result: { injected: true, dom: await collectDomState(page) },
       selectors,
     });
   } catch (error) {
-    const currentUrl = page.url();
+    const currentUrl = page?.url() || config.url;
     payload = buildCanaryPayload({
       status: "failed",
       url: currentUrl,
       path: pathnameFromUrl(currentUrl),
       extensionVersion,
       result: {
-        ...classifyCanaryFailure(currentUrl),
-        error: error?.message || String(error),
-        dom: await collectDomState(page),
+        ...(page ? classifyCanaryFailure(currentUrl) : { reason: `${phase}_failed` }),
+        phase,
+        error: String(error?.message || error).slice(0, 1000),
+        ...(page ? { dom: await collectDomState(page) } : {}),
       },
       selectors,
     });
   } finally {
-    await context.close();
+    if (context) {
+      try { await context.close(); }
+      catch (error) {
+        payload = { ...payload, status: "failed", result: { ...payload?.result,
+          reason: "browser_close_failed", error: String(error?.message || error).slice(0, 1000) } };
+      }
+    }
   }
 
+  if (config.resultPath) {
+    mkdirSync(path.dirname(config.resultPath), { recursive: true });
+    const temporary = `${config.resultPath}.tmp`;
+    writeFileSync(temporary, `${JSON.stringify(payload, null, 2)}\n`, "utf8");
+    renameSync(temporary, config.resultPath);
+  }
   if (config.postResult) {
     await postPayload(config, payload);
   }

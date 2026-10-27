@@ -31,19 +31,36 @@ daily canary only when selector/injection evidence is sufficient.
 
 ## Authoritative daily canary
 
-Windows Scheduled Task: `AutoLister DOM Canary`, scheduled for 16:30
-Europe/Amsterdam. Its generated runner:
+Windows Scheduled Task: `AutoLister DOM Canary`. Task Scheduler holds its daily
+schedule; reinstalling preserves the existing trigger. Its launcher:
 
 1. uses Chrome for Testing;
-2. uses its own clean canary profile and the saved canary account;
-3. copies the configured frontend checkout into its canary extension directory;
+2. preserves its dedicated, manually authenticated canary profile;
+3. loads an installed, verified release ZIP rather than copying a development checkout;
 4. opens the real Vinted `/items/new` page headed;
-5. lets the extension verify title, description, photo input, AutoLister tools,
+5. runs `scripts/run-dom-canary.mjs` to verify title, description, photo input, AutoLister tools,
    Generate, Sign In, Phone, and both language controls;
-6. posts one result to `/api/dom-canary`, then closes the canary browser.
+6. closes the browser and posts one result from the host to `/api/dom-canary`.
 
-The task's `LastTaskResult = 0` only proves the runner launched. The authoritative
-pass/fail and DOM details are the production `/api/dom-canary` `log-detail` body.
+The canonical Node runner owns both selector checks and report delivery, including
+browser-launch failures. Failures return a nonzero exit code. The latest bounded
+result and launcher output live in `%LOCALAPPDATA%\AutoListerDomCanary\last-result.json`
+and `last-run.log`. The authoritative retained pass/fail and DOM details remain
+the production `/api/dom-canary` `log-detail` body.
+
+The profile is never seeded from normal Chrome. The runner does not create an
+account, supply Vinted credentials, accept terms, or solve challenges. A redirect
+to `/terms_and_conditions` reports `terms_required`; login redirects report
+`auth_required`. These are account gates, not selector-drift verdicts. Do not
+accept a legal agreement without the user's specific review/authorization.
+
+To update the installed checker, use `scripts/install-dom-canary-task.ps1` with
+`-ExtensionZip` pointing to the verified published package and the existing
+canary root. It installs only that package and the canonical runner. Do not
+point the task at a dirty development checkout or create a second task/profile.
+The installer preserves the scheduled time and keeps one task with overlapping
+runs ignored. Existing Chrome for Testing must be available. Windows script
+signing/execution controls still apply; do not change system policy.
 
 The task is the sole exception to the normal-profile rule. Agents must not trigger,
 reinstall, reschedule, open, or close it unless the user explicitly asks. Never
@@ -68,10 +85,8 @@ A current selector/injection pass requires all of these:
 Also report `occurredAt`, `extensionVersion`, URL, and title text. A failed result
 with `reason: "auth_required"` proves neither selector stability nor injection.
 
-Last production evidence before this expanded contract: the 2026-08-02 16:30
-CEST daily run passed the original real create-page checks with extension
-`1.3.70`. The next scheduled run is the first authoritative production check
-that can prove the added Phone and language-control flags.
+Recheck actual extension version and every DOM flag on each fresh result.
+Historical passes do not certify the current Vinted page or installed package.
 
 ## Explicit fresh run
 
