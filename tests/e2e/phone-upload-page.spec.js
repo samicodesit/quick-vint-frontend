@@ -1,7 +1,10 @@
 const { test, expect } = require("@playwright/test");
 const fs = require("node:fs");
 const path = require("node:path");
-const phonePage = path.resolve(__dirname, "../../../quick-vint-api/src/pages/phone-upload.html");
+const phonePage = path.resolve(
+  process.env.AUTOLISTER_API_PATH || path.resolve(__dirname, "../../../quick-vint-api"),
+  "src/pages/phone-upload.html",
+);
 test.skip(!fs.existsSync(phonePage), "Coordinated phone-page checks require the backend checkout.");
 
 async function openPhone(page, query, metadata) {

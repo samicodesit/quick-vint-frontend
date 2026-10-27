@@ -1540,6 +1540,12 @@
     } catch (_) {}
     const billing = window.AutoListerBilling;
     const billingCopy = billing.getCopy(billingLocale);
+    if (limitCode === "free_lifetime_limit") {
+      title = billingCopy.freeLimitTitle.replace("{limit}", String(FREE_LIFETIME_LIMIT));
+      message = billingCopy.freeLimitMessage;
+      trustNote = billingCopy.subscriptionTrust;
+      secondaryActionText = billingCopy.comparePlans;
+    }
     options = [
       ...options.filter((option) => option.checkoutType !== "credit_pack"),
       ...billing.packs.map((pack) => ({
@@ -1551,7 +1557,13 @@
     ].map((option) => {
       const plan = PLAN_LIMITS[option.tier];
       return option.checkoutType === "subscription" && plan
-        ? { ...option, unitPrice: billing.formatUnitPrice(Number(plan.price.match(/[\d.]+/)[0]), plan.monthly, billingLocale) }
+        ? {
+            ...option,
+            price: `${billing.formatPrice(Number(plan.price.match(/[\d.]+/)[0]), billingLocale)} ${billingCopy.perMonth}`,
+            limits: billingCopy.limits.replace("{daily}", String(plan.daily)).replace("{monthly}", String(plan.monthly)),
+            badge: option.tier === "pro" ? billingCopy.popular : option.badge,
+            unitPrice: billing.formatUnitPrice(Number(plan.price.match(/[\d.]+/)[0]), plan.monthly, billingLocale),
+          }
         : option;
     });
     removeDescriptionApplyPrompt();
@@ -1651,7 +1663,7 @@
         }
         ${trustHtml}
       </div>
-      <button class="toast-close paywall-close" aria-label="Close">×</button>
+      <button class="toast-close paywall-close" aria-label="${escapeHtml(billingCopy.closePaywall)}">×</button>
     `;
 
     toast.className = "paywall";
@@ -1744,7 +1756,7 @@
         if (button !== triggerButton) button.disabled = true;
       });
       if (actionBtn) actionBtn.disabled = true;
-      if (optionNameEl) optionNameEl.textContent = "Opening checkout...";
+      if (optionNameEl) optionNameEl.textContent = billingCopy.openingCheckout;
 
       trackGrowthEvent("checkout_start", {
         source: "extension_paywall",
@@ -2405,8 +2417,8 @@
 
     if (code === "free_lifetime_limit") {
       return {
-        title: "Free listings used",
-        message: "Your photos stay here. Pick a plan to generate this listing.",
+        title: "You’ve used all 5 free listings",
+        message: "Choose a plan or buy one-time credits to continue.",
         options: [
           planOption("starter", { featured: true }),
           planOption("pro"),

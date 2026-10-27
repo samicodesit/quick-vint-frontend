@@ -7112,7 +7112,7 @@ test.describe("AutoLister extension smoke flows", () => {
     await expect(page.locator("#quickvint-phone-modal")).toHaveCount(0);
     await expect(page.locator("#quickvint-toast.paywall")).toBeVisible();
     await expect(page.locator("#quickvint-toast.paywall")).toContainText(
-      "Free listings used",
+      "You’ve used all 5 free listings",
     );
   });
 
@@ -7331,7 +7331,7 @@ test.describe("AutoLister extension smoke flows", () => {
 
     await page.locator("#quickvint-gen-btn").click();
     await expect(page.locator("#quickvint-toast.paywall")).toContainText(
-      "Free listings used",
+      "You’ve used all 5 free listings",
     );
     await expect(page.locator("#quickvint-toast.paywall")).toBeVisible();
     const paywallBox = await page.locator("#quickvint-toast.paywall").boundingBox();
@@ -7562,6 +7562,8 @@ test.describe("AutoLister extension smoke flows", () => {
       await expect(paywall).toBeVisible();
       const tabs = paywall.getByRole("tab");
       const translated = require(billingCatalogPath).getCopy(language);
+      await expect(paywall.locator(".paywall-title")).toHaveText(translated.freeLimitTitle.replace("{limit}", "5"));
+      await expect(paywall.locator(".paywall-message")).toHaveText(translated.freeLimitMessage);
       await expect(tabs.first()).toHaveText(translated.monthly);
       await expect(tabs.first()).toHaveAttribute("aria-selected", "true");
       for (const width of [320, 390]) {
@@ -7569,7 +7571,7 @@ test.describe("AutoLister extension smoke flows", () => {
         await expectPaywallColumns(paywall);
         await expect.poll(() => paywall.evaluate(el => el.scrollWidth <= el.clientWidth + 1)).toBe(true);
       }
-      if (process.env.BILLING_QA_OUTPUT && ["de", "el"].includes(language)) await paywall.screenshot({ path: path.join(process.env.BILLING_QA_OUTPUT, `extension-monthly-${language}-390.jpg`) });
+      if (process.env.BILLING_QA_OUTPUT && ["fr", "de", "el"].includes(language)) await paywall.screenshot({ path: path.join(process.env.BILLING_QA_OUTPUT, `extension-monthly-${language}-390.jpg`) });
       await tabs.first().press("ArrowRight");
       await expect(tabs.nth(1)).toHaveAttribute("aria-selected", "true");
       await expect(paywall.locator('.paywall-option:visible')).toHaveCount(3);
@@ -7612,7 +7614,7 @@ test.describe("AutoLister extension smoke flows", () => {
 
     await page.locator("#quickvint-gen-btn").click();
     await expect(page.locator("#quickvint-toast.paywall")).toContainText(
-      "Free listings used",
+      "You’ve used all 5 free listings",
     );
     await page.locator('[data-paywall-option-index="1"]').click();
 
@@ -7687,7 +7689,7 @@ test.describe("AutoLister extension smoke flows", () => {
 
     await page.locator("#quickvint-gen-btn").click();
     await expect(page.locator("#quickvint-toast.paywall")).toContainText(
-      "Free listings used",
+      "You’ve used all 5 free listings",
     );
     await page.locator('[data-paywall-option-index="1"]').click();
 
