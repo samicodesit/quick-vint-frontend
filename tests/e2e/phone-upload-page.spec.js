@@ -18,6 +18,7 @@ async function openPhone(page, query, metadata) {
     const request = route.request(); const url = new URL(request.url());
     const json = (status, data, headers) => route.fulfill({ status, contentType: "application/json", body: JSON.stringify(data), headers });
     if (url.pathname === "/phone-upload") return route.fulfill({ contentType: "text/html", body: fs.readFileSync(phonePage, "utf8") });
+    if (url.pathname === "/phone-upload-runtime.js") return route.fulfill({ contentType: "application/javascript", body: fs.readFileSync(path.resolve(path.dirname(phonePage), "../../public/phone-upload-runtime.js"), "utf8") });
     if (url.pathname === "/phone-upload-recovery.js") return route.fulfill({ contentType: "application/javascript", body: fs.readFileSync(path.resolve(__dirname, "../../lib/phone-upload-recovery.js"), "utf8") });
     if (url.pathname === "/api/phone-upload") {
       const action = url.searchParams.get("action");
