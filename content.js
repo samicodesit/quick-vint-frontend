@@ -3007,9 +3007,9 @@
     capturedUpload.capturedAt = Date.now();
   }
 
-  async function uploadManualFileToTempStorage(sessionId, file, order, signal) {
+  async function uploadManualFileToTempStorage(sessionId, file, order, signal, options = {}) {
     signal?.throwIfAborted();
-    const uploadFile = await compressFileForStorageUpload(file, signal);
+    const uploadFile = options.prepared ? file : await compressFileForStorageUpload(file, signal);
     let lastError = null;
     let lastStatus = null;
     let attempts = 0;
@@ -3020,7 +3020,12 @@
       attempt += 1
     ) {
       attempts = attempt + 1;
+      const controller = options.prepared ? new AbortController() : null;
+      const abort = () => controller?.abort();
+      signal?.addEventListener("abort", abort, { once: true });
+      const timeout = controller ? setTimeout(abort, 30000) : null;
       try {
+        signal?.throwIfAborted();
         const formData = new FormData();
         formData.append("sessionId", sessionId);
         formData.append("uploadOrder", String(order));
@@ -3031,11 +3036,12 @@
         );
 
         const response = await fetch(
-          `${PHONE_UPLOAD_API}?sessionId=${encodeURIComponent(sessionId)}`,
+          `${PHONE_UPLOAD_API}?sessionId=${encodeURIComponent(sessionId)}${options.prepared ? `&v=2&expectedCount=${options.expectedCount}` : ""}`,
           {
             method: "POST",
             body: formData,
-            signal,
+            signal: controller?.signal || signal,
+            ...(options.accessToken ? { headers: { Authorization: `Bearer ${options.accessToken}` } } : {}),
           },
         );
         const data = await response.json().catch(() => ({}));
@@ -3068,6 +3074,9 @@
           message: error?.message || String(error),
         });
         await sleep(delayMs, signal);
+      } finally {
+        if (timeout) clearTimeout(timeout);
+        signal?.removeEventListener("abort", abort);
       }
     }
 
@@ -3764,6 +3773,98 @@
         byteLimit,
       },
     };
+  }
+
+  async function storeOversizedDomImages(requestBody, { accessToken, signal, assertActive }) {
+    // Manual retry identities live for 15 minutes. The owner-bound v2 session
+    // and its signed URLs last at least an hour; uncertain retries keep this
+    // exact payload rather than uploading another set or changing the request ID.
+    if (requestBody.generationMode !== "manual" ||
+        !requestBody.imageMetadata?.every(image => image.promptSource === "vinted_dom_image" && !image.capturedUploadAvailable) ||
+        !requestBody.imageUrls.length || !requestBody.imageUrls.every(url => url.startsWith("data:")) ||
+        new TextEncoder().encode(JSON.stringify(requestBody)).length <= getGenerateRequestBodyByteLimit()) return null;
+
+    const sessionId = generateSessionId();
+    const controller = new AbortController();
+    const abort = () => controller.abort();
+    signal?.addEventListener("abort", abort, { once: true });
+    const deadline = setTimeout(abort, 120000);
+    const pending = [];
+    const active = async () => {
+      controller.signal.throwIfAborted();
+      await assertActive();
+    };
+    const metadata = (action, method = "POST") => globalThis.AutoListerPhoneRecovery.run({
+      active: () => !controller.signal.aborted,
+      request: async ({ signal: requestSignal }) => {
+        const requestController = new AbortController();
+        const stop = () => requestController.abort();
+        controller.signal.addEventListener("abort", stop, { once: true });
+        requestSignal.addEventListener("abort", stop, { once: true });
+        try {
+          await active();
+          const response = await fetch(`${PHONE_UPLOAD_API}?v=2&sessionId=${encodeURIComponent(sessionId)}&${action}`, {
+            method, headers: { Authorization: `Bearer ${accessToken}` }, signal: requestController.signal,
+          });
+          const data = await response.json().catch(() => ({}));
+          // Here HTTP metadata completion is separate from the phone workflow's
+          // "complete" field. Validate the returned ordered photos below.
+          const { complete: _complete, ...payload } = data;
+          return { ok: response.ok, status: response.status, data: payload, retryAfter: response.headers.get("Retry-After") };
+        } finally {
+          controller.signal.removeEventListener("abort", stop);
+          requestSignal.removeEventListener("abort", stop);
+        }
+      },
+    });
+    try {
+      await active();
+      await metadata("action=open&mode=single");
+      await metadata(`action=prepare&expectedCount=${requestBody.imageUrls.length}&uploaderId=${generateSessionId()}`);
+      await mapWithConcurrency(requestBody.imageUrls, MANUAL_STORAGE_UPLOAD_CONCURRENCY, async (url, order) => {
+        await active();
+        const blob = await (await fetch(url, { signal: controller.signal })).blob();
+        await active();
+        const file = new File([blob], `prepared-${order}.jpg`, { type: blob.type });
+        const upload = uploadManualFileToTempStorage(sessionId, file, order, controller.signal, {
+          prepared: true, expectedCount: requestBody.imageUrls.length, accessToken,
+        });
+        pending.push(upload);
+        await upload;
+        await active();
+      });
+      const response = await metadata("includeUrls=1", "GET");
+      await active();
+      const files = new Map(getPhoneUploadPhotoFiles(response.data?.files).map(file => [Number(file.order), file]));
+      const body = {
+        ...requestBody,
+        imageUrls: requestBody.imageUrls.map((_url, index) => {
+          const file = files.get(index);
+          if (!file?.url) throw new Error("Could not prepare all photos. Please try again.");
+          return file.url;
+        }),
+        imageMetadata: requestBody.imageMetadata.map(image => ({
+          ...image, generationPayloadSource: "prepared_dom_storage_url",
+          generationPayloadFallbackReason: "request_body_too_large", generationPayloadOriginalKind: "data_url",
+        })),
+      };
+      const requestBodyJson = JSON.stringify(body);
+      if (new TextEncoder().encode(requestBodyJson).length > getGenerateRequestBodyByteLimit()) throw new Error("Could not prepare all photos. Please try again.");
+      return { requestBody: body, requestBodyJson, payloadFallback: null };
+    } catch (error) {
+      controller.abort();
+      await Promise.allSettled(pending);
+      // This session belongs only to this preparation. Cancellation prevents
+      // late writes from reviving it, and never touches the listing's originals.
+      fetch(`${PHONE_UPLOAD_API}?action=cleanup&v=2&reason=cancelled&sessionId=${encodeURIComponent(sessionId)}`, {
+        method: "POST", headers: { Authorization: `Bearer ${accessToken}` }, keepalive: true,
+      }).catch(() => {});
+      if (error.code?.startsWith("PHONE_") || error.name === "AbortError") throw new Error("Could not prepare photos. Please try again.");
+      throw error;
+    } finally {
+      clearTimeout(deadline);
+      signal?.removeEventListener("abort", abort);
+    }
   }
 
   if (window.__AUTOLISTER_TEST_HOOKS__) {
@@ -13220,10 +13321,11 @@
 
   function injectFieldLanguageControl(input, label, title, selectId, storageKey) {
     if (!input || document.getElementById(selectId)) return;
-    const fieldLabel = input.closest("label");
+    const fieldLabel = input.labels?.[0] || input.closest("label");
     const titleNode =
       fieldLabel?.querySelector('[data-testid$="--title"]') ||
-      fieldLabel?.querySelector('[class*="Input__title"]');
+      fieldLabel?.querySelector('[class*="Input__title"]') ||
+      (input.id && fieldLabel?.htmlFor === input.id ? fieldLabel : null);
     if (!titleNode) return;
     titleNode.classList.add("quickvint-lang-title-host");
     titleNode.appendChild(
@@ -19462,7 +19564,15 @@
           requestBody.descriptionFooterText = effectiveDescriptionFooterText;
         }
 
-        return maybeUseRemoteImagesForOversizedGeneratePayload(requestBody);
+        const stored = !batchContext && await storeOversizedDomImages(requestBody, {
+          accessToken: access_token,
+          signal: batchSignal,
+          assertActive: async () => {
+            if (generationOwnerId && batchAuthUserId !== generationOwnerId) throw new Error("Your account changed. This generation has not been applied.");
+            await checkRenewalInputs();
+          },
+        });
+        return stored || maybeUseRemoteImagesForOversizedGeneratePayload(requestBody);
       }
 
       const retryKey = JSON.stringify({

@@ -6,7 +6,7 @@ const path = require("node:path");
 
 // Real Chromium and loopback HTTP test the runner/report boundary. The fixture
 // supplies controls; this does not certify Vinted or product injection.
-async function fixture() {
+async function fixture(missingLanguages = false) {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), "autolister-canary-test-"));
   const extensionPath = path.join(root, "extension");
   await fs.mkdir(extensionPath);
@@ -23,7 +23,7 @@ async function fixture() {
       return res.end('{"ok":true}');
     }
     res.writeHead(200, { "Content-Type": "text/html" });
-    res.end('<title>Listing fixture</title><input data-testid="title--input"><textarea data-testid="description--input"></textarea><input type="file" name="photos"><div class="quickvint-tools"><button id="quickvint-gen-btn"></button><button id="quickvint-signin-btn"></button><button id="quickvint-phone-btn"></button><select id="quickvint-title-language-select"></select><select id="quickvint-description-language-select"></select></div>');
+    res.end('<title>Listing fixture</title><label data-testid="title-field"><span data-testid="title--title">Title</span><input data-testid="title--input" value="PRIVATE_TITLE"></label><textarea data-testid="description--input">PRIVATE_DESCRIPTION</textarea><input type="file" name="photos"><div class="quickvint-tools"><button id="quickvint-gen-btn"></button><button id="quickvint-signin-btn"></button><button id="quickvint-phone-btn"></button>' + (missingLanguages ? '' : '<select id="quickvint-title-language-select"></select><select id="quickvint-description-language-select"></select>') + '</div>');
   });
   await new Promise(resolve => server.listen(0, "127.0.0.1", resolve));
   const base = `http://127.0.0.1:${server.address().port}`;
@@ -66,5 +66,18 @@ test("a real browser-launch failure still produces a retained failure report", a
     expect(result.result.reason).toBe("browser_launch_failed");
     expect(f.reports).toEqual([result]);
     expect(JSON.parse(await fs.readFile(f.config.resultPath, "utf8"))).toEqual(result);
+  } finally { await f.close(); }
+});
+
+test("missing language controls retain bounded field structure without field contents", async () => {
+  const f = await fixture(true);
+  try {
+    const { runDomCanary } = await import("../../scripts/run-dom-canary.mjs");
+    const result = await runDomCanary(f.config);
+    expect(result.status).toBe("failed");
+    expect(result.result.dom.fieldStructure.title[0]).toMatchObject({ tag: "LABEL", testId: "title-field" });
+    expect(result.result.dom.fieldStructure.title).toHaveLength(3);
+    expect(JSON.stringify(result.result.dom.fieldStructure)).not.toContain("PRIVATE_");
+    expect(f.reports).toEqual([result]);
   } finally { await f.close(); }
 });

@@ -111,6 +111,27 @@ async function collectDomState(page) {
         document.querySelector(selectors.descriptionLanguage),
       );
       const tools = Boolean(document.querySelector(selectors.tools));
+      const describe = element => ({
+        tag: element.tagName,
+        testId: (element.getAttribute("data-testid") || "").slice(0, 80),
+        class: (element.getAttribute("class") || "").slice(0, 120),
+        id: (element.id || "").slice(0, 80),
+        for: (element.getAttribute("for") || "").slice(0, 80),
+      });
+      const structure = selector => {
+        const result = [];
+        let ancestor = document.querySelector(selector)?.parentElement;
+        while (ancestor && result.length < 3) {
+          result.push({ ...describe(ancestor), children: [...ancestor.children].slice(0, 4).map(describe) });
+          ancestor = ancestor.parentElement;
+        }
+        if (result.length) {
+          const input = document.querySelector(selector);
+          result[0].associatedLabels = [...(input.labels || [])].slice(0, 2).map(describe);
+          result[0].nearbyLabels = [...(input.parentElement?.parentElement?.querySelectorAll("label") || [])].slice(0, 3).map(describe);
+        }
+        return result;
+      };
       return {
         title,
         description,
@@ -123,6 +144,10 @@ async function collectDomState(page) {
         tools,
         href: location.href,
         titleText: document.title,
+        ...(!titleLanguage || !descriptionLanguage ? { fieldStructure: {
+          ...(!titleLanguage ? { title: structure(selectors.title) } : {}),
+          ...(!descriptionLanguage ? { description: structure(selectors.description) } : {}),
+        } } : {}),
       };
     }, selectors)
     .catch((error) => ({ error: error?.message || String(error) }));

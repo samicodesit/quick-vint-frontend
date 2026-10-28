@@ -12,6 +12,25 @@ const billingCatalogPath = path.join(extensionPath, "lib/billing-catalog.js");
 const qrCodePath = path.join(extensionPath, "lib/qrcode.min.js");
 const contentScriptPath = path.join(extensionPath, "content.js");
 
+test("Bloom sibling labels retain both language controls and their separate preferences", async ({ page }) => {
+  const html = listingFixture
+    .replace(/<label>\s*Title\s*<input data-testid="title--input"\s*\/?>\s*<\/label>/,
+      '<div><label class="input-label" for="listing-title">Title</label><div data-testid="title" class="input-root"><input id="listing-title" data-testid="title--input" value="Retained title"></div></div>')
+    .replace(/<label>\s*Description\s*<textarea data-testid="description--input"><\/textarea>\s*<\/label>/,
+      '<div data-testid="description"><div class="textarea-top"><label for="listing-description">Description</label></div><textarea id="listing-description" data-testid="description--input">Retained description</textarea></div>');
+  await openContentHarness(page, null, { pageUrl: "https://www.vinted.nl/items/new", pageHtml: html });
+  await expect(page.locator("#quickvint-title-language-select")).toBeVisible();
+  await expect(page.locator("#quickvint-description-language-select")).toBeVisible();
+  await expect(page.locator('label[for="listing-title"] #quickvint-title-language-select')).toHaveCount(1);
+  await expect(page.locator('label[for="listing-description"] #quickvint-description-language-select')).toHaveCount(1);
+  await page.locator("#quickvint-title-language-select").click();
+  await page.locator('#quickvint-title-language-select + .quickvint-lang-menu [data-value="de"]').click();
+  await expect(page.locator("#quickvint-title-language-select")).toHaveAttribute("data-value", "de");
+  await expect(page.locator("#quickvint-description-language-select")).toHaveAttribute("data-value", "en");
+  await expect(page.locator('[data-testid="title--input"]')).toHaveValue("Retained title");
+  await expect(page.locator('[data-testid="description--input"]')).toHaveValue("Retained description");
+});
+
 async function useActualPaywallIcon(page) {
   const icon = "data:image/png;base64," + fs.readFileSync(path.join(extensionPath, "icons/icon48.png")).toString("base64");
   await page.evaluate(icon => {
