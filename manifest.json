@@ -118,6 +118,7 @@
       "resources": [
         "callback.html",
         "icons/icon48.png",
+        "images/account-paused-paywall.webp",
         "images/wardrobe-rewrite-character.webp",
         "images/quickvint-upload-multiple.jpg",
         "images/quickvint-upload-single.jpg"
