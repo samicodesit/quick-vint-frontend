@@ -1185,7 +1185,7 @@
 
   // --- HELPER FUNCTIONS ---
 
-  function showToast(message, type = "error", action = null, autoHide = true) {
+  function showToast(message, type = "error", action = null, autoHide = true, accountPaused = false) {
     clearPaywallPositioning();
     let toast = document.getElementById("quickvint-toast");
     if (!toast) {
@@ -1195,8 +1195,10 @@
     }
     resetToastPosition(toast);
 
-    const icon = type === "success" ? "✅" : type === "info" ? "ℹ️" : "⚠️";
-    let messageHtml = `<span class="toast-message-text">${escapeHtml(message)}</span>`;
+    const icon = accountPaused
+      ? `<img class="toast-image" src="${chrome.runtime.getURL("images/account-paused-paywall.webp")}" alt="" aria-hidden="true">`
+      : type === "success" ? "✅" : type === "info" ? "ℹ️" : "⚠️";
+    let messageHtml = `${accountPaused ? '<strong class="toast-title">Free trial paused</strong>' : ""}<span class="toast-message-text">${escapeHtml(message)}</span>`;
 
     if (action && action.text && typeof action.onClick === "function") {
       messageHtml += `
@@ -1256,7 +1258,7 @@
 
     const hasStructuredActions =
       action && action.text && (action.url || typeof action.onClick === "function");
-    toast.className = `${type}${hasStructuredActions ? " has-actions" : ""}`;
+    toast.className = `${type}${hasStructuredActions ? " has-actions" : ""}${accountPaused ? " account-paused" : ""}`;
     toast.style.visibility = "visible"; // Ensure it's visible for the transition
 
     // Add close handler
@@ -1592,7 +1594,11 @@
       document.body.appendChild(toast);
     }
 
-    const logoUrl = chrome.runtime.getURL("icons/icon48.png");
+    const logoUrl = chrome.runtime.getURL(
+      limitCode === "account_paused"
+        ? "images/account-paused-paywall.webp"
+        : "icons/icon48.png",
+    );
     const optionsHtml = options.length
       ? `
         <div class="paywall-options">
@@ -2405,9 +2411,7 @@
     if (code === "account_paused") {
       return {
         title: "Account paused",
-        message:
-          limitData.error ||
-          "This account is paused because it appears linked to duplicate free-trial usage. To continue, contact support or choose a paid option.",
+        message: "This account appears linked to another free trial.",
         actionText: "View paid options",
         secondaryActionText: "Contact support",
         secondaryActionUrl: ACCOUNT_REVIEW_CONTACT_URL,
@@ -9764,6 +9768,13 @@
         margin-top: 1px; /* Align slightly with text */
       }
 
+      #quickvint-toast .toast-image {
+        display: block;
+        width: 32px;
+        height: 32px;
+        object-fit: contain;
+      }
+
       #quickvint-toast .toast-content {
         flex: 1;
         /* Allow wrapping normally */
@@ -9788,6 +9799,7 @@
       }
 
       #quickvint-toast .toast-link {
+        box-sizing: border-box;
         appearance: none;
         display: flex;
         align-items: center;
@@ -9836,6 +9848,72 @@
 
       #quickvint-toast .toast-action-button:not(.toast-link):hover {
         opacity: 0.86;
+      }
+
+      #quickvint-toast.account-paused {
+        box-sizing: border-box;
+        width: min(420px, calc(100vw - 24px));
+        min-width: 0;
+        max-width: 420px;
+        padding: 14px;
+        gap: 12px;
+        background: #ffffff;
+        color: #475569;
+        border: 1px solid #e2e8f0;
+        box-shadow: 0 8px 28px rgba(15, 23, 42, 0.12);
+        font-weight: 400;
+      }
+
+      #quickvint-toast.account-paused .toast-content {
+        min-width: 0;
+        gap: 4px;
+      }
+
+      #quickvint-toast.account-paused .toast-title {
+        color: #0f172a;
+        font-size: 15px;
+        font-weight: 650;
+        padding-right: 24px;
+      }
+
+      #quickvint-toast.account-paused .toast-actions {
+        flex-direction: row;
+        gap: 8px;
+        margin-top: 8px;
+      }
+
+      #quickvint-toast.account-paused .toast-link {
+        flex: 1;
+        justify-content: center;
+        min-width: 0;
+        min-height: 36px;
+        padding: 8px 10px;
+        border-radius: 7px;
+        border-color: #cbd5e1;
+        background: #ffffff;
+        color: #334155;
+        font-weight: 600;
+        text-align: center;
+      }
+
+      #quickvint-toast.account-paused .toast-link.primary {
+        background: #4f46e5;
+        border-color: #4f46e5;
+        color: #ffffff;
+      }
+
+      #quickvint-toast.account-paused .toast-link:hover { background: #f1f5f9; }
+      #quickvint-toast.account-paused .toast-link.primary:hover { background: #4338ca; }
+      #quickvint-toast.account-paused .toast-link:focus-visible { outline: 2px solid #4f46e5; outline-offset: 2px; }
+      #quickvint-toast.account-paused .toast-link > span:last-child { display: none; }
+      #quickvint-toast.account-paused .toast-close { position: absolute; top: 12px; right: 12px; margin: 0; color: #64748b; }
+      #quickvint-toast.account-paused .toast-close:hover { color: #0f172a; background: #f1f5f9; }
+      @media (max-width: 480px) {
+        #quickvint-toast.account-paused .toast-link { min-height: 44px; }
+      }
+      @media (max-width: 360px) {
+        #quickvint-toast.account-paused .toast-actions { flex-direction: column; align-items: stretch; }
+        #quickvint-toast.account-paused .toast-link { flex: none; width: 100%; }
       }
 
       #quickvint-toast.paywall .paywall-logo {
@@ -17411,6 +17489,8 @@
             secondaryUrl: limitMessage.secondaryActionUrl,
           }
         : null,
+      true,
+      capacity.reason === "account_paused",
     );
   }
 
@@ -19800,6 +19880,7 @@
                 }
               : null,
             !isAccountPaused,
+            isAccountPaused,
           );
         }
         if (errData.code === "account_paused") {

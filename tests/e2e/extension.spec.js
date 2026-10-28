@@ -7097,10 +7097,20 @@ test.describe("AutoLister extension smoke flows", () => {
 
     const toast = page.locator("#quickvint-toast.error");
     await expect(toast).toBeVisible();
-    await expect(toast).toContainText("account is paused");
+    await expect(toast).toContainText("Free trial paused");
     await expect(toast).toContainText("View paid options");
     await expect(toast).toContainText("Contact support");
     await expect(page.locator("#quickvint-gen-btn")).toBeEnabled();
+
+    const actions = await toast.locator(".toast-link").evaluateAll(elements =>
+      elements.map(element => {
+        const rect = element.getBoundingClientRect();
+        return { height: rect.height, top: rect.top };
+      }),
+    );
+    expect(actions).toHaveLength(2);
+    expect(actions[0].height).toBe(actions[1].height);
+    expect(actions[0].top).toBe(actions[1].top);
 
     await page.locator("#quickvint-toast .toast-action-button").click();
     await expect(page.locator("#quickvint-toast.paywall")).toBeVisible();
