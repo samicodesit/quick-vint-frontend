@@ -3281,6 +3281,9 @@
       updateButtonUI();
     });
 
+    // Preparation starts before Generate can await it. Observe its rejection
+    // immediately while retaining the error and rejected promise for retry.
+    currentUploadPromise.catch(() => {});
     upload.storageUploadPromise = upload.storageUploadPromise
       ? Promise.allSettled([upload.storageUploadPromise, currentUploadPromise])
       : currentUploadPromise;
