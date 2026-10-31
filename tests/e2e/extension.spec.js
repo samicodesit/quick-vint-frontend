@@ -5149,6 +5149,57 @@ test.describe("AutoLister extension smoke flows", () => {
     expect(event.context.descriptionLengthDelta).toBeGreaterThan(0);
   });
 
+  test("an unopened form keeps its edit window and sends one exposure when both fields become available", async ({ page }) => {
+    const events = [];
+    await page.route("https://autolister.app/api/events/track", route => {
+      events.push(...route.request().postDataJSON().events);
+      return route.fulfill({ json: { ok: true } });
+    });
+    await page.route("https://autolister.app/api/generate", route =>
+      route.fulfill({ json: { title: "Coat", description: "Blue wool", measurementAdvice: "" } }));
+    await openContentHarness(page);
+    await page.clock.install();
+    await page.evaluate(() => Object.defineProperty(document, "visibilityState", {configurable: true, value: "hidden"}));
+    await page.locator("#quickvint-gen-btn").click();
+    const title = page.locator('[data-testid="title--input"]');
+    await expect(title).toHaveValue("Coat");
+    await page.clock.fastForward(360000);
+    const relevant = () => events.filter(e => e.event.startsWith("generation_output_"));
+    expect(relevant()).toHaveLength(0);
+    await page.evaluate(() => {
+      Object.defineProperty(document, "visibilityState", {configurable: true, value: "visible"});
+      document.dispatchEvent(new Event("visibilitychange"));
+      document.dispatchEvent(new Event("visibilitychange"));
+    });
+    await title.fill("Coat size M");
+    await title.blur();
+    await page.evaluate(() => AutoListerTelemetry.flush());
+    await expect.poll(() => relevant().map(e => e.event).sort()).toEqual(["generation_output_edited","generation_output_visible"]);
+    expect(relevant().find(e => e.event === "generation_output_visible").context.generationRequestId).toBeTruthy();
+    expect(relevant().find(e => e.event === "generation_output_edited").context).toMatchObject({
+      generatedTitle: "Coat", finalTitle: "Coat size M", generatedDescription: "Blue wool", finalDescription: "Blue wool",
+    });
+  });
+
+  test("unapplied and partially applied review suggestions never count as a fully editable form", async ({ page }) => {
+    const events = [];
+    await page.route("https://autolister.app/api/events/track", route => {
+      events.push(...route.request().postDataJSON().events);
+      return route.fulfill({ json: { ok: true } });
+    });
+    await page.route("https://autolister.app/api/generate", route =>
+      route.fulfill({ json: { title: "Coat", description: "Blue wool", measurementAdvice: "" } }));
+    await openContentHarness(page);
+    await page.locator('[data-testid="title--input"]').fill("Existing title");
+    await page.locator("#quickvint-gen-btn").click();
+    await page.getByRole("button", {name:"Review suggestions"}).click();
+    await page.getByRole("button", {name:"Use this title"}).click();
+    await page.getByRole("button", {name:"Discard description suggestion"}).click();
+    await page.evaluate(() => AutoListerTelemetry.flush());
+    expect(events.some(e => e.event === "generate_success")).toBe(true);
+    expect(events.some(e => e.event === "generation_output_visible")).toBe(false);
+  });
+
   test("bounds edit snapshots across remounts and preserves a final full undo", async ({ page }) => {
     const events = [];
     await page.route("https://autolister.app/api/events/track", route => {

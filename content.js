@@ -13993,7 +13993,7 @@
     return `out_${Date.now()}_${Math.random().toString(36).slice(2)}`;
   }
 
-  function startGenerationOutputEditTracking({ generationAttemptId, generationOwnerId, mode,
+  function startGenerationOutputEditTracking({ generationAttemptId, generationOwnerId, requestId, mode,
     photoCount, titleLanguageCode, descriptionLanguageCode, descriptionApplyChoice,
     generatedTitle, generatedDescription, initiallyApplied = [] }) {
     activeGenerationOutputEditCleanup?.("new_generation");
@@ -14008,6 +14008,26 @@
     const outputTrackingId = createOutputTrackingId();
     let lastSummary = started, firstEdit = null, lastEdit = started, sequence = 0, timer;
     let closed = false;
+
+    let expiry, reportedExposure = false;
+    function observeForm() {
+      if (closed || reportedExposure || document.visibilityState !== "visible" ||
+          window.location.pathname !== pathname) return;
+      const ready = [...enabled].filter(field => {
+        const node = document.querySelector(SELECTORS[field]);
+        return node && !node.matches(":disabled") && !node.readOnly && node.getClientRects().length &&
+          (!node.checkVisibility || node.checkVisibility({ visibilityProperty: true })) &&
+          normalizeTrackedOutputText(node.value) === current[field];
+      });
+      if (ready.length && !expiry)
+        expiry = setTimeout(() => cleanup("expired"), GENERATION_OUTPUT_EDIT_TRACKING_TTL_MS);
+      if (ready.length === 2 && requestId) {
+        reportedExposure = true;
+        trackGrowthEvent("generation_output_visible", {
+          generationAttemptId, generationRequestId: requestId, mode, titleLanguageCode, descriptionLanguageCode,
+        }, generationOwnerId);
+      }
+    }
 
     function summary(reason, terminal = false) {
       if (firstEdit === null || sequence >= GENERATION_OUTPUT_EDIT_MAX_SUMMARIES) return;
@@ -14067,7 +14087,7 @@
       if (event.type !== "focusout") record(field, normalizeTrackedOutputText(event.target.value));
       if (event.type === "focusout") summary("focusout");
     }
-    function onHidden() { if (document.visibilityState === "hidden") summary("hidden"); }
+    function onHidden() { if (document.visibilityState === "hidden") summary("hidden"); else observeForm(); }
     function onSubmit(event) {
       if (event.target.contains?.(document.querySelector(SELECTORS.title)) ||
           event.target.contains?.(document.querySelector(SELECTORS.description))) summary("submit", true);
@@ -14089,11 +14109,11 @@
     document.addEventListener("submit", onSubmit, true);
     document.addEventListener("visibilitychange", onHidden);
     window.addEventListener("pagehide", onPageHide);
-    const expiry = setTimeout(() => cleanup("expired"), GENERATION_OUTPUT_EDIT_TRACKING_TTL_MS);
+    observeForm();
     activeGenerationOutputEditCleanup = cleanup;
     const trackAppliedField = (field, applied) => {
       if (closed) return;
-      if (applied) enabled.add(field);
+      if (applied) { enabled.add(field); observeForm(); }
       else {
         enabled.delete(field);
         record(field, baseline[field]);
@@ -19853,7 +19873,7 @@
       }
       if (pendingGenerationRequest === generationRequest) pendingGenerationRequest = null;
       trackGenerationEvent("generate_success", {
-        generationAttemptId,
+        generationAttemptId, generationRequestId: generationRequest.requestId,
         mode,
         photoCount: imageUrls.length,
         titleLanguageCode,
@@ -19878,7 +19898,7 @@
       if (!applyGeneratedOutput || reviewOriginals) trackGenerationEvent("listing_review", { generationAttemptId, lastConfirmedStage: "generation_received" });
       let outputEditTracker;
       const beginEditTracking = (initiallyApplied) => outputEditTracker = startGenerationOutputEditTracking({
-        generationAttemptId, generationOwnerId, mode, photoCount: imageUrls.length,
+        generationAttemptId, generationOwnerId, requestId: generationRequest.requestId, mode, photoCount: imageUrls.length,
         titleLanguageCode, descriptionLanguageCode, descriptionApplyChoice,
         generatedTitle: title, generatedDescription: description, initiallyApplied,
       });
