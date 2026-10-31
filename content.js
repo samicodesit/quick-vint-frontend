@@ -4240,6 +4240,7 @@
     if (changes.supabaseSession) {
       const nextUserId = changes.supabaseSession.newValue?.user?.id || null;
       if (nextUserId !== batchAuthUserId) {
+        activeGenerationOutputEditCleanup?.("account_changed");
         authActionObserver?.clear();
         batchItemTask?.controller.abort();
         batchAuthUserId = nextUserId;
@@ -13992,249 +13993,120 @@
     return `out_${Date.now()}_${Math.random().toString(36).slice(2)}`;
   }
 
-  function startGenerationOutputEditTracking({
-    generationAttemptId,
-    mode,
-    photoCount,
-    titleLanguageCode,
-    descriptionLanguageCode,
-    descriptionApplyChoice,
-    generatedTitle,
-    generatedDescription,
-    appliedTitle,
-    appliedDescription,
-  }) {
-    if (activeGenerationOutputEditCleanup) {
-      activeGenerationOutputEditCleanup("new_generation");
-    }
-
-    const titleInput = document.querySelector(SELECTORS.title);
-    const descInput = document.querySelector(SELECTORS.description);
-    if (!titleInput && !descInput) return;
-
-    const initialTitle = normalizeTrackedOutputText(appliedTitle);
-    const initialDescription = normalizeTrackedOutputText(appliedDescription);
+  function startGenerationOutputEditTracking({ generationAttemptId, generationOwnerId, mode,
+    photoCount, titleLanguageCode, descriptionLanguageCode, descriptionApplyChoice,
+    generatedTitle, generatedDescription, initiallyApplied = [] }) {
+    activeGenerationOutputEditCleanup?.("new_generation");
+    if (!generationOwnerId || !generationAttemptId) return;
+    const pathname = window.location.pathname;
+    const baseline = { title: normalizeTrackedOutputText(generatedTitle), description: normalizeTrackedOutputText(generatedDescription) };
+    const current = { ...baseline };
+    const emitted = { ...baseline };
+    const enabled = new Set(initiallyApplied);
+    const counts = { title: 0, description: 0 };
+    const started = Date.now();
     const outputTrackingId = createOutputTrackingId();
-    const startedAt = Date.now();
-    let summaryCount = 0;
-    let editEventCount = 0;
-    let titleEditEventCount = 0;
-    let descriptionEditEventCount = 0;
-    let firstEditAt = null;
-    let lastEditAt = startedAt;
-    let lastObservedTitle = initialTitle;
-    let lastObservedDescription = initialDescription;
-    let lastEmittedTitle = initialTitle;
-    let lastEmittedDescription = initialDescription;
-    let lastSummaryAt = startedAt;
-    let summaryTimer = null;
-    let expiryTimer = null;
-    let isCleanedUp = false;
+    let lastSummary = started, firstEdit = null, lastEdit = started, sequence = 0, timer;
+    let closed = false;
 
-    const readCurrentOutput = () => ({
-      title: normalizeTrackedOutputText(titleInput?.value),
-      description: normalizeTrackedOutputText(descInput?.value),
-    });
-
-    const hasChangedFromInitial = ({ title, description }) => ({
-      titleChanged: Boolean(titleInput) && title !== initialTitle,
-      descriptionChanged:
-        Boolean(descInput) && description !== initialDescription,
-    });
-
-    const hasChangedFromLastObserved = ({ title, description }) => ({
-      titleChangedSinceLastObserved:
-        Boolean(titleInput) && title !== lastObservedTitle,
-      descriptionChangedSinceLastObserved:
-        Boolean(descInput) && description !== lastObservedDescription,
-    });
-
-    const hasChangedSinceLastSummary = ({ title, description }) =>
-      (Boolean(titleInput) && title !== lastEmittedTitle) ||
-      (Boolean(descInput) && description !== lastEmittedDescription);
-
-    const summarizeChangedFields = ({ titleChanged, descriptionChanged }) => {
-      const fields = [];
-      if (titleChanged) fields.push("title");
-      if (descriptionChanged) fields.push("description");
-      return fields.join(",");
-    };
-
-    const trackSummary = (reason) => {
-      if (summaryCount >= GENERATION_OUTPUT_EDIT_MAX_SUMMARIES) return false;
-      if (!firstEditAt || editEventCount <= 0) return false;
-      const current = readCurrentOutput();
-      const changedFromInitial = hasChangedFromInitial(current);
-      if (
-        !changedFromInitial.titleChanged &&
-        !changedFromInitial.descriptionChanged
-      ) {
-        return false;
-      }
-      if (!hasChangedSinceLastSummary(current)) {
-        return false;
-      }
-
+    function summary(reason, terminal = false) {
+      if (firstEdit === null || sequence >= GENERATION_OUTPUT_EDIT_MAX_SUMMARIES) return;
+      // Leave a slot for the last observed state, including an undo after an earlier snapshot.
+      if (!terminal && sequence >= GENERATION_OUTPUT_EDIT_MAX_SUMMARIES - 1) return;
+      if (current.title === emitted.title && current.description === emitted.description) return;
       const now = Date.now();
-      summaryCount += 1;
-      const changedSinceLastSummary = {
-        titleChangedSincePrevious:
-          Boolean(titleInput) && current.title !== lastEmittedTitle,
-        descriptionChangedSincePrevious:
-          Boolean(descInput) &&
-          current.description !== lastEmittedDescription,
-      };
+      const titleChanged = current.title !== baseline.title;
+      const descriptionChanged = current.description !== baseline.description;
+      const changedFields = ["title", "description"].filter(f => current[f] !== baseline[f]).join(",");
+      const changedText = {};
+      // A complete undo needs only flags. Never include an unaccepted suggestion or original listing text.
+      if (changedFields) {
+        for (const field of enabled) {
+          const name = field === "title" ? "Title" : "Description";
+          changedText["generated" + name] = baseline[field];
+          changedText["final" + name] = current[field];
+        }
+      }
+      sequence++;
       trackGrowthEvent("generation_output_edited", {
-        mode,
-        photoCount,
-        titleLanguageCode,
-        descriptionLanguageCode,
-        descriptionApplyChoice,
-        outputTrackingId,
-        generationAttemptId,
-        editSequence: summaryCount,
-        editSnapshotReason: reason,
-        editDelayMs: now - startedAt,
-        msSincePreviousEditSnapshot: now - lastSummaryAt,
-        titleChanged: changedFromInitial.titleChanged,
-        descriptionChanged: changedFromInitial.descriptionChanged,
-        titleChangedSincePrevious:
-          changedSinceLastSummary.titleChangedSincePrevious,
-        descriptionChangedSincePrevious:
-          changedSinceLastSummary.descriptionChangedSincePrevious,
-        generatedTitle: normalizeTrackedOutputText(generatedTitle),
-        generatedDescription: normalizeTrackedOutputText(generatedDescription),
-        appliedTitle: initialTitle,
-        appliedDescription: initialDescription,
-        previousTitle: lastEmittedTitle,
-        previousDescription: lastEmittedDescription,
-        currentTitle: current.title,
-        currentDescription: current.description,
-        finalTitle: current.title,
-        finalDescription: current.description,
-        editSummaryReason: reason,
-        editSummarySequence: summaryCount,
-        editEventCount,
-        titleEditEventCount,
-        descriptionEditEventCount,
-        changedFields: summarizeChangedFields(changedFromInitial),
-        titleLengthDelta: current.title.length - initialTitle.length,
-        descriptionLengthDelta:
-          current.description.length - initialDescription.length,
-        editStartedDelayMs: firstEditAt - startedAt,
-        editDurationMs: now - firstEditAt,
-        editIdleMs: now - lastEditAt,
-        summaryLimit: GENERATION_OUTPUT_EDIT_MAX_SUMMARIES,
-      });
-
-      lastEmittedTitle = current.title;
-      lastEmittedDescription = current.description;
-      lastSummaryAt = now;
-      editEventCount = 0;
-      titleEditEventCount = 0;
-      descriptionEditEventCount = 0;
-      firstEditAt = null;
-      return true;
-    };
-
-    const cleanup = (reason = "cleanup") => {
-      if (isCleanedUp) return;
-      isCleanedUp = true;
-      if (summaryTimer) clearTimeout(summaryTimer);
-      if (expiryTimer) clearTimeout(expiryTimer);
-      trackSummary(reason);
-      titleInput?.removeEventListener("input", handleTitleInput);
-      descInput?.removeEventListener("input", handleDescriptionInput);
-      titleInput?.removeEventListener("change", handleTitleChange);
-      descInput?.removeEventListener("change", handleDescriptionChange);
-      window.removeEventListener("pagehide", handlePageHide);
-      if (activeGenerationOutputEditCleanup === cleanup) {
-        activeGenerationOutputEditCleanup = null;
-      }
-    };
-
-    const checkForEdit = () => {
-      trackSummary("idle");
-      if (summaryCount >= GENERATION_OUTPUT_EDIT_MAX_SUMMARIES) {
-        cleanup("summary_limit");
-      }
-    };
-
-    function scheduleSummary() {
-      if (summaryTimer) clearTimeout(summaryTimer);
-      summaryTimer = setTimeout(
-        checkForEdit,
-        GENERATION_OUTPUT_EDIT_SUMMARY_IDLE_MS,
-      );
+        generationAttemptId, outputTrackingId, mode, photoCount, titleLanguageCode, descriptionLanguageCode,
+        descriptionApplyChoice, editSequence: sequence, editSummarySequence: sequence,
+        editSnapshotReason: reason, editSummaryReason: reason, editDelayMs: now - started,
+        msSincePreviousEditSnapshot: now - lastSummary, editStartedDelayMs: firstEdit - started,
+        editDurationMs: now - firstEdit, editIdleMs: now - lastEdit,
+        titleChanged, descriptionChanged, changedFields,
+        titleChangedSincePrevious: current.title !== emitted.title,
+        descriptionChangedSincePrevious: current.description !== emitted.description,
+        titleLengthDelta: current.title.length - baseline.title.length,
+        descriptionLengthDelta: current.description.length - baseline.description.length,
+        titleEditEventCount: counts.title, descriptionEditEventCount: counts.description,
+        editEventCount: counts.title + counts.description, summaryLimit: GENERATION_OUTPUT_EDIT_MAX_SUMMARIES,
+        ...changedText,
+      }, generationOwnerId);
+      Object.assign(emitted, current);
+      counts.title = counts.description = 0;
+      firstEdit = null;
+      lastSummary = now;
     }
 
-    function recordOutputEdit(field) {
-      if (isCleanedUp) return;
-
-      const current = readCurrentOutput();
-      const changedFromInitial = hasChangedFromInitial(current);
-      const changedFromLastObserved = hasChangedFromLastObserved(current);
-      if (
-        !changedFromInitial.titleChanged &&
-        !changedFromInitial.descriptionChanged
-      ) {
-        lastObservedTitle = current.title;
-        lastObservedDescription = current.description;
-        return;
-      }
-      if (
-        !changedFromLastObserved.titleChangedSinceLastObserved &&
-        !changedFromLastObserved.descriptionChangedSinceLastObserved
-      ) {
-        return;
-      }
-
-      const now = Date.now();
-      if (!firstEditAt) firstEditAt = now;
-      lastEditAt = now;
-      editEventCount += 1;
-      if (
-        field === "title" ||
-        changedFromLastObserved.titleChangedSinceLastObserved
-      ) {
-        titleEditEventCount += 1;
-      }
-      if (
-        field === "description" ||
-        changedFromLastObserved.descriptionChangedSinceLastObserved
-      ) {
-        descriptionEditEventCount += 1;
-      }
-      lastObservedTitle = current.title;
-      lastObservedDescription = current.description;
-      scheduleSummary();
+    function record(field, value) {
+      if (current[field] === value) return;
+      current[field] = value;
+      counts[field]++;
+      lastEdit = Date.now();
+      firstEdit ??= lastEdit;
+      clearTimeout(timer);
+      timer = setTimeout(() => summary("idle"), GENERATION_OUTPUT_EDIT_SUMMARY_IDLE_MS);
     }
-
-    const handleTitleInput = () => recordOutputEdit("title");
-    const handleDescriptionInput = () =>
-      recordOutputEdit("description");
-    const handleTitleChange = () => recordOutputEdit("title");
-    const handleDescriptionChange = () =>
-      recordOutputEdit("description");
-
-    function handlePageHide() {
-      cleanup("pagehide");
-      flushGrowthEvents();
+    function onFieldEvent(event) {
+      if (window.location.pathname !== pathname) return cleanup("route_changed");
+      if (!event.isTrusted) return;
+      const field = [...enabled].find(f => event.target.matches?.(SELECTORS[f]));
+      if (!field) return;
+      // Capture only the interacted field. A rerender can replace the input before we emit.
+      if (event.type !== "focusout") record(field, normalizeTrackedOutputText(event.target.value));
+      if (event.type === "focusout") summary("focusout");
     }
-
-    titleInput?.addEventListener("input", handleTitleInput);
-    descInput?.addEventListener("input", handleDescriptionInput);
-    titleInput?.addEventListener("change", handleTitleChange);
-    descInput?.addEventListener("change", handleDescriptionChange);
-    window.addEventListener("pagehide", handlePageHide);
-    expiryTimer = setTimeout(
-      () => cleanup("expired"),
-      GENERATION_OUTPUT_EDIT_TRACKING_TTL_MS,
-    );
+    function onHidden() { if (document.visibilityState === "hidden") summary("hidden"); }
+    function onSubmit(event) {
+      if (event.target.contains?.(document.querySelector(SELECTORS.title)) ||
+          event.target.contains?.(document.querySelector(SELECTORS.description))) summary("submit", true);
+    }
+    function onPageHide() { cleanup("pagehide"); }
+    function cleanup(reason) {
+      if (closed) return;
+      closed = true;
+      clearTimeout(timer);
+      clearTimeout(expiry);
+      if (reason !== "account_changed") summary(reason, true);
+      for (const type of ["input", "change", "focusout"]) document.removeEventListener(type, onFieldEvent, true);
+      document.removeEventListener("submit", onSubmit, true);
+      document.removeEventListener("visibilitychange", onHidden);
+      window.removeEventListener("pagehide", onPageHide);
+      if (activeGenerationOutputEditCleanup === cleanup) activeGenerationOutputEditCleanup = null;
+    }
+    for (const type of ["input", "change", "focusout"]) document.addEventListener(type, onFieldEvent, true);
+    document.addEventListener("submit", onSubmit, true);
+    document.addEventListener("visibilitychange", onHidden);
+    window.addEventListener("pagehide", onPageHide);
+    const expiry = setTimeout(() => cleanup("expired"), GENERATION_OUTPUT_EDIT_TRACKING_TTL_MS);
     activeGenerationOutputEditCleanup = cleanup;
+    const trackAppliedField = (field, applied) => {
+      if (closed) return;
+      if (applied) enabled.add(field);
+      else {
+        enabled.delete(field);
+        record(field, baseline[field]);
+      }
+    };
+    trackAppliedField.sellerChangedDescription = (node) => {
+      if (!closed && enabled.has("description") && window.location.pathname === pathname &&
+          node === document.querySelector(SELECTORS.description)) record("description", normalizeTrackedOutputText(node.value));
+    };
+    return trackAppliedField;
   }
 
-  async function maybeShowEmojiRetryPrompt(descInput) {
+  async function maybeShowEmojiRetryPrompt(descInput, tracker) {
     if (pendingGenerationOffer || activeFloatingPromptType) return;
 
     const handledKey = await getPerUserStorageKey(EMOJI_RETRY_PROMPT_HANDLED_KEY);
@@ -14261,6 +14133,7 @@
     const strippedDescription = stripEmojisFromText(originalDescription);
     if (strippedDescription !== originalDescription) {
       setDescriptionValue(descInput, strippedDescription);
+      tracker?.sellerChangedDescription(descInput);
     }
     trackGrowthEvent("emoji_remove_prompt_accepted", {
       source: "listing_tools",
@@ -18887,6 +18760,7 @@
           );
           if (!field) return;
           setListingFieldValue(field, state.originals[fieldName]);
+          state.trackAppliedField?.(fieldName, false);
           state.status[fieldName] = "done";
           result.remove();
           attachWardrobeReplaceOutput(state);
@@ -18950,6 +18824,7 @@
           if (!actionField) return;
           cleanupInput();
           setListingFieldValue(actionField, state.originals[fieldName]);
+          state.trackAppliedField?.(fieldName, false);
           state.status[fieldName] = "active";
           card.remove();
           attachWardrobeReviewOutput(state, fieldName);
@@ -18966,6 +18841,7 @@
           );
           if (!field) return;
           setListingFieldValue(field, state.generated[fieldName]);
+          state.trackAppliedField?.(fieldName, true);
           state.status[fieldName] = "applied";
           card.remove();
           attachWardrobeReviewOutput(state, fieldName);
@@ -18990,12 +18866,13 @@
     }
   }
 
-  function startWardrobeRewriteOutput(mode, originals, generated, route) {
+  function startWardrobeRewriteOutput(mode, originals, generated, route, trackAppliedField) {
     wardrobeRewriteOutputCleanup?.("new_rewrite");
     const state = {
       mode,
       originals,
       generated,
+      trackAppliedField,
       expectedPathname: route.pathname,
       itemId: route.itemId,
       status: { title: "active", description: "active" },
@@ -19021,12 +18898,12 @@
     attachWardrobeRewriteOutput(state);
   }
 
-  function renderWardrobeReplaceUndo(originals, generated, route) {
-    startWardrobeRewriteOutput("replace", originals, generated, route);
+  function renderWardrobeReplaceUndo(originals, generated, route, trackAppliedField) {
+    startWardrobeRewriteOutput("replace", originals, generated, route, trackAppliedField);
   }
 
-  function renderListingReviewSuggestions(originals, generated, route) {
-    startWardrobeRewriteOutput("review", originals, generated, route);
+  function renderListingReviewSuggestions(originals, generated, route, trackAppliedField) {
+    startWardrobeRewriteOutput("review", originals, generated, route, trackAppliedField);
   }
 
   async function runWardrobeRewriteItem(message) {
@@ -19076,15 +18953,15 @@
             mode: "replace",
             attempts: WARDROBE_REWRITE_APPLY_ATTEMPTS,
           });
-          renderListingReviewSuggestions(originals, output, route);
+          renderListingReviewSuggestions(originals, output, route, generated.beginEditTracking?.([]));
           throw new Error("Vinted did not keep the generated text. Review it before continuing.");
         }
         trackGrowthEvent("fields_applied", { mode: "wardrobe_rewrite" });
         trackGrowthEvent("listing_review", { lastConfirmedStage: "fields_applied", mode: "wardrobe_rewrite" });
-        renderWardrobeReplaceUndo(originals, output, route);
+        renderWardrobeReplaceUndo(originals, output, route, generated.beginEditTracking?.(["title", "description"]));
         showWardrobeRewriteStatus("New title and description applied. Review before saving.", "success");
       } else {
-        renderListingReviewSuggestions(originals, output, route);
+        renderListingReviewSuggestions(originals, output, route, generated.beginEditTracking?.([]));
         showWardrobeRewriteStatus("New title and description ready to review.", "success");
       }
       return { ok: true, offers: generated.offers || [] };
@@ -19999,6 +19876,12 @@
       const descInput = document.querySelector(SELECTORS.description);
 
       if (!applyGeneratedOutput || reviewOriginals) trackGenerationEvent("listing_review", { generationAttemptId, lastConfirmedStage: "generation_received" });
+      let outputEditTracker;
+      const beginEditTracking = (initiallyApplied) => outputEditTracker = startGenerationOutputEditTracking({
+        generationAttemptId, generationOwnerId, mode, photoCount: imageUrls.length,
+        titleLanguageCode, descriptionLanguageCode, descriptionApplyChoice,
+        generatedTitle: title, generatedDescription: description, initiallyApplied,
+      });
       if (applyGeneratedOutput) {
         if (reviewOriginals) {
           if (
@@ -20011,7 +19894,7 @@
           renderListingReviewSuggestions(
             reviewOriginals,
             { title, description },
-            reviewRoute,
+            reviewRoute, beginEditTracking([]),
           );
         } else {
           if (titleInput) setListingFieldValue(titleInput, title);
@@ -20024,18 +19907,8 @@
             photoCount: imageUrls.length, gridSelector: SELECTORS.mediaGrid, imageSelector: SELECTORS.mediaImage,
           });
 
-          startGenerationOutputEditTracking({
-            generationAttemptId,
-            mode,
-            photoCount: imageUrls.length,
-            titleLanguageCode,
-            descriptionLanguageCode,
-            descriptionApplyChoice,
-            generatedTitle: title,
-            generatedDescription: description,
-            appliedTitle: titleInput?.value || "",
-            appliedDescription: descInput?.value || "",
-          });
+          beginEditTracking(["title", "description"].filter(f =>
+            f === "title" ? titleInput?.value === title : descInput?.value === description));
         }
 
         if (manageButtonState) setButtonSuccessState();
@@ -20057,11 +19930,11 @@
         isFreeProfile(userProfile) &&
         descInput
       ) {
-        await maybeShowEmojiRetryPrompt(descInput);
+        await maybeShowEmojiRetryPrompt(descInput, outputEditTracker);
       }
 
       authAction?.finish("succeeded", { generationAttemptId: authRequestGenerationAttemptId, statusCode: response.status });
-      return { ok: true, title, description, measurementAdvice, offers, generationAttemptId };
+      return { ok: true, title, description, measurementAdvice, offers, generationAttemptId, beginEditTracking };
     } catch (err) {
       authAction?.finish(authBlockReason ? "blocked" : batchSignal?.aborted ? "cancelled" : "failed", {
         generationAttemptId: authRequestGenerationAttemptId,

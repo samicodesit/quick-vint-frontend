@@ -5129,24 +5129,13 @@ test.describe("AutoLister extension smoke flows", () => {
       .fill("Clean black jacket in good condition.\nSmoke-free home.");
     await page.evaluate(() => window.dispatchEvent(new Event("pagehide")));
 
-    await expect
-      .poll(
-        () =>
-          eventBatches
-            .flatMap((batch) => batch.events || [])
-            .find((event) => event.event === "generation_output_edited"),
-        { timeout: 5000 },
-      )
-      .toBeTruthy();
-    const events = eventBatches.flatMap((batch) => batch.events || []);
-    const event = events.find(
-      (candidate) => candidate.event === "generation_output_edited",
-    );
-
-    expect(event.context.editSequence).toBe(1);
-    expect(event.context.editSummarySequence).toBe(1);
+    const edits = () => eventBatches.flatMap(batch => batch.events || [])
+      .filter(event => event.event === "generation_output_edited");
+    await expect.poll(() => edits().length).toBe(2);
+    expect(edits()[0].context.editSummaryReason).toBe("focusout");
+    const event = edits()[1];
+    expect(event.context.editSequence).toBe(2);
     expect(event.context.editSummaryReason).toBe("pagehide");
-    expect(event.context.editEventCount).toBeGreaterThanOrEqual(2);
     expect(event.context.changedFields).toBe("title,description");
     expect(event.context.titleChanged).toBe(true);
     expect(event.context.descriptionChanged).toBe(true);
@@ -5158,6 +5147,59 @@ test.describe("AutoLister extension smoke flows", () => {
     expect(event.context.finalDescription).toContain("Smoke-free home.");
     expect(event.context.titleLengthDelta).toBeGreaterThan(0);
     expect(event.context.descriptionLengthDelta).toBeGreaterThan(0);
+  });
+
+  test("bounds edit snapshots across remounts and preserves a final full undo", async ({ page }) => {
+    const events = [];
+    await page.route("https://autolister.app/api/events/track", route => {
+      events.push(...route.request().postDataJSON().events);
+      return route.fulfill({ json: { ok: true } });
+    });
+    await page.route("https://autolister.app/api/generate", route =>
+      route.fulfill({ json: { title: "Coat", description: "Blue wool", measurementAdvice: "" } }));
+    await openContentHarness(page);
+    await page.locator("#quickvint-gen-btn").click();
+    const title = page.locator('[data-testid="title--input"]');
+    await expect(title).toHaveValue("Coat");
+    await title.evaluate(node => node.replaceWith(node.cloneNode(true)));
+    const edits = () => events.filter(e => e.event === "generation_output_edited");
+    await title.press("End");
+    await title.pressSequentially(" with buttons and pockets");
+    await page.evaluate(() => AutoListerTelemetry.flush());
+    expect(edits()).toHaveLength(0);
+    await title.blur();
+    await title.fill("Coat size 42");
+    await title.blur();
+    await title.fill("Coat size M");
+    await title.blur();
+    await title.fill("Coat");
+    await page.evaluate(() => window.dispatchEvent(new Event("pagehide")));
+    await expect.poll(() => edits().length).toBe(3);
+    expect(edits().map(e => e.context.editSequence)).toEqual([1,2,3]);
+    expect(edits()[2].context).toMatchObject({ titleChanged: false, descriptionChanged: false });
+    expect(edits()[2].context.finalTitle).toBeUndefined();
+  });
+
+  test("discards pending listing edits on account switch", async ({page}) => {
+    const events = [];
+    await page.route("https://autolister.app/api/events/track", route => {
+      events.push(...route.request().postDataJSON().events);
+      return route.fulfill({ json: { ok: true } });
+    });
+    await page.route("https://autolister.app/api/generate", route =>
+      route.fulfill({ json: { title: "Coat", description: "Blue wool", measurementAdvice: "" } }));
+    await openContentHarness(page);
+    await page.locator("#quickvint-gen-btn").click();
+    const title = page.locator('[data-testid="title--input"]');
+    await expect(title).toHaveValue("Coat");
+    await title.fill("Coat edits for first account");
+    await page.evaluate(async () => {
+      const {supabaseSession} = await chrome.storage.local.get("supabaseSession");
+      await chrome.storage.local.set({supabaseSession: {...supabaseSession,user: {id: "different-owner"}}});
+      window.dispatchEvent(new Event("pagehide"));
+      await AutoListerTelemetry.flush();
+    });
+    expect(events.some(e => e.event === "generation_output_edited")).toBe(false);
   });
 
   test("compresses remote Vinted images through the background proxy", async ({
