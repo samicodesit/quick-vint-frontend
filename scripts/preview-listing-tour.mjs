@@ -89,8 +89,8 @@ export async function previewListingTour({ context, folder, extensionId }) {
         2,
       ),
     );
-    for (const width of [1440, 1024, 375]) {
-      await page.setViewportSize({ width, height: width === 375 ? 812 : 1050 });
+    for (const width of [1440, 1280, 1024, 375]) {
+      await page.setViewportSize({ width, height: width === 375 ? 812 : width <= 1280 ? 768 : 1050 });
       await page.evaluate(() => {
         scrollTo(0, 0);
         return document.fonts.ready;
