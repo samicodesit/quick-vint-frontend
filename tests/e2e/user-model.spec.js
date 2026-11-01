@@ -315,7 +315,7 @@ test("listing invitation waits for an idle eligible route and closes on account 
       ),
     );
   expect(new Set(invitationFonts).size).toBe(1);
-  expect(invitationFonts[0]).toContain("system-ui");
+  expect(invitationFonts[0]).toContain("AutoLister Geist");
   await expect(page.locator(".um-example-pair img").first()).toHaveJSProperty(
     "naturalWidth",
     280,

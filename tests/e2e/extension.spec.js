@@ -3138,6 +3138,13 @@ test.describe("AutoLister extension smoke flows", () => {
       ]);
       expect(manifest.content_scripts[0].css).toContain("lib/user-model.css");
       expect(manifest.content_scripts[0].css).toContain("lib/typography.css");
+      expect(manifest.web_accessible_resources.flatMap(entry => entry.resources)).toContain("lib/fonts/*.woff2");
+      const packagedFont = await serviceWorker.evaluate(async () => {
+        const response = await fetch(chrome.runtime.getURL("lib/fonts/geist-latin-wght-normal-19f9c925.woff2"));
+        const bytes = new Uint8Array(await response.arrayBuffer());
+        return { ok: response.ok, signature: String.fromCharCode(...bytes.slice(0, 4)) };
+      });
+      expect(packagedFont).toEqual({ ok: true, signature: "wOF2" });
       expect(manifest.host_permissions).toContain("https://autolister.app/*");
     } finally {
       await context.close();

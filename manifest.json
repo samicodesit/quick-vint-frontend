@@ -121,6 +121,7 @@
     {
       "resources": [
         "callback.html",
+        "lib/fonts/*.woff2",
         "icons/icon48.png",
         "images/account-paused-paywall.webp",
         "images/user-model-female.webp",
