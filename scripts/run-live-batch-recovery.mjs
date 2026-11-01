@@ -1,6 +1,9 @@
 // Real Vinted batch recovery test. Never clicks Save or Publish.
-import { writeFileSync } from "node:fs";
-import { chromium } from "@playwright/test";
+import { writeFileSync, readFileSync, existsSync, unlinkSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { createHash } from "node:crypto";
+import { createRequire } from "node:module";
+const { chromium } = createRequire(import.meta.url)(process.env.AUTOLISTER_PLAYWRIGHT_MODULE || "@playwright/test");
 
 const required = (name) => {
   const value = String(process.env[name] || "").trim();
@@ -16,15 +19,49 @@ const imageOne = required("AUTOLISTER_REAL_BATCH_IMAGE_ONE");
 const imageTwo = required("AUTOLISTER_REAL_BATCH_IMAGE_TWO");
 const profileDirectory = String(process.env.AUTOLISTER_REAL_BATCH_PROFILE || "Default").trim();
 const recoveryOnly = process.env.AUTOLISTER_REAL_BATCH_RECOVERY_ONLY === "1";
+const modelPhotosOnly = process.env.AUTOLISTER_REAL_MODEL_PHOTOS_ONLY === "1";
 const origin = "https://www.vinted.nl";
 const createUrl = `${origin}/items/new`;
+// UI-only control of the dedicated login tabs. No cookies or sessions are copied.
+async function serviceLoginUi(fallbackPage) {
+  if (!modelPhotosOnly) return;
+  const folder = dirname(outputFile);
+  const commandFile = join(folder, 'live-login-command.json');
+  let command;
+  if (existsSync(commandFile)) {
+    command = JSON.parse(readFileSync(commandFile, 'utf8'));
+    unlinkSync(commandFile);
+  }
+  const pages = context.pages();
+  const page = Number.isInteger(command?.page) ? pages[command.page] : fallbackPage;
+  if (!page) return;
+  if (command?.action === 'click') await page.locator(command.selector).click({timeout:10000});
+  if (command?.action === 'fill') await page.locator(command.selector).fill(command.value,{timeout:10000});
+  if (command?.action === 'front') await page.bringToFront();
+  if (command?.action === 'press') await page.locator(command.selector).press(command.key);
+  if (command?.action === 'viewport') await page.setViewportSize({width:command.width,height:command.height});
+  if (command?.action === 'read') {
+    writeFileSync(join(folder,'live-dom.json'),JSON.stringify(await page.locator(command.selector).evaluateAll(es=>es.map(e=>({html:e.outerHTML,rect:e.getBoundingClientRect().toJSON(),display:getComputedStyle(e).display}))),null,2));
+  }
+  if (command || !existsSync(join(folder,'live-login-state.json'))) {
+    const state=[];
+    for (const tab of context.pages()) {
+      state.push({url:tab.url(),title:await tab.title(),ui:await tab.locator('body').innerText().catch(()=>''),controls:await tab.locator('button,input,a').evaluateAll(es=>es.map(e=>({tag:e.tagName,id:e.id,type:e.type,name:e.name,text:(e.textContent||'').trim().slice(0,120),placeholder:e.getAttribute('placeholder'),aria:e.getAttribute('aria-label')})))});
+    }
+    writeFileSync(join(folder,'live-login-state.json'),JSON.stringify(state,null,2));
+    await page.screenshot({path:join(folder,'live-login.png'),fullPage:true});
+  }
+}
 
+console.log('Launching the dedicated Chrome profile...');
 const context = await chromium.launchPersistentContext(userDataDir, {
   executablePath: browserExecutable,
   headless: false,
   locale: "nl-NL",
   timezoneId: "Europe/Amsterdam",
   viewport: { width: 1440, height: 1000 },
+  timeout: 60000,
+  ignoreDefaultArgs: ['--disable-extensions'],
   args: [
     "--disable-blink-features=AutomationControlled",
     `--profile-directory=${profileDirectory}`,
@@ -32,24 +69,42 @@ const context = await chromium.launchPersistentContext(userDataDir, {
     `--load-extension=${extensionPath}`,
   ],
 });
+console.log('Browser connected. Checking extension worker...');
+if (modelPhotosOnly) {
+  const landing = context.pages()[0] || await context.newPage();
+  await landing.goto(createUrl, {waitUntil:'domcontentloaded',timeout:60000});
+  await landing.bringToFront();
+}
 
 const diagnostics = {
   startedAt: new Date().toISOString(),
+  mode: modelPhotosOnly ? 'model_photos' : 'batch_recovery',
   normal: {},
   recovery: {},
   saveOrPublishClicks: 0,
 };
 
+const loadedManifest=JSON.parse(readFileSync(join(extensionPath,'manifest.json'),'utf8'));
+const expectedId=loadedManifest.key ? createHash('sha256').update(Buffer.from(loadedManifest.key,'base64')).digest('hex').slice(0,32).replace(/[0-9a-f]/g,c=>String.fromCharCode(97+parseInt(c,16))) : null;
+let modelRuntimePage;
+if(expectedId){
+  const wake=await context.newPage();
+  await wake.goto(`chrome-extension://${expectedId}/popup.html`);
+  if(modelPhotosOnly)modelRuntimePage=wake;else await wake.close();
+}
 let worker =
-  context.serviceWorkers()[0] ||
-  (await context.waitForEvent("serviceworker", { timeout: 30000 }));
+  modelRuntimePage ||
+  context.serviceWorkers().find(w=>!expectedId||new URL(w.url()).hostname===expectedId) ||
+  (await context.waitForEvent("serviceworker", { predicate:w=>!expectedId||new URL(w.url()).hostname===expectedId, timeout:30000 }).catch(async error=>{
+    if(!modelPhotosOnly)throw error;
+    console.log('Extension startup is blocked. Keeping the Vinted window open for sign-in.');
+    const inspect=await context.newPage();await inspect.goto('chrome://extensions');
+    await serviceLoginUi(inspect);
+    while(true){await serviceLoginUi(context.pages()[0]).catch(()=>{});const ready=context.serviceWorkers().find(w=>!expectedId||new URL(w.url()).hostname===expectedId);if(ready)return ready;await new Promise(r=>setTimeout(r,500));}
+  }));
 
-const workerHasRecoveryCode = await worker.evaluate(async () =>
-  (await (await fetch(chrome.runtime.getURL("background.js"))).text())
-    .includes('batchDiagnosticsVersion: 2')
-);
-if (!workerHasRecoveryCode) throw new Error("Chrome loaded a stale extension worker.");
-const extensionId = await worker.evaluate(() => chrome.runtime.id);
+const extensionId = new URL(worker.url()).hostname;
+console.log('Extension worker loaded. Checking runtime...');
 const preflightPage = await context.newPage();
 await preflightPage.goto(`chrome-extension://${extensionId}/popup.html`);
 let runtimeInfo = await preflightPage.evaluate(() =>
@@ -99,13 +154,15 @@ const readExtensionSession = () => worker.evaluate(async () => {
 });
 
 let extensionSession = await readExtensionSession();
+console.log('Extension session present:', extensionSession.hasToken);
 if (!extensionSession.hasToken) {
   const extensionId = await worker.evaluate(() => chrome.runtime.id);
   const signInPage = await context.newPage();
   await signInPage.goto(`chrome-extension://${extensionId}/popup.html`);
   console.log("ACTION REQUIRED: Sign into the AutoLister extension in this browser.");
-  const deadline = Date.now() + 300000;
+  const deadline = Date.now() + (modelPhotosOnly ? 1800000 : 300000);
   while (!extensionSession.hasToken && Date.now() < deadline) {
+    await serviceLoginUi(signInPage);
     await new Promise((resolve) => setTimeout(resolve, 500));
     extensionSession = await readExtensionSession();
   }
@@ -144,11 +201,24 @@ async function openRealCreatePage() {
   await page.waitForLoadState("networkidle", { timeout: 15000 }).catch(() => {});
   await dismissDomainModal(page);
   if (new URL(page.url()).pathname !== "/items/new") {
+    await page.bringToFront();
+    diagnostics.ok = false;
+    diagnostics.blocker = { reason: 'vinted_auth_required', path: new URL(page.url()).pathname };
+    writeFileSync(outputFile, JSON.stringify(diagnostics, null, 2));
+    await page.screenshot({path:join(dirname(outputFile),'authentication-required.png'),fullPage:true});
     console.log("ACTION REQUIRED: Sign into Vinted in this browser, then open https://www.vinted.nl/items/new");
+  }
+  if (modelPhotosOnly) {
+    const deadline=Date.now()+1800000;
+    while(!await page.locator('input[data-testid="title--input"]').isVisible() && Date.now()<deadline){
+      await serviceLoginUi(page);
+      await page.waitForTimeout(300);
+    }
   }
   await page.locator('input[data-testid="title--input"]').waitFor({ timeout: 300000 });
   await page.locator("#quickvint-phone-btn").waitFor({ timeout: 45000 });
   await page.locator("#quickvint-signin-btn").waitFor({ state: "hidden", timeout: 30000 });
+  delete diagnostics.blocker;
   return page;
 }
 
@@ -217,6 +287,10 @@ async function closeOtherVintedCreatePages(keep) {
 
 try {
   await closeOtherVintedCreatePages(null);
+  if (modelPhotosOnly) {
+    const { checkLiveModelPhotos } = await import('./live-model-photo-check.mjs');
+    diagnostics.modelPhotos = await checkLiveModelPhotos({ context, openRealCreatePage, extensionId, outputFile });
+  } else {
   if (!recoveryOnly) {
     const normalSource = await openRealCreatePage();
     const normalModal = await prepareTwoItemBatch(normalSource);
@@ -336,6 +410,7 @@ try {
     .locator("#quickvint-batch-modal .batch-subtitle")
     .innerText();
 
+  }
   diagnostics.finishedAt = new Date().toISOString();
   diagnostics.ok = true;
 } catch (error) {
@@ -345,5 +420,21 @@ try {
   throw error;
 } finally {
   writeFileSync(outputFile, JSON.stringify(diagnostics, null, 2));
-  await context.close();
+  if (modelPhotosOnly) {
+    console.log('Photo check finished. Keeping the test window open for inspection.');
+    while (context.pages().length) {
+      const repeat=join(dirname(outputFile),'live-recheck.json');
+      if(existsSync(repeat)){
+        unlinkSync(repeat);
+        try{
+          const {checkLiveModelPhotos}=await import(`./live-model-photo-check.mjs?run=${Date.now()}`);
+          diagnostics.modelPhotos=await checkLiveModelPhotos({context,openRealCreatePage,extensionId,outputFile});diagnostics.ok=true;delete diagnostics.error;
+        }catch(error){diagnostics.ok=false;diagnostics.error=error.message;}
+        writeFileSync(outputFile,JSON.stringify(diagnostics,null,2));
+        console.log('Repeated photo check:',diagnostics.ok?'passed':diagnostics.error);
+      }
+      await serviceLoginUi(context.pages().find(p=>p.url().includes('/items/new')) || context.pages()[0]).catch(error=>console.log('Inspection:',error.message.split('\n')[0]));
+      await new Promise(resolve=>setTimeout(resolve,500));
+    }
+  } else await context.close();
 }

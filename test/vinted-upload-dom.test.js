@@ -17,6 +17,8 @@ test("mediaPhotoBox selector covers current Vinted CSS-module photo boxes", () =
   const selector = getSelector("mediaPhotoBox");
 
   assert.match(selector, /\.photo-box/);
-  assert.match(selector, /\[class\*="__photo-box"\]/);
-  assert.match(selector, /:not\(\[class\*="__photo-box__"\]\)/);
+  // A single underscore covers both current wSh2GW_photo-box and older
+  // double-underscore CSS modules, while excluding their inner elements.
+  assert.match(selector, /\[class\*="_photo-box"\]/);
+  assert.match(selector, /:not\(\[class\*="_photo-box__"\]\)/);
 });

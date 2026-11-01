@@ -1,7 +1,7 @@
 const { test, expect } = require("@playwright/test");
 const { openBatchJourney } = require("./batch-journey");
 
-test("opening and closing the upload chooser preserves its Phone/Computer icons and badge", async () => {
+test("opening and closing the upload chooser preserves its icons without an obsolete New badge", async () => {
   const flow = await openBatchJourney();
   try {
     const button = flow.controller.locator("#quickvint-phone-btn");
@@ -9,7 +9,7 @@ test("opening and closing the upload chooser preserves its Phone/Computer icons 
     await button.click();
     await flow.controller.getByRole("button", { name: "Close upload choices", exact: true }).click();
     await expect(button.locator("svg")).toHaveCount(2);
-    await expect(button.locator(".quickvint-phone-new-badge")).toHaveText("NEW");
+    await expect(button.locator(".quickvint-phone-new-badge")).toHaveCount(0);
     await button.click();
     await expect(flow.controller.locator(".quickvint-upload-choice-card")).toBeVisible();
   } finally { await flow.close(); }

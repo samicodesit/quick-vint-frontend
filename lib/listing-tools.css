@@ -1,0 +1,644 @@
+/* Approved direction C. The host's native photo controls remain untouched. */
+.al-listing-tools,
+.al-photo-tools,
+.al-tour-card,
+.al-tour-invitation {
+  --al-accent: #5143df;
+  --al-ink: #283044;
+  --al-muted: #647084;
+  font-family: "AutoLister Geist", Arial, sans-serif;
+  color: var(--al-ink);
+  font-size: 13px;
+  line-height: 1.4;
+}
+.al-listing-tools *,
+.al-photo-tools *,
+.al-tour-card *,
+.al-tour-invitation * {
+  box-sizing: border-box;
+  font-family: inherit;
+}
+.al-listing-tools {
+  margin-bottom: 24px;
+}
+.al-listing-tools .quickvint-primary-tools {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  justify-content: flex-start;
+}
+.al-listing-tools .quickvint-primary-tools > button,
+.al-tool-button,
+.al-icon-button {
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  border: 1px solid #dce0e8;
+  background: white;
+  color: #283044;
+  border-radius: 7px;
+  padding: 0 12px;
+  height: 40px;
+  min-width: 0;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  box-shadow: none;
+}
+.al-listing-tools button svg,
+.al-photo-tools button svg {
+  width: 16px;
+  height: 16px;
+  flex: none;
+}
+.al-listing-tools #quickvint-gen-btn {
+  height: 40px;
+  min-height: 40px;
+  width: auto;
+  min-width: 118px;
+  padding: 0 16px;
+  background: #5143df;
+  color: white;
+  border: 0;
+  box-shadow: none;
+  border-radius: 7px;
+  font-size: 14px;
+  font-weight: 600;
+  transform: none;
+}
+.al-listing-tools #quickvint-gen-btn .icon {
+  width: 18px;
+  height: 18px;
+  margin: 0;
+}
+.al-listing-tools #quickvint-gen-btn svg {
+  width: 18px;
+  height: 18px;
+}
+.al-listing-tools #quickvint-gen-btn:hover:not(:disabled) {
+  background: #4435cb;
+  transform: none;
+  box-shadow: none;
+}
+.al-listing-tools #quickvint-gen-btn:disabled {
+  opacity: 0.6;
+}
+.al-listing-tools #quickvint-more-btn {
+  margin-left: auto;
+  width: auto;
+  padding: 0 10px;
+  white-space: nowrap;
+}
+.al-listing-tools button:focus-visible,
+.al-photo-tools button:focus-visible,
+.al-tour-card button:focus-visible,
+.al-tour-invitation button:focus-visible {
+  outline: 2px solid #5143df;
+  outline-offset: 3px;
+}
+.al-listing-tools .al-tool-button:hover,
+.al-listing-tools .al-icon-button:hover {
+  background: #f4f3fc;
+}
+.al-photo-tools {
+  display: flex;
+  justify-content: flex-end;
+  position: relative;
+  z-index: 3;
+}
+.al-photo-tools.al-with-heading {
+  pointer-events: none;
+}
+.al-photo-tools #quickvint-phone-btn {
+  pointer-events: auto;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 40px;
+  min-height: 40px;
+  min-width: 0;
+  width: auto;
+  padding: 0 12px;
+  border: 1px solid #cbcfe0;
+  border-radius: 7px;
+  color: #283044;
+  background: #fafaff;
+  box-shadow: none;
+  font-size: 13px;
+  transform: none;
+}
+.al-photo-tools #quickvint-phone-btn:hover {
+  background: #f2f1fb;
+  box-shadow: none;
+  transform: none;
+}
+.al-upload-copy {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  line-height: 16px;
+  white-space: nowrap;
+}
+.al-upload-copy strong {
+  font-size: 13px;
+  font-weight: 550;
+}
+.al-upload-copy small {
+  font-size: 12px;
+  font-weight: 400;
+  color: #647084;
+}
+.al-listing-tools #quickvint-model-control {
+  display: flex;
+  position: relative;
+  align-items: center;
+  gap: 6px;
+  padding: 0 7px 0 0;
+  height: 40px;
+  min-height: 40px;
+  border: 1px solid #dce0e8;
+  border-radius: 7px;
+  background: white;
+}
+.al-listing-tools #quickvint-model-btn {
+  display: flex;
+  width: auto;
+  justify-content: flex-start;
+  align-items: center;
+  gap: 9px;
+  height: 38px;
+  min-height: 0;
+  padding: 0 4px 0 0;
+  border: 0;
+  border-radius: 6px;
+  background: none;
+  box-shadow: none;
+  font-size: 13px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+.al-listing-tools #quickvint-model-btn {
+  color: #283044;
+}
+.al-listing-tools #quickvint-model-btn > span:not(.um-entry-new) {
+  display: inline;
+}
+.al-listing-tools #quickvint-model-btn .al-model-photo {
+  width: 34px;
+  height: 38px;
+  object-fit: cover;
+  object-position: center 32%;
+  border-radius: 6px 0 0 6px;
+  flex: none;
+}
+.al-listing-tools #quickvint-model-btn .um-entry-new {
+  font-size: 10px;
+  line-height: 16px;
+  font-weight: 600;
+  color: #5b48bf;
+  background: #eeeafd;
+  padding: 0 5px;
+  position: static;
+  align-self: center;
+  box-shadow: none;
+  animation: none;
+}
+.al-listing-tools #quickvint-model-toggle {
+  height: 36px;
+  width: 36px;
+  min-width: 36px;
+  min-height: 36px;
+  padding: 0;
+  border: 0;
+  background: none;
+  box-shadow: none;
+  justify-content: center;
+}
+.al-listing-tools #quickvint-model-toggle .quickvint-toggle-switch {
+  width: 30px;
+  height: 18px;
+}
+.al-listing-tools #quickvint-model-toggle .quickvint-toggle-knob {
+  top: 2px;
+  left: 2px;
+}
+.al-listing-tools
+  #quickvint-model-toggle[aria-checked="true"]
+  .quickvint-toggle-knob {
+  transform: translateX(12px);
+}
+.al-listing-tools .um-toolbar-error {
+  position: absolute;
+  top: 44px;
+  left: 0;
+  padding: 8px;
+  background: white;
+  z-index: 10;
+  width: 240px;
+}
+.al-listing-tools dialog.al-tools-panel {
+  position: fixed;
+  inset: auto;
+  margin: 0;
+  width: 360px;
+  max-width: calc(100vw - 24px);
+  max-height: calc(100dvh - 24px);
+  overflow: auto;
+  border: 1px solid #dce0e8;
+  border-radius: 12px;
+  padding: 18px;
+  background: white;
+  color: #283044;
+  box-shadow: 0 12px 36px #18213c24;
+}
+.al-listing-tools dialog.al-tools-panel::backdrop {
+  background: #1c223114;
+}
+.al-listing-tools dialog.al-tools-panel.al-help-panel {
+  width: max-content;
+  min-width: 224px;
+  max-width: min(320px, calc(100vw - 24px));
+  padding: 12px;
+  right: auto;
+  bottom: auto;
+}
+.al-help-panel > header {
+  padding: 4px 6px;
+}
+.al-tools-panel > header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+.al-tools-panel > header > strong {
+  font-size: 15px;
+  font-weight: 600;
+}
+.al-tools-panel > header > .al-icon-button {
+  height: 32px;
+  width: 32px;
+  padding: 0;
+  border: 0;
+  margin: -6px -6px -6px 0;
+}
+.al-tools-panel > .al-tool-button,
+.al-tools-panel > #quickvint-report-btn,
+.al-tools-panel > .quickvint-tools-collapse {
+  display: flex;
+  position: static;
+  width: 100%;
+  justify-content: flex-start;
+  align-items: center;
+  margin: 4px 0;
+  height: 40px;
+  border: 0;
+  box-shadow: none;
+  background: white;
+  color: #283044;
+  padding: 0 12px;
+  transform: none;
+  font-size: 13px;
+}
+.al-listing-tools .al-tools-panel > #quickvint-report-btn svg {
+  width: 16px;
+  height: 16px;
+  flex: none;
+}
+.al-listing-tools .al-tools-panel > #quickvint-report-btn:hover {
+  background: #f4f3fc;
+  box-shadow: none;
+  transform: none;
+  color: #283044;
+}
+.al-tools-panel > hr {
+  border: 0;
+  border-top: 1px solid #e8eaf0;
+  margin: 8px 0;
+}
+.al-tools-panel .quickvint-tool-options {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 16px;
+}
+.al-tools-panel .quickvint-preference-row {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 14px;
+}
+.al-tools-panel #quickvint-description-length-toggle,
+.al-tools-panel #quickvint-output-shape-toggle {
+  width: 100%;
+  box-shadow: none;
+  background: #f2f3f6;
+  border: 0;
+  transform: none;
+}
+.al-tools-panel #quickvint-output-shape-toggle .quickvint-format-option {
+  display: flex;
+  flex: 1;
+  width: auto;
+  gap: 7px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 6px;
+  padding: 0 8px;
+  white-space: nowrap;
+  font-size: 13px;
+  font-weight: 500;
+  color: #505b6d;
+}
+.al-tools-panel #quickvint-description-length-toggle .quickvint-length-option {
+  font-weight: 500;
+  transform: none;
+}
+.al-tools-panel
+  #quickvint-description-length-toggle
+  .quickvint-length-option[aria-pressed="true"],
+.al-tools-panel
+  #quickvint-output-shape-toggle
+  .quickvint-format-option[aria-pressed="true"] {
+  background: white;
+  color: #5143df;
+  box-shadow: 0 1px 3px #15213d19;
+  transform: none;
+}
+.al-tools-panel
+  #quickvint-description-length-toggle
+  .quickvint-length-option:not([aria-pressed="true"]) {
+  color: #505b6d;
+}
+.al-tools-panel .quickvint-binary-toggle[aria-pressed="true"] {
+  background: white;
+  color: #283044;
+  box-shadow: none;
+  border: 0;
+}
+.al-tools-panel .quickvint-binary-toggle,
+.al-tools-panel .quickvint-note-control {
+  width: 100%;
+  height: 38px;
+  box-shadow: none;
+  background: white;
+  border: 0;
+  transform: none;
+}
+.al-tools-panel .quickvint-binary-toggle {
+  justify-content: space-between;
+  padding: 0 3px;
+}
+.al-tools-panel .quickvint-toggle-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 500;
+}
+.al-tools-panel .quickvint-note-control .quickvint-binary-toggle {
+  width: 100%;
+  flex: 1;
+  gap: 48px;
+}
+.al-tools-panel .quickvint-note-control {
+  position: relative;
+  overflow: visible;
+}
+.al-listing-tools .al-tools-panel .quickvint-note-edit {
+  position: absolute;
+  right: 43px;
+  top: 0;
+  height: 100%;
+  width: 40px;
+  min-width: 40px;
+  border: 0;
+  border-radius: 6px;
+}
+.al-listing-tools .al-tools-panel .quickvint-binary-toggle:hover {
+  background: #f7f7fc;
+  transform: none;
+  box-shadow: none;
+}
+.al-tour-invitation {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+  margin: -12px 0 20px;
+  font-size: 12px;
+  color: #647084;
+}
+.al-text-button {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  color: #5143df;
+  font: inherit;
+  font-weight: 550;
+  padding: 6px 2px;
+  cursor: pointer;
+  border-radius: 4px;
+}
+.al-tour-invitation .al-text-button:last-child {
+  color: #647084;
+}
+.al-tour-card {
+  position: fixed;
+  z-index: 2147483500;
+  width: 320px;
+  max-width: calc(100vw - 24px);
+  padding: 18px;
+  border: 1px solid #dce0e8;
+  border-radius: 12px;
+  background: #fff;
+  box-shadow: 0 10px 36px #18213c29;
+  text-align: left;
+}
+.al-tour-card header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+.al-tour-count {
+  font-size: 12px;
+  color: #647084;
+  font-variant-numeric: tabular-nums;
+}
+.al-tour-card h2 {
+  font:
+    600 16px/1.35 "AutoLister Geist",
+    Arial,
+    sans-serif;
+  margin: 0 0 8px;
+  color: #283044;
+}
+.al-tour-card p {
+  font-size: 13px;
+  line-height: 1.55;
+  color: #505b6d;
+  margin: 0;
+}
+.al-tour-card footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 18px;
+}
+.al-tour-next {
+  margin-left: auto;
+  appearance: none;
+  border: 0;
+  border-radius: 7px;
+  color: white;
+  background: #5143df;
+  padding: 0 16px;
+  height: 36px;
+  font:
+    550 13px "AutoLister Geist",
+    Arial,
+    sans-serif;
+  cursor: pointer;
+}
+.al-tour-target {
+  outline: 3px solid #bdb5ff !important;
+  outline-offset: 4px !important;
+}
+@media (min-width: 601px) {
+  .al-listing-tools.al-compact-tools .quickvint-primary-tools {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+  }
+  .al-listing-tools.al-compact-tools #quickvint-gen-btn {
+    grid-column: 1;
+    grid-row: 1;
+  }
+  .al-listing-tools.al-compact-tools #quickvint-style-btn {
+    grid-column: 2;
+    grid-row: 1;
+    justify-self: end;
+  }
+  .al-listing-tools.al-compact-tools #quickvint-more-btn {
+    grid-column: 3;
+    grid-row: 1;
+  }
+  .al-listing-tools.al-compact-tools #quickvint-model-control {
+    grid-column: 1/-1;
+    grid-row: 2;
+    justify-self: start;
+  }
+}
+@media (max-width: 600px) {
+  .al-listing-tools .quickvint-primary-tools {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    gap: 8px;
+  }
+  .al-listing-tools #quickvint-gen-btn {
+    grid-column: 1;
+    grid-row: 1;
+    height: 44px;
+    min-height: 44px;
+    padding: 0 12px;
+    min-width: 0;
+  }
+  .al-listing-tools #quickvint-style-btn {
+    grid-column: 2;
+    grid-row: 1;
+    justify-self: end;
+    height: 44px;
+    padding: 0 10px;
+    max-width: 100%;
+    overflow-wrap: anywhere;
+  }
+  .al-listing-tools #quickvint-more-btn {
+    grid-column: 3;
+    grid-row: 1;
+    height: 44px;
+    width: auto;
+  }
+  .al-listing-tools.al-narrow-actions .quickvint-primary-tools {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+  .al-listing-tools.al-narrow-actions #quickvint-gen-btn {
+    justify-self: start;
+  }
+  .al-listing-tools.al-narrow-actions #quickvint-more-btn {
+    grid-column: 2;
+  }
+  .al-listing-tools.al-narrow-actions #quickvint-style-btn {
+    grid-column: 1/-1;
+    grid-row: 3;
+    justify-self: start;
+  }
+  .al-listing-tools #quickvint-model-control {
+    grid-column: 1/-1;
+    grid-row: 2;
+    height: 48px;
+    padding-right: 6px;
+  }
+  .al-listing-tools #quickvint-model-btn {
+    height: 46px;
+    margin-right: auto;
+  }
+  .al-listing-tools #quickvint-model-btn .al-model-photo {
+    width: 42px;
+    height: 46px;
+  }
+  .al-listing-tools #quickvint-model-toggle {
+    height: 44px;
+    width: 44px;
+    min-width: 44px;
+  }
+  .al-photo-tools #quickvint-phone-btn {
+    height: 44px;
+    min-height: 44px;
+  }
+  .al-listing-tools dialog.al-tools-panel {
+    bottom: 12px;
+    right: 12px;
+    width: auto;
+  }
+  .al-listing-tools dialog.al-tools-panel::backdrop {
+    background: #1c223147;
+  }
+  .al-tools-panel button,
+  .al-tools-panel .quickvint-binary-toggle {
+    min-height: 44px;
+  }
+  .al-tools-panel #quickvint-description-length-toggle,
+  .al-tools-panel #quickvint-output-shape-toggle {
+    height: 50px;
+  }
+  .al-tools-panel > header > .al-icon-button {
+    width: 44px;
+    height: 44px;
+    margin: -10px -10px -10px 0;
+  }
+  .al-tour-card {
+    width: auto;
+    right: 12px;
+    padding: 18px;
+  }
+  .al-tour-card button,
+  .al-tour-invitation button {
+    min-height: 44px;
+  }
+  .al-tour-invitation {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .al-listing-tools *,
+  .al-photo-tools *,
+  .al-tour-card * {
+    animation: none !important;
+    transition: none !important;
+    scroll-behavior: auto !important;
+  }
+}

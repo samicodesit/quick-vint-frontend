@@ -110,7 +110,7 @@
     title: 'input[data-testid="title--input"]',
     description: 'textarea[data-testid="description--input"]',
     mediaGrid: '[data-testid="media-upload-grid"], [data-testid="media-select-grid"]',
-    mediaPhotoBox: '.photo-box, [class*="__photo-box"]:not([class*="__photo-box__"])',
+    mediaPhotoBox: '.photo-box, [class*="_photo-box"]:not([class*="_photo-box__"])',
     mediaImageWrapper: '[data-testid^="image-wrapper-"]',
     mediaImage:
       '[data-testid^="image-wrapper-"] img.web_ui__Image__content, .photo-box__image-container img.web_ui__Image__content, img[alt^="Uploaded photo"]',
@@ -1181,6 +1181,8 @@
   let suppressNextFileInputCapture = false;
   const boundPromptUploadFileInputs = new WeakSet();
   const capturedPromptUploadFileSignatures = new WeakMap();
+  let originalPhotoRevision=0;
+  try{originalPhotoRevision=Number(sessionStorage.getItem('autolisterOriginalPhotoRevision')||0);}catch{}
   const boundPromptUploadMediaGrids = new WeakSet();
 
   // --- HELPER FUNCTIONS ---
@@ -2860,6 +2862,9 @@
   ) {
     const fileList = Array.from(files || []).filter(Boolean);
     if (!fileList.length) return null;
+    originalPhotoRevision++;
+    listingPhotoController?.newOriginalUpload();
+    try{sessionStorage.setItem('autolisterOriginalPhotoRevision',String(originalPhotoRevision));}catch{}
 
     let existingUpload = append ? getActiveCapturedPromptUpload() : null;
     const existingFiles =
@@ -3779,13 +3784,45 @@
       shouldWarnBeforeLeavingListing;
   }
 
+  let listingPhotoController = null;
+  let listingModelEnabled;
+  window.addEventListener('autolister-model-state',event=>{
+    if(event.detail?.owner!==batchAuthUserId)return;
+    listingModelEnabled=event.detail.state?.enabled;
+    if(event.detail?.state?.enabled===false)listingPhotoController?.stop(event.detail.owner);
+  });
+  function getListingPhotoController() {
+    if (!listingPhotoController && globalThis.AutoListerListingPhotos) {
+      listingPhotoController = globalThis.AutoListerListingPhotos.create({
+        grid: () => document.querySelector(SELECTORS.mediaGrid),
+        images: () => Array.from((document.querySelector(SELECTORS.mediaGrid) || document).querySelectorAll(SELECTORS.mediaImage)),
+        boxSelector: SELECTORS.mediaPhotoBox,
+        owner: async () => (await chrome.storage.local.get('supabaseSession')).supabaseSession?.user?.id || null,
+        enabled: () => listingModelEnabled!==false,
+        sourceRevision: () => originalPhotoRevision,
+        download: async url => {
+          const result = await downloadPhoneUploadFile({ url, name: 'model.jpg' }, { timeoutMs: 20000 });
+          if (!result.file) throw new Error('model_photo_download_failed');
+          if (result.previewUrl) URL.revokeObjectURL(result.previewUrl);
+          return result.file;
+        },
+        inject: file => injectFilesIntoVinted([file], 'model_generated'),
+        changed: () => {
+          const captured = getActiveCapturedPromptUpload();
+          if (captured) captured.orderTrusted = false;
+        },
+      });
+    }
+    return listingPhotoController;
+  }
+
   function getUploadedImageEntries() {
     const grid = document.querySelector(SELECTORS.mediaGrid);
     const root = grid || document;
     const images = Array.from(root.querySelectorAll(SELECTORS.mediaImage));
     const seenUrls = new Set();
 
-    const domEntries = images
+    const domEntries = images.filter(img => !getListingPhotoController()?.isDerived(img))
       .map((img) => {
         const source = getBestImageSource(img);
         return {
@@ -3804,6 +3841,22 @@
       });
 
     return applyCapturedPromptUploadSources(domEntries);
+  }
+
+  async function addModelPhotosOnly(owner) {
+    const controller = getListingPhotoController();
+    if (!controller || controller.pending) return;
+    if(controller.uncertain)throw new Error(globalThis.AutoListerPhotoUI.text('Couldn’t add model photos.'));
+    const route=location.pathname;
+    const sourceKey = controller.sourceKey();
+    const entries = getUploadedImageEntries();
+    if (!entries.length) throw new Error(globalThis.AutoListerPhotoUI.text('Add item photos first.'));
+    const prepared = await prepareImagesForGenerate(entries);
+    if(location.pathname!==route||batchAuthUserId!==owner||controller.sourceKey()!==sourceKey||listingModelEnabled===false)return;
+    const result = await sendMessage({ type: 'LISTING_PHOTO_REQUEST', expectedUserId: owner, method: 'POST', action: 'create', sources: prepared.imageUrls, sourceKey });
+    if (!result?.ok) throw new Error(globalThis.AutoListerPhotoUI.text('Couldn’t create model photos.'));
+    if(location.pathname!==route||batchAuthUserId!==owner||controller.sourceKey()!==sourceKey||listingModelEnabled===false)return;
+    void controller.start(result.data, owner, sourceKey, true);
   }
 
   function buildImageSourceTelemetry(imageEntries) {
@@ -4035,6 +4088,7 @@
       boundPromptUploadMediaGrids.add(grid);
 
       const mediaGridObserver = new MutationObserver((mutations) => {
+        if (listingPhotoController?.mutating) return;
         const capturedUpload = getActiveCapturedPromptUpload();
         if (!capturedUpload || capturedUpload.orderTrusted === false) return;
 
@@ -4122,6 +4176,7 @@
   function initializeAuthState() {
     chrome.storage.local.get("supabaseSession", ({ supabaseSession }) => {
       batchAuthUserId = supabaseSession?.user?.id || null;
+      void getListingPhotoController()?.restore();
       isAuthenticated = !!supabaseSession?.access_token;
       updateButtonUI();
       refreshWardrobeRewriteCapacity();
@@ -4136,6 +4191,8 @@
     if (changes.supabaseSession) {
       const nextUserId = changes.supabaseSession.newValue?.user?.id || null;
       if (nextUserId !== batchAuthUserId) {
+        listingPhotoController?.stop();
+        listingModelEnabled = undefined;
         authActionObserver?.clear();
         batchItemTask?.controller.abort();
         batchAuthUserId = nextUserId;
@@ -4335,7 +4392,12 @@
 
       #${PHONE_BTN_ID} {
         min-width: 218px;
+        color: #475569;
+        border: 1px solid #d9dde8;
+        box-shadow: none;
       }
+      #${PHONE_BTN_ID} .icon svg { fill: currentColor; }
+      #${PHONE_BTN_ID} .icon svg[fill="none"] { fill: none; stroke: currentColor; }
 
       #${PHONE_BTN_ID} .quickvint-source-options,
       #${PHONE_BTN_ID} .quickvint-source-option {
@@ -4354,7 +4416,7 @@
       #${PHONE_BTN_ID} .quickvint-source-divider {
         width: 1px;
         height: 17px;
-        background: rgba(255, 255, 255, 0.55);
+        background: #d9dde8;
       }
 
       #${PHONE_BTN_ID} .quickvint-phone-new-badge {
@@ -4723,6 +4785,9 @@
         align-items: flex-start;
         gap: 10px;
       }
+      .quickvint-lang-bloom-host { position: relative; }
+      .quickvint-lang-bloom-host > label { padding-right: 108px; min-height: 32px; }
+      .quickvint-lang-bloom-host > .quickvint-lang-field { position: absolute; top: 0; right: 0; }
 
       .quickvint-lang-trigger {
         display: inline-flex;
@@ -6641,6 +6706,7 @@
       }
 
       @media (max-width: 680px) {
+        .quickvint-lang-bloom-host > label { min-height: 48px; }
         #${BATCH_MODAL_ID} .batch-layout {
           grid-template-columns: 1fr;
         }
@@ -8932,9 +8998,10 @@
       }
 
       .quickvint-tools {
-        display: inline-grid;
+        display: grid;
+        width: 100%;
         position: relative;
-        justify-items: end;
+        justify-items: stretch;
         align-items: flex-end;
       }
 
@@ -8960,7 +9027,7 @@
         display: flex;
         min-height: 0;
         flex-direction: column;
-        align-items: flex-end;
+        align-items: stretch;
         gap: 8px;
         overflow: visible;
       }
@@ -9112,9 +9179,18 @@
       }
 
       .quickvint-tool-options {
-        justify-content: flex-end;
-        gap: 7px;
+        display: flex;
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 8px;
         width: 100%;
+      }
+      .quickvint-preference-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+      .quickvint-tool-options .quickvint-toggle-label,
+      .quickvint-tool-options #${DESCRIPTION_LENGTH_TOGGLE_ID} .quickvint-length-option,
+      .quickvint-tool-options #${OUTPUT_SHAPE_TOGGLE_ID} .quickvint-format-option {
+        font-size: 13px;
+        font-weight: 600;
       }
 
       #${DESCRIPTION_LENGTH_TOGGLE_ID} {
@@ -9447,12 +9523,14 @@
         transition: transform 0.22s ease;
       }
 
-      .quickvint-binary-toggle[aria-pressed="true"] .quickvint-toggle-switch {
+      .quickvint-binary-toggle[aria-pressed="true"] .quickvint-toggle-switch,
+      .quickvint-binary-toggle[aria-checked="true"] .quickvint-toggle-switch {
         background: ${PRIMARY_BUTTON_BACKGROUND};
         box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.18);
       }
 
-      .quickvint-binary-toggle[aria-pressed="true"] .quickvint-toggle-knob {
+      .quickvint-binary-toggle[aria-pressed="true"] .quickvint-toggle-knob,
+      .quickvint-binary-toggle[aria-checked="true"] .quickvint-toggle-knob {
         transform: translateX(16px);
       }
 
@@ -10539,18 +10617,21 @@
 
         .quickvint-tool-options {
           justify-content: flex-start;
-          gap: 6px;
+          gap: 10px;
         }
+        .quickvint-preference-row { gap: 6px; }
+        .quickvint-preference-row > * { box-sizing: border-box; }
 
         #${DESCRIPTION_LENGTH_TOGGLE_ID},
         #${OUTPUT_SHAPE_TOGGLE_ID} {
-          height: 50px;
-          min-height: 50px;
+          height: 46px;
+          min-height: 46px;
+          padding: 1px;
         }
 
         #${DESCRIPTION_LENGTH_TOGGLE_ID} .quickvint-length-option,
         #${OUTPUT_SHAPE_TOGGLE_ID} .quickvint-format-option {
-          height: 44px;
+          height: 42px;
         }
 
         .quickvint-binary-toggle {
@@ -11877,8 +11958,8 @@
 
       @media (max-width: 640px) {
         #${RELEASE_UPDATE_WIDGET_ID} {
-          right: 16px;
-          bottom: 16px;
+          position: static;
+          margin: 24px 16px;
         }
       }
 
@@ -12011,7 +12092,7 @@
     btn.innerHTML = `
         <span class="icon">${WAND_ICON_SVG}</span>
         ${mirageLoaderSvg("quickvint-mirage-main")}
-        <span class="label">Generate</span>
+        <span class="label" data-al-copy="Generate">Generate</span>
     `;
     btn.addEventListener("click", onGenerateClick);
     return btn;
@@ -12187,7 +12268,6 @@
           <span class="quickvint-source-divider"></span>
           <span class="quickvint-source-option"><span class="icon">${COMPUTER_ICON_SVG}</span>Computer</span>
         </span>
-        <span class="quickvint-phone-new-badge" aria-hidden="true">NEW</span>
     `;
     btn.setAttribute("aria-label", "Upload photos from phone or computer");
     btn.addEventListener("click", openUploadChoiceModal);
@@ -12696,6 +12776,7 @@
     hashtagsToggleBtn.title = enabled
       ? "Hashtags are on for generated descriptions"
       : "Hashtags are off for generated descriptions";
+    globalThis.AutoListerListingTools?.refreshControlText(hashtagsToggleBtn);
   }
 
   async function syncHashtagsToggleState() {
@@ -12739,6 +12820,7 @@
     outputShapeToggleBtn.title = useBulletPoints
       ? "Generated descriptions use bullet points"
       : "Generated descriptions use paragraphs";
+    globalThis.AutoListerListingTools?.refreshControlText(outputShapeToggleBtn);
   }
 
   async function syncOutputShapeToggleState() {
@@ -12908,6 +12990,7 @@
         : "Add a saved note before hashtags"
       : "Saved notes are available during the free trial and on Pro or Business.";
     setDescriptionFooterEditButtonState({ enabled });
+    globalThis.AutoListerListingTools?.refreshControlText(descriptionFooterBtn);
   }
 
   function setDescriptionFooterEditButtonState({ enabled }) {
@@ -12917,6 +13000,7 @@
       ? "Edit saved note"
       : "Saved notes are available during the free trial and on Pro or Business.";
     descriptionFooterEditBtn.setAttribute("aria-label", "Edit saved note");
+    globalThis.AutoListerListingTools?.refreshControlText(descriptionFooterEditBtn);
   }
 
   async function syncDescriptionFooterButtonState() {
@@ -13058,12 +13142,14 @@
           ? "Emojis are on for generated descriptions"
           : "Emojis are off for generated descriptions"
         : "Emoji support is available during the free trial and on Pro or Business.";
+      globalThis.AutoListerListingTools?.refreshControlText(emojiToggleBtn);
     } catch (error) {
       if (handleExtensionContextInvalidated(error)) return;
       console.warn("AutoLister AI: failed to load emoji setting", error);
       setEmojiToggleState(false);
       emojiToggleBtn.disabled = true;
       emojiToggleBtn.title = "Emoji setting could not be loaded.";
+      globalThis.AutoListerListingTools?.refreshControlText(emojiToggleBtn);
     }
   }
 
@@ -13303,7 +13389,14 @@
     const titleNode =
       fieldLabel?.querySelector('[data-testid$="--title"]') ||
       fieldLabel?.querySelector('[class*="Input__title"]');
-    if (!titleNode) return;
+    if (!titleNode) {
+      const linkedLabel = Array.from(input.labels || []).find(node => !node.contains(input));
+      if (!linkedLabel?.parentElement) return;
+      const host = linkedLabel.parentElement;
+      host.classList.add('quickvint-lang-bloom-host');
+      host.appendChild(createInlineLanguageField(label, title, selectId, storageKey));
+      return;
+    }
     titleNode.classList.add("quickvint-lang-title-host");
     titleNode.appendChild(
       createInlineLanguageField(label, title, selectId, storageKey),
@@ -13425,7 +13518,7 @@
     if (phoneBtn) {
       phoneBtn.classList.remove("is-loading");
       phoneBtn.disabled = isBusy;
-      phoneBtn.style.background = PRIMARY_BUTTON_BACKGROUND;
+      phoneBtn.style.background = "#ffffff";
       phoneBtn.style.cursor = isBusy ? "not-allowed" : "pointer";
     }
     if (batchBtn) {
@@ -13448,10 +13541,12 @@
       generateBtn.classList.add("is-loading");
       generateBtn.disabled = true;
       icon.style.display = "";
-      label.textContent =
+      const busyText =
         incompletePhoneUpload || manualPhotosPreparing
           ? "Preparing..."
           : generateBusyLabel;
+      label.dataset.alCopy = busyText;
+      label.textContent = globalThis.AutoListerListingCopy?.text(busyText) || busyText;
       generateBtn.style.cursor = "progress";
       generateBtn.style.background = PRIMARY_BUTTON_BACKGROUND;
     } else {
@@ -13459,7 +13554,8 @@
       generateBtn.disabled = false;
       generateBusyLabel = "Generating";
       icon.style.display = "";
-      label.textContent = "Generate";
+      label.dataset.alCopy = "Generate";
+      label.textContent = globalThis.AutoListerListingCopy?.text("Generate") || "Generate";
       generateBtn.style.background = PRIMARY_BUTTON_BACKGROUND;
       generateBtn.style.cursor = "pointer";
     }
@@ -15395,7 +15491,7 @@
     const fileInput = document.querySelector(SELECTORS.fileInput);
     if (!fileInput || files.length === 0) return false;
 
-    registerPromptUploadFiles(files, uploadSource, {
+    if (uploadSource !== 'model_generated') registerPromptUploadFiles(files, uploadSource, {
       append: shouldAppendToCapturedPromptUpload(uploadSource),
       generateUrls,
       storageSessionId,
@@ -19200,6 +19296,18 @@
         task.controller.signal,
       );
 
+      // Text is editable while the independent photo operation finishes.
+      batchFieldLocks.forEach(({ field, readOnly, busy }) => {
+        field.readOnly = readOnly;
+        if (busy === null) field.removeAttribute('aria-busy');
+        else field.setAttribute('aria-busy', busy);
+      });
+      if (listingPhotoController?.pending) {
+        showBatchTabStatus(globalThis.AutoListerPhotoUI.text('Text ready · Model photos pending'));
+        await listingPhotoController.settled;
+        checkActive();
+      }
+
       if (message.batchId) {
         observePhase("completion_checkpoint");
         let checkpoint = null;
@@ -19280,7 +19388,9 @@
       throw new Error("Still uploading.");
     }
 
+    if(getListingPhotoController()?.uncertain)throw new Error(globalThis.AutoListerPhotoUI.text('Couldn’t add model photos.'));
     let imageEntries = getUploadedImageEntries();
+    const modelPhotoSourceKey = getListingPhotoController()?.sourceKey();
     let imageUrls = imageEntries.map((entry) => entry.url);
     let imageSourceTelemetry = buildImageSourceTelemetry(imageEntries);
     let generationAttemptId = createGenerationAttemptId();
@@ -19528,6 +19638,8 @@
         descriptionLength,
         generationMode: requestGenerationMode,
         generationAttemptId,
+        modelPhotosEligible: !/\/items\/[^/]+\/edit\/?$/.test(location.pathname) && applyGeneratedOutput && !getListingPhotoController()?.hasPairForSource(),
+        modelPhotoSourceKey,
       };
 
       async function buildPreparedGeneratePayload(entries, options = {}) {
@@ -19873,10 +19985,11 @@
         emojiRetry: Boolean(emojiRetry),
         hasMeasurementAdvice: Boolean(measurementAdvice && measurementAdvice.trim()),
       });
-      if (requestImageMetadata.some(isCapturedStoragePayload)) {
+      if (!generationResponseData.modelPhotos && requestImageMetadata.some(isCapturedStoragePayload)) {
         clearCapturedPromptUploadGenerationUrls("generate_success");
       }
       if (
+        !generationResponseData.modelPhotos &&
         requestImageMetadata.some(
           (metadata) => metadata?.capturedUploadSource === "phone_upload_single",
         )
@@ -19904,6 +20017,9 @@
         } else {
           if (titleInput) setListingFieldValue(titleInput, title);
           if (descInput) applyGeneratedDescription(descInput, description);
+          if (generationResponseData.modelPhotos && !/\/items\/\d+\/edit/.test(location.pathname)) {
+            void getListingPhotoController()?.start(generationResponseData.modelPhotos, generationOwnerId, modelPhotoSourceKey);
+          }
 
           void globalThis.AutoListerFlowEvidence?.confirmFields({
             expectedAccountId: generationOwnerId,
@@ -20095,7 +20211,7 @@
   }
 
   async function maybeShowReleaseUpdate() {
-    if (!isListingEditorPage() || releaseUpdateCheckStarted) return;
+    if (!isListingEditorPage() || releaseUpdateCheckStarted || document.getElementById('quickvint-model-control')) return;
     releaseUpdateCheckStarted = true;
 
     let storage;
@@ -20163,7 +20279,7 @@
   // --- INJECTION & OBSERVATION LOGIC ---
 
   function injectButton() {
-    maybeShowReleaseUpdate();
+    if (!globalThis.AutoListerListingTools) maybeShowReleaseUpdate();
     const existingBtn = document.getElementById(BTN_ID);
     if (existingBtn) {
       generateBtn = existingBtn;
@@ -20200,6 +20316,7 @@
       );
       signInBtn = document.getElementById(SIGN_IN_BTN_ID);
       initializeListingToolsCollapse(existingBtn.closest(".quickvint-tools"));
+      enhanceListingTools(existingBtn.closest(".quickvint-tools"));
       injectFieldLanguageControls();
       syncEmojiToggleState();
       syncHashtagsToggleState();
@@ -20218,7 +20335,7 @@
     if (container && container.parentNode) {
       const btnContainer = document.createElement("div");
       // Container for tool buttons and the sign-in component, spaced below the title.
-      btnContainer.style.marginTop = "20px";
+      btnContainer.style.marginTop = "16px";
 
       // Wrapper for primary actions and lightweight preferences.
       const toolsWrapper = document.createElement("div");
@@ -20227,6 +20344,9 @@
       primaryTools.className = "quickvint-primary-tools";
       const toolOptions = document.createElement("div");
       toolOptions.className = "quickvint-tool-options";
+      const styleOptions = document.createElement("div");
+      const extraOptions = document.createElement("div");
+      styleOptions.className = extraOptions.className = "quickvint-preference-row";
 
       generateBtn = createButton();
       phoneBtn = createPhoneButton();
@@ -20242,11 +20362,9 @@
       primaryTools.appendChild(generateBtn);
       primaryTools.appendChild(phoneBtn);
       primaryTools.appendChild(reportBtn);
-      toolOptions.appendChild(descriptionLengthToggle);
-      toolOptions.appendChild(outputShapeToggleBtn);
-      toolOptions.appendChild(hashtagsToggleBtn);
-      toolOptions.appendChild(descriptionFooterControl);
-      toolOptions.appendChild(emojiToggleBtn);
+      styleOptions.append(descriptionLengthToggle, outputShapeToggleBtn, hashtagsToggleBtn);
+      extraOptions.append(descriptionFooterControl, emojiToggleBtn);
+      toolOptions.append(styleOptions, extraOptions);
       toolsWrapper.appendChild(primaryTools);
       toolsWrapper.appendChild(toolOptions);
 
@@ -20255,6 +20373,7 @@
 
       container.parentNode.insertBefore(btnContainer, container.nextSibling);
       initializeListingToolsCollapse(toolsWrapper);
+      enhanceListingTools(toolsWrapper);
       injectFieldLanguageControls();
       updateButtonUI();
       maybePostDomCanaryPass();
@@ -20278,6 +20397,14 @@
     });
 
     observer.observe(document.body, { childList: true, subtree: true });
+  }
+
+  function enhanceListingTools(wrapper) {
+    globalThis.AutoListerListingTools?.enhance(wrapper, {
+      canGuide: () => isAuthenticated === true && !isBusy &&
+        !isPhoneUploadGenerateInFlight && !isPhoneUploadLockInFlight &&
+        !batchComputerUploadPromise && !activeTabJobHeartbeat,
+    });
   }
 
   function getMemberId(pathname = window.location.pathname) {
@@ -21105,7 +21232,7 @@
 
   function init() {
     injectStylesheet();
-    globalThis.AutoListerModels?.startContent({ isBusy: () => isBusy || isPhoneUploadGenerateInFlight || isPhoneUploadLockInFlight || Boolean(batchComputerUploadPromise) });
+    globalThis.AutoListerModels?.startContent({ isBusy: () => isBusy || isPhoneUploadGenerateInFlight || isPhoneUploadLockInFlight || Boolean(batchComputerUploadPromise), onAddPhotos: addModelPhotosOnly });
     maybeShowReleaseUpdate();
     bindPromptUploadFileCapture();
     bindLimitFollowupResumeListeners();

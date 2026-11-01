@@ -35,6 +35,298 @@ async function expectPaywallColumns(paywall) {
   }
 }
 
+async function installModelPhotoHost(page, keyboard = false) {
+  const pixel=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAFgwJ/l1utxQAAAABJRU5ErkJggg==','base64');
+  await page.route('https://images1.vinted.net/**',route=>{
+    const p=route.request().url().includes('primary')?process.env.MODEL_PHOTO_PRIMARY:route.request().url().includes('secondary')?process.env.MODEL_PHOTO_SECONDARY:process.env.MODEL_PHOTO_ORIGINAL;
+    return route.fulfill({contentType:p?'image/jpeg':'image/png',body:p?fs.readFileSync(p):pixel});
+  });
+  await page.evaluate(keyboard=>{
+    const grid=document.querySelector('[data-testid="media-upload-grid"]');
+    const f=window.__modelPhotoFixture;f.host=[grid.querySelector('img').src];
+    let dragged;
+    f.render=()=>{
+      grid.querySelectorAll('.photo-box').forEach(el=>el.remove());
+      for(const src of f.host){
+        const box=document.createElement('div');box.className=keyboard?'wSh2GW_photo-box':'photo-box';box.draggable=!keyboard;box.dataset.src=src;
+        if(keyboard){box.setAttribute('aria-roledescription','sortable');box.tabIndex=0;box.style.cssText='width:80px;height:100px;flex:none';}
+        const img=document.createElement('img');img.src=src;img.alt='Uploaded photo';img.style.cssText='width:100%;height:100%';box.append(img);grid.append(box);
+      }
+    };
+    grid.addEventListener('change',event=>{
+      if(event.target.type!=='file')return;
+      const names=Array.from(event.target.files,file=>file.name);f.files.push(...names);
+      const finish=()=>{f.host.push(...names.map(name=>'https://images1.vinted.net/'+name));f.render();};
+      if(f.holdNativeUpload&&names.some(name=>name.startsWith('autolister-model-')))f.releaseNativeUpload=finish;else finish();
+    });
+    grid.addEventListener('dragstart',event=>{dragged=event.target.closest('.photo-box')?.dataset.src;});
+    grid.addEventListener('dragover',event=>event.preventDefault());
+    grid.addEventListener('drop',event=>{
+      event.preventDefault();if(!f.sorting)return;
+      const target=event.target.closest('.photo-box')?.dataset.src;
+      if(!dragged||!target)return;
+      f.host.splice(f.host.indexOf(dragged),1);f.host.splice(f.host.indexOf(target),0,dragged);f.render();
+    });
+    if(keyboard){
+      grid.style.cssText='display:flex;flex-wrap:wrap;width:260px;gap:8px';
+      const render=f.render;f.render=()=>{grid.querySelectorAll('.wSh2GW_photo-box').forEach(el=>el.remove());render();};
+      let active=null,index=0;
+      grid.addEventListener('keydown',event=>{
+        if(keyboard==='pointer')return;
+        const box=event.target.closest('[aria-roledescription="sortable"]');if(!box)return;
+        if(event.code==='Space'){
+          event.preventDefault();
+          if(active){const src=active.dataset.src;f.host.splice(f.host.indexOf(src),1);f.host.splice(index,0,src);active=null;f.render();}
+          else{active=box;index=f.host.indexOf(box.dataset.src);}
+        }else if(active&&event.code.startsWith('Arrow')){
+          event.preventDefault();const next=index+({ArrowLeft:-1,ArrowRight:1,ArrowUp:-3,ArrowDown:3}[event.code]||0);
+          if(next<0||next>=f.host.length)return;index=next;
+          const start=f.host.indexOf(active.dataset.src);active.style.transform=`translate(${(index%3-start%3)*88}px,${(Math.floor(index/3)-Math.floor(start/3))*108}px)`;
+        }else if(event.code==='Escape'){active=null;f.render();}
+      });
+      if(keyboard==='pointer'){
+        grid.addEventListener('pointerdown',event=>{active=event.target.closest('[aria-roledescription="sortable"]');});
+        document.addEventListener('pointerup',event=>{
+          if(!active)return;
+          const target=Array.from(grid.querySelectorAll('[aria-roledescription="sortable"]')).find(el=>{const r=el.getBoundingClientRect();return event.clientX>=r.left&&event.clientX<=r.right&&event.clientY>=r.top&&event.clientY<=r.bottom;});
+          if(target&&target!==active){const src=active.dataset.src;f.host.splice(f.host.indexOf(src),1);f.host.splice(f.host.indexOf(target.dataset.src),0,src);f.render();}
+          active=null;
+        });
+      }
+    }
+    f.render();
+  },keyboard);
+}
+
+for(const mode of [true,'pointer'])test(`model photos use the new ${mode===true?'keyboard':'pointer'}-sortable Vinted grid and survive a host rerender`,async({page})=>{
+ await page.route('https://autolister.app/api/generate',r=>r.fulfill({json:{title:'Ready',description:'Text',modelPhotos:{jobId:'11111111-2222-4333-8444-555555555555',status:'queued'}}}));
+ await openContentHarness(page,null,{pageUrl:'https://www.vinted.co.uk/items/new',modelPhotos:true});
+ await installModelPhotoHost(page,mode);
+ await page.evaluate(()=>{const f=window.__modelPhotoFixture;f.host=Array.from({length:5},(_,i)=>'https://images1.vinted.net/original-'+i+'.jpg');f.status='ready';f.eligible=true;f.render();});
+ await page.locator('#quickvint-gen-btn').click();
+ await expect.poll(()=>page.evaluate(()=>window.__modelPhotoFixture.host.slice(0,2).every(src=>src.includes('autolister-model-')))).toBe(true);
+ await page.evaluate(()=>window.__modelPhotoFixture.render());
+ await expect(page.locator('[data-testid="media-upload-grid"] img').first()).toHaveAttribute('src',/primary/);
+ expect(await page.evaluate(()=>window.__modelPhotoFixture.host.filter(s=>s.includes('original-')))).toHaveLength(5);
+});
+
+async function modelPhotoScreen(page,name){
+ if(!process.env.MODEL_PHOTO_SCREENSHOTS)return;
+ fs.mkdirSync(process.env.MODEL_PHOTO_SCREENSHOTS,{recursive:true});
+ const font=fs.readFileSync(path.join(extensionPath,'lib/fonts/geist-latin-wght-normal-19f9c925.woff2')).toString('base64');
+ await page.addStyleTag({content:`@font-face{font-family:'AutoLister Geist';src:url(data:font/woff2;base64,${font}) format('woff2');font-weight:100 900}:root{--autolister-font-ui:'AutoLister Geist',system-ui,sans-serif}[data-testid=media-upload-grid]{display:flex;flex-wrap:wrap;gap:8px}[data-testid=add-photos-input]{width:100%}main{box-sizing:border-box}body{padding:16px} .photo-box{width:100px;height:125px} @media(max-width:480px){main{padding:16px}.photo-box{width:76px;height:96px}}`});
+ for(const [device,width,height] of [['desktop',1200,900],['mobile',390,844]]){
+  await page.setViewportSize({width,height});await page.evaluate(()=>document.fonts.ready);
+  await page.screenshot({path:path.join(process.env.MODEL_PHOTO_SCREENSHOTS,`extension-${name}-${device}.png`),fullPage:true});
+ }
+}
+
+for(const scenario of ['native order','partial upload','unsupported order'])test(`model photos preserve originals and handle ${scenario}`,async({page})=>{
+  const inputs=[];
+  await page.route('https://autolister.app/api/generate',route=>{inputs.push(route.request().postDataJSON());return route.fulfill({json:{title:'Ready text',description:'Editable description',modelPhotos:{jobId:'11111111-2222-4333-8444-555555555555',status:'queued'}}});});
+  await openContentHarness(page,null,{pageUrl:'https://www.vinted.co.uk/items/new',modelPhotos:true});
+  await installModelPhotoHost(page);
+  if(scenario==='native order'){await expect(page.locator('#quickvint-model-btn')).toBeVisible();await modelPhotoScreen(page,'toolbar');}
+  await page.locator('#quickvint-gen-btn').click();
+  await expect(page.locator('[data-testid="title--input"]')).toHaveValue('Ready text');
+  await expect(page.locator('.mp-placeholder')).toHaveCount(0);
+  await page.evaluate(scenario=>{Object.assign(window.__modelPhotoFixture,{status:'generating',eligible:true,blockSecondary:scenario==='partial upload',sorting:scenario!=='unsupported order'});},scenario);
+  await expect(page.getByText('Creating model photos…',{exact:true})).toBeVisible();
+  if(scenario==='native order')await modelPhotoScreen(page,'generating');
+  await page.locator('[data-testid="title--input"]').fill('My edited text');
+  await page.evaluate(()=>window.__modelPhotoFixture.status='ready');
+  if(scenario==='partial upload'){
+    await expect(page.getByText('Couldn’t add model photos.',{exact:true})).toBeVisible();
+    await modelPhotoScreen(page,'upload-failure');
+    expect(await page.evaluate(()=>window.__modelPhotoFixture.files.length)).toBe(1);
+    await page.evaluate(()=>window.__modelPhotoFixture.blockSecondary=false);
+    await page.getByRole('button',{name:'Retry',exact:true}).click();
+  }
+  await expect.poll(()=>page.evaluate(()=>window.__modelPhotoFixture.files.length)).toBe(2);
+  if(scenario==='unsupported order')await expect(page.getByText('Move the model photos to the start.',{exact:true})).toBeVisible();
+  else{
+    await expect.poll(()=>page.evaluate(()=>window.__modelPhotoFixture.host.slice(0,2).every(src=>src.includes('autolister-model-')))).toBe(true);
+    await page.evaluate(()=>window.__modelPhotoFixture.render());
+    expect(await page.locator('.photo-box img').first().getAttribute('src')).toContain('primary');
+  }
+  await expect(page.locator('[data-testid="title--input"]')).toHaveValue('My edited text');
+  await expect(page.locator('.photo-box')).toHaveCount(3);
+  await page.waitForFunction(()=>!document.querySelector('.mp-placeholder'));
+  if(scenario==='native order')await modelPhotoScreen(page,'success');
+  await page.locator('#quickvint-gen-btn').click();
+  await page.getByRole('button',{name:'Replace existing text',exact:true}).click();
+  await expect.poll(()=>inputs.length).toBe(2);
+  expect(inputs[1].imageUrls).toHaveLength(1);
+  expect(await page.evaluate(()=>window.__modelPhotoFixture.files.length)).toBe(2);
+});
+
+test('model downloads overlap while host uploads stay sequential',async({page})=>{
+  await page.route('https://autolister.app/api/generate',route=>route.fulfill({json:{title:'Ready text',description:'Editable description',modelPhotos:{jobId:'11111111-2222-4333-8444-555555555555',status:'queued'}}}));
+  await openContentHarness(page,null,{pageUrl:'https://www.vinted.co.uk/items/new',modelPhotos:true});
+  await installModelPhotoHost(page);
+  await page.evaluate(()=>{
+    const original=chrome.runtime.sendMessage;
+    let release;const first=new Promise(resolve=>release=resolve);
+    chrome.runtime.sendMessage=(message,callback)=>{
+      if(message.type!=='PROXY_FETCH'||!message.url.includes('/model-'))return original(message,callback);
+      window.__modelPhotoFixture.startedDownloads ||= [];
+      window.__modelPhotoFixture.startedDownloads.push(message.url);
+      const work=async()=>{if(message.url.includes('primary'))await first;else release();return original(message);};
+      const pending=work();if(callback)pending.then(callback);return pending;
+    };
+    Object.assign(window.__modelPhotoFixture,{status:'ready',eligible:true});
+  });
+  await page.locator('#quickvint-gen-btn').click();
+  await expect.poll(()=>page.evaluate(()=>window.__modelPhotoFixture.startedDownloads?.length||0),{timeout:2500}).toBe(2);
+  await expect.poll(()=>page.evaluate(()=>window.__modelPhotoFixture.files.length)).toBe(2);
+  const files=await page.evaluate(()=>window.__modelPhotoFixture.files);
+  expect(files[0]).toContain('primary');expect(files[1]).toContain('secondary');
+});
+
+test('edit-page model action leaves text unchanged and owns the only New badge',async({page})=>{
+  let textCalls=0;
+  await page.route('https://autolister.app/api/generate',route=>{textCalls++;return route.abort();});
+  await openContentHarness(page,null,{pageUrl:'https://www.vinted.co.uk/items/123/edit',modelPhotos:true});
+  await installModelPhotoHost(page);
+  await page.locator('[data-testid="title--input"]').fill('Existing title');
+  await page.locator('[data-testid="description--input"]').fill('Existing description');
+  await expect(page.locator('#quickvint-model-btn')).toBeVisible();
+  await expect(page.locator('.quickvint-phone-new-badge')).toHaveCount(0);
+  await expect(page.locator('#quickvint-model-btn .um-entry-new')).toHaveCount(1);
+  await page.locator('#quickvint-model-btn').click();
+  await page.getByRole('button',{name:'Add model photos',exact:true}).waitFor();
+  await modelPhotoScreen(page,'edit-action');
+  await page.getByRole('button',{name:'Add model photos',exact:true}).click();
+  await page.evaluate(()=>Object.assign(window.__modelPhotoFixture,{status:'generating',eligible:true}));
+  await expect(page.getByText('Creating model photos…',{exact:true})).toBeVisible();
+  await expect(page.locator('[data-testid="title--input"]')).toHaveValue('Existing title');
+  await expect(page.locator('[data-testid="description--input"]')).toHaveValue('Existing description');
+  expect(textCalls).toBe(0);
+});
+
+test('inline model switch persists independently and stays in sync with model preview',async({page})=>{
+ await openContentHarness(page,null,{pageUrl:'https://www.vinted.co.uk/items/new',modelPhotos:true});
+ const toggle=page.locator('#quickvint-model-toggle');
+ await expect(toggle).toHaveAttribute('aria-checked','true');
+ await toggle.click();await expect(toggle).toHaveAttribute('aria-checked','false');
+ await expect(page.locator('.um-modal')).toHaveCount(0);
+ expect(await page.evaluate(()=>window.__modelPhotoFixture.modelPatches)).toEqual([{enabled:false}]);
+ await page.locator('#quickvint-model-btn').click();
+ await page.locator('.um-modal [role=switch]').check();
+ await expect(toggle).toHaveAttribute('aria-checked','true');
+ await page.keyboard.press('Escape');
+ await page.evaluate(()=>window.__modelPhotoFixture.failModelToggle=true);
+ await toggle.click();
+ await expect(page.locator('.um-toolbar-error')).toBeVisible();
+ await expect(toggle).toHaveAttribute('aria-checked','true');
+ await expect(toggle).toBeEnabled();
+});
+
+test('model switch opens setup when there is no saved model',async({page})=>{
+ await openContentHarness(page,null,{pageUrl:'https://www.vinted.co.uk/items/new',modelPhotos:true});
+ await page.evaluate(()=>{window.__modelPhotoFixture.noModel=true;return AutoListerModels.request('test-user');});
+ const toggle=page.locator('#quickvint-model-toggle');
+ await expect(toggle).toHaveAttribute('aria-checked','false');await toggle.click();
+ await expect(page.locator('.um-modal').getByRole('button',{name:'Create model',exact:true})).toBeVisible();
+ expect(await page.evaluate(()=>window.__modelPhotoFixture.modelPatches||[])).toHaveLength(0);
+});
+
+for(const interruption of ['disable','source change','account switch'])test(`model upload rechecks ${interruption} after its final status request`,async({page})=>{
+ await page.route('https://autolister.app/api/generate',r=>r.fulfill({json:{title:'Ready',description:'Text',modelPhotos:{jobId:'11111111-2222-4333-8444-555555555555',status:'ready'}}}));
+ await openContentHarness(page,null,{pageUrl:'https://www.vinted.co.uk/items/new',modelPhotos:true});await installModelPhotoHost(page);
+ await page.evaluate(()=>{
+  const f=window.__modelPhotoFixture;f.status='ready';f.eligible=true;
+  const send=chrome.runtime.sendMessage;let reads=0;
+  chrome.runtime.sendMessage=(message,...args)=>{
+   if(message.type==='LISTING_PHOTO_REQUEST'&&message.method==='GET'&&++reads===2)return new Promise(resolve=>{f.releaseStatus=()=>resolve(send(message,...args));});
+   return send(message,...args);
+  };
+ });
+ await page.locator('#quickvint-gen-btn').click();
+ await page.waitForFunction(()=>Boolean(window.__modelPhotoFixture.releaseStatus));
+ if(interruption==='disable')await page.locator('#quickvint-model-toggle').click();
+ else if(interruption==='source change')await page.evaluate(()=>{const f=window.__modelPhotoFixture;f.host.push('https://images1.vinted.net/another-original.jpg');f.render();});
+ else await page.evaluate(async()=>{const s=(await chrome.storage.local.get('supabaseSession')).supabaseSession;await chrome.storage.local.set({supabaseSession:{...s,user:{...s.user,id:'another-user'}}});});
+ await page.evaluate(()=>window.__modelPhotoFixture.releaseStatus());await page.waitForTimeout(500);
+ expect(await page.evaluate(()=>window.__modelPhotoFixture.files)).toHaveLength(0);
+});
+
+test('dispatched model upload retains provenance after disable and resumes the same pair explicitly',async({page})=>{
+ const inputs=[];
+ await page.route('https://autolister.app/api/generate',r=>{inputs.push(r.request().postDataJSON());return r.fulfill({json:{title:'Ready',description:'Text',modelPhotos:{jobId:'11111111-2222-4333-8444-555555555555',status:'ready'}}});});
+ await openContentHarness(page,null,{pageUrl:'https://www.vinted.co.uk/items/new',modelPhotos:true});await installModelPhotoHost(page);
+ await page.evaluate(()=>Object.assign(window.__modelPhotoFixture,{status:'ready',eligible:true,holdNativeUpload:true}));
+ await page.locator('#quickvint-gen-btn').click();await page.waitForFunction(()=>Boolean(window.__modelPhotoFixture.releaseNativeUpload));
+ await page.locator('#quickvint-model-toggle').click();
+ await page.evaluate(()=>{const f=window.__modelPhotoFixture;f.holdNativeUpload=false;f.releaseNativeUpload();});
+ await page.waitForFunction(()=>document.querySelector('[data-autolister-model-photo="true"]'));
+ await page.waitForTimeout(300);
+ expect(await page.evaluate(()=>window.__modelPhotoFixture.files)).toHaveLength(1);
+ await page.locator('#quickvint-model-toggle').click();
+ await page.locator('#quickvint-gen-btn').click();await page.getByRole('button',{name:'Replace existing text',exact:true}).click();
+ await expect.poll(()=>page.evaluate(()=>window.__modelPhotoFixture.files.length)).toBe(2);
+ await expect.poll(()=>page.evaluate(()=>window.__modelPhotoFixture.host[0])).toContain('primary');
+ expect(inputs[1].imageUrls).toHaveLength(1);
+});
+
+for(const alreadyPresent of [false,true])test(`restoring a dispatched upload reconciles ${alreadyPresent?'an existing':'a late'} host result without uploading twice`,async({page})=>{
+ await openContentHarness(page,null,{pageUrl:'https://www.vinted.co.uk/items/new',modelPhotos:true});await installModelPhotoHost(page);
+ await page.evaluate(alreadyPresent=>{
+  const f=window.__modelPhotoFixture,before=[...f.host];
+  f.status='generating';f.eligible=true;
+  sessionStorage.setItem('autolisterListingModelPhotosV1',JSON.stringify({owner:'test-user',route:location.pathname,jobId:'11111111-2222-4333-8444-555555555555',sourceKey:JSON.stringify(before),slots:{},status:'adding',eligible:true,inflight:{before,slot:'primary',revision:0}}));
+  if(alreadyPresent){f.host.push('https://images1.vinted.net/restored-primary.jpg');f.render();}
+  const c=AutoListerListingPhotos.create({grid:()=>document.querySelector('[data-testid="media-upload-grid"]'),images:()=>Array.from(document.querySelectorAll('.photo-box img')),boxSelector:'.photo-box',owner:async()=>'test-user',download:()=>{f.unexpectedDownload=true;throw Error('duplicate');},inject:()=>{f.unexpectedInjection=true;return false;}});
+  f.restored=c;f.restorePromise=c.restore();
+ },alreadyPresent);
+ if(!alreadyPresent){await page.waitForTimeout(300);expect(await page.evaluate(()=>window.__modelPhotoFixture.unexpectedInjection)).toBeFalsy();await page.evaluate(()=>{const f=window.__modelPhotoFixture;f.host.push('https://images1.vinted.net/restored-primary.jpg');f.render();});}
+ await expect.poll(()=>page.evaluate(()=>window.__modelPhotoFixture.restored.uncertain)).toBe(false);
+ expect(await page.evaluate(()=>{const f=window.__modelPhotoFixture;const result=f.restored.isDerived(document.querySelector('.photo-box:last-child img'));f.restored.stop();return result;})).toBe(true);
+ expect(await page.evaluate(()=>window.__modelPhotoFixture.unexpectedDownload)).toBeFalsy();
+});
+
+test('a different manual original finishing first is not mistaken for a pending model photo',async({page})=>{
+ await page.route('https://autolister.app/api/generate',r=>r.fulfill({json:{title:'Ready',description:'Text',modelPhotos:{jobId:'11111111-2222-4333-8444-555555555555',status:'ready'}}}));
+ await openContentHarness(page,null,{pageUrl:'https://www.vinted.co.uk/items/new',modelPhotos:true});await installModelPhotoHost(page);
+ const blue=await page.evaluate(()=>{const c=document.createElement('canvas');c.width=c.height=32;const ctx=c.getContext('2d');ctx.fillStyle='#0055ff';ctx.fillRect(0,0,32,32);return c.toDataURL('image/jpeg');});
+ const red=await page.evaluate(()=>{const c=document.createElement('canvas');c.width=c.height=32;const ctx=c.getContext('2d');ctx.fillStyle='#dc2626';ctx.fillRect(0,0,32,32);return c.toDataURL('image/jpeg');});
+ await page.route('https://images1.vinted.net/manual-original.jpg',r=>r.fulfill({contentType:'image/jpeg',body:Buffer.from(blue.split(',')[1],'base64')}));
+ await page.route('https://images1.vinted.net/autolister-model-*',r=>r.fulfill({contentType:'image/jpeg',body:Buffer.from(red.split(',')[1],'base64')}));
+ await page.evaluate(({blue,red})=>{
+  const f=window.__modelPhotoFixture;f.status='ready';f.eligible=true;f.holdNativeUpload=true;
+  const send=chrome.runtime.sendMessage;
+  chrome.runtime.sendMessage=(message,...args)=>{
+   if(message.type==='PROXY_FETCH'&&(/manual-original|autolister-model|\/model-/.test(message.url))){const pending=Promise.resolve({ok:true,data:message.url.includes('manual-original')?blue:red});if(typeof args[0]==='function')pending.then(args[0]);return pending;}
+   return send(message,...args);
+  };
+ },{blue,red});
+ await page.locator('#quickvint-gen-btn').click();await page.waitForFunction(()=>Boolean(window.__modelPhotoFixture.releaseNativeUpload));
+ await page.locator('[data-testid="add-photos-input"]').setInputFiles({name:'manual-original.jpg',mimeType:'image/jpeg',buffer:Buffer.from(blue.split(',')[1],'base64')});
+ await page.waitForTimeout(400);
+ await expect(page.locator('img[src$="manual-original.jpg"]')).not.toHaveAttribute('data-autolister-model-photo','true');
+ await page.evaluate(()=>{const f=window.__modelPhotoFixture;f.holdNativeUpload=false;f.releaseNativeUpload();});
+ await expect(page.locator('img[src*="autolister-model-"]')).toHaveAttribute('data-autolister-model-photo','true');
+ await expect(page.locator('img[src$="manual-original.jpg"]')).not.toHaveAttribute('data-autolister-model-photo','true');
+ expect((await page.evaluate(()=>window.__modelPhotoFixture.files)).filter(name=>name.startsWith('autolister-model-'))).toHaveLength(1);
+});
+
+test('model photo capacity holds the pair and adds it only after the user frees slots',async({page})=>{
+ await page.route('https://autolister.app/api/generate',route=>route.fulfill({json:{title:'Ready',description:'Text',modelPhotos:{jobId:'11111111-2222-4333-8444-555555555555',status:'queued'}}}));
+ await openContentHarness(page,null,{pageUrl:'https://www.vinted.co.uk/items/new',modelPhotos:true});
+ await installModelPhotoHost(page);
+ await page.evaluate(()=>{const f=window.__modelPhotoFixture;f.host=Array.from({length:20},(_,i)=>'https://images1.vinted.net/original-'+i+'.jpg');f.render();});
+ await page.waitForFunction(()=>[...document.querySelectorAll('.photo-box img')].every(i=>i.complete&&i.naturalWidth));
+ await page.locator('#quickvint-gen-btn').click();await expect(page.locator('[data-testid="title--input"]')).toHaveValue('Ready');
+ await page.evaluate(()=>Object.assign(window.__modelPhotoFixture,{status:'ready',eligible:true}));
+ await expect(page.getByText('Free 2 photo slots to add model photos.',{exact:true})).toBeVisible();
+ expect(await page.evaluate(()=>window.__modelPhotoFixture.files.length)).toBe(0);
+ await modelPhotoScreen(page,'capacity');
+ await page.evaluate(()=>{const f=window.__modelPhotoFixture;f.host.splice(18,2);f.render();});
+ await page.getByRole('button',{name:'Retry',exact:true}).click();
+ await expect.poll(()=>page.evaluate(()=>window.__modelPhotoFixture.files.length)).toBe(2);
+ await expect(page.locator('.photo-box')).toHaveCount(20);
+});
+
 test("replays a dropped generation response with the same request and starts a fresh intentional generation", async ({ page }) => {
   await page.route("https://autolister.app/api/events/track", (route) => route.fulfill({ status: 204, body: "" }));
   const requests = [];
@@ -267,6 +559,40 @@ const emptyListingFixture = listingFixture.replace(
   /\n        <div class="photo-box">[\s\S]*?\n        <\/div>(?=\n      <\/section>)/,
   "",
 );
+const bloomListingFixture = listingFixture
+ .replace(/<label>\s*Title\s*<input data-testid="title--input" \/>\s*<\/label>/, '<div data-bloom="true"><label for="bloom-title">Title</label><div class="input-root" data-testid="title"><input id="bloom-title" data-testid="title--input" /></div></div>')
+ .replace(/<label>\s*Description\s*<textarea data-testid="description--input"><\/textarea>\s*<\/label>/, '<div data-testid="description"><div class="textarea-top"><label for="bloom-description">Description</label></div><textarea id="bloom-description" data-testid="description--input"></textarea></div>');
+
+test('new Vinted form keeps compact controls, a primary Generate action and separate field languages',async({page})=>{
+ await page.setViewportSize({width:1440,height:1000});
+ await openContentHarness(page,null,{pageUrl:'https://www.vinted.co.uk/items/new',pageHtml:bloomListingFixture,modelPhotos:true});
+ await page.addStyleTag({content:'main{max-width:560px;box-sizing:border-box}body{padding:16px}'});
+ await expect(page.locator('#quickvint-model-btn')).toBeVisible();
+ await expect(page.locator('#quickvint-model-btn .um-entry-new')).toHaveCount(1);
+ await expect(page.locator('.quickvint-phone-new-badge')).toHaveCount(0);
+ for(const field of ['title','description']){
+  const trigger=page.locator(`#quickvint-${field}-language-select`);
+  await expect(trigger).toBeVisible();
+  expect(await trigger.evaluate(e=>Boolean(e.closest('.quickvint-tools')))).toBe(false);
+  const label=await page.locator(`label[for=bloom-${field}]`).boundingBox(),button=await trigger.boundingBox();
+  expect(Math.abs(label.y-button.y)).toBeLessThan(2);
+ }
+ const phone=page.locator('#quickvint-phone-btn');
+ expect(await phone.evaluate(e=>getComputedStyle(e).backgroundColor)).toBe('rgb(255, 255, 255)');
+ expect(await page.locator('#quickvint-gen-btn').evaluate(e=>getComputedStyle(e).backgroundImage)).toContain('gradient');
+ expect((await page.locator('#quickvint-description-length-toggle').boundingBox())?.width||0).toBeLessThan(130);
+ for(const width of [390,320]){
+  await page.setViewportSize({width,height:900});
+  const rects=await page.locator('.quickvint-primary-tools button:visible,.quickvint-preference-row > *:visible').evaluateAll(es=>es.map(e=>e.getBoundingClientRect().toJSON()));
+  for(const rect of rects){expect(rect.left).toBeGreaterThanOrEqual(0);expect(rect.right).toBeLessThanOrEqual(width);}
+  if(width===390){
+   // The real Vinted form uses 10px side padding on phones.
+   await page.addStyleTag({content:'body{padding:10px}main{padding:0}'});
+   const row=await page.locator('.quickvint-preference-row').last().locator(':scope > *').evaluateAll(es=>es.map(e=>e.getBoundingClientRect().top));
+   expect(Math.max(...row)-Math.min(...row)).toBeLessThan(4);
+  }
+ }
+});
 const delayedFileInputListingFixture = emptyListingFixture.replace(
   /<input\s+data-testid="add-photos-input"[\s\S]*?\/>/,
   `<script>
@@ -812,6 +1138,40 @@ async function openContentHarness(page, capacityResponse = null, options = {}) {
   await page.addScriptTag({ path: languageDefaultsPath });
   await page.addScriptTag({ path: qrCodePath });
   await installTelemetryHarness(page, extensionPath);
+  if (options.modelPhotos) {
+    const uri=(file,mime='image/jpeg')=>file?'data:'+mime+';base64,'+fs.readFileSync(file).toString('base64'):null;
+    const assets={item:uri(process.env.MODEL_PHOTO_ORIGINAL),front:uri(process.env.MODEL_PHOTO_PRIMARY),back:uri(process.env.MODEL_PHOTO_SECONDARY),model:process.env.MODEL_PHOTO_SCREENSHOTS?uri(path.join(extensionPath,'images/user-model-female.webp'),'image/webp'):null};
+    await page.evaluate((assets) => {
+      window.__modelPhotoFixture = { status:'analyzing', eligible:false, files:[], downloads:[], blockSecondary:false, sorting:true };
+      const original = chrome.runtime.sendMessage;
+      const png = assets.item || document.querySelector('.photo-box img').src;
+      document.querySelector('.photo-box img').src=png;
+      chrome.runtime.sendMessage = (message,callback) => {
+       if(!['USER_MODEL_REQUEST','LISTING_PHOTO_REQUEST'].includes(message.type) && !(message.type==='PROXY_FETCH'&&message.url.includes('/model-')))return original(message,callback);
+       const work=async()=>{
+        const f=window.__modelPhotoFixture;
+        if(message.type==='USER_MODEL_REQUEST'){
+          if(message.method==='PATCH'){
+            (f.modelPatches ||= []).push(message.body);
+            if(f.failModelToggle)return {ok:false,status:500};
+            f.modelEnabled=message.body.enabled;
+          }
+          return {ok:true,data:{enabled:f.modelEnabled!==false,listingPhotosAvailable:true,invitationState:'dismissed',model:f.noModel?null:{state:'ready',imageUrl:assets.model||png}}};
+        }
+        if(message.type==='LISTING_PHOTO_REQUEST')return {ok:true,data:{jobId:'11111111-2222-4333-8444-555555555555',status:f.status,eligible:f.eligible,photos:['primary','secondary'].map(slot=>({slot,url:'https://images1.vinted.net/model-'+slot+'.jpg'}))}};
+        if(message.type==='PROXY_FETCH'&&message.url.includes('/model-')){
+          f.downloads.push(message.url);
+          if(f.blockSecondary&&message.url.includes('secondary'))return {ok:false,error:'Fixture upload interrupted'};
+          // The native upload receives an image/jpeg Blob, as in production.
+          return {ok:true,data:(message.url.includes('secondary')?assets.back:assets.front)||png.replace('image/png','image/jpeg')};
+        }
+       };
+       const pending=work();if(callback)pending.then(callback);return pending;
+      };
+    },assets);
+    for (const file of ['user-model-copy.js','user-model-ui.js','user-model-client.js','listing-model-photos.js','listing-photo-client.js']) await page.addScriptTag({path:path.join(extensionPath,'lib',file)});
+    await page.addStyleTag({path:path.join(extensionPath,'lib/user-model.css')});
+  }
   await page.addScriptTag({ path: contentScriptPath });
   if (options.skipToolExpectation) return;
   if (options.expectAuthenticated === false) {
@@ -2851,9 +3211,7 @@ test.describe("AutoLister extension smoke flows", () => {
     await page.setViewportSize({ width: 390, height: 844 });
     await openContentHarness(page, { allowed: true, available: 12 });
 
-    await expect(page.locator("#quickvint-phone-btn .quickvint-phone-new-badge")).toHaveText(
-      "NEW",
-    );
+    await expect(page.locator("#quickvint-phone-btn .quickvint-phone-new-badge")).toHaveCount(0);
     const modal = await openPhoneChoice(page);
     await expect(modal.locator(".quickvint-upload-choice-title")).toHaveText(
       "How many items do you want to sell?",
@@ -3134,6 +3492,11 @@ test.describe("AutoLister extension smoke flows", () => {
         "lib/user-model-copy.js",
         "lib/user-model-ui.js",
         "lib/user-model-client.js",
+        "lib/listing-model-photos.js",
+        "lib/listing-photo-client.js",
+        "lib/listing-tools-copy.js",
+        "lib/listing-tools-icons.js",
+        "lib/listing-tools.js",
         "content.js",
       ]);
       expect(manifest.content_scripts[0].css).toContain("lib/user-model.css");
@@ -3145,6 +3508,20 @@ test.describe("AutoLister extension smoke flows", () => {
         return { ok: response.ok, signature: String.fromCharCode(...bytes.slice(0, 4)) };
       });
       expect(packagedFont).toEqual({ ok: true, signature: "wOF2" });
+      const fontPage = await context.newPage();
+      await fontPage.route("https://www.vinted.nl/**", route => route.fulfill({
+        contentType: "text/html",
+        body: '<!doctype html><p style="font-family: &quot;AutoLister Geist&quot;; font-weight:550">Add photos</p>',
+      }));
+      await fontPage.goto("https://www.vinted.nl/items/new");
+      await expect.poll(() => fontPage.evaluate(() => [...document.fonts].some(font => font.family.includes("AutoLister Geist")))).toBe(true);
+      const loadedFaces = await fontPage.evaluate(async () => {
+        const faces = await document.fonts.load('550 16px "AutoLister Geist"', "Add photos");
+        return faces.map(font => ({ family: font.family, status: font.status }));
+      });
+      expect(loadedFaces.length).toBeGreaterThan(0);
+      expect(loadedFaces.every(font => font.status === "loaded")).toBe(true);
+      await fontPage.close();
       expect(manifest.host_permissions).toContain("https://autolister.app/*");
     } finally {
       await context.close();

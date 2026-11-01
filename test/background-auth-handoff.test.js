@@ -1123,6 +1123,17 @@ test("model bridge binds authorization to the opening account and refuses other 
   assert.equal(calls[0].init.body,JSON.stringify({enabled:false}));
 });
 
+test("listing photo bridge binds the owner and cannot proxy arbitrary endpoints",async()=>{
+ const calls=[];
+ const harness=await runBackgroundHandoff({type:"PING"},undefined,{runScheduledTimers:false,initialStorage:{supabaseSession:{access_token:"owner-access",refresh_token:"owner-refresh",expires_at:2000000000,user:{id:"owner"}}},fetch:async(url,init)=>{calls.push({url,init});return{ok:true,status:200,json:async()=>({status:"queued"})};}});
+ const send=message=>new Promise(resolve=>harness.internalListener(message,{id:"test-extension-id"},resolve));
+ const id="f61d1098-af80-4053-b503-e7c70fefb290";
+ assert.equal((await send({type:"LISTING_PHOTO_REQUEST",expectedUserId:"other",id,method:"GET"})).ok,false);
+ assert.equal((await send({type:"LISTING_PHOTO_REQUEST",expectedUserId:"owner",id:"../../other",method:"GET"})).ok,false);
+ const result=await send({type:"LISTING_PHOTO_REQUEST",expectedUserId:"owner",id,method:"GET"});
+ assert.equal(result.ok,true);assert.equal(calls.filter(c=>c.url.includes("/api/listing-model-photos?id="+id)).length,1);
+});
+
 test("model bridge discards a response after the account changes in flight", async () => {
   let resolveFetch;
   const harness=await runBackgroundHandoff({type:"PING"},undefined,{

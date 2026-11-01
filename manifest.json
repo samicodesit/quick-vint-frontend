@@ -102,9 +102,14 @@
         "lib/user-model-copy.js",
         "lib/user-model-ui.js",
         "lib/user-model-client.js",
+        "lib/listing-model-photos.js",
+        "lib/listing-photo-client.js",
+        "lib/listing-tools-copy.js",
+        "lib/listing-tools-icons.js",
+        "lib/listing-tools.js",
         "content.js"
       ],
-      "css": ["lib/typography.css", "lib/user-model.css"],
+      "css": ["lib/typography.css", "lib/user-model.css", "lib/listing-tools.css"],
       "run_at": "document_idle"
     },
     {

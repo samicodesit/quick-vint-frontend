@@ -2724,7 +2724,13 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (["AUTOLISTER_TELEMETRY", "AUTOLISTER_TELEMETRY_FLUSH"].includes(message?.type)) return false;
   (async () => {
     switch (message.type) {
+      case "LISTING_PHOTO_REQUEST":
       case "USER_MODEL_REQUEST": {
+        const listingPhotos = message.type === "LISTING_PHOTO_REQUEST";
+        const createPhotos = listingPhotos && message.method === "POST" && message.action === "create";
+        if (listingPhotos && (createPhotos ? !Array.isArray(message.sources) || !message.sources.length || message.sources.length > 20 || message.sources.some(s => typeof s !== 'string' || s.length > 14000000) : !/^[0-9a-f-]{36}$/i.test(message.id || "") || !["GET", "POST"].includes(message.method) || (message.method === "POST" && !["resume", "retry", "cancel", "attached", "attachment_failed", "order_failed", "capacity"].includes(message.action)))) {
+          sendResponse({ ok: false, status: 400, error: "Invalid photo request." }); break;
+        }
         if (sender.id !== chrome.runtime.id || !message.expectedUserId || !["GET", "POST", "PATCH"].includes(message.method)) {
           sendResponse({ ok: false, status: 400, error: "Invalid model request." });
           break;
@@ -2735,10 +2741,11 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
           for (let attempt = 0; attempt < 2; attempt++) {
             const session = await ensureValidToken({}, { allowUsable: true, forceRefresh: attempt === 1, expectedUserId: expected });
             if (!session || session.user?.id !== expected) throw new Error("Sign in to the same account to open your model.");
-            result = await fetch(`${API_BASE}/api/user/model`, {
+            const endpoint = listingPhotos ? `/api/listing-model-photos${message.method === "GET" ? "?id=" + encodeURIComponent(message.id) : ""}` : "/api/user/model";
+            result = await fetch(`${API_BASE}${endpoint}`, {
               method: message.method,
               headers: { Authorization: `Bearer ${session.access_token}`, "Content-Type": "application/json", "X-Autolister-Client": "extension" },
-              ...(message.method !== "GET" ? { body: JSON.stringify(message.body) } : {}),
+              ...(message.method !== "GET" ? { body: JSON.stringify(createPhotos ? { action: "create", sources: message.sources, sourceKey: message.sourceKey } : listingPhotos ? { id: message.id, action: message.action } : message.body) } : {}),
               signal: AbortSignal.timeout(15000),
             });
             if (result.status !== 401) break;
