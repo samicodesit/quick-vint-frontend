@@ -88,6 +88,11 @@ with `reason: "auth_required"` proves neither selector stability nor injection.
 Recheck actual extension version and every DOM flag on each fresh result.
 Historical passes do not certify the current Vinted page or installed package.
 
+Missing language controls include bounded field structure in the result:
+three ancestor levels, four children per level, and associated/nearby label
+attributes. Values, field text, HTML and photos are excluded. This distinguishes
+host label-layout changes from a missing input without collecting a page dump.
+
 ## Explicit fresh run
 
 The user can authorize this by saying `Run a fresh real Vinted canary`. Then run:

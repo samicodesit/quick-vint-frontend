@@ -67,3 +67,25 @@ test("manual generation becomes usable again after consumed storage URLs, includ
     expect(flow.requests).toHaveLength(2);
   } finally { releaseAppend(); await flow.close(); }
 });
+
+test("a normal tab close after typing hands the title edit to the extension worker", async () => {
+  const flow = await openBatchJourney();
+  try {
+    const page = flow.controller;
+    await page.locator('[data-testid="add-photos-input"]').setInputFiles({
+      name: "photo-0.png", mimeType: "image/png",
+      buffer: Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII=", "base64"),
+    });
+    await page.locator("#quickvint-gen-btn").click();
+    const title = page.locator('[data-testid="title--input"]');
+    await expect(title).toHaveValue("Item 1");
+    await title.fill("Item 1 size M");
+    await page.close({ runBeforeUnload: true });
+    const edits = () => flow.events.filter(e => e.event === "generation_output_edited");
+    await expect.poll(() => edits().length).toBe(1);
+    expect(edits()[0].context).toMatchObject({
+      generatedTitle: "Item 1", finalTitle: "Item 1 size M",
+      generationAttemptId: flow.requests[0].body.generationAttemptId,
+    });
+  } finally { await flow.close(); }
+});

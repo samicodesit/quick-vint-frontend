@@ -35,6 +35,14 @@ Add or update Playwright E2E tests when touching:
 
 Do not rely on unit/static tests alone for upload or generation behavior.
 
+`oversized-prepared-bytes.spec.js` loads the real extension and sends native
+multipart uploads to loopback HTTP. It checks large DOM-only photo sets,
+connection loss, changed photos/account/settings, storage rejection, exact retry
+identity, byte/order preservation and the small-payload fast path. Optional
+`AUTOLISTER_API_PATH` runs the backend image-preparation helper against the same
+isolated image hosts. These checks do not replay unavailable historical photos
+or call a paid model.
+
 ## Batch progress ownership
 
 `batch-progress-ownership.spec.js` starts two real fixture batches on the same

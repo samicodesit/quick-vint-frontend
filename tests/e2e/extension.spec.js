@@ -12,6 +12,25 @@ const billingCatalogPath = path.join(extensionPath, "lib/billing-catalog.js");
 const qrCodePath = path.join(extensionPath, "lib/qrcode.min.js");
 const contentScriptPath = path.join(extensionPath, "content.js");
 
+test("Bloom sibling labels retain both language controls and their separate preferences", async ({ page }) => {
+  const html = listingFixture
+    .replace(/<label>\s*Title\s*<input data-testid="title--input"\s*\/?>\s*<\/label>/,
+      '<div><label class="input-label" for="listing-title">Title</label><div data-testid="title" class="input-root"><input id="listing-title" data-testid="title--input" value="Retained title"></div></div>')
+    .replace(/<label>\s*Description\s*<textarea data-testid="description--input"><\/textarea>\s*<\/label>/,
+      '<div data-testid="description"><div class="textarea-top"><label for="listing-description">Description</label></div><textarea id="listing-description" data-testid="description--input">Retained description</textarea></div>');
+  await openContentHarness(page, null, { pageUrl: "https://www.vinted.nl/items/new", pageHtml: html });
+  await expect(page.locator("#quickvint-title-language-select")).toBeVisible();
+  await expect(page.locator("#quickvint-description-language-select")).toBeVisible();
+  await expect(page.locator('label[for="listing-title"] #quickvint-title-language-select')).toHaveCount(1);
+  await expect(page.locator('label[for="listing-description"] #quickvint-description-language-select')).toHaveCount(1);
+  await page.locator("#quickvint-title-language-select").click();
+  await page.locator('#quickvint-title-language-select + .quickvint-lang-menu [data-value="de"]').click();
+  await expect(page.locator("#quickvint-title-language-select")).toHaveAttribute("data-value", "de");
+  await expect(page.locator("#quickvint-description-language-select")).toHaveAttribute("data-value", "en");
+  await expect(page.locator('[data-testid="title--input"]')).toHaveValue("Retained title");
+  await expect(page.locator('[data-testid="description--input"]')).toHaveValue("Retained description");
+});
+
 async function useActualPaywallIcon(page) {
   const icon = "data:image/png;base64," + fs.readFileSync(path.join(extensionPath, "icons/icon48.png")).toString("base64");
   await page.evaluate(icon => {
@@ -5499,24 +5518,13 @@ test.describe("AutoLister extension smoke flows", () => {
       .fill("Clean black jacket in good condition.\nSmoke-free home.");
     await page.evaluate(() => window.dispatchEvent(new Event("pagehide")));
 
-    await expect
-      .poll(
-        () =>
-          eventBatches
-            .flatMap((batch) => batch.events || [])
-            .find((event) => event.event === "generation_output_edited"),
-        { timeout: 5000 },
-      )
-      .toBeTruthy();
-    const events = eventBatches.flatMap((batch) => batch.events || []);
-    const event = events.find(
-      (candidate) => candidate.event === "generation_output_edited",
-    );
-
-    expect(event.context.editSequence).toBe(1);
-    expect(event.context.editSummarySequence).toBe(1);
+    const edits = () => eventBatches.flatMap(batch => batch.events || [])
+      .filter(event => event.event === "generation_output_edited");
+    await expect.poll(() => edits().length).toBe(2);
+    expect(edits()[0].context.editSummaryReason).toBe("focusout");
+    const event = edits()[1];
+    expect(event.context.editSequence).toBe(2);
     expect(event.context.editSummaryReason).toBe("pagehide");
-    expect(event.context.editEventCount).toBeGreaterThanOrEqual(2);
     expect(event.context.changedFields).toBe("title,description");
     expect(event.context.titleChanged).toBe(true);
     expect(event.context.descriptionChanged).toBe(true);
@@ -5528,6 +5536,110 @@ test.describe("AutoLister extension smoke flows", () => {
     expect(event.context.finalDescription).toContain("Smoke-free home.");
     expect(event.context.titleLengthDelta).toBeGreaterThan(0);
     expect(event.context.descriptionLengthDelta).toBeGreaterThan(0);
+  });
+
+  test("an unopened form keeps its edit window and sends one exposure when both fields become available", async ({ page }) => {
+    const events = [];
+    await page.route("https://autolister.app/api/events/track", route => {
+      events.push(...route.request().postDataJSON().events);
+      return route.fulfill({ json: { ok: true } });
+    });
+    await page.route("https://autolister.app/api/generate", route =>
+      route.fulfill({ json: { title: "Coat", description: "Blue wool", measurementAdvice: "" } }));
+    await openContentHarness(page);
+    await page.clock.install();
+    await page.evaluate(() => Object.defineProperty(document, "visibilityState", {configurable: true, value: "hidden"}));
+    await page.locator("#quickvint-gen-btn").click();
+    const title = page.locator('[data-testid="title--input"]');
+    await expect(title).toHaveValue("Coat");
+    await page.clock.fastForward(360000);
+    const relevant = () => events.filter(e => e.event.startsWith("generation_output_"));
+    expect(relevant()).toHaveLength(0);
+    await page.evaluate(() => {
+      Object.defineProperty(document, "visibilityState", {configurable: true, value: "visible"});
+      document.dispatchEvent(new Event("visibilitychange"));
+      document.dispatchEvent(new Event("visibilitychange"));
+    });
+    await title.fill("Coat size M");
+    await title.blur();
+    await page.evaluate(() => AutoListerTelemetry.flush());
+    await expect.poll(() => relevant().map(e => e.event).sort()).toEqual(["generation_output_edited","generation_output_visible"]);
+    expect(relevant().find(e => e.event === "generation_output_visible").context.generationRequestId).toBeTruthy();
+    expect(relevant().find(e => e.event === "generation_output_edited").context).toMatchObject({
+      generatedTitle: "Coat", finalTitle: "Coat size M", generatedDescription: "Blue wool", finalDescription: "Blue wool",
+    });
+  });
+
+  test("unapplied and partially applied review suggestions never count as a fully editable form", async ({ page }) => {
+    const events = [];
+    await page.route("https://autolister.app/api/events/track", route => {
+      events.push(...route.request().postDataJSON().events);
+      return route.fulfill({ json: { ok: true } });
+    });
+    await page.route("https://autolister.app/api/generate", route =>
+      route.fulfill({ json: { title: "Coat", description: "Blue wool", measurementAdvice: "" } }));
+    await openContentHarness(page);
+    await page.locator('[data-testid="title--input"]').fill("Existing title");
+    await page.locator("#quickvint-gen-btn").click();
+    await page.getByRole("button", {name:"Review suggestions"}).click();
+    await page.getByRole("button", {name:"Use this title"}).click();
+    await page.getByRole("button", {name:"Discard description suggestion"}).click();
+    await page.evaluate(() => AutoListerTelemetry.flush());
+    expect(events.some(e => e.event === "generate_success")).toBe(true);
+    expect(events.some(e => e.event === "generation_output_visible")).toBe(false);
+  });
+
+  test("bounds edit snapshots across remounts and preserves a final full undo", async ({ page }) => {
+    const events = [];
+    await page.route("https://autolister.app/api/events/track", route => {
+      events.push(...route.request().postDataJSON().events);
+      return route.fulfill({ json: { ok: true } });
+    });
+    await page.route("https://autolister.app/api/generate", route =>
+      route.fulfill({ json: { title: "Coat", description: "Blue wool", measurementAdvice: "" } }));
+    await openContentHarness(page);
+    await page.locator("#quickvint-gen-btn").click();
+    const title = page.locator('[data-testid="title--input"]');
+    await expect(title).toHaveValue("Coat");
+    await title.evaluate(node => node.replaceWith(node.cloneNode(true)));
+    const edits = () => events.filter(e => e.event === "generation_output_edited");
+    await title.press("End");
+    await title.pressSequentially(" with buttons and pockets");
+    await page.evaluate(() => AutoListerTelemetry.flush());
+    expect(edits()).toHaveLength(0);
+    await title.blur();
+    await title.fill("Coat size 42");
+    await title.blur();
+    await title.fill("Coat size M");
+    await title.blur();
+    await title.fill("Coat");
+    await page.evaluate(() => window.dispatchEvent(new Event("pagehide")));
+    await expect.poll(() => edits().length).toBe(3);
+    expect(edits().map(e => e.context.editSequence)).toEqual([1,2,3]);
+    expect(edits()[2].context).toMatchObject({ titleChanged: false, descriptionChanged: false });
+    expect(edits()[2].context.finalTitle).toBeUndefined();
+  });
+
+  test("discards pending listing edits on account switch", async ({page}) => {
+    const events = [];
+    await page.route("https://autolister.app/api/events/track", route => {
+      events.push(...route.request().postDataJSON().events);
+      return route.fulfill({ json: { ok: true } });
+    });
+    await page.route("https://autolister.app/api/generate", route =>
+      route.fulfill({ json: { title: "Coat", description: "Blue wool", measurementAdvice: "" } }));
+    await openContentHarness(page);
+    await page.locator("#quickvint-gen-btn").click();
+    const title = page.locator('[data-testid="title--input"]');
+    await expect(title).toHaveValue("Coat");
+    await title.fill("Coat edits for first account");
+    await page.evaluate(async () => {
+      const {supabaseSession} = await chrome.storage.local.get("supabaseSession");
+      await chrome.storage.local.set({supabaseSession: {...supabaseSession,user: {id: "different-owner"}}});
+      window.dispatchEvent(new Event("pagehide"));
+      await AutoListerTelemetry.flush();
+    });
+    expect(events.some(e => e.event === "generation_output_edited")).toBe(false);
   });
 
   test("compresses remote Vinted images through the background proxy", async ({
