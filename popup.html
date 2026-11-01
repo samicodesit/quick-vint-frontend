@@ -2,13 +2,13 @@
 <html lang="en">
 
 <head>
+  <link rel="stylesheet" href="lib/typography.css" />
   <meta charset="UTF-8" />
   <title>AutoLister AI</title>
   <style>
     /* --- Base & General Styles --- */
     body {
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
-        "Inter", sans-serif;
+      font-family: var(--autolister-font-ui, system-ui, sans-serif);
       width: 320px;
       padding: 0;
       margin: 0;
@@ -1356,7 +1356,7 @@
   </style>
 </head>
 
-<body data-view="loading">
+<body class="autolister-extension" data-view="loading">
   <div class="popup-container">
     <header class="popup-header">
       <button id="settingsToggleBtn" class="icon-btn" aria-label="Settings">

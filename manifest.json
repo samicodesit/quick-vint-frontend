@@ -104,7 +104,7 @@
         "lib/user-model-client.js",
         "content.js"
       ],
-      "css": ["lib/user-model.css"],
+      "css": ["lib/typography.css", "lib/user-model.css"],
       "run_at": "document_idle"
     },
     {

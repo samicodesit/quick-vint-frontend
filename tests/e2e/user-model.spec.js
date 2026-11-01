@@ -27,6 +27,7 @@ async function scripts(page) {
       contentType: "image/webp",
     }),
   );
+  await page.addStyleTag({ path: path.join(root, "lib/typography.css") });
   await page.addStyleTag({ path: path.join(root, "lib/user-model.css") });
   await page.addScriptTag({ path: path.join(root, "language-defaults.js") });
   await page.addScriptTag({ path: path.join(root, "lib/user-model-copy.js") });
@@ -305,6 +306,16 @@ test("listing invitation waits for an idle eligible route and closes on account 
   await expect(page.getByRole("dialog")).toHaveCount(0);
   await page.evaluate(() => (window.modelBusy = false));
   await expect(page.getByRole("dialog")).toBeVisible({ timeout: 5000 });
+  await expect(page.locator(".um-invitation-new")).toHaveText("New");
+  const invitationFonts = await page
+    .locator(".um-view")
+    .evaluate((el) =>
+      [el, el.querySelector("h2"), el.querySelector("button")].map(
+        (node) => getComputedStyle(node).fontFamily,
+      ),
+    );
+  expect(new Set(invitationFonts).size).toBe(1);
+  expect(invitationFonts[0]).toContain("system-ui");
   await expect(page.locator(".um-example-pair img").first()).toHaveJSProperty(
     "naturalWidth",
     280,

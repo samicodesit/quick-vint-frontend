@@ -132,6 +132,7 @@ for (const size of [
         page.getByRole("dialog", { name: "Your model" }),
       ).toBeVisible();
       await shot(page, "web-invitation-" + size.name + ".png");
+      await expect(page.locator(".um-invitation-new")).toHaveText("New");
       await page.getByRole("button", { name: "Not now", exact: true }).click();
       await expect(
         page.getByRole("dialog", { name: "Your model" }),

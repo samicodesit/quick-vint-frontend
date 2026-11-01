@@ -1,0 +1,12 @@
+/* Native UI fonts match the site without any font requests from Vinted. */
+:root {
+  --autolister-font-ui:
+    system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+:where([id^="quickvint-"], .autolister-extension) {
+  font-family: var(--autolister-font-ui);
+}
+:where([id^="quickvint-"], .autolister-extension)
+  :is(h1, h2, h3, h4, button, input, select, textarea) {
+  font-family: var(--autolister-font-ui);
+}

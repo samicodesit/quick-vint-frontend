@@ -4317,7 +4317,7 @@
         border: none;
         border-radius: 10px;
         font-size: 14px;
-        font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        font-family: var(--autolister-font-ui, system-ui, sans-serif);
         cursor: not-allowed;
         transition: transform 0.16s ease, box-shadow 0.16s ease, filter 0.16s ease, opacity 0.16s ease;
         font-weight: 650;
@@ -4329,7 +4329,8 @@
       }
 
       #${BTN_ID} {
-        min-width: 147px;
+        /* Reserve room for the native-font loading label and its indicator. */
+        min-width: 12em;
       }
 
       #${PHONE_BTN_ID} {
@@ -4389,7 +4390,7 @@
         border: none;
         border-radius: 12px;
         font-size: 15px;
-        font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        font-family: var(--autolister-font-ui, system-ui, sans-serif);
         font-weight: 600;
         cursor: pointer;
         box-shadow: 0 4px 12px rgba(79, 70, 229, 0.25);
@@ -4631,7 +4632,7 @@
           linear-gradient(135deg, #ffffff 30%, #f4f3ff 100%);
         color: #312e81;
         box-shadow: 0 8px 22px rgba(55, 48, 163, .10);
-        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        font-family: var(--autolister-font-ui, system-ui, sans-serif);
         font-size: 13px;
         font-weight: 780;
         line-height: 1.2;
@@ -4713,7 +4714,7 @@
         margin-top: 0;
         position: relative;
         color: #4c1d95;
-        font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        font-family: var(--autolister-font-ui, system-ui, sans-serif);
       }
 
       .quickvint-lang-title-host {
@@ -4834,7 +4835,7 @@
         box-shadow: none !important;
         color: #1f2937;
         cursor: pointer;
-        font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        font-family: var(--autolister-font-ui, system-ui, sans-serif);
         font-size: 12px;
         font-weight: 700;
         line-height: 1.2;
@@ -4898,7 +4899,7 @@
         justify-content: center;
         padding: 20px;
         background: rgba(15, 23, 42, 0.36);
-        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        font-family: var(--autolister-font-ui, system-ui, sans-serif);
       }
 
       #${REPORT_MODAL_ID}.visible {
@@ -5041,7 +5042,7 @@
         justify-content: center;
         padding: 20px;
         background: rgba(15, 23, 42, 0.36);
-        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        font-family: var(--autolister-font-ui, system-ui, sans-serif);
       }
 
       #${DESCRIPTION_FOOTER_MODAL_ID}.visible {
@@ -5208,7 +5209,7 @@
         justify-content: center;
         padding: 24px;
         background: rgba(15, 23, 42, 0.52);
-        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        font-family: var(--autolister-font-ui, system-ui, sans-serif);
         animation: fadeIn 0.16s ease-out;
       }
 
@@ -5469,7 +5470,7 @@
         align-items: center;
         justify-content: center;
         z-index: 9999;
-        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        font-family: var(--autolister-font-ui, system-ui, sans-serif);
         animation: fadeIn 0.2s ease-out;
       }
 
@@ -5826,7 +5827,7 @@
         align-items: center;
         justify-content: center;
         z-index: 2147483646;
-        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        font-family: var(--autolister-font-ui, system-ui, sans-serif);
         animation: fadeIn 0.2s ease-out;
       }
 
@@ -8002,7 +8003,7 @@
         border-radius: 10px;
         background: #f8faff;
         color: #1f2937;
-        font: 600 13px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        font: 600 13px/1.4 var(--autolister-font-ui, system-ui, sans-serif);
         overflow-wrap: anywhere;
       }
 
@@ -8205,7 +8206,7 @@
         border-radius: 12px;
         background: #ffffff;
         box-shadow: 0 16px 40px rgba(17, 24, 39, 0.18);
-        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        font-family: var(--autolister-font-ui, system-ui, sans-serif);
       }
 
       #${DESCRIPTION_APPLY_PROMPT_ID} .quickvint-apply-title {
@@ -8280,7 +8281,7 @@
         padding: 20px;
         background: rgba(20, 18, 45, 0.54);
         backdrop-filter: blur(7px);
-        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        font-family: var(--autolister-font-ui, system-ui, sans-serif);
         opacity: 0;
         transition: opacity 180ms ease;
       }
@@ -8336,7 +8337,7 @@
         border-radius: 50%;
         background: rgba(255, 255, 255, 0.12);
         color: #ffffff;
-        font: 400 25px/1 Arial, sans-serif;
+        font: 400 25px/1 var(--autolister-font-ui, system-ui, sans-serif);
         cursor: pointer;
         transition: background 160ms ease, transform 160ms ease;
       }
@@ -8643,7 +8644,7 @@
         position: fixed;
         z-index: 2147483647;
         width: min(410px, calc(100vw - 28px));
-        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        font-family: var(--autolister-font-ui, system-ui, sans-serif);
       }
 
       #${LIMIT_FOLLOWUP_MODAL_ID} .quickvint-limit-card {
@@ -9164,7 +9165,7 @@
         background: transparent;
         color: #64748b;
         cursor: pointer;
-        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        font-family: var(--autolister-font-ui, system-ui, sans-serif);
         font-size: 12px;
         font-weight: 800;
         line-height: 1;
@@ -9358,7 +9359,7 @@
         background: #ffffff;
         color: #475569;
         cursor: pointer;
-        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        font-family: var(--autolister-font-ui, system-ui, sans-serif);
         font-size: 12px;
         font-weight: 800;
         line-height: 1;
@@ -9598,7 +9599,7 @@
         padding: 14px 18px; /* Slightly tighter horizontal padding */
         border-radius: 12px; /* Fixed radius instead of pill */
         z-index: 2147483647;
-        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        font-family: var(--autolister-font-ui, system-ui, sans-serif);
         font-size: 14px;
         font-weight: 500;
         line-height: 1.4;
@@ -10856,7 +10857,7 @@
           linear-gradient(135deg, rgba(255, 255, 255, .98) 30%, rgba(244, 243, 255, .98) 100%);
         box-shadow: 0 8px 20px rgba(55, 48, 163, .12);
         color: #19164d;
-        font: 600 13px/1.3 Arial, sans-serif;
+        font: 600 13px/1.3 var(--autolister-font-ui, system-ui, sans-serif);
       }
 
       .quickvint-wardrobe-selection-main {
@@ -11418,7 +11419,7 @@
         box-shadow: 0 6px 14px rgba(79, 70, 229, .18);
         color: #fff;
         cursor: pointer;
-        font-family: Arial, sans-serif;
+        font-family: var(--autolister-font-ui, system-ui, sans-serif);
         font-size: 13px;
         font-weight: 700;
         letter-spacing: .01em;
@@ -11490,7 +11491,7 @@
         box-shadow: 0 7px 16px rgba(79, 70, 229, .22);
         color: #fff;
         cursor: pointer;
-        font-family: Arial, sans-serif;
+        font-family: var(--autolister-font-ui, system-ui, sans-serif);
         font-size: 13px;
         font-weight: 700;
         letter-spacing: .012em;
@@ -11579,7 +11580,7 @@
         background: transparent;
         color: #312e81;
         cursor: pointer;
-        font-family: Arial, sans-serif;
+        font-family: var(--autolister-font-ui, system-ui, sans-serif);
         font-size: 14px;
         font-weight: 700;
         letter-spacing: .01em;
@@ -11736,7 +11737,7 @@
         z-index: 2147483000;
         width: min(310px, calc(100vw - 32px));
         color: #29265d;
-        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        font-family: var(--autolister-font-ui, system-ui, sans-serif);
       }
 
       #${RELEASE_UPDATE_WIDGET_ID} button {
@@ -11891,7 +11892,7 @@
         padding: 24px;
         background: rgba(35, 33, 63, .48);
         color: #29265d;
-        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        font-family: var(--autolister-font-ui, system-ui, sans-serif);
       }
 
       #${BATCH_RECOVERY_NUDGE_ID} .quickvint-batch-recovery-dialog {
@@ -11921,7 +11922,7 @@
         background: #f5f4fa;
         color: #65627c;
         cursor: pointer;
-        font: 400 20px/1 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        font: 400 20px/1 var(--autolister-font-ui, system-ui, sans-serif);
       }
 
       #${BATCH_RECOVERY_NUDGE_ID} .quickvint-batch-recovery-content {
@@ -11973,7 +11974,7 @@
         box-shadow: 0 8px 20px rgba(91, 82, 223, .24);
         color: #fff;
         cursor: pointer;
-        font: 700 15px/1 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        font: 700 15px/1 var(--autolister-font-ui, system-ui, sans-serif);
       }
 
       #${BATCH_RECOVERY_NUDGE_ID} button:focus-visible {

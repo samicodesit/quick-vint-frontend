@@ -3137,6 +3137,7 @@ test.describe("AutoLister extension smoke flows", () => {
         "content.js",
       ]);
       expect(manifest.content_scripts[0].css).toContain("lib/user-model.css");
+      expect(manifest.content_scripts[0].css).toContain("lib/typography.css");
       expect(manifest.host_permissions).toContain("https://autolister.app/*");
     } finally {
       await context.close();
