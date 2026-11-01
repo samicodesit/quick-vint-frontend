@@ -116,6 +116,7 @@ async function runBackgroundHandoff(
 
   const chrome = {
     runtime: {
+      id: "test-extension-id",
       lastError: null,
       getManifest: () => ({ version: options.manifestVersion || "1.0.0" }),
       setUninstallURL(_url, callback) {
@@ -191,6 +192,7 @@ async function runBackgroundHandoff(
     URLSearchParams,
     URL,
     AbortController,
+    AbortSignal,
     Response,
     crypto: { randomUUID: () => "cid-test" },
     importScripts(...files) {
@@ -1103,4 +1105,36 @@ test("the real website bridge does not truncate an invalid source into a valid o
   });
   await settleAcquisition();
   assert.equal(harness.storageData[FIRST_TOUCH_KEY], undefined);
+});
+test("model bridge binds authorization to the opening account and refuses other senders", async () => {
+  const calls=[];
+  const harness=await runBackgroundHandoff({type:"PING"},undefined,{
+    runScheduledTimers:false,
+    initialStorage:{supabaseSession:{access_token:"owner-access",refresh_token:"owner-refresh",expires_at:2000000000,user:{id:"owner"}}},
+    fetch:async(url,init)=>{if(url.endsWith("/api/user/model"))calls.push({url,init});return{ok:true,status:200,json:async()=>({enabled:false,model:null})};},
+  });
+  const send=(message,sender={id:"test-extension-id"})=>new Promise(resolve=>harness.internalListener(message,sender,resolve));
+  assert.equal((await send({type:"USER_MODEL_REQUEST",expectedUserId:"owner",method:"GET"},{id:"another-extension"})).ok,false);
+  assert.equal((await send({type:"USER_MODEL_REQUEST",expectedUserId:"someone-else",method:"GET"})).ok,false);
+  assert.equal(calls.length,0);
+  assert.equal((await send({type:"USER_MODEL_REQUEST",expectedUserId:"owner",method:"PATCH",body:{enabled:false}})).ok,true);
+  assert.equal(calls.length,1);
+  assert.equal(calls[0].init.headers.Authorization,"Bearer owner-access");
+  assert.equal(calls[0].init.body,JSON.stringify({enabled:false}));
+});
+
+test("model bridge discards a response after the account changes in flight", async () => {
+  let resolveFetch;
+  const harness=await runBackgroundHandoff({type:"PING"},undefined,{
+    runScheduledTimers:false,
+    initialStorage:{supabaseSession:{access_token:"owner-access",refresh_token:"owner-refresh",expires_at:2000000000,user:{id:"owner"}}},
+    fetch:async(url)=>url.endsWith("/api/user/model")?new Promise(resolve=>{resolveFetch=resolve;}):{ok:true,status:200,json:async()=>({})},
+  });
+  const result=new Promise(resolve=>harness.internalListener({type:"USER_MODEL_REQUEST",expectedUserId:"owner",method:"GET"},{id:"test-extension-id"},resolve));
+  await new Promise(resolve=>setImmediate(resolve));
+  harness.storageData.supabaseSession={access_token:"other-access",user:{id:"another"}};
+  resolveFetch({ok:true,status:200,json:async()=>({model:{imageUrl:"private-image"}})});
+  const response=await result;
+  assert.equal(response.ok,false);
+  assert.equal(response.data,undefined);
 });

@@ -3131,8 +3131,11 @@ test.describe("AutoLister extension smoke flows", () => {
         "lib/telemetry-flow.js",
         "lib/auth-action-observer.js",
         "lib/phone-upload-recovery.js",
+        "lib/user-model-ui.js",
+        "lib/user-model-client.js",
         "content.js",
       ]);
+      expect(manifest.content_scripts[0].css).toContain("lib/user-model.css");
       expect(manifest.host_permissions).toContain("https://autolister.app/*");
     } finally {
       await context.close();

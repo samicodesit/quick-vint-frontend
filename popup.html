@@ -1625,7 +1625,7 @@
 
           <div class="setting-row saved-note-row">
             <div class="setting-label-container">
-              <span class="setting-label"><span id="descriptionFooterTitle">Saved note</span> <span class="new-badge">NEW</span></span>
+              <div class="um-note-heading"><span class="setting-label"><span id="descriptionFooterTitle">Saved note</span> <span class="new-badge">NEW</span></span><button type="button" class="um-settings-entry" id="userModelButton" hidden>Your model</button></div>
               <ul id="descriptionFooterHelp" class="saved-note-help">
                 <li>Appears on every future listing</li>
                 <li>Added before hashtags</li>
@@ -1734,6 +1734,11 @@
   <script src="lib/telemetry-registry.js"></script>
   <script src="lib/telemetry-client.js"></script>
   <script src="popup.js"></script>
+  <link rel="stylesheet" href="lib/user-model.css">
+  <style>#settingsView.um-popup-active > :not(.um-popup-view){display:none!important}.um-popup-view{padding:4px 0 8px}.um-popup-view .um-header{margin-bottom:12px;gap:12px}.um-popup-view .um-header h2{font-size:20px}.um-popup-view .um-preview{max-height:350px}.um-popup-view .um-form{gap:8px}.um-popup-view .um-form legend{margin-bottom:5px}.um-popup-view .um-choice{min-height:56px}.um-popup-view .um-gender .um-choice{min-height:42px}.um-popup-view .um-choice-art,.um-popup-view .um-choice-art svg{height:28px}.um-popup-view .um-skinTone .um-choice{min-height:38px}.um-popup-view .um-swatch{width:26px;height:26px}.um-popup-view .um-consequence{font-size:11px}.popup-container:has(.um-popup-active) .subtitle{display:none}.um-popup-view .um-height input[type=number]{padding:5px}.um-popup-view .um-primary{min-height:38px;padding:8px 14px}</style>
+  <script src="lib/user-model-ui.js"></script>
+  <script src="lib/user-model-client.js"></script>
+  <script src="lib/user-model-popup.js"></script>
 </body>
 
 </html>

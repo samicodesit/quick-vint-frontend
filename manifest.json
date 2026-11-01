@@ -99,8 +99,11 @@
         "lib/telemetry-flow.js",
         "lib/auth-action-observer.js",
         "lib/phone-upload-recovery.js",
+        "lib/user-model-ui.js",
+        "lib/user-model-client.js",
         "content.js"
       ],
+      "css": ["lib/user-model.css"],
       "run_at": "document_idle"
     },
     {

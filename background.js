@@ -2724,6 +2724,31 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (["AUTOLISTER_TELEMETRY", "AUTOLISTER_TELEMETRY_FLUSH"].includes(message?.type)) return false;
   (async () => {
     switch (message.type) {
+      case "USER_MODEL_REQUEST": {
+        if (sender.id !== chrome.runtime.id || !message.expectedUserId || !["GET", "POST", "PATCH"].includes(message.method)) {
+          sendResponse({ ok: false, status: 400, error: "Invalid model request." });
+          break;
+        }
+        try {
+          const expected = message.expectedUserId;
+          let result;
+          for (let attempt = 0; attempt < 2; attempt++) {
+            const session = await ensureValidToken({}, { allowUsable: true, forceRefresh: attempt === 1, expectedUserId: expected });
+            if (!session || session.user?.id !== expected) throw new Error("Sign in to the same account to open your model.");
+            result = await fetch(`${API_BASE}/api/user/model`, {
+              method: message.method,
+              headers: { Authorization: `Bearer ${session.access_token}`, "Content-Type": "application/json", "X-Autolister-Client": "extension" },
+              ...(message.method !== "GET" ? { body: JSON.stringify(message.body) } : {}),
+              signal: AbortSignal.timeout(15000),
+            });
+            if (result.status !== 401) break;
+          }
+          const data = await result.json();
+          if ((await getStoredSession())?.user?.id !== expected) throw new Error("Your account changed. Reopen your model.");
+          sendResponse(result.ok ? { ok: true, data } : { ok: false, status: result.status, error: data.error });
+        } catch (error) { sendResponse({ ok: false, error: error.message || "Your model could not be loaded." }); }
+        break;
+      }
       case "CAPTURE_ATTRIBUTION":
         if (!isAttributionBridgeSender(sender)) {
           sendResponse({ ok: false, error: "invalid_sender" });

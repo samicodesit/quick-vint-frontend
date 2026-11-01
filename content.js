@@ -21104,6 +21104,7 @@
 
   function init() {
     injectStylesheet();
+    globalThis.AutoListerModels?.startContent({ isBusy: () => isBusy || isPhoneUploadGenerateInFlight || isPhoneUploadLockInFlight || Boolean(batchComputerUploadPromise) });
     maybeShowReleaseUpdate();
     bindPromptUploadFileCapture();
     bindLimitFollowupResumeListeners();
