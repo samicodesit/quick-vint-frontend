@@ -37,7 +37,10 @@ export async function checkLiveModelPhotos({ context, openRealCreatePage, extens
     if(!/\/items\/\d+\/edit$/.test(new URL(owned.url()).pathname))
       throw new Error('Existing-listing audit redirected to '+new URL(owned.url()).pathname);
     return await checkExistingListing({context,folder,extensionId,options:{...testOptions,page:context.pages().indexOf(owned)}});
-   }finally{await owned.close();}
+   }finally{
+    for(const worker of context.serviceWorkers())await worker.evaluate(()=>{if(globalThis.__qaOriginalModelFetch){globalThis.fetch=globalThis.__qaOriginalModelFetch;delete globalThis.__qaOriginalModelFetch;}}).catch(()=>{});
+    await owned.close();
+   }
   }
   return checkExistingListing({context,folder,extensionId,options:testOptions});
  }

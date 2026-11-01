@@ -21,8 +21,10 @@ test("Bloom sibling labels retain both language controls and their separate pref
   await openContentHarness(page, null, { pageUrl: "https://www.vinted.nl/items/new", pageHtml: html });
   await expect(page.locator("#quickvint-title-language-select")).toBeVisible();
   await expect(page.locator("#quickvint-description-language-select")).toBeVisible();
-  await expect(page.locator('label[for="listing-title"] #quickvint-title-language-select')).toHaveCount(1);
-  await expect(page.locator('label[for="listing-description"] #quickvint-description-language-select')).toHaveCount(1);
+  // The current compact layout places the interactive selector beside its
+  // associated label, rather than nesting a button inside the host's label.
+  await expect(page.locator('label[for="listing-title"]').locator("..").locator("#quickvint-title-language-select")).toHaveCount(1);
+  await expect(page.locator('label[for="listing-description"]').locator("..").locator("#quickvint-description-language-select")).toHaveCount(1);
   await page.locator("#quickvint-title-language-select").click();
   await page.locator('#quickvint-title-language-select + .quickvint-lang-menu [data-value="de"]').click();
   await expect(page.locator("#quickvint-title-language-select")).toHaveAttribute("data-value", "de");
