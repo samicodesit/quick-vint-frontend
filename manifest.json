@@ -99,6 +99,7 @@
         "lib/telemetry-flow.js",
         "lib/auth-action-observer.js",
         "lib/phone-upload-recovery.js",
+        "lib/user-model-copy.js",
         "lib/user-model-ui.js",
         "lib/user-model-client.js",
         "content.js"
@@ -122,6 +123,8 @@
         "callback.html",
         "icons/icon48.png",
         "images/account-paused-paywall.webp",
+        "images/user-model-female.webp",
+        "images/user-model-male.webp",
         "images/wardrobe-rewrite-character.webp",
         "images/quickvint-upload-multiple.jpg",
         "images/quickvint-upload-single.jpg"

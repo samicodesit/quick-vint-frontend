@@ -17,7 +17,19 @@ const image = sample
       '<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1536"><rect width="1024" height="1536" fill="#e1d8cc"/></svg>',
     );
 async function scripts(page) {
+  await page.route("https://model-assets.test/images/**", (route) =>
+    route.fulfill({
+      path: path.join(
+        root,
+        "images",
+        new URL(route.request().url()).pathname.split("/").pop(),
+      ),
+      contentType: "image/webp",
+    }),
+  );
   await page.addStyleTag({ path: path.join(root, "lib/user-model.css") });
+  await page.addScriptTag({ path: path.join(root, "language-defaults.js") });
+  await page.addScriptTag({ path: path.join(root, "lib/user-model-copy.js") });
   await page.addScriptTag({ path: path.join(root, "lib/user-model-ui.js") });
   await page.addScriptTag({
     path: path.join(root, "lib/user-model-client.js"),
@@ -32,6 +44,7 @@ async function chromeMock(page, state) {
       window.modelState = state;
       window.chrome = {
         runtime: {
+          getURL: (path) => "https://model-assets.test/" + path,
           sendMessage: async (msg) => {
             window.modelCalls.push(msg);
             if (msg.body?.action === "invite")
@@ -61,6 +74,8 @@ async function chromeMock(page, state) {
           local: {
             get: async () => ({
               supabaseSession: { user: { id: currentOwner } },
+              selectedDescriptionLanguage: state.fixtureLanguage,
+              quickvintLanguagePreferenceTouched: !!state.fixtureLanguage,
             }),
           },
           onChanged: {
@@ -130,13 +145,20 @@ test("popup model view preserves seller note, completes in background and surviv
   });
   await chromeMock(page, {
     enabled: false,
-    invitationState: "dismissed",
+    invitationState: "seen",
     model: null,
   });
   await scripts(page);
   await page.evaluate(() => AutoListerModels.startPopup());
+  await expect(page.locator("#userModelButton")).toHaveClass(/um-discover/);
+  await expect(page.locator("#userModelButton img")).toHaveJSProperty(
+    "naturalWidth",
+    280,
+  );
+  await shot(page, "extension-settings.png");
   await page.locator("#descriptionFooterText").fill("Keep my unsaved note");
   await page.locator("#userModelButton").click();
+  await expect(page.locator("#userModelButton")).not.toHaveClass(/um-discover/);
   await choose(page);
   await shot(page, "extension-preferences.png");
   await page
@@ -170,6 +192,96 @@ test("popup model view preserves seller note, completes in background and surviv
     0,
   );
 });
+
+test("all model languages fit the popup and preserve preference enum values", async ({
+  page,
+}) => {
+  const html = fs
+    .readFileSync(path.join(root, "popup.html"), "utf8")
+    .replace(/<script\b[^>]*>[\s\S]*?<\/script>/g, "");
+  await page.setViewportSize({ width: 320, height: 600 });
+  await page.setContent(html);
+  await page.evaluate(() => {
+    document.body.classList.add("settings-active");
+    document.body.dataset.view = "signed-in";
+    document.getElementById("settingsView").classList.add("um-popup-active");
+    const view = document.createElement("section");
+    view.className = "um-popup-view";
+    view.id = "locale-view";
+    document.getElementById("settingsView").append(view);
+  });
+  await scripts(page);
+  const languages = await page.evaluate(() =>
+    Object.keys(AutoListerModelCopy.copy),
+  );
+  for (const code of languages) {
+    await page.evaluate(
+      ({ code, prefs }) => {
+        window.disposeModelLocale?.();
+        AutoListerModelCopy.setLocale(code);
+        window.disposeModelLocale = AutoListerModelUI.mount(
+          document.getElementById("locale-view"),
+          {
+            initialPreferences: prefs,
+            onClose: () => {},
+            backLabel: "Settings",
+            request: async (method, body) => {
+              if (body?.action === "create")
+                window.localePrefs = body.preferences;
+              return {
+                model: null,
+                enabled: false,
+                invitationState: "dismissed",
+              };
+            },
+          },
+        );
+      },
+      { code, prefs },
+    );
+    expect(
+      await page
+        .locator(".um-view")
+        .evaluate((el) => el.scrollWidth <= el.clientWidth),
+    ).toBe(true);
+    await page.locator('input[name="model-hair"][value="red"]').check();
+    await page.locator(".um-primary").click();
+    expect(await page.evaluate(() => window.localePrefs.hair)).toBe("red");
+    if (["fr", "de"].includes(code))
+      await shot(page, "extension-preferences-" + code + ".png");
+  }
+});
+
+test("popup model copy follows the existing explicit language preference", async ({
+  page,
+}) => {
+  const html = fs
+    .readFileSync(path.join(root, "popup.html"), "utf8")
+    .replace(/<script\b[^>]*>[\s\S]*?<\/script>/g, "");
+  await page.setViewportSize({ width: 320, height: 600 });
+  await page.setContent(html);
+  await page.evaluate(() => {
+    document.body.classList.add("settings-active");
+    document.body.dataset.view = "signed-in";
+  });
+  await chromeMock(page, {
+    model: null,
+    enabled: false,
+    invitationState: "seen",
+    fixtureLanguage: "fr",
+  });
+  await scripts(page);
+  await page.evaluate(() => AutoListerModels.startPopup());
+  await page
+    .getByRole("button", { name: "Créer votre mannequin", exact: true })
+    .click();
+  await expect(
+    page.getByRole("radio", { name: "Roux", exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "Créer le mannequin", exact: true }),
+  ).toBeVisible();
+});
 test("listing invitation waits for an idle eligible route and closes on account switch", async ({
   page,
 }) => {
@@ -193,6 +305,11 @@ test("listing invitation waits for an idle eligible route and closes on account 
   await expect(page.getByRole("dialog")).toHaveCount(0);
   await page.evaluate(() => (window.modelBusy = false));
   await expect(page.getByRole("dialog")).toBeVisible({ timeout: 5000 });
+  await expect(page.locator(".um-example-pair img").first()).toHaveJSProperty(
+    "naturalWidth",
+    280,
+  );
+  await shot(page, "extension-invitation.png");
   await page.getByRole("button", { name: "Create my model" }).click();
   await choose(page);
   await expect(

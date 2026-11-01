@@ -200,6 +200,9 @@ for (const size of [
       await dialog
         .getByRole("textbox", { name: "Seller note" })
         .fill("Keep this unsaved seller note");
+      await dialog
+        .locator(".draft-settings-content")
+        .evaluate((el) => (el.scrollTop = 0));
       await shot(page, "web-settings-" + size.name + ".png");
       await dialog
         .getByRole("button", { name: "Your model", exact: true })
@@ -218,6 +221,73 @@ for (const size of [
       await expect(
         dialog.getByRole("textbox", { name: "Seller note" }),
       ).toHaveValue("Keep this unsaved seller note");
+    },
+  );
+  test(
+    "web " +
+      size.name +
+      " puts model discovery first and stops motion after opening",
+    async ({ page }) => {
+      const state = { model: null, enabled: false, invitationState: "seen" };
+      await page.setViewportSize(size);
+      await mocks(page, state);
+      await signIn(page);
+      await page.goto(url + "/app?signin=1");
+      const trigger = page.locator(
+        "#draft-global-dialog [data-user-model-open]",
+      );
+      await expect(trigger).not.toHaveAttribute("hidden");
+      await page.locator("[data-draft-global-trigger]").click();
+      await expect(trigger).toHaveClass(/um-discover/);
+      await expect(trigger.locator(".um-entry-copy")).toHaveCSS(
+        "text-align",
+        "left",
+      );
+      const languageButtons = page.locator(
+        "#draft-global-dialog .draft-language-fields .draft-select-trigger",
+      );
+      const leftLanguage = await languageButtons.nth(0).boundingBox();
+      const rightLanguage = await languageButtons.nth(1).boundingBox();
+      expect(Math.abs(leftLanguage.y - rightLanguage.y)).toBeLessThan(1);
+      expect(rightLanguage.x).toBeGreaterThan(
+        leftLanguage.x + leftLanguage.width,
+      );
+      await expect(trigger.locator("img")).toHaveJSProperty(
+        "naturalWidth",
+        280,
+      );
+      expect(
+        await trigger.evaluate(
+          (el) => el.parentElement.firstElementChild === el,
+        ),
+      ).toBe(true);
+      await shot(page, "web-discovery-" + size.name + ".png");
+      if (size.name === "mobile") {
+        await page.setViewportSize({ width: 320, height: 700 });
+        await languageButtons.nth(1).click();
+        const options = page.locator("#global-descriptionLanguageCode-options");
+        await expect(options).toBeVisible();
+        const bounds = await options.boundingBox();
+        expect(bounds.x).toBeGreaterThanOrEqual(0);
+        expect(bounds.x + bounds.width).toBeLessThanOrEqual(320);
+        await page.keyboard.press("Escape");
+        await page.setViewportSize(size);
+      }
+      await page.emulateMedia({ reducedMotion: "reduce" });
+      expect(
+        await trigger.evaluate(
+          (el) => getComputedStyle(el, "::before").animationName,
+        ),
+      ).toBe("none");
+      await trigger.click();
+      await expect.poll(() => state.invitationState).toBe("dismissed");
+      await page
+        .getByRole("button", { name: "Back to settings", exact: true })
+        .click();
+      await expect(trigger).not.toHaveClass(/um-discover/);
+      await page.reload();
+      await expect(trigger).not.toHaveAttribute("hidden");
+      await expect(trigger).not.toHaveClass(/um-discover/);
     },
   );
 }
@@ -244,4 +314,35 @@ test("signed-in users explicitly review retained preferences before creation", a
   await page.getByRole("button", { name: "Create model", exact: true }).click();
   await expect(page.getByAltText("Your saved full-length model")).toBeVisible();
   expect(creates).toBe(1);
+});
+
+test("model onboarding follows browser language and keeps red as an API enum", async ({
+  page,
+}) => {
+  await page.addInitScript(() => {
+    Object.defineProperty(navigator, "languages", { get: () => ["fr-FR"] });
+    Object.defineProperty(navigator, "language", { get: () => "fr-FR" });
+  });
+  await mocks(page, { model: null, enabled: false, invitationState: "unseen" });
+  await page.goto(url + "/app");
+  await page.locator("[data-style-skip]").click();
+  await expect(
+    page.getByRole("heading", { name: "Créer votre mannequin" }),
+  ).toBeVisible();
+  for (const [field, value] of Object.entries(prefs)) {
+    if (field !== "heightCm")
+      await page
+        .locator(
+          `input[name="model-${field}"][value="${field === "hair" ? "red" : value}"]`,
+        )
+        .check();
+  }
+  await page.getByRole("button", { name: "Continuer", exact: true }).click();
+  expect(
+    await page.evaluate(
+      () =>
+        JSON.parse(localStorage.getItem("autolister:pending-model:v1"))
+          .preferences.hair,
+    ),
+  ).toBe("red");
 });
