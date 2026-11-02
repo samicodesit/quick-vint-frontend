@@ -177,10 +177,12 @@ test("repeated HTTP 401 stops after one auth replay without signing out the reta
 });
 
 for (const code of ["refresh_token_not_found", "session_not_found"]) test(`${code} requires sign-in and retains photos without generating`, async ({}, testInfo) => {
-  const flow = await journey({ expired: true });
+  // Keep automatic renewal pending until the real click has been dispatched.
+  // Otherwise a valid background rejection can hide Generate before the click.
+  const flow = await journey({ expired: true, hold: true });
   try {
-    flow.rejectSession(code);
     await flow.controller.locator("#quickvint-gen-btn").click();
+    flow.rejectSession(code);
     await expect(flow.controller.getByRole("button", { name: /Sign in to enable AI Tools/ })).toBeVisible();
     fs.writeFileSync(testInfo.outputPath("rejection.json"), JSON.stringify({ code, authRequests: flow.authRequests, photosRetained: true }, null, 2));
     expect(flow.requests).toHaveLength(0);

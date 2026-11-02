@@ -31,7 +31,7 @@ async function fixture(missingLanguages = false) {
     reports,
     config: { secret: "local-fixture", profileDir: path.join(root, "profile"),
       extensionPath, url: `${base}/items/new`, apiUrl: `${base}/api/dom-canary`,
-      headless: true, channel: "chromium", timeoutMs: 1000, postResult: true,
+      headless: true, channel: "chromium", timeoutMs: 5000, postResult: true,
       keepOpenMs: 0, resultPath: path.join(root, "last-result.json") },
     async close() {
       server.closeAllConnections();
@@ -75,6 +75,7 @@ test("missing language controls retain bounded field structure without field con
     const { runDomCanary } = await import("../../scripts/run-dom-canary.mjs");
     const result = await runDomCanary(f.config);
     expect(result.status).toBe("failed");
+    expect(result.result).toMatchObject({ phase: "selectors", reason: "selector_timeout" });
     expect(result.result.dom.fieldStructure.title[0]).toMatchObject({ tag: "LABEL", testId: "title-field" });
     expect(result.result.dom.fieldStructure.title).toHaveLength(3);
     expect(JSON.stringify(result.result.dom.fieldStructure)).not.toContain("PRIVATE_");
