@@ -86,7 +86,10 @@ async function runBackgroundHandoff(
         options.refreshSession ||
         (async () => ({ data: { session: null }, error: null })),
       onAuthStateChange(listener) { authStateListener = listener; },
-      signOut: async () => { authStateListener?.("SIGNED_OUT", null); return { error: null }; },
+      signOut: async () => {
+        if (options.signOutError) return { error: options.signOutError };
+        authStateListener?.("SIGNED_OUT", null); return { error: null };
+      },
     },
     from(table) {
       return {
@@ -292,6 +295,29 @@ test("exhausted token refresh retains the final sanitized provider error without
   assert.equal(refreshCalls, 3);
   assert.deepEqual(harness.timers.filter(timer => [2000, 4000].includes(timer.delay)), [{ delay: 2000 }, { delay: 4000 }]);
   assert.equal(harness.storageData.supabaseSession.access_token, "existing-access");
+});
+
+test("failed renewal rearms only the current non-rejected session with the existing minimum delay", async () => {
+  for (const outcome of ["transient", "rejected", "owner_changed"]) {
+    const saved = { access_token: "saved-access", refresh_token: "saved-refresh",
+      expires_at: 2000000000, user: { id: "user-1" } };
+    const options = { initialStorage: { supabaseSession: saved }, runScheduledTimers: false };
+    const harness = await runBackgroundHandoff({ type: "PING" }, undefined, options);
+    harness.storageData.supabaseSession.expires_at = 1;
+    options.signOutError = new Error("Controlled sign-out failure");
+    options.onSetSession = async () => {
+      if (outcome === "owner_changed") harness.storageData.supabaseSession = {
+        ...saved, user: { id: "user-2" },
+      };
+      return { data: { session: null }, error: outcome === "rejected"
+        ? { name: "AuthApiError", code: "refresh_token_not_found", status: 400, message: "Rejected" }
+        : new TypeError("Failed to fetch") };
+    };
+    const before = harness.timers.length;
+    assert.equal(await harness.refreshToken(), null);
+    assert.equal(harness.storageData.supabaseSession.refresh_token, "saved-refresh");
+    assert.deepEqual(harness.timers.slice(before), outcome === "transient" ? [{ delay: 60000 }] : [], outcome);
+  }
 });
 
 test("Supabase auth fetch has a deadline and leaves product requests untouched", async () => {

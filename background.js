@@ -192,6 +192,9 @@ async function boundedSupabaseFetch(input, options) {
 }
 const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
   global: { fetch: boundedSupabaseFetch },
+  // Background renewal is scheduled below and shared by credential requests.
+  // A separate SDK timer can rotate while the coordinator restores old tokens.
+  auth: { autoRefreshToken: false },
 });
 let tokenRefreshPromise = null;
 let tokenRefreshTimeout = null;
@@ -386,6 +389,8 @@ async function refreshTokenWithRetry(maxRetries = 3, diagnostic = {}) {
     navigatorOnline: globalThis.navigator?.onLine, ...context,
   }, "extension_background"); };
   const refreshStartedAt = Date.now();
+  let retryAfterFailure = false;
+  let rejectionConfirmed = false;
   let refreshPhase = "load_session";
   const refreshErrorContext = (error) => ({
     stage: "authenticating",
@@ -420,6 +425,7 @@ async function refreshTokenWithRetry(maxRetries = 3, diagnostic = {}) {
       }
       if (restored.error) {
         if (isRejectedRefreshSession(restored.error)) {
+          rejectionConfirmed = true;
           trackRefresh("token_refresh_expired", { ...refreshErrorContext(restored.error), attempts });
           await handleSignOut({ clearAccountEmail: false });
           return null;
@@ -473,6 +479,7 @@ async function refreshTokenWithRetry(maxRetries = 3, diagnostic = {}) {
         lastRefreshError = error;
         console.warn(`Token refresh attempt ${attempt} failed:`, error?.message);
         if (isRejectedRefreshSession(error)) {
+          rejectionConfirmed = true;
           trackRefresh("token_refresh_expired", { ...refreshErrorContext(error), attempts });
           await handleSignOut({ clearAccountEmail: false });
           return null;
@@ -482,10 +489,12 @@ async function refreshTokenWithRetry(maxRetries = 3, diagnostic = {}) {
           await new Promise((res) => setTimeout(res, 1000 * 2 ** attempt));
         }
       }
+      retryAfterFailure = true;
       trackRefresh("token_refresh_failed", { ...refreshErrorContext(lastRefreshError), reason: "retries_exhausted", attempts });
       console.error("Token refresh failed after all retries.");
       return null;
     } catch (error) {
+      retryAfterFailure = !rejectionConfirmed;
       if (renewalNeeded) trackRefresh("token_refresh_failed", { ...refreshErrorContext(error), reason: "refresh_exception", attempts });
       console.error("Unexpected error during token refresh:", error);
       return null;
@@ -495,6 +504,17 @@ async function refreshTokenWithRetry(maxRetries = 3, diagnostic = {}) {
   try {
     return await tokenRefreshPromise;
   } finally {
+    // Keep no-click recovery after a transient failure. Reuse the existing
+    // scheduler and its one-minute floor, using only the current owner's session.
+    if (retryAfterFailure && tokenRefreshDiagnostic?.ownerId) {
+      try {
+        const latest = await getStoredSession();
+        if (!requestedSignOuts && latest?.user?.id === tokenRefreshDiagnostic.ownerId &&
+            latest.refresh_token && latest.expires_at) scheduleTokenRefresh(latest);
+      } catch (error) {
+        console.warn("Unable to reschedule token refresh:", error);
+      }
+    }
     tokenRefreshPromise = null;
     tokenRefreshDiagnostic = null;
   }
