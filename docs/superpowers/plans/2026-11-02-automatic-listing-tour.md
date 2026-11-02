@@ -50,3 +50,12 @@
 - Corrected setup verified: all 11 phone-page and real-focus navigation tests passed serially against the pinned current API checkout. No product changes were needed. The complete configured gate then used that same setup.
 - Final gate passed: 168 unit tests and 403 browser tests, with 13 configured skips. Production build passed. Source diff check passed, and the pre-existing two-line lib/user-model-ui.js edit remains untouched. Local draft only, no publish or deployment.
 - Desktop and narrow-screen rendered previews are preserved in the chat's final-toolbar visualization folder. Startup timing data and reproducible audit remain in docs/qa/toolbar-startup. Superseded owned screenshots, scratch patches and diagnostic logs were removed after their conclusions were recorded.
+
+## Publication follow-through
+
+- The owner asked this chat to handle Chrome publication on 2026-11-02. Firefox publication is excluded and remains with its own chat.
+- UI source is committed as 6219e7b. Current upstream authentication hotfix 0b3148b and its tests were merged locally as ac30b48, preserving both changes. The unrelated lib/user-model-ui.js edit remains unstaged and unmodified.
+- Combined authentication/startup/tour verification after the merge passed all 168 unit tests, 39 targeted browser tests and the production build. The earlier full UI gate remains recorded separately; it is not represented as a full gate of the new merged source.
+- An authentication release was already running at https://github.com/samicodesit/quick-vint-frontend/actions/runs/41459833108. Its owner in chat 01a100a0-a690-7e91-9ab2-73150030dc3d confirmed that urgent release must finish first and any resulting Store submission must not be cancelled or replaced.
+- The UI release is queued locally, not uploaded or submitted. Do not push frontend main before that workflow's release-state commit lands. Do not start another upload while its Store submission is pending. The authentication chat will notify this chat on release-state and published/cleared status.
+- Resume by fetching and merging the release-state metadata, running release:status and checking actual Store state. Once clear, run the mandatory push:production gate with the matching API checkout, then dispatch chrome-web-store-release.yml on main with mode=upload-and-submit and bump_patch=true. Let release tooling choose the version from current records. Do not reuse the old 1.4.31 prediction after the authentication release.
