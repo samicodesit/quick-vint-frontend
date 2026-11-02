@@ -30,6 +30,7 @@ async function scripts(page) {
   await page.addStyleTag({ path: path.join(root, "lib/typography.css") });
   await page.addStyleTag({ path: path.join(root, "lib/user-model.css") });
   await page.addScriptTag({ path: path.join(root, "language-defaults.js") });
+  await page.addScriptTag({ path: path.join(root, "lib/shared-ui-copy.js") });
   await page.addScriptTag({ path: path.join(root, "lib/user-model-copy.js") });
   await page.addScriptTag({ path: path.join(root, "lib/user-model-ui.js") });
   await page.addScriptTag({

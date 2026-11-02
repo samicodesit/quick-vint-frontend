@@ -203,6 +203,7 @@ async function installPopupHarness(page, options = {}) {
     { storageSeed: initialStorage, validSessionFixture: validSessionResponse },
   );
 
+  await page.addScriptTag({ path: path.join(extensionPath, "lib/shared-ui-copy.js") });
   await page.addScriptTag({ path: billingCatalogPath });
   await page.addScriptTag({ path: languageDefaultsPath });
   await installTelemetryHarness(page, extensionPath);

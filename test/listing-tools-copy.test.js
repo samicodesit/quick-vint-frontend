@@ -5,7 +5,7 @@ const { test } = require("node:test"),
   path = require("node:path");
 test("listing tour and settings copy cover every model locale without empty strings", () => {
   const context = vm.createContext({ navigator: { languages: ["en"] } });
-  for (const file of ["user-model-copy.js", "listing-tools-copy.js"])
+  for (const file of ["shared-ui-copy.js", "user-model-copy.js", "listing-tools-copy.js"])
     vm.runInContext(
       fs.readFileSync(path.join(__dirname, "../lib", file), "utf8"),
       context,

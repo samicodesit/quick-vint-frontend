@@ -599,7 +599,6 @@
     en: {
       title: "Saved note",
       label: "Description note",
-      placeholder: "Smoke-free home. Happy to bundle items.",
       bullets: [
         "Appears on every future listing",
         "Added before hashtags",
@@ -611,14 +610,12 @@
       saved: "Saved note updated.",
       cleared: "Saved note cleared.",
       clear: "Clear",
-      cancel: "Cancel",
       save: "Save",
       close: "Close saved note form",
     },
     fr: {
       title: "Note enregistrée",
       label: "Note de description",
-      placeholder: "Maison non-fumeur. Regroupement possible.",
       bullets: ["Ajoutée à chaque future annonce", "Placée avant les hashtags", "Pas de liens ni coordonnées"],
       locked: "Disponible avec l'essai gratuit et les offres Pro ou Business.",
       includeLabel: "Utiliser pour cette annonce",
@@ -626,14 +623,12 @@
       saved: "Note enregistrée.",
       cleared: "Note supprimée.",
       clear: "Effacer",
-      cancel: "Annuler",
       save: "Enregistrer",
       close: "Fermer la note enregistrée",
     },
     cz: {
       title: "Uložená poznámka",
       label: "Poznámka k popisu",
-      placeholder: "Nekuřácká domácnost. Ráda sloučím více věcí.",
       bullets: ["Zobrazí se u každého dalšího inzerátu", "Přidá se před hashtagy", "Bez odkazů a kontaktních údajů"],
       locked: "Dostupné ve zkušební verzi zdarma a v tarifech Pro nebo Business.",
       includeLabel: "Použít u tohoto inzerátu",
@@ -641,14 +636,12 @@
       saved: "Poznámka uložena.",
       cleared: "Poznámka vymazána.",
       clear: "Vymazat",
-      cancel: "Zrušit",
       save: "Uložit",
       close: "Zavřít uloženou poznámku",
     },
     da: {
       title: "Gemt note",
       label: "Note til beskrivelse",
-      placeholder: "Røgfrit hjem. Samler gerne varer.",
       bullets: ["Vises på alle fremtidige annoncer", "Tilføjes før hashtags", "Ingen links eller kontaktoplysninger"],
       locked: "Tilgængelig i gratis prøveperiode og på Pro eller Business.",
       includeLabel: "Brug på denne annonce",
@@ -656,14 +649,12 @@
       saved: "Note gemt.",
       cleared: "Note ryddet.",
       clear: "Ryd",
-      cancel: "Annuller",
       save: "Gem",
       close: "Luk gemt note",
     },
     nl: {
       title: "Opgeslagen notitie",
       label: "Notitie voor beschrijving",
-      placeholder: "Rookvrij huis. Bundelen is mogelijk.",
       bullets: ["Verschijnt bij elke toekomstige advertentie", "Komt voor de hashtags", "Geen links of contactgegevens"],
       locked: "Beschikbaar tijdens de gratis proefperiode en met Pro of Business.",
       includeLabel: "Gebruiken voor deze advertentie",
@@ -671,14 +662,12 @@
       saved: "Notitie opgeslagen.",
       cleared: "Notitie gewist.",
       clear: "Wissen",
-      cancel: "Annuleren",
       save: "Opslaan",
       close: "Opgeslagen notitie sluiten",
     },
     de: {
       title: "Gespeicherte Notiz",
       label: "Notiz für Beschreibung",
-      placeholder: "Rauchfreier Haushalt. Kombiversand möglich.",
       bullets: ["Erscheint bei jedem künftigen Angebot", "Wird vor Hashtags eingefügt", "Keine Links oder Kontaktdaten"],
       locked: "Verfügbar im kostenlosen Test und mit Pro oder Business.",
       includeLabel: "Für dieses Angebot verwenden",
@@ -686,14 +675,12 @@
       saved: "Notiz gespeichert.",
       cleared: "Notiz gelöscht.",
       clear: "Löschen",
-      cancel: "Abbrechen",
       save: "Speichern",
       close: "Gespeicherte Notiz schließen",
     },
     el: {
       title: "Αποθηκευμένη σημείωση",
       label: "Σημείωση περιγραφής",
-      placeholder: "Σπίτι χωρίς καπνό. Μπορώ να συνδυάσω προϊόντα.",
       bullets: ["Εμφανίζεται σε κάθε μελλοντική αγγελία", "Μπαίνει πριν από τα hashtags", "Χωρίς links ή στοιχεία επικοινωνίας"],
       locked: "Διαθέσιμο στη δωρεάν δοκιμή και στα Pro ή Business.",
       includeLabel: "Χρήση σε αυτή την αγγελία",
@@ -701,14 +688,12 @@
       saved: "Η σημείωση αποθηκεύτηκε.",
       cleared: "Η σημείωση διαγράφηκε.",
       clear: "Διαγραφή",
-      cancel: "Άκυρο",
       save: "Αποθήκευση",
       close: "Κλείσιμο αποθηκευμένης σημείωσης",
     },
     hr: {
       title: "Spremljena napomena",
       label: "Napomena za opis",
-      placeholder: "Dom bez dima. Mogu spojiti više artikala.",
       bullets: ["Pojavljuje se na svakoj budućoj objavi", "Dodaje se prije hashtagova", "Bez linkova ili kontakt podataka"],
       locked: "Dostupno u besplatnoj probi i na Pro ili Business planu.",
       includeLabel: "Koristi na ovoj objavi",
@@ -716,14 +701,12 @@
       saved: "Napomena spremljena.",
       cleared: "Napomena obrisana.",
       clear: "Obriši",
-      cancel: "Odustani",
       save: "Spremi",
       close: "Zatvori spremljenu napomenu",
     },
     fi: {
       title: "Tallennettu huomautus",
       label: "Kuvaustekstiin lisättävä huomautus",
-      placeholder: "Savuton koti. Yhdistelen mielelläni tuotteita.",
       bullets: ["Näkyy jokaisessa tulevassa ilmoituksessa", "Lisätään ennen hashtageja", "Ei linkkejä tai yhteystietoja"],
       locked: "Saatavilla ilmaisessa kokeilussa sekä Pro- tai Business-tilillä.",
       includeLabel: "Käytä tässä ilmoituksessa",
@@ -731,14 +714,12 @@
       saved: "Huomautus tallennettu.",
       cleared: "Huomautus tyhjennetty.",
       clear: "Tyhjennä",
-      cancel: "Peruuta",
       save: "Tallenna",
       close: "Sulje tallennettu huomautus",
     },
     hu: {
       title: "Mentett megjegyzés",
       label: "Leírás megjegyzése",
-      placeholder: "Dohányfüstmentes otthon. Több terméket is össze tudok vonni.",
       bullets: ["Minden jövőbeli hirdetésben megjelenik", "A hashtagek elé kerül", "Nincsenek linkek vagy elérhetőségek"],
       locked: "Elérhető az ingyenes próba alatt, valamint Pro vagy Business csomaggal.",
       includeLabel: "Használat ennél a hirdetésnél",
@@ -746,14 +727,12 @@
       saved: "Megjegyzés mentve.",
       cleared: "Megjegyzés törölve.",
       clear: "Törlés",
-      cancel: "Mégse",
       save: "Mentés",
       close: "Mentett megjegyzés bezárása",
     },
     it: {
       title: "Nota salvata",
       label: "Nota per la descrizione",
-      placeholder: "Casa senza fumo. Posso unire più articoli.",
       bullets: ["Compare in ogni annuncio futuro", "Viene aggiunta prima degli hashtag", "Niente link o contatti"],
       locked: "Disponibile nella prova gratuita e con Pro o Business.",
       includeLabel: "Usa in questo annuncio",
@@ -761,14 +740,12 @@
       saved: "Nota salvata.",
       cleared: "Nota eliminata.",
       clear: "Cancella",
-      cancel: "Annulla",
       save: "Salva",
       close: "Chiudi nota salvata",
     },
     lt: {
       title: "Išsaugota pastaba",
       label: "Aprašymo pastaba",
-      placeholder: "Namai be dūmų. Galiu sujungti kelias prekes.",
       bullets: ["Rodoma kiekviename būsimame skelbime", "Pridedama prieš grotažymes", "Be nuorodų ar kontaktų"],
       locked: "Pasiekiama nemokamos bandomosios versijos metu ir su Pro arba Business.",
       includeLabel: "Naudoti šiame skelbime",
@@ -776,14 +753,12 @@
       saved: "Pastaba išsaugota.",
       cleared: "Pastaba išvalyta.",
       clear: "Išvalyti",
-      cancel: "Atšaukti",
       save: "Išsaugoti",
       close: "Uždaryti išsaugotą pastabą",
     },
     pl: {
       title: "Zapisana notatka",
       label: "Notatka do opisu",
-      placeholder: "Dom bez dymu. Chętnie połączę kilka rzeczy.",
       bullets: ["Pojawia się w każdej przyszłej ofercie", "Dodawana przed hashtagami", "Bez linków i danych kontaktowych"],
       locked: "Dostępne w darmowej wersji próbnej oraz w Pro lub Business.",
       includeLabel: "Użyj w tej ofercie",
@@ -791,14 +766,12 @@
       saved: "Notatka zapisana.",
       cleared: "Notatka usunięta.",
       clear: "Wyczyść",
-      cancel: "Anuluj",
       save: "Zapisz",
       close: "Zamknij zapisaną notatkę",
     },
     pt: {
       title: "Nota guardada",
       label: "Nota da descrição",
-      placeholder: "Casa sem fumo. Posso juntar artigos.",
       bullets: ["Aparece em todos os anúncios futuros", "É adicionada antes das hashtags", "Sem links ou contactos"],
       locked: "Disponível no teste gratuito e nos planos Pro ou Business.",
       includeLabel: "Usar neste anúncio",
@@ -806,14 +779,12 @@
       saved: "Nota guardada.",
       cleared: "Nota apagada.",
       clear: "Limpar",
-      cancel: "Cancelar",
       save: "Guardar",
       close: "Fechar nota guardada",
     },
     ro: {
       title: "Notă salvată",
       label: "Notă pentru descriere",
-      placeholder: "Casă fără fum. Pot grupa articole.",
       bullets: ["Apare la fiecare anunț viitor", "Este adăugată înainte de hashtaguri", "Fără linkuri sau date de contact"],
       locked: "Disponibil în perioada gratuită și pe Pro sau Business.",
       includeLabel: "Folosește la acest anunț",
@@ -821,14 +792,12 @@
       saved: "Notă salvată.",
       cleared: "Notă ștearsă.",
       clear: "Șterge",
-      cancel: "Anulează",
       save: "Salvează",
       close: "Închide nota salvată",
     },
     es: {
       title: "Nota guardada",
       label: "Nota para la descripción",
-      placeholder: "Casa sin humo. Puedo agrupar artículos.",
       bullets: ["Aparece en todos los anuncios futuros", "Se añade antes de los hashtags", "Sin enlaces ni datos de contacto"],
       locked: "Disponible en la prueba gratuita y en Pro o Business.",
       includeLabel: "Usar en este anuncio",
@@ -836,14 +805,12 @@
       saved: "Nota guardada.",
       cleared: "Nota eliminada.",
       clear: "Borrar",
-      cancel: "Cancelar",
       save: "Guardar",
       close: "Cerrar nota guardada",
     },
     sk: {
       title: "Uložená poznámka",
       label: "Poznámka k popisu",
-      placeholder: "Nefajčiarska domácnosť. Rada spojím viac vecí.",
       bullets: ["Zobrazí sa pri každom budúcom inzeráte", "Pridá sa pred hashtagy", "Bez odkazov a kontaktných údajov"],
       locked: "Dostupné v bezplatnej skúšobnej verzii a v Pro alebo Business.",
       includeLabel: "Použiť v tomto inzeráte",
@@ -851,14 +818,12 @@
       saved: "Poznámka uložená.",
       cleared: "Poznámka vymazaná.",
       clear: "Vymazať",
-      cancel: "Zrušiť",
       save: "Uložiť",
       close: "Zavrieť uloženú poznámku",
     },
     sv: {
       title: "Sparad notis",
       label: "Notis till beskrivning",
-      placeholder: "Rökfritt hem. Samfraktar gärna.",
       bullets: ["Visas på varje framtida annons", "Läggs till före hashtags", "Inga länkar eller kontaktuppgifter"],
       locked: "Tillgängligt under gratis testperiod och med Pro eller Business.",
       includeLabel: "Använd i denna annons",
@@ -866,7 +831,6 @@
       saved: "Notis sparad.",
       cleared: "Notis rensad.",
       clear: "Rensa",
-      cancel: "Avbryt",
       save: "Spara",
       close: "Stäng sparad notis",
     },
@@ -1544,6 +1508,13 @@
     } catch (_) {}
     const billing = window.AutoListerBilling;
     const billingCopy = billing.getCopy(billingLocale);
+    if (limitCode === "account_paused") {
+      const common = globalThis.AutoListerSharedUiCopy;
+      title = common.get("paywall.pausedTitle", billingLocale);
+      message = common.get("paywall.pausedMessage", billingLocale);
+      trustNote = common.get("paywall.pausedTrust", billingLocale);
+      secondaryActionText = common.get("support.contact", billingLocale);
+    }
     if (limitCode === "free_lifetime_limit") {
       title = billingCopy.freeLimitTitle.replace("{limit}", String(FREE_LIFETIME_LIMIT));
       message = billingCopy.freeLimitMessage;
@@ -1898,7 +1869,7 @@
   function getDescriptionFooterCopy(languageCode) {
     const supportedLanguage =
       languageDefaults.getSupportedLanguageCode(languageCode) || "en";
-    return DESCRIPTION_FOOTER_COPY[supportedLanguage] || DESCRIPTION_FOOTER_COPY.en;
+    return { ...(DESCRIPTION_FOOTER_COPY[supportedLanguage] || DESCRIPTION_FOOTER_COPY.en), ...globalThis.AutoListerSharedUiCopy.project({ cancel: "action.cancel", placeholder: "listing.sellerNotePlaceholder" }, supportedLanguage) };
   }
 
   function getUploadChoiceCopy(languageCode) {
@@ -2343,16 +2314,16 @@
 
   function showAccountPausedPaywall(pricingUrl) {
     showLimitPaywall({
-      title: "Continue with a paid option",
+      title: globalThis.AutoListerSharedUiCopy.get("paywall.pausedTitle", "en"),
       message:
-        "Paid plans and credit packs let legitimate sellers continue while support reviews duplicate free-trial issues.",
+        globalThis.AutoListerSharedUiCopy.get("paywall.pausedMessage", "en"),
       options: [
         planOption("starter", { featured: true }),
         planOption("pro"),
         planOption("business"),
         creditPackOption({ badge: "One-time purchase" }),
       ],
-      trustNote: "Secure checkout by Stripe. Contact support if this pause looks wrong.",
+      trustNote: globalThis.AutoListerSharedUiCopy.get("paywall.pausedTrust", "en"),
       actionText: "Upgrade to Starter",
       actionUrl: pricingUrl,
       secondaryActionText: "Contact support",
@@ -12515,7 +12486,7 @@
   }
 
   function updateDescriptionFooterModalState(modal, { allowed, text, status = "" }) {
-    const copy = modal.__descriptionFooterCopy || DESCRIPTION_FOOTER_COPY.en;
+    const copy = modal.__descriptionFooterCopy || getDescriptionFooterCopy("en");
     const textarea = modal.querySelector(".quickvint-footer-textarea");
     const counter = modal.querySelector(".quickvint-footer-count");
     const statusEl = modal.querySelector(".quickvint-footer-status");
@@ -12693,7 +12664,7 @@
   async function saveDescriptionFooterFromModal() {
     const modal = document.getElementById(DESCRIPTION_FOOTER_MODAL_ID);
     if (!modal || modal.dataset.allowed !== "true") return;
-    const copy = modal.__descriptionFooterCopy || DESCRIPTION_FOOTER_COPY.en;
+    const copy = modal.__descriptionFooterCopy || getDescriptionFooterCopy("en");
     const textarea = modal.querySelector(".quickvint-footer-textarea");
     const text = textarea?.value || "";
     const validation = validateDescriptionFooterText(text);

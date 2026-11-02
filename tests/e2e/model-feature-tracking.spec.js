@@ -5,6 +5,7 @@ const root = path.resolve(__dirname, "../..");
 
 test("model funnel records transitions once and excludes appearance data", async ({ page }) => {
   await page.setContent('<section id="model"></section>');
+  await page.addScriptTag({ path: path.join(root, "lib/shared-ui-copy.js") });
   await page.addScriptTag({ path: path.join(root, "lib/user-model-copy.js") });
   await page.addScriptTag({ path: path.join(root, "lib/user-model-ui.js") });
   await page.evaluate(() => {

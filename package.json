@@ -12,7 +12,9 @@
     "verify:production": "npm test && npm run build:prod",
     "push:production": "bash scripts/push-production.sh",
     "build": "node scripts/set-env.js && terser content.js -o content.min.js --compress --mangle",
-    "build:prod": "API_BASE_URL=https://autolister.app node scripts/set-env.js && terser content.js -o content.min.js --compress --mangle",
+    "build:prod": "npm run translations:check && API_BASE_URL=https://autolister.app node scripts/set-env.js && terser content.js -o content.min.js --compress --mangle",
+    "translations:sync": "node scripts/sync-shared-translations.js",
+    "translations:check": "node scripts/check-shared-translations.js",
     "build:local": "API_BASE_URL=http://localhost:5000 node scripts/set-env.js && terser content.js -o content.min.js --compress --mangle",
     "prepare": "npm run build",
     "release:status": "node scripts/release-version.js status",
@@ -27,7 +29,7 @@
     "canary:dom:setup": "DOM_CANARY_HEADED=1 DOM_CANARY_NO_POST=1 DOM_CANARY_KEEP_OPEN_MS=600000 node scripts/run-dom-canary.mjs",
     "live:session": "node scripts/create-live-test-session.mjs",
     "test:live:wardrobe": "powershell.exe -NoProfile -ExecutionPolicy Bypass -File \"$(wslpath -w scripts/run-live-wardrobe-rewrite.ps1)\"",
-    "package": "node build.js"
+    "package": "npm run translations:check && node build.js"
   },
   "repository": {
     "type": "git",

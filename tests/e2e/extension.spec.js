@@ -12,6 +12,31 @@ const billingCatalogPath = path.join(extensionPath, "lib/billing-catalog.js");
 const qrCodePath = path.join(extensionPath, "lib/qrcode.min.js");
 const contentScriptPath = path.join(extensionPath, "content.js");
 
+for (const locale of Object.keys(require(path.join(extensionPath, "lib/shared-ui-copy.js")).billing)) {
+  test(`shared pause copy renders in ${locale} without changing listing fields`, async ({ page }) => {
+    const shared = require(path.join(extensionPath, "lib/shared-ui-copy.js"));
+    await page.route("https://autolister.app/api/generate", route => route.fulfill({
+      status: 403, contentType: "application/json",
+      body: JSON.stringify({ code: "account_paused", error: "Account paused." }),
+    }));
+    await openContentHarness(page, null, { initialStorage: {
+      selectedLanguage: locale, selectedTitleLanguage: "en", selectedDescriptionLanguage: locale,
+      quickvintLanguagePreferenceTouched: true,
+    } });
+    await page.locator('[data-testid="title--input"]').fill("Seller's original title");
+    await page.locator('[data-testid="description--input"]').fill("Seller's original description");
+    await page.locator("#quickvint-gen-btn").click();
+    await page.getByRole("button", { name: "Replace existing text", exact: true }).click();
+    await page.locator("#quickvint-toast .toast-action-button").click();
+    const paywall = page.locator("#quickvint-toast.paywall");
+    for (const id of ["paywall.pausedTitle", "paywall.pausedMessage", "paywall.pausedTrust", "support.contact"])
+      await expect(paywall).toContainText(shared.get(id, locale));
+    await expect(paywall.locator('a[href^="mailto:"]')).toHaveAttribute("href", /support@autolister\.app/);
+    await expect(page.locator('[data-testid="title--input"]')).toHaveValue("Seller's original title");
+    await expect(page.locator('[data-testid="description--input"]')).toHaveValue("Seller's original description");
+  });
+}
+
 test("Bloom sibling labels retain both language controls and their separate preferences", async ({ page }) => {
   const html = listingFixture
     .replace(/<label>\s*Title\s*<input data-testid="title--input"\s*\/?>\s*<\/label>/,
@@ -1155,6 +1180,7 @@ async function openContentHarness(page, capacityResponse = null, options = {}) {
       };
     });
   }
+  await page.addScriptTag({ path: path.join(extensionPath, "lib/shared-ui-copy.js") });
   await page.addScriptTag({ path: billingCatalogPath });
   await page.addScriptTag({ path: languageDefaultsPath });
   await page.addScriptTag({ path: qrCodePath });
@@ -1246,6 +1272,7 @@ async function openWardrobeEditHarness(page, itemId = "42", options = {}) {
         originalSetInterval(callback, delay === 20 * 1000 ? 25 : delay, ...args);
     });
   }
+  await page.addScriptTag({ path: path.join(extensionPath, "lib/shared-ui-copy.js") });
   await page.addScriptTag({ path: billingCatalogPath });
   await page.addScriptTag({ path: languageDefaultsPath });
   await installTelemetryHarness(page, extensionPath);
@@ -1364,6 +1391,7 @@ async function openWardrobeHarness(
       : { supabaseSession: null }),
     ...initialStorage,
   });
+  await page.addScriptTag({ path: path.join(extensionPath, "lib/shared-ui-copy.js") });
   await page.addScriptTag({ path: billingCatalogPath });
   await page.addScriptTag({ path: languageDefaultsPath });
   await installTelemetryHarness(page, extensionPath);
@@ -1657,6 +1685,7 @@ async function openImageCompressionHarness(page, proxyResponse) {
       originalSendMessage(message, callback);
     };
   }, proxyResponse);
+  await page.addScriptTag({ path: path.join(extensionPath, "lib/shared-ui-copy.js") });
   await page.addScriptTag({ path: billingCatalogPath });
   await page.addScriptTag({ path: languageDefaultsPath });
   await installTelemetryHarness(page, extensionPath);
@@ -3503,6 +3532,7 @@ test.describe("AutoLister extension smoke flows", () => {
       expect(manifest.content_scripts[0].js).toEqual([
         "canary-config.js",
         "language-defaults.js",
+        "lib/shared-ui-copy.js",
         "lib/billing-catalog.js",
         "lib/qrcode.min.js",
         "lib/telemetry-registry.js",
@@ -4444,7 +4474,8 @@ test.describe("AutoLister extension smoke flows", () => {
     expect(JSON.stringify(storage)).not.toContain(description);
     await page.reload({ waitUntil: "domcontentloaded" });
     await installChromeHarness(page, null, storage);
-    await page.addScriptTag({ path: billingCatalogPath });
+    await page.addScriptTag({ path: path.join(extensionPath, "lib/shared-ui-copy.js") });
+  await page.addScriptTag({ path: billingCatalogPath });
   await page.addScriptTag({ path: languageDefaultsPath });
     await page.addScriptTag({ path: qrCodePath });
     await installTelemetryHarness(page, extensionPath);
@@ -8334,7 +8365,8 @@ test.describe("wardrobe rewrite tab", () => {
     await expect(ping()).resolves.toEqual({ ok: false, itemId: "42" });
     await page.reload({ waitUntil: "domcontentloaded" });
     await installChromeHarness(page);
-    await page.addScriptTag({ path: billingCatalogPath });
+    await page.addScriptTag({ path: path.join(extensionPath, "lib/shared-ui-copy.js") });
+  await page.addScriptTag({ path: billingCatalogPath });
   await page.addScriptTag({ path: languageDefaultsPath });
     await installTelemetryHarness(page, extensionPath);
     await page.addScriptTag({ path: contentScriptPath });
