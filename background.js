@@ -400,13 +400,15 @@ async function refreshTokenWithRetry(maxRetries = 3, diagnostic = {}) {
   tokenRefreshPromise = (async () => {
     let lastRefreshError;
     let attempts = 0;
+    let renewalNeeded = true;
     try {
       const session = await getStoredSession();
       if (!session?.refresh_token) return null;
       tokenRefreshDiagnostic.ownerId = session.user?.id;
+      renewalNeeded = !diagnostic.restoreOnly || isTokenNearExpiry(session);
       const sameOwner = async () => (await getStoredSession())?.user?.id === session.user?.id;
 
-      trackRefresh("token_refresh_start");
+      if (renewalNeeded) trackRefresh("token_refresh_start");
       refreshPhase = "restore_session";
       const restored = await supabaseClient.auth.setSession({
         access_token: session.access_token,
@@ -429,11 +431,32 @@ async function refreshTokenWithRetry(maxRetries = 3, diagnostic = {}) {
         if (!accessTokenExpired) throw restored.error;
       }
 
+      // Restoring an expired JWT can already renew it. Reading the SDK
+      // session also consumes its near-expiry renewal before a forced refresh,
+      // so refreshSession cannot rotate twice using an outdated token.
+      let restoredSession = restored.data?.session;
       for (let attempt = 1; attempt <= maxRetries; attempt++) {
         attempts = attempt;
         refreshPhase = "refresh_session";
-        const { data, error } = await supabaseClient.auth.refreshSession({
-          refresh_token: session.refresh_token,
+        let result;
+        if (restoredSession) {
+          const current = await supabaseClient.auth.getSession();
+          if (!(await sameOwner())) return null;
+          if (current.error) result = current;
+          else {
+            restoredSession = current.data?.session || restoredSession;
+            if (!isTokenNearExpiry(restoredSession) &&
+                (diagnostic.restoreOnly || restoredSession.access_token !== session.access_token)) {
+              await setStoredSession(restoredSession);
+              if (restoredSession.access_token !== session.access_token) trackRefresh("token_refresh_success");
+              return restoredSession;
+            }
+          }
+        }
+        // SDK session reads can renew too. Their transient failures belong
+        // to the existing retry loop, with the same rejection safeguards.
+        const { data, error } = result || await supabaseClient.auth.refreshSession({
+          refresh_token: restoredSession?.refresh_token || session.refresh_token,
         });
         if (!(await sameOwner())) {
           if (error) throw error;
@@ -463,7 +486,7 @@ async function refreshTokenWithRetry(maxRetries = 3, diagnostic = {}) {
       console.error("Token refresh failed after all retries.");
       return null;
     } catch (error) {
-      trackRefresh("token_refresh_failed", { ...refreshErrorContext(error), reason: "refresh_exception", attempts });
+      if (renewalNeeded) trackRefresh("token_refresh_failed", { ...refreshErrorContext(error), reason: "refresh_exception", attempts });
       console.error("Unexpected error during token refresh:", error);
       return null;
     }
@@ -496,7 +519,12 @@ async function ensureValidToken(diagnostic = {}, options = {}) {
     return session;
   }
   if (options.forceRefresh || isTokenNearExpiry(session)) {
-    const renewed = await refreshTokenWithRetry(3, diagnostic);
+    let renewed = await refreshTokenWithRetry(3, diagnostic);
+    // A forced API-401 retry can join startup's restore-only operation.
+    // Restoring the unchanged rejected token does not satisfy that retry.
+    if (options.forceRefresh && renewed?.access_token === session.access_token) {
+      renewed = await refreshTokenWithRetry(3, diagnostic);
+    }
     const current = await getStoredSession();
     if (current && current.user?.id !== diagnostic.ownerId) {
       diagnostic.accountChanged = true;
@@ -3081,6 +3109,10 @@ supabaseClient.auth.onAuthStateChange((event, session) => {
       // selected while its network request was pending.
       const refreshingOwnerId = tokenRefreshDiagnostic?.ownerId;
       if (refreshingOwnerId && (await getStoredSession())?.user?.id !== refreshingOwnerId) return;
+      // The SDK also renews outside our explicit coordinator. A late renewal
+      // must not restore a logged-out or previously selected account.
+      if (event === "TOKEN_REFRESHED" &&
+          session?.user?.id !== (await getStoredSession())?.user?.id) return;
       if (event === "SIGNED_OUT" || event === "USER_DELETED") {
         if (tokenRefreshTimeout) clearTimeout(tokenRefreshTimeout);
         const keysToRemove = ["supabaseSession", "userProfile"];
@@ -3122,17 +3154,12 @@ chrome.runtime.onSuspend.addListener(() => {
 async function init() {
   const session = await getStoredSession();
   if (session) {
-    await supabaseClient.auth.setSession({
-      access_token: session.access_token,
-      refresh_token: session.refresh_token,
-    });
-
-    updateAndStoreUserProfile();
-
-    if (isTokenNearExpiry(session)) {
-      await refreshTokenWithRetry(3, { entryPoint: "startup_restore" });
-    } else {
-      scheduleTokenRefresh(session);
+    const restored = await refreshTokenWithRetry(3, { entryPoint: "startup_restore", restoreOnly: true });
+    const current = await getStoredSession();
+    // A failed validation of a still-usable token must not lose its existing
+    // refresh schedule, or schedule an account that has since signed out.
+    if (!restored && current?.user?.id === session.user?.id && current && !isTokenNearExpiry(current)) {
+      scheduleTokenRefresh(current);
     }
   }
 }

@@ -30,6 +30,7 @@ async function runBackgroundHandoff(
   let clientOptions;
   let setSessionArgs = null;
   let verifyOtpArgs = null;
+  let sdkSession = null;
   const setSessionResult = options.setSessionResult || {
     data: {
       session: {
@@ -45,16 +46,22 @@ async function runBackgroundHandoff(
         setSessionArgs = session;
         if (options.onSetSession) return options.onSetSession(session);
         if (options.setSessionError) throw options.setSessionError;
-        return {
+        const result = {
           ...setSessionResult,
           data: {
             ...setSessionResult.data,
             session: setSessionResult.data?.session
-              ? { ...session, ...setSessionResult.data.session }
+              ? { ...session, ...(options.setSessionResult ? setSessionResult.data.session
+                  : storageData.supabaseSession?.access_token === session.access_token
+                    ? storageData.supabaseSession : setSessionResult.data.session) }
               : null,
           },
         };
+        sdkSession = result.data?.session || null;
+        if (sdkSession) authStateListener?.("SIGNED_IN", sdkSession);
+        return result;
       },
+      getSession: async () => ({ data: { session: sdkSession }, error: null }),
       getUser: async () => ({
         data: { user: { id: "user-1", email: "seller@example.com" } },
         error: null,
@@ -448,7 +455,9 @@ test("a server-expired access JWT still refreshes and persists the valid session
     setSessionResult: { data: { session: null }, error: { name: "AuthApiError", code: "bad_jwt", status: 403, message: "invalid JWT: token has invalid claims: token is expired" } },
     refreshSession: async () => { calls++; return { data: { session: renewed }, error: null }; },
   });
-  assert.equal((await harness.refreshToken())?.access_token, renewed.access_token);
+  // The real startup path now owns this restoration, rather than silently
+  // discarding its error before the test explicitly invokes another refresh.
+  assert.equal(harness.storageData.supabaseSession.access_token, renewed.access_token);
   await new Promise(resolve => setImmediate(resolve));
   assert.equal(calls, 1);
   assert.equal(harness.storageData.supabaseSession.refresh_token, renewed.refresh_token);

@@ -211,7 +211,7 @@ async function openBatchJourney(options = {}) {
   const sourceTabId = await worker.evaluate(async () => (await chrome.tabs.query({})).find(tab => tab.url?.includes("/items/new")).id);
   return {
     context, get worker() { return worker; }, controller, sourceTabId, requests, commits, events, eventRequests, cleanup, unexpected, files,
-    async restartWorker() {
+    async restartWorker(beforeWake) {
       const cdp = await context.newCDPSession(controller);
       const versions = new Map();
       cdp.on("ServiceWorker.workerVersionUpdated", ({ versions: updated }) => updated.forEach(version => versions.set(version.versionId, version)));
@@ -223,6 +223,7 @@ async function openBatchJourney(options = {}) {
       const target = targetInfos.find(target => target.type === "service_worker" && target.url === version.scriptURL);
       if (!target) throw new Error("Extension worker target was not found");
       await cdp.send("Target.closeTarget", { targetId: target.targetId });
+      if (beforeWake) await beforeWake();
       const response = await sendFromExtensionContent(context, controller, { type: "QUICKVINT_TAB_JOB_HEARTBEAT", kind: "batch" });
       await expect.poll(async () => {
         const candidate = context.serviceWorkers().find(isExtensionWorker);
