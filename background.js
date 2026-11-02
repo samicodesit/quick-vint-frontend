@@ -2718,12 +2718,36 @@ chrome.runtime.onMessageExternal.addListener((message, sender, sendResponse) => 
 /**
  * Main message handler for requests from other parts of the extension.
  */
+const listingTourClaims = new Map();
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   // The durable telemetry listener owns these acknowledgements. A second reply
   // here would win the race before storage or server acceptance completes.
   if (["AUTOLISTER_TELEMETRY", "AUTOLISTER_TELEMETRY_FLUSH"].includes(message?.type)) return false;
   (async () => {
     switch (message.type) {
+      case "CLAIM_LISTING_TOUR": {
+        const expected = message.expectedUserId;
+        if (sender.id !== chrome.runtime.id || typeof expected !== "string" || !expected ||
+          (listingTourClaims.get(expected) || 0) > Date.now()) {
+          sendResponse({ ok: true, claimed: false });
+          break;
+        }
+        // Reserve synchronously before storage reads, across tabs and origins.
+        // The short lease expires if the page cannot render its introduction.
+        listingTourClaims.set(expected, Date.now() + 5000);
+        try {
+          const key = "listingTourV1:" + expected;
+          const data = await chrome.storage.local.get(["supabaseSession", key]);
+          const claimed = data.supabaseSession?.user?.id === expected &&
+            Boolean(data.supabaseSession?.access_token) && !data[key];
+          if (!claimed) listingTourClaims.delete(expected);
+          sendResponse({ ok: true, claimed });
+        } catch {
+          listingTourClaims.delete(expected);
+          sendResponse({ ok: false, claimed: false });
+        }
+        break;
+      }
       case "LISTING_PHOTO_REQUEST":
       case "USER_MODEL_REQUEST": {
         const listingPhotos = message.type === "LISTING_PHOTO_REQUEST";

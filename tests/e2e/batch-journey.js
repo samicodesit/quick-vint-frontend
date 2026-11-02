@@ -205,6 +205,7 @@ async function openBatchJourney(options = {}) {
   }), options.session);
   await context.setOffline(false);
   const controller = await context.newPage();
+  if (options.beforeNavigate) await options.beforeNavigate({ context, worker, controller });
   await controller.goto("https://www.vinted.com/items/new", { waitUntil: "domcontentloaded" });
   await expect(controller.locator("#quickvint-phone-btn")).toBeVisible();
   const sourceTabId = await worker.evaluate(async () => (await chrome.tabs.query({})).find(tab => tab.url?.includes("/items/new")).id);

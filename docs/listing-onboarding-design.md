@@ -10,24 +10,29 @@ Use existing Geist and the same Lucide icons as the web app.
 
 ## First use
 
-Prefer a contextual, optional tour over an autoplay video or blocking wizard.
-A compact invitation offers Quick tour and Skip once on an authenticated
-new-listing page. No automatic tour on existing listings or batch worker tabs.
-Starting it shows three short anchored tips: add photos, generate and review,
+Show a contextual, nonblocking tour automatically once on an authenticated
+new-listing page, without an invitation row. Never open it on existing listings,
+hidden tabs or batch worker tabs, or after the user has started working.
+Show three short anchored tips: add photos, generate and review,
 optional model. If the model is unavailable, omit that tip. Mention languages
 and Writing style in the generation tip. Never perform actions on the user's
 behalf. No forced uploads, generation, paid calls or sample listing changes.
 
-Skip, close, Escape or completion permanently dismiss the automatic invitation
-for that account in this browser. More allows replay on create and edit pages.
-The tour does not steal focus until explicitly started. It has a visible step
+Remember the first successfully rendered automatic tip for that account in this
+browser. Preserve existing dismissal flags. Skip, Escape, outside interaction or
+completion closes it, without automatic reopening. Help allows replay on create
+and edit pages. Automatic appearance must not move focus or scroll the page;
+explicit navigation and replay may do so. It has a visible step
 counter, Back, Next, Done and Skip. On narrow screens use a compact bottom card.
 Respect reduced motion. Pause/dismiss when host navigation, account changes,
 generation, upload or a conflicting dialog makes the context invalid.
 
 Replace the automatic model invitation on listing pages with the model tour
 step and existing New badge. Keep the model setup view available on demand.
-No repeated popups following tour dismissal. No extra New badge.
+No repeated popups following tour dismissal. No extra New badge. Recheck owner,
+route, visibility and activity after asynchronous reads. Do not include an
+unusable model placeholder as a tour step. Do not infer first-time product use
+solely from the absence of the local dismissal flag.
 
 ## Verification
 

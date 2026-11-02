@@ -34,21 +34,24 @@ test("model funnel records transitions once and excludes appearance data", async
   await page.evaluate(() => window.dispose());
 });
 
-test("tour emits offered, skipped, replay started and completed through the durable transport", async () => {
+test("tour emits automatic exposure, skip, replay and completion through the durable transport", async () => {
   const f = await openBatchJourney();
   try {
     const p = f.controller;
     await expect(p.locator("#quickvint-model-control")).toBeVisible();
-    await expect(p.locator(".al-tour-invitation")).toBeVisible();
-    await p.locator(".al-tour-invitation").getByRole("button",{name:"Skip",exact:true}).click();
+    await expect(p.locator("#quickvint-listing-tour")).toBeVisible();
+    await p.locator("#quickvint-listing-tour").getByRole("button",{name:"Skip",exact:true}).click();
     await p.locator("#quickvint-more-btn").click();
     await p.locator("#quickvint-tour-replay").click();
     await p.locator("#quickvint-listing-tour").getByRole("button",{name:"Next",exact:true}).click();
     await p.locator("#quickvint-listing-tour").getByRole("button",{name:"Next",exact:true}).click();
     await p.locator("#quickvint-listing-tour").getByRole("button",{name:"Done",exact:true}).click();
     await expect.poll(() => f.events.filter(e=>e.event === "listing_tour_completed").length).toBe(1);
-    for(const event of ["listing_tour_offered","listing_tour_skipped","listing_tour_started"])
+    for(const event of ["listing_tour_offered","listing_tour_skipped"])
       expect(f.events.filter(e=>e.event===event)).toHaveLength(1);
+    const starts=f.events.filter(e=>e.event==="listing_tour_started");
+    expect(starts).toHaveLength(2);
+    expect(starts.map(e=>e.context.entryPoint)).toEqual(["automatic","help"]);
     expect(f.events.filter(e=>e.event === "listing_tour_closed")).toHaveLength(0);
     expect(f.requests).toHaveLength(0);
   } finally { await f.close(); }

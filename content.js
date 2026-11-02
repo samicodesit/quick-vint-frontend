@@ -13558,6 +13558,10 @@
       ".quickvint-note-control",
     );
     document.querySelector(".quickvint-tools")?.__quickvintSyncCollapse?.();
+    for (const id of ["quickvint-style-btn", "quickvint-more-btn"]) {
+      const button = document.getElementById(id);
+      if (button) button.style.display = isAuthenticated === true ? "inline-flex" : "none";
+    }
 
     if (isAuthenticated === null) {
       if (signInBtn) signInBtn.style.display = "none";
@@ -20330,6 +20334,7 @@
       syncDescriptionLengthToggleState();
       updateButtonUI();
       maybePostDomCanaryPass();
+      globalThis.dispatchEvent(new CustomEvent('autolister-listing-tools-ready'));
       return true;
     }
 
@@ -20382,12 +20387,14 @@
       injectFieldLanguageControls();
       updateButtonUI();
       maybePostDomCanaryPass();
+      globalThis.dispatchEvent(new CustomEvent('autolister-listing-tools-ready'));
       return true;
     }
     return false;
   }
 
   function startInjectionObserver() {
+    if (injectButton()) return;
     const pollInterval = setInterval(() => {
       if (injectButton()) {
         clearInterval(pollInterval);

@@ -1,8 +1,233 @@
 const { test, expect } = require("@playwright/test");
-const { openBatchJourney } = require("./batch-journey");
+const { openBatchJourney, sendFromExtensionContent } = require("./batch-journey");
 const fs = require("node:fs"),
   path = require("node:path");
 const evidence = process.env.LISTING_TOUR_EVIDENCE;
+
+for (const width of [1024, 375]) {
+test(`automatic introduction appears once without an invitation, focus theft or scrolling at ${width}px`, async () => {
+  const f = await openBatchJourney();
+  try {
+    const p = f.controller;
+    await p.setViewportSize({ width, height: 850 });
+    await realisticFixture(p);
+    await p.locator("#quickvint-more-btn").focus();
+    const scroll = await p.evaluate(() => scrollY);
+    const tour = p.locator("#quickvint-listing-tour");
+    await expect(tour).toBeVisible();
+    await expect(p.locator(".al-tour-invitation")).toHaveCount(0);
+    await expect(p.locator("#quickvint-more-btn")).toBeFocused();
+    expect(await p.evaluate(() => scrollY)).toBe(scroll);
+    await shot(p, `${width === 375 ? "mobile" : "desktop"}-automatic-tour`);
+    await expect.poll(() => f.worker.evaluate(async () =>
+      (await chrome.storage.local.get("listingTourV1:test-user"))["listingTourV1:test-user"],
+    )).toBe(true);
+    await tour.getByRole("button", { name: "Skip", exact: true }).click();
+    await p.reload();
+    await expect(p.locator("#quickvint-gen-btn")).toBeVisible();
+    await p.waitForTimeout(1200);
+    await expect(tour).toHaveCount(0);
+    await expect(p.locator(".al-tour-invitation")).toHaveCount(0);
+    await replay(p);
+    await expect(tour).toBeVisible();
+    expect(f.requests).toHaveLength(0);
+  } finally {
+    await f.close();
+  }
+});
+}
+
+test("starting to type before introduction readiness suppresses late automatic guidance", async () => {
+  const f = await openBatchJourney();
+  try {
+    const p = f.controller;
+    await p.locator('[data-testid="title--input"]').fill("My item");
+    await p.waitForTimeout(1500);
+    await expect(p.locator("#quickvint-listing-tour")).toHaveCount(0);
+    await expect(p.locator(".al-tour-invitation")).toHaveCount(0);
+    await expect(p.locator('[data-testid="title--input"]')).toHaveValue("My item");
+    await replay(p);
+    await expect(p.locator("#quickvint-listing-tour")).toBeVisible();
+    expect(f.requests).toHaveLength(0);
+  } finally {
+    await f.close();
+  }
+});
+
+test("Help replay works immediately before the first tour polling tick", async () => {
+  const f = await openBatchJourney();
+  try {
+    const p = f.controller;
+    await replay(p);
+    await expect(p.locator("#quickvint-listing-tour")).toBeVisible();
+    expect(f.requests).toHaveLength(0);
+  } finally {
+    await f.close();
+  }
+});
+
+test("a conflicting dialog defers the introduction without consuming it", async () => {
+  const f = await openBatchJourney();
+  try {
+    const p = f.controller;
+    await p.evaluate(() => {
+      const dialog = document.createElement("dialog");
+      dialog.id = "fixture-dialog";
+      dialog.textContent = "Existing dialog";
+      document.body.append(dialog);
+      dialog.showModal();
+    });
+    await p.waitForTimeout(1200);
+    await expect(p.locator("#quickvint-listing-tour")).toHaveCount(0);
+    expect(await f.worker.evaluate(async () =>
+      (await chrome.storage.local.get("listingTourV1:test-user"))["listingTourV1:test-user"],
+    )).toBeUndefined();
+    await p.evaluate(() => document.getElementById("fixture-dialog").remove());
+    await expect(p.locator("#quickvint-listing-tour")).toBeVisible();
+    expect(f.requests).toHaveLength(0);
+  } finally {
+    await f.close();
+  }
+});
+
+test("an untouched edit page never starts guidance but still supports Help replay", async () => {
+  const f = await openBatchJourney();
+  try {
+    const p = f.controller;
+    await p.evaluate(() => history.replaceState({}, "", "/items/123/edit"));
+    await p.waitForTimeout(1200);
+    await expect(p.locator("#quickvint-listing-tour")).toHaveCount(0);
+    await expect(p.locator(".al-tour-invitation")).toHaveCount(0);
+    expect(await f.worker.evaluate(async () =>
+      (await chrome.storage.local.get("listingTourV1:test-user"))["listingTourV1:test-user"],
+    )).toBeUndefined();
+    await replay(p);
+    await expect(p.locator("#quickvint-listing-tour")).toBeVisible();
+    expect(f.requests).toHaveLength(0);
+  } finally {
+    await f.close();
+  }
+});
+
+test("pending optional model data neither blocks the tour nor becomes a tour target", async () => {
+  const f = await openBatchJourney();
+  let release;
+  const ready = new Promise(resolve => { release = resolve; });
+  try {
+    const p = f.controller;
+    await f.context.route("https://autolister.app/api/user/model", async route => {
+      await ready;
+      await route.fulfill({ json: { enabled: false, model: null, invitationState: "seen" } });
+    });
+    await f.worker.evaluate(() => chrome.storage.local.remove("listingTourV1:test-user"));
+    await p.reload();
+    const tour = p.locator("#quickvint-listing-tour");
+    await expect(tour).toContainText("1 / 2");
+    await tour.getByRole("button", { name: "Next", exact: true }).click();
+    await expect(tour).toContainText("2 / 2");
+    await expect(tour.getByRole("button", { name: "Done", exact: true })).toBeVisible();
+    await expect(p.locator("#quickvint-model-control.al-tour-target")).toHaveCount(0);
+    expect(f.requests).toHaveLength(0);
+  } finally {
+    release();
+    await f.close();
+  }
+});
+
+test("lifecycle: signing in from an untouched listing still starts its introduction", async () => {
+  const f = await openBatchJourney();
+  try {
+    const p = f.controller;
+    const session = await f.worker.evaluate(async () =>
+      (await chrome.storage.local.get("supabaseSession")).supabaseSession);
+    await f.worker.evaluate(() => chrome.storage.local.set({ supabaseSession: null }));
+    await expect(p.locator("#quickvint-signin-btn")).toBeVisible();
+    await p.locator("#quickvint-signin-btn").click();
+    await f.worker.evaluate(session => chrome.storage.local.set({ supabaseSession: session }), session);
+    await expect(p.locator("#quickvint-listing-tour")).toBeVisible();
+    expect(f.requests).toHaveLength(0);
+  } finally { await f.close(); }
+});
+
+test("lifecycle: Escape after a passive introduction preserves focus outside the tour", async () => {
+  const f = await openBatchJourney();
+  try {
+    const p = f.controller;
+    await p.locator("#quickvint-more-btn").focus();
+    await expect(p.locator("#quickvint-listing-tour")).toBeVisible();
+    await p.locator('[data-testid="title--input"]').focus();
+    await p.keyboard.press("Escape");
+    await expect(p.locator("#quickvint-listing-tour")).toHaveCount(0);
+    await expect(p.locator('[data-testid="title--input"]')).toBeFocused();
+  } finally { await f.close(); }
+});
+
+test("lifecycle: an active automatic tour closes when navigation changes to another listing route", async () => {
+  const f = await openBatchJourney();
+  try {
+    const p = f.controller;
+    await expect(p.locator("#quickvint-listing-tour")).toBeVisible();
+    await p.evaluate(() => history.pushState({}, "", "/items/123/edit"));
+    await expect(p.locator("#quickvint-listing-tour")).toHaveCount(0);
+    await replay(p);
+    await expect(p.locator("#quickvint-listing-tour")).toBeVisible();
+  } finally { await f.close(); }
+});
+
+test("lifecycle: concurrent automatic introduction claims grant only one account-matched sender", async () => {
+  const f = await openBatchJourney();
+  try {
+    await f.controller.locator('[data-testid="title--input"]').fill("My item");
+    const message = { type: "CLAIM_LISTING_TOUR", expectedUserId: "test-user" };
+    const replies = await Promise.all([
+      sendFromExtensionContent(f.context, f.controller, message),
+      sendFromExtensionContent(f.context, f.controller, message),
+    ]);
+    expect(replies.filter(reply => reply.claimed)).toHaveLength(1);
+    const wrong = await sendFromExtensionContent(f.context, f.controller, {
+      ...message, expectedUserId: "another-user",
+    });
+    expect(wrong.claimed).toBe(false);
+    await f.worker.evaluate(() => chrome.storage.local.set({ "listingTourV1:test-user": true }));
+    const seen = await sendFromExtensionContent(f.context, f.controller, message);
+    expect(seen.claimed).toBe(false);
+    expect(f.requests).toHaveLength(0);
+  } finally { await f.close(); }
+});
+
+for (const width of [1024, 375]) {
+  test(`Writing style and Help follow sign-in state at ${width}px`, async () => {
+    const f = await openBatchJourney();
+    try {
+      const p = f.controller;
+      await p.setViewportSize({ width, height: 850 });
+      const session = await f.worker.evaluate(async () =>
+        (await chrome.storage.local.get("supabaseSession")).supabaseSession,
+      );
+      for (const id of ["style", "more"])
+        await expect(p.locator(`#quickvint-${id}-btn`)).toBeVisible();
+      await f.worker.evaluate(() =>
+        chrome.storage.local.set({ supabaseSession: null }),
+      );
+      await expect(p.locator("#quickvint-signin-btn")).toBeVisible();
+      await shot(p, `signed-out-${width}`);
+      for (const id of ["style", "more"])
+        await expect(p.locator(`#quickvint-${id}-btn`)).toBeHidden();
+      await p.reload();
+      await expect(p.locator("#quickvint-signin-btn")).toBeVisible();
+      for (const id of ["style", "more"])
+        await expect(p.locator(`#quickvint-${id}-btn`)).toBeHidden();
+      await f.worker.evaluate((session) =>
+        chrome.storage.local.set({ supabaseSession: session }), session,
+      );
+      for (const id of ["style", "more"])
+        await expect(p.locator(`#quickvint-${id}-btn`)).toBeVisible();
+      expect(f.requests).toHaveLength(0);
+    } finally {
+      await f.close();
+    }
+  });
+}
 
 test("localized toolbar layout stays within its form at desktop and phone widths", async () => {
   const f = await openBatchJourney();
@@ -281,10 +506,10 @@ test("hidden drop overlays never anchor photo tools or become their parent", asy
   }
 });
 
-async function finishInvitation(page) {
-  await expect(page.locator(".al-tour-invitation")).toBeVisible();
+async function finishAutomaticTour(page) {
+  await expect(page.locator("#quickvint-listing-tour")).toBeVisible();
   await page
-    .locator(".al-tour-invitation")
+    .locator("#quickvint-listing-tour")
     .getByRole("button", { name: "Skip", exact: true })
     .click();
 }
@@ -339,7 +564,7 @@ async function shot(page, name) {
     fullPage: true,
   });
 }
-test("first-use tour is optional, remembered, replayable and never generates", async () => {
+test("automatic tour is dismissible, remembered, replayable and never generates", async () => {
   const f = await openBatchJourney();
   try {
     const p = f.controller;
@@ -347,13 +572,8 @@ test("first-use tour is optional, remembered, replayable and never generates", a
     await realisticFixture(p);
     await expect(p.locator("#quickvint-model-control")).toBeVisible();
     await expect(p.locator(".um-modal")).toHaveCount(0);
-    await expect(p.locator(".al-tour-invitation")).toBeVisible();
-    await shot(p, "desktop-invitation");
-    await p
-      .locator(".al-tour-invitation")
-      .getByRole("button", { name: "Quick tour", exact: true })
-      .click();
-    await expect(p.locator("#quickvint-listing-tour")).toContainText("1 / 3");
+    await expect(p.locator(".al-tour-invitation")).toHaveCount(0);
+    await expect(p.locator("#quickvint-listing-tour")).toContainText(/1 \/ [23]/);
     await shot(p, "desktop-tour-photos");
     await p
       .locator("#quickvint-listing-tour")
@@ -409,7 +629,7 @@ test("writing preferences persist, dialogs contain keyboard focus and fit narrow
   const f = await openBatchJourney();
   try {
     const p = f.controller;
-    await finishInvitation(p);
+    await finishAutomaticTour(p);
     await expect(p.locator("#quickvint-model-control")).toBeVisible();
     await p.setViewportSize({ width: 375, height: 667 });
     await realisticFixture(p);
@@ -456,11 +676,11 @@ test("writing preferences persist, dialogs contain keyboard focus and fit narrow
     await f.close();
   }
 });
-test("edit pages have replay but no automatic invitation and account changes dismiss an active tour", async () => {
+test("edit pages have replay without automatic guidance and account changes dismiss an active tour", async () => {
   const f = await openBatchJourney();
   try {
     const p = f.controller;
-    await finishInvitation(p);
+    await finishAutomaticTour(p);
     await replay(p);
     await f.worker.evaluate(() =>
       chrome.storage.local.set({ supabaseSession: null }),
@@ -475,11 +695,9 @@ test("edit pages have replay but no automatic invitation and account changes dis
         },
       }),
     );
-    await expect(p.locator(".al-tour-invitation")).toBeVisible();
-    await p
-      .locator(".al-tour-invitation")
-      .getByRole("button", { name: "Skip", exact: true })
-      .click();
+    await expect(p.locator("#quickvint-more-btn")).toBeVisible();
+    await p.waitForTimeout(1200);
+    await expect(p.locator("#quickvint-listing-tour")).toHaveCount(0);
     await p.evaluate(() => history.pushState({}, "", "/items/123/edit"));
     await p.waitForTimeout(1200);
     await expect(p.locator(".al-tour-invitation")).toHaveCount(0);

@@ -12,6 +12,17 @@ npm run build:prod
 - `npm run test:unit`
 - `npm run test:e2e`
 
+From a worktree, explicitly select the matching API checkout for coordinated
+phone-page, socket and auth-handoff checks. The default sibling path can resolve
+to an older worktree even when its files exist:
+
+```bash
+AUTOLISTER_API_PATH=/path/to/matching/quick-vint-api npm test
+```
+
+Use the configured single browser worker for the acceptance gate. Native
+visibility and focus checks need the repository's normal execution conditions.
+
 ## Critical Contracts
 
 Generation/upload changes must keep these contracts covered in `tests/e2e/extension.spec.js`:
