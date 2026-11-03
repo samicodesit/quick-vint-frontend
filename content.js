@@ -1,4 +1,5 @@
 (() => {
+  if (!["text/html", "application/xhtml+xml"].includes(document.contentType)) return;
   // --- CONSTANTS & CONFIGURATION ---
   const BTN_ID = "quickvint-gen-btn";
   const PHONE_BTN_ID = "quickvint-phone-btn";
@@ -12160,7 +12161,7 @@
         }
       }
     `;
-    document.head.appendChild(style);
+    (document.head || document.documentElement).appendChild(style);
   }
 
   function createButton() {
@@ -21231,5 +21232,14 @@
     startInjectionObserver();
   }
 
-  init();
+  if (document.body) {
+    init();
+  } else if (document.documentElement) {
+    const waitForBody = new MutationObserver(() => {
+      if (!document.body) return;
+      waitForBody.disconnect();
+      init();
+    });
+    waitForBody.observe(document.documentElement, { childList: true });
+  }
 })();
