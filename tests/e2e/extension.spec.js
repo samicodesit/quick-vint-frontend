@@ -7103,23 +7103,14 @@ test.describe("AutoLister extension smoke flows", () => {
         (item) => item.capturedUploadFile?.fileName,
       ),
     ).toEqual(["phone-1.jpg", "phone-2.jpg", "phone-3.jpg"]);
-    await expect
-      .poll(() =>
-        page.evaluate(() => {
-          const sessions = window.__phoneSessions || [];
-          const cleanupUrls = window.__extensionHarness.runtimeMessages
-            .filter(
-              (message) =>
-                message?.type === "PROXY_FETCH" &&
-                String(message.url || "").includes("action=cleanup"),
-            )
-            .map((message) => String(message.url || ""));
-          return sessions.filter((sessionId) =>
-            cleanupUrls.some((url) => url.includes(`sessionId=${sessionId}`)),
-          ).length;
-        }),
-      )
-      .toBe(2);
+    await expect(page.locator("#quickvint-phone-modal")).toHaveCount(0);
+    const cleanupsPerSession = await page.evaluate(() => {
+      const cleanups = window.__extensionHarness.runtimeMessages
+        .filter((message) => message?.type === "PROXY_FETCH" && message.url?.includes("action=cleanup"))
+        .map((message) => new URL(message.url).searchParams.get("sessionId"));
+      return window.__phoneSessions.map((id) => cleanups.filter((session) => session === id).length);
+    });
+    expect(cleanupsPerSession).toEqual([1, 1]);
 
     const eventNames = trackedEvents.flatMap((body) =>
       (body.events || []).map((event) => event.event),

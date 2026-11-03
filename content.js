@@ -2914,6 +2914,8 @@
     capturedUpload.files.forEach((entry) => {
       entry.generateUrl = null;
     });
+    capturedUpload.storageSessionIds = (capturedUpload.storageSessionIds || []).filter((id) => id !== sessionId);
+    if (capturedUpload.storageSessionId === sessionId) capturedUpload.storageSessionId = null;
     capturedUpload.generationUrlsInvalidatedReason = reason || "session_finished";
   }
 
@@ -15032,7 +15034,8 @@
     if (modal) {
       modal.remove();
     }
-    if (!keepSessionAlive) {
+    // Generation may already have finished the session before the modal closes.
+    if (!keepSessionAlive && (!generated || sessionId === activePhoneUploadSessionId)) {
       finishPhoneUploadSession(
         sessionId,
         cancelUpload ? "cancelled" : "completed",
