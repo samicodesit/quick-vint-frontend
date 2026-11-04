@@ -20,7 +20,7 @@ test("model funnel records transitions once and excludes appearance data", async
       },
     });
   });
-  await page.getByRole("button", {name:"Create model",exact:true}).click();
+  await page.getByRole("button", {name:"Create and enable",exact:true}).click();
   await expect(page.getByRole("status").first()).toContainText("Creating");
   await page.evaluate(() => {
     window.modelState = {enabled:true,model:{state:"ready",operationId:"operation-1",imageUrl:"about:blank"}};

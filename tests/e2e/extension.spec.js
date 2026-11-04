@@ -92,12 +92,14 @@ async function installModelPhotoHost(page, keyboard = false) {
     const f=window.__modelPhotoFixture;f.host=[grid.querySelector('img').src];
     let dragged;
     f.render=()=>{
+      const uploadTile=grid.querySelector('.native-photo-upload');
       grid.querySelectorAll('.photo-box').forEach(el=>el.remove());
       for(const src of f.host){
         const box=document.createElement('div');box.className=keyboard?'wSh2GW_photo-box':'photo-box';box.draggable=!keyboard;box.dataset.src=src;
         if(keyboard){box.setAttribute('aria-roledescription','sortable');box.tabIndex=0;box.style.cssText='width:80px;height:100px;flex:none';}
         const img=document.createElement('img');img.src=src;img.alt='Uploaded photo';img.style.cssText='width:100%;height:100%';box.append(img);grid.append(box);
       }
+      if(uploadTile)grid.append(uploadTile);
     };
     grid.addEventListener('change',event=>{
       if(event.target.type!=='file')return;
@@ -157,22 +159,68 @@ for(const mode of [true,'pointer'])test(`model photos use the new ${mode===true?
  expect(await page.evaluate(()=>window.__modelPhotoFixture.host.filter(s=>s.includes('original-')))).toHaveLength(5);
 });
 
+test('unsuitable model-photo items show one quiet explanation without blocking text',async({page})=>{
+ await page.route('https://autolister.app/api/generate',route=>route.fulfill({json:{title:'Patterned neck warmer',description:'Patterned neck warmer. See photos for details.',modelPhotos:{jobId:'11111111-2222-4333-8444-555555555555',status:'queued'}}}));
+ await openContentHarness(page,null,{pageUrl:'https://www.vinted.co.uk/items/new',pageHtml:currentListingFixture,modelPhotos:true,listingTools:true});
+ await installModelPhotoHost(page);
+ const uploadAction=await page.locator('#quickvint-phone-btn').boundingBox();
+ const photoArea=await page.locator('[data-testid="media-upload-grid"]').boundingBox();
+ expect(uploadAction.y+uploadAction.height).toBeLessThanOrEqual(photoArea.y+2);
+ await page.locator('#quickvint-gen-btn').click();
+ await expect(page.locator('[data-testid="title--input"]')).toHaveValue('Patterned neck warmer');
+ await expect(page.locator('.mp-placeholder')).toHaveCount(0);
+ await page.evaluate(()=>Object.assign(window.__modelPhotoFixture,{status:'skipped',eligible:false}));
+ const progress=page.locator('[data-autolister-photo-progress]');
+ await expect(progress.getByRole('status')).toHaveText('Model photos aren’t available for this item.');
+ await expect(progress.locator('.mp-unavailable-icon svg')).toBeVisible();
+ await expect(progress.locator('.mp-unavailable-icon')).toHaveAttribute('aria-hidden','true');
+ expect(await progress.evaluate(el=>Boolean(el.closest('.quickvint-tools')))).toBe(true);
+ const modelControl=await page.locator('#quickvint-model-control').boundingBox();
+ const statusBox=await progress.boundingBox();
+ expect(statusBox.y-modelControl.y-modelControl.height).toBeLessThanOrEqual(12);
+ await expect(progress.getByRole('button')).toHaveCount(0);
+ await expect(progress.locator('.mp-placeholder')).toHaveCount(0);
+ await page.locator('[data-testid="title--input"]').fill('My patterned neck warmer');
+ await modelPhotoScreen(page,'skipped');
+ const languages=await page.evaluate(()=>Object.keys(AutoListerModelCopy.copy));
+ for(const code of languages){
+  await page.evaluate(code=>{
+   AutoListerModelCopy.setLocale(code);
+   AutoListerPhotoUI.render(document.querySelector('[data-autolister-photo-progress]'),{status:'skipped',eligible:false,canRetry:true},()=>{throw Error('Skipped items must not retry');});
+  },code);
+  await expect(progress.getByRole('button')).toHaveCount(0);
+  expect(await progress.evaluate(el=>el.scrollWidth<=el.clientWidth)).toBe(true);
+  if(['nl','de','fr'].includes(code))await modelPhotoScreen(page,'skipped-'+code);
+ }
+ expect(await page.evaluate(()=>window.__modelPhotoFixture.files)).toHaveLength(0);
+ expect(await page.evaluate(()=>window.__modelPhotoFixture.downloads)).toHaveLength(0);
+ await page.evaluate(()=>{AutoListerModelCopy.setLocale('en');window.__modelPhotoFixture.noModel=true;});
+ await page.locator('#quickvint-model-btn').click();
+ await expect(page.getByRole('button',{name:'Create and enable',exact:true})).toBeVisible();
+ await modelPhotoScreen(page,'create');
+ await page.keyboard.press('Escape');
+});
+
 async function modelPhotoScreen(page,name){
  if(!process.env.MODEL_PHOTO_SCREENSHOTS)return;
  fs.mkdirSync(process.env.MODEL_PHOTO_SCREENSHOTS,{recursive:true});
  const font=fs.readFileSync(path.join(extensionPath,'lib/fonts/geist-latin-wght-normal-19f9c925.woff2')).toString('base64');
- await page.addStyleTag({content:`@font-face{font-family:'AutoLister Geist';src:url(data:font/woff2;base64,${font}) format('woff2');font-weight:100 900}:root{--autolister-font-ui:'AutoLister Geist',system-ui,sans-serif}[data-testid=media-upload-grid]{display:flex;flex-wrap:wrap;gap:8px}[data-testid=add-photos-input]{width:100%}main{box-sizing:border-box}body{padding:16px} .photo-box{width:100px;height:125px} @media(max-width:480px){main{padding:16px}.photo-box{width:76px;height:96px}}`});
+ const current=await page.locator('body').getAttribute('data-fixture')==='vinted-current';
+ await page.addStyleTag({content:`@font-face{font-family:'AutoLister Geist';src:url(data:font/woff2;base64,${font}) format('woff2');font-weight:100 900}:root{--autolister-font-ui:'AutoLister Geist',system-ui,sans-serif}`+(current?'':`[data-testid=media-upload-grid]{display:flex;flex-wrap:wrap;gap:8px}[data-testid=add-photos-input]{width:100%}main{box-sizing:border-box}body{padding:16px} .photo-box{width:100px;height:125px} @media(max-width:480px){main{padding:16px}.photo-box{width:76px;height:96px}}`)});
  for(const [device,width,height] of [['desktop',1200,900],['mobile',390,844]]){
   await page.setViewportSize({width,height});await page.evaluate(()=>document.fonts.ready);
-  await page.screenshot({path:path.join(process.env.MODEL_PHOTO_SCREENSHOTS,`extension-${name}-${device}.png`),fullPage:true});
+  await page.evaluate(()=>window.scrollTo(0,0));
+  await page.screenshot({path:path.join(process.env.MODEL_PHOTO_SCREENSHOTS,`extension-${name}-${device}.png`),fullPage:!current});
  }
 }
 
-for(const scenario of ['native order','partial upload','unsupported order'])test(`model photos preserve originals and handle ${scenario}`,async({page})=>{
+for(const scenario of ['native order','partial upload','unsupported order','partial upload without a Photos heading'])test(`model photos preserve originals and handle ${scenario}`,async({page})=>{
   const inputs=[];
   await page.route('https://autolister.app/api/generate',route=>{inputs.push(route.request().postDataJSON());return route.fulfill({json:{title:'Ready text',description:'Editable description',modelPhotos:{jobId:'11111111-2222-4333-8444-555555555555',status:'queued'}}});});
-  await openContentHarness(page,null,{pageUrl:'https://www.vinted.co.uk/items/new',pageHtml:bloomListingFixture,modelPhotos:true});
+  await openContentHarness(page,null,{pageUrl:'https://www.vinted.co.uk/items/new',pageHtml:currentListingFixture,modelPhotos:true,listingTools:true});
   await installModelPhotoHost(page);
+  const partial=scenario.startsWith('partial upload');
+  if(scenario.includes('without'))await page.locator('.photos-heading').evaluate(el=>el.remove());
   await page.evaluate(()=>{
     window.__modelPhotoEvents=[];
     const original=AutoListerTelemetry.track.bind(AutoListerTelemetry);
@@ -196,11 +244,19 @@ for(const scenario of ['native order','partial upload','unsupported order'])test
       await page.screenshot({path:path.join(process.env.MODEL_PHOTO_SCREENSHOTS,'extension-ready-preview-'+name+'.png')});
     }
   }
-  if(scenario==='partial upload')await page.evaluate(()=>window.__modelPhotoFixture.blockSecondary=true);
+  if(partial)await page.evaluate(()=>window.__modelPhotoFixture.blockSecondary=true);
   await preview.getByRole('button',{name:'Add model photos',exact:true}).last().click();
-  if(scenario==='partial upload'){
+  if(partial){
     await expect(page.getByText('Couldn’t add model photos.',{exact:true})).toBeVisible();
-    await modelPhotoScreen(page,'upload-failure');
+    if(!scenario.includes('without'))for(const width of [1366,390]){
+      await page.setViewportSize({width,height:900});
+      await expect.poll(()=>page.evaluate(()=>{
+        const action=document.querySelector('#quickvint-phone-btn').getBoundingClientRect();
+        const heading=document.querySelector('.photos-heading').getBoundingClientRect();
+        return Math.abs(action.y+action.height/2-heading.y-heading.height/2);
+      })).toBeLessThanOrEqual(2);
+    }
+    if(!scenario.includes('without'))await modelPhotoScreen(page,'upload-failure');
     expect(await page.evaluate(()=>window.__modelPhotoFixture.files.length)).toBe(1);
     expect(await page.evaluate(()=>window.__modelPhotoEvents.filter(e=>['model_photos_uploaded','model_photos_attached','model_photos_order_failed'].includes(e.event)).length)).toBe(0);
     await page.evaluate(()=>window.__modelPhotoFixture.blockSecondary=false);
@@ -209,7 +265,7 @@ for(const scenario of ['native order','partial upload','unsupported order'])test
   }
   await expect.poll(()=>page.evaluate(()=>window.__modelPhotoFixture.files.length)).toBe(2);
   if(scenario==='unsupported order'){
-    await expect(page.getByText('Move the model photos to the start.',{exact:true})).toBeVisible();
+    await expect(page.getByText('Photos added. Couldn’t put them first.',{exact:true})).toBeVisible();
     await modelPhotoScreen(page,'order-failure');
   }
   else{
@@ -352,7 +408,7 @@ test('model switch opens setup when there is no saved model',async({page})=>{
  await page.evaluate(()=>{window.__modelPhotoFixture.noModel=true;return AutoListerModels.request('test-user');});
  const toggle=page.locator('#quickvint-model-toggle');
  await expect(toggle).toHaveAttribute('aria-checked','false');await toggle.click();
- await expect(page.locator('.um-modal').getByRole('button',{name:'Create model',exact:true})).toBeVisible();
+ await expect(page.locator('.um-modal').getByRole('button',{name:'Create and enable',exact:true})).toBeVisible();
  expect(await page.evaluate(()=>window.__modelPhotoFixture.modelPatches||[])).toHaveLength(0);
 });
 
@@ -684,6 +740,7 @@ const listingFixture = fs.readFileSync(
   path.resolve(__dirname, "../fixtures/vinted-listing.html"),
   "utf8",
 );
+const currentListingFixture = fs.readFileSync(path.resolve(__dirname,'../fixtures/vinted-listing-current.html'),'utf8');
 const emptyListingFixture = listingFixture.replace(
   /\n        <div class="photo-box">[\s\S]*?\n        <\/div>(?=\n      <\/section>)/,
   "",
@@ -1306,6 +1363,10 @@ async function openContentHarness(page, capacityResponse = null, options = {}) {
     for (const file of ['user-model-copy.js','user-model-ui.js','user-model-client.js','listing-model-photos.js','listing-photo-client.js']) await page.addScriptTag({path:path.join(extensionPath,'lib',file)});
     await page.addStyleTag({path:path.join(extensionPath,'lib/user-model.css')});
   }
+  if (options.listingTools) {
+    for (const file of ['listing-tools-copy.js','listing-tools-icons.js','listing-tools.js']) await page.addScriptTag({path:path.join(extensionPath,'lib',file)});
+    await page.addStyleTag({path:path.join(extensionPath,'lib/listing-tools.css')});
+  }
   await page.addScriptTag({ path: contentScriptPath });
   if (options.skipToolExpectation) return;
   if (options.expectAuthenticated === false) {
@@ -1334,6 +1395,10 @@ async function openContentHarness(page, capacityResponse = null, options = {}) {
   }
   await expect(page.locator("#quickvint-phone-btn")).toBeVisible();
   await expect(page.locator("#quickvint-batch-btn")).toHaveCount(0);
+  if (options.listingTools) {
+    await expect(page.locator('#quickvint-style-btn')).toBeVisible();
+    return;
+  }
   await expect(
     page.locator("#quickvint-description-length-toggle"),
   ).toBeVisible();

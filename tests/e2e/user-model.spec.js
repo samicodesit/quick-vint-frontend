@@ -171,7 +171,7 @@ test("popup model view preserves seller note, completes in background and surviv
   );
   await page.locator("#userModelButton").click();
   await choose(page);
-  await page.getByRole("button", { name: "Create model", exact: true }).click();
+  await page.getByRole("button", { name: "Create and enable", exact: true }).click();
   await expect(page.getByText("Creating your model…")).toBeVisible();
   await page
     .getByRole("button", { name: "Back to settings", exact: true })
@@ -281,7 +281,7 @@ test("popup model copy follows the existing explicit language preference", async
     page.getByRole("radio", { name: "Roux", exact: true }),
   ).toBeVisible();
   await expect(
-    page.getByRole("button", { name: "Créer le mannequin", exact: true }),
+    page.getByRole("button", { name: "Créer et activer", exact: true }),
   ).toBeVisible();
 });
 test("listing invitation waits for an idle eligible route and closes on account switch", async ({
@@ -325,7 +325,7 @@ test("listing invitation waits for an idle eligible route and closes on account 
   await page.getByRole("button", { name: "Create my model" }).click();
   await choose(page);
   await expect(
-    page.getByRole("button", { name: "Create model", exact: true }),
+    page.getByRole("button", { name: "Create and enable", exact: true }),
   ).toBeVisible();
   await page.evaluate(() => changeModelOwner());
   await expect(page.getByRole("dialog")).toHaveCount(0);
@@ -346,13 +346,13 @@ test("shared preference form requires all choices and keeps height numeric", asy
       onContinue: (value) => (window.modelChoice = value),
     }),
   );
-  await page.getByRole("button", { name: "Continue", exact: true }).click();
+  await page.getByRole("button", { name: "Create and enable", exact: true }).click();
   expect(await page.evaluate(() => window.modelChoice)).toBeUndefined();
   await choose(page);
   await page
     .getByRole("spinbutton", { name: "Height value in centimeters" })
     .fill("184");
-  await page.getByRole("button", { name: "Continue", exact: true }).click();
+  await page.getByRole("button", { name: "Create and enable", exact: true }).click();
   expect(await page.evaluate(() => window.modelChoice.heightCm)).toBe(184);
 });
 
