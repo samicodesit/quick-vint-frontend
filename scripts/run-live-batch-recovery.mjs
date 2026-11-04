@@ -170,7 +170,7 @@ if (!extensionSession.hasToken) {
 }
 if (!extensionSession.hasToken) throw new Error("AutoLister sign-in was not completed within five minutes.");
 diagnostics.extensionAccount = extensionSession.email || null;
-diagnostics.staleRecoveryDiscarded = await worker.evaluate(async () => {
+diagnostics.staleRecoveryDiscarded = modelPhotosOnly ? false : await worker.evaluate(async () => {
   const key = "quickvintBatchRecovery";
   const recovery = (await chrome.storage.local.get(key))[key];
   if (!recovery) return false;
@@ -420,7 +420,9 @@ try {
   throw error;
 } finally {
   writeFileSync(outputFile, JSON.stringify(diagnostics, null, 2));
-  if (modelPhotosOnly) {
+  const photoOptionsPath = join(dirname(outputFile), 'live-photo-options.json');
+  const closeAfterPhotoCheck = modelPhotosOnly && existsSync(photoOptionsPath) && JSON.parse(readFileSync(photoOptionsPath, 'utf8')).closeAfterCheck === true;
+  if (modelPhotosOnly && !closeAfterPhotoCheck) {
     console.log('Photo check finished. Keeping the test window open for inspection.');
     while (context.pages().length) {
       const repeat=join(dirname(outputFile),'live-recheck.json');

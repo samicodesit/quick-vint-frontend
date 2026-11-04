@@ -150,6 +150,7 @@ for(const mode of [true,'pointer'])test(`model photos use the new ${mode===true?
  await installModelPhotoHost(page,mode);
  await page.evaluate(()=>{const f=window.__modelPhotoFixture;f.host=Array.from({length:5},(_,i)=>'https://images1.vinted.net/original-'+i+'.jpg');f.status='ready';f.eligible=true;f.render();});
  await page.locator('#quickvint-gen-btn').click();
+ await page.locator('.mp-preview-dialog .mp-preview-image').first().click();
  await expect.poll(()=>page.evaluate(()=>window.__modelPhotoFixture.host.slice(0,2).every(src=>src.includes('autolister-model-')))).toBe(true);
  await page.evaluate(()=>window.__modelPhotoFixture.render());
  await expect(page.locator('[data-testid="media-upload-grid"] img').first()).toHaveAttribute('src',/primary/);
@@ -170,30 +171,59 @@ async function modelPhotoScreen(page,name){
 for(const scenario of ['native order','partial upload','unsupported order'])test(`model photos preserve originals and handle ${scenario}`,async({page})=>{
   const inputs=[];
   await page.route('https://autolister.app/api/generate',route=>{inputs.push(route.request().postDataJSON());return route.fulfill({json:{title:'Ready text',description:'Editable description',modelPhotos:{jobId:'11111111-2222-4333-8444-555555555555',status:'queued'}}});});
-  await openContentHarness(page,null,{pageUrl:'https://www.vinted.co.uk/items/new',modelPhotos:true});
+  await openContentHarness(page,null,{pageUrl:'https://www.vinted.co.uk/items/new',pageHtml:bloomListingFixture,modelPhotos:true});
   await installModelPhotoHost(page);
+  await page.evaluate(()=>{
+    window.__modelPhotoEvents=[];
+    const original=AutoListerTelemetry.track.bind(AutoListerTelemetry);
+    AutoListerTelemetry.track=(event,context,...rest)=>{window.__modelPhotoEvents.push({event,context});return original(event,context,...rest);};
+  });
   if(scenario==='native order'){await expect(page.locator('#quickvint-model-btn')).toBeVisible();await modelPhotoScreen(page,'toolbar');}
   await page.locator('#quickvint-gen-btn').click();
   await expect(page.locator('[data-testid="title--input"]')).toHaveValue('Ready text');
   await expect(page.locator('.mp-placeholder')).toHaveCount(0);
-  await page.evaluate(scenario=>{Object.assign(window.__modelPhotoFixture,{status:'generating',eligible:true,blockSecondary:scenario==='partial upload',sorting:scenario!=='unsupported order'});},scenario);
+  await page.evaluate(scenario=>{Object.assign(window.__modelPhotoFixture,{status:'generating',eligible:true,blockSecondary:false,sorting:scenario!=='unsupported order'});},scenario);
   await expect(page.getByText('Creating model photos…',{exact:true})).toBeVisible();
   if(scenario==='native order')await modelPhotoScreen(page,'generating');
   await page.locator('[data-testid="title--input"]').fill('My edited text');
   await page.evaluate(()=>window.__modelPhotoFixture.status='ready');
+  const preview=page.locator('.mp-preview-dialog');
+  await expect(preview).toBeVisible();
+  expect(await page.evaluate(()=>window.__modelPhotoFixture.files.length)).toBe(0);
+  if(process.env.MODEL_PHOTO_SCREENSHOTS&&scenario==='native order'){
+    for(const [name,width,height] of [['desktop',1365,900],['mobile',390,844]]){
+      await page.setViewportSize({width,height});
+      await page.screenshot({path:path.join(process.env.MODEL_PHOTO_SCREENSHOTS,'extension-ready-preview-'+name+'.png')});
+    }
+  }
+  if(scenario==='partial upload')await page.evaluate(()=>window.__modelPhotoFixture.blockSecondary=true);
+  await preview.getByRole('button',{name:'Add model photos',exact:true}).last().click();
   if(scenario==='partial upload'){
     await expect(page.getByText('Couldn’t add model photos.',{exact:true})).toBeVisible();
     await modelPhotoScreen(page,'upload-failure');
     expect(await page.evaluate(()=>window.__modelPhotoFixture.files.length)).toBe(1);
+    expect(await page.evaluate(()=>window.__modelPhotoEvents.filter(e=>['model_photos_uploaded','model_photos_attached','model_photos_order_failed'].includes(e.event)).length)).toBe(0);
     await page.evaluate(()=>window.__modelPhotoFixture.blockSecondary=false);
     await page.getByRole('button',{name:'Retry',exact:true}).click();
+    await page.locator('.mp-preview-dialog').getByRole('button',{name:'Add model photos',exact:true}).last().click();
   }
   await expect.poll(()=>page.evaluate(()=>window.__modelPhotoFixture.files.length)).toBe(2);
-  if(scenario==='unsupported order')await expect(page.getByText('Move the model photos to the start.',{exact:true})).toBeVisible();
+  if(scenario==='unsupported order'){
+    await expect(page.getByText('Move the model photos to the start.',{exact:true})).toBeVisible();
+    await modelPhotoScreen(page,'order-failure');
+  }
   else{
     await expect.poll(()=>page.evaluate(()=>window.__modelPhotoFixture.host.slice(0,2).every(src=>src.includes('autolister-model-')))).toBe(true);
     await page.evaluate(()=>window.__modelPhotoFixture.render());
     expect(await page.locator('.photo-box img').first().getAttribute('src')).toContain('primary');
+  }
+  await expect.poll(()=>page.evaluate(()=>window.__modelPhotoEvents.filter(e=>e.event==='model_photos_uploaded').length)).toBe(1);
+  const outcome=scenario==='unsupported order'?'model_photos_order_failed':'model_photos_attached';
+  await expect.poll(()=>page.evaluate(event=>window.__modelPhotoEvents.filter(e=>e.event===event).length,outcome)).toBe(1);
+  expect(await page.evaluate(()=>window.__modelPhotoEvents.filter(e=>['model_photos_attached','model_photos_order_failed'].includes(e.event)).length)).toBe(1);
+  if(scenario==='unsupported order'){
+    await page.evaluate(()=>{const f=window.__modelPhotoFixture;const photos=f.host.filter(src=>src.includes('autolister-model-'));f.host=[...photos,...f.host.filter(src=>!src.includes('autolister-model-'))];f.render();});
+    await expect.poll(()=>page.evaluate(()=>window.__modelPhotoEvents.filter(e=>e.event==='model_photos_attached').length)).toBe(1);
   }
   await expect(page.locator('[data-testid="title--input"]')).toHaveValue('My edited text');
   await expect(page.locator('.photo-box')).toHaveCount(3);
@@ -204,6 +234,54 @@ for(const scenario of ['native order','partial upload','unsupported order'])test
   await expect.poll(()=>inputs.length).toBe(2);
   expect(inputs[1].imageUrls).toHaveLength(1);
   expect(await page.evaluate(()=>window.__modelPhotoFixture.files.length)).toBe(2);
+  expect(await page.evaluate(()=>window.__modelPhotoEvents.filter(e=>e.event==='model_photos_uploaded').length)).toBe(1);
+});
+
+test('model photo preview can be dismissed and reopened without uploading',async({page})=>{
+  await page.route('https://autolister.app/api/generate',r=>r.fulfill({json:{title:'Ready',description:'Text',modelPhotos:{jobId:'11111111-2222-4333-8444-555555555555',status:'ready'}}}));
+  await openContentHarness(page,null,{pageUrl:'https://www.vinted.co.uk/items/new',modelPhotos:true});
+  await installModelPhotoHost(page);
+  await page.evaluate(()=>Object.assign(window.__modelPhotoFixture,{status:'ready',eligible:true}));
+  await page.locator('#quickvint-gen-btn').click();
+  const preview=page.locator('.mp-preview-dialog');
+  await expect(preview).toBeVisible();
+  await preview.getByRole('button',{name:'Not now'}).click();
+  expect(await page.evaluate(()=>window.__modelPhotoFixture.files.length)).toBe(0);
+  await page.getByRole('button',{name:'Model photos',exact:true}).click();
+  await expect(preview).toBeVisible();
+  await preview.locator('.mp-preview-image').first().evaluate(el=>{el.click();el.click();});
+  await expect.poll(()=>page.evaluate(()=>window.__modelPhotoFixture.files.length)).toBe(2);
+  await page.waitForTimeout(500);
+  expect(await page.evaluate(()=>window.__modelPhotoFixture.files.length)).toBe(2);
+});
+test('model photo preview keeps readable controls with the marketplace base font',async({page})=>{
+  await page.route('https://autolister.app/api/generate',r=>r.fulfill({json:{title:'Ready',description:'Text',modelPhotos:{jobId:'11111111-2222-4333-8444-555555555555',status:'ready'}}}));
+  await openContentHarness(page,null,{pageUrl:'https://www.vinted.co.uk/items/new',pageHtml:bloomListingFixture,modelPhotos:true});
+  await installModelPhotoHost(page);
+  await page.addStyleTag({content:'html{font-size:10px}'});
+  await page.evaluate(()=>Object.assign(window.__modelPhotoFixture,{status:'ready',eligible:true}));
+  await page.locator('#quickvint-gen-btn').click();
+  const preview=page.locator('.mp-preview-dialog');await expect(preview).toBeVisible();
+  for(const width of [1366,390]){
+    await page.setViewportSize({width,height:844});
+    for(const button of await preview.locator('.mp-preview-actions button').all())await expect(button).toHaveCSS('font-size','14px');
+    const box=await preview.boundingBox();
+    const availableWidth=await page.evaluate(()=>document.documentElement.clientWidth);
+    expect(box.x).toBeGreaterThanOrEqual(8);
+    expect(box.x+box.width).toBeLessThanOrEqual(availableWidth-8);
+  }
+  expect(await page.evaluate(()=>window.__modelPhotoFixture.files.length)).toBe(0);
+});
+test('model photo preview closes after route changes without adding photos',async({page})=>{
+  await page.route('https://autolister.app/api/generate',r=>r.fulfill({json:{title:'Ready',description:'Text',modelPhotos:{jobId:'11111111-2222-4333-8444-555555555555',status:'ready'}}}));
+  await openContentHarness(page,null,{pageUrl:'https://www.vinted.co.uk/items/new',modelPhotos:true});
+  await installModelPhotoHost(page);
+  await page.evaluate(()=>Object.assign(window.__modelPhotoFixture,{status:'ready',eligible:true}));
+  await page.locator('#quickvint-gen-btn').click();
+  await expect(page.locator('.mp-preview-dialog')).toBeVisible();
+  await page.evaluate(()=>{history.pushState({},'', '/items/other/edit');document.body.append(document.createElement('span'));});
+  await expect(page.locator('.mp-preview-dialog')).toHaveCount(0);
+  expect(await page.evaluate(()=>window.__modelPhotoFixture.files.length)).toBe(0);
 });
 
 test('model downloads overlap while host uploads stay sequential',async({page})=>{
@@ -224,6 +302,7 @@ test('model downloads overlap while host uploads stay sequential',async({page})=
   });
   await page.locator('#quickvint-gen-btn').click();
   await expect.poll(()=>page.evaluate(()=>window.__modelPhotoFixture.startedDownloads?.length||0),{timeout:2500}).toBe(2);
+  await page.locator('.mp-preview-dialog').getByRole('button',{name:'Add model photos',exact:true}).last().click();
   await expect.poll(()=>page.evaluate(()=>window.__modelPhotoFixture.files.length)).toBe(2);
   const files=await page.evaluate(()=>window.__modelPhotoFixture.files);
   expect(files[0]).toContain('primary');expect(files[1]).toContain('secondary');
@@ -289,6 +368,7 @@ for(const interruption of ['disable','source change','account switch'])test(`mod
   };
  });
  await page.locator('#quickvint-gen-btn').click();
+ await page.locator('.mp-preview-dialog').getByRole('button',{name:'Add model photos',exact:true}).last().click();
  await page.waitForFunction(()=>Boolean(window.__modelPhotoFixture.releaseStatus));
  if(interruption==='disable')await page.locator('#quickvint-model-toggle').click();
  else if(interruption==='source change')await page.evaluate(()=>{const f=window.__modelPhotoFixture;f.host.push('https://images1.vinted.net/another-original.jpg');f.render();});
@@ -302,7 +382,7 @@ test('dispatched model upload retains provenance after disable and resumes the s
  await page.route('https://autolister.app/api/generate',r=>{inputs.push(r.request().postDataJSON());return r.fulfill({json:{title:'Ready',description:'Text',modelPhotos:{jobId:'11111111-2222-4333-8444-555555555555',status:'ready'}}});});
  await openContentHarness(page,null,{pageUrl:'https://www.vinted.co.uk/items/new',modelPhotos:true});await installModelPhotoHost(page);
  await page.evaluate(()=>Object.assign(window.__modelPhotoFixture,{status:'ready',eligible:true,holdNativeUpload:true}));
- await page.locator('#quickvint-gen-btn').click();await page.waitForFunction(()=>Boolean(window.__modelPhotoFixture.releaseNativeUpload));
+ await page.locator('#quickvint-gen-btn').click();await page.locator('.mp-preview-dialog').getByRole('button',{name:'Add model photos',exact:true}).last().click();await page.waitForFunction(()=>Boolean(window.__modelPhotoFixture.releaseNativeUpload));
  await page.locator('#quickvint-model-toggle').click();
  await page.evaluate(()=>{const f=window.__modelPhotoFixture;f.holdNativeUpload=false;f.releaseNativeUpload();});
  await page.waitForFunction(()=>document.querySelector('[data-autolister-model-photo="true"]'));
@@ -310,6 +390,7 @@ test('dispatched model upload retains provenance after disable and resumes the s
  expect(await page.evaluate(()=>window.__modelPhotoFixture.files)).toHaveLength(1);
  await page.locator('#quickvint-model-toggle').click();
  await page.locator('#quickvint-gen-btn').click();await page.getByRole('button',{name:'Replace existing text',exact:true}).click();
+ await page.locator('.mp-preview-dialog').getByRole('button',{name:'Add model photos',exact:true}).last().click();
  await expect.poll(()=>page.evaluate(()=>window.__modelPhotoFixture.files.length)).toBe(2);
  await expect.poll(()=>page.evaluate(()=>window.__modelPhotoFixture.host[0])).toContain('primary');
  expect(inputs[1].imageUrls).toHaveLength(1);
@@ -346,7 +427,7 @@ test('a different manual original finishing first is not mistaken for a pending 
    return send(message,...args);
   };
  },{blue,red});
- await page.locator('#quickvint-gen-btn').click();await page.waitForFunction(()=>Boolean(window.__modelPhotoFixture.releaseNativeUpload));
+ await page.locator('#quickvint-gen-btn').click();await page.locator('.mp-preview-dialog').getByRole('button',{name:'Add model photos',exact:true}).last().click();await page.waitForFunction(()=>Boolean(window.__modelPhotoFixture.releaseNativeUpload));
  await page.locator('[data-testid="add-photos-input"]').setInputFiles({name:'manual-original.jpg',mimeType:'image/jpeg',buffer:Buffer.from(blue.split(',')[1],'base64')});
  await page.waitForTimeout(400);
  await expect(page.locator('img[src$="manual-original.jpg"]')).not.toHaveAttribute('data-autolister-model-photo','true');
@@ -364,11 +445,13 @@ test('model photo capacity holds the pair and adds it only after the user frees 
  await page.waitForFunction(()=>[...document.querySelectorAll('.photo-box img')].every(i=>i.complete&&i.naturalWidth));
  await page.locator('#quickvint-gen-btn').click();await expect(page.locator('[data-testid="title--input"]')).toHaveValue('Ready');
  await page.evaluate(()=>Object.assign(window.__modelPhotoFixture,{status:'ready',eligible:true}));
+ await page.locator('.mp-preview-dialog').getByRole('button',{name:'Add model photos',exact:true}).last().click();
  await expect(page.getByText('Free 2 photo slots to add model photos.',{exact:true})).toBeVisible();
  expect(await page.evaluate(()=>window.__modelPhotoFixture.files.length)).toBe(0);
  await modelPhotoScreen(page,'capacity');
  await page.evaluate(()=>{const f=window.__modelPhotoFixture;f.host.splice(18,2);f.render();});
  await page.getByRole('button',{name:'Retry',exact:true}).click();
+ await page.locator('.mp-preview-dialog').getByRole('button',{name:'Add model photos',exact:true}).last().click();
  await expect.poll(()=>page.evaluate(()=>window.__modelPhotoFixture.files.length)).toBe(2);
  await expect(page.locator('.photo-box')).toHaveCount(20);
 });
@@ -1189,6 +1272,10 @@ async function openContentHarness(page, capacityResponse = null, options = {}) {
     const uri=(file,mime='image/jpeg')=>file?'data:'+mime+';base64,'+fs.readFileSync(file).toString('base64'):null;
     const assets={item:uri(process.env.MODEL_PHOTO_ORIGINAL),front:uri(process.env.MODEL_PHOTO_PRIMARY),back:uri(process.env.MODEL_PHOTO_SECONDARY),model:process.env.MODEL_PHOTO_SCREENSHOTS?uri(path.join(extensionPath,'images/user-model-female.webp'),'image/webp'):null};
     await page.evaluate((assets) => {
+      if(assets.model){
+        const getURL=chrome.runtime.getURL;
+        chrome.runtime.getURL=asset=>asset==='images/user-model-female.webp'?assets.model:getURL(asset);
+      }
       window.__modelPhotoFixture = { status:'analyzing', eligible:false, files:[], downloads:[], blockSecondary:false, sorting:true };
       const original = chrome.runtime.sendMessage;
       const png = assets.item || document.querySelector('.photo-box img').src;
