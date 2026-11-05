@@ -7419,7 +7419,7 @@ test.describe("AutoLister extension smoke flows", () => {
     );
   });
 
-  test("does not send saved description notes for active Starter users", async ({
+  test("keeps saved description notes for active Starter users", async ({
     page,
   }) => {
     const requestBodies = [];
@@ -7451,11 +7451,13 @@ test.describe("AutoLister extension smoke flows", () => {
 
     await expect(page.locator("#quickvint-description-footer-btn")).toHaveAttribute(
       "aria-pressed",
-      "false",
+      "true",
     );
     await page.locator("#quickvint-gen-btn").click();
     await expect.poll(() => requestBodies.length).toBe(1);
-    expect(requestBodies[0]).not.toHaveProperty("descriptionFooterText");
+    expect(requestBodies[0].descriptionFooterText).toBe(
+      "  Smoke-free home.\n\nShips fast.  ",
+    );
   });
 
   test("lets free users remove emojis locally and saves the preference", async ({
@@ -7605,7 +7607,7 @@ test.describe("AutoLister extension smoke flows", () => {
     expect(storedProfile.userProfile.pack_credits).toBe(1);
   });
 
-  test("does not allow Starter users to enable emoji generation", async ({
+  test("keeps emoji generation available for active Starter users", async ({
     page,
   }) => {
     const requestBodies = [];
@@ -7636,15 +7638,15 @@ test.describe("AutoLister extension smoke flows", () => {
     );
     await page.waitForTimeout(1100);
 
-    await expect(page.locator("#quickvint-emoji-toggle")).toBeDisabled();
+    await expect(page.locator("#quickvint-emoji-toggle")).toBeEnabled();
     await expect(page.locator("#quickvint-emoji-toggle")).toHaveAttribute(
       "aria-pressed",
-      "false",
+      "true",
     );
 
     await page.locator("#quickvint-gen-btn").click();
     await expect.poll(() => requestBodies.length).toBe(1);
-    expect(requestBodies[0].useEmojis).toBe(false);
+    expect(requestBodies[0].useEmojis).toBe(true);
   });
 
   test("does not show clothing measurement advice toast", async ({

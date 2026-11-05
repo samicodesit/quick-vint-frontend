@@ -605,7 +605,7 @@
         "Added before hashtags",
         "No links or contact details",
       ],
-      locked: "Available during the free trial and on Pro or Business.",
+      locked: "Available during the free trial and on Starter, Pro or Business.",
       includeLabel: "Use on this listing",
       skipped: "Saved note is off for this listing.",
       saved: "Saved note updated.",
@@ -618,7 +618,7 @@
       title: "Note enregistrée",
       label: "Note de description",
       bullets: ["Ajoutée à chaque future annonce", "Placée avant les hashtags", "Pas de liens ni coordonnées"],
-      locked: "Disponible avec l'essai gratuit et les offres Pro ou Business.",
+      locked: "Disponible avec l'essai gratuit et les offres Starter, Pro ou Business.",
       includeLabel: "Utiliser pour cette annonce",
       skipped: "La note est désactivée pour cette annonce.",
       saved: "Note enregistrée.",
@@ -631,7 +631,7 @@
       title: "Uložená poznámka",
       label: "Poznámka k popisu",
       bullets: ["Zobrazí se u každého dalšího inzerátu", "Přidá se před hashtagy", "Bez odkazů a kontaktních údajů"],
-      locked: "Dostupné ve zkušební verzi zdarma a v tarifech Pro nebo Business.",
+      locked: "Dostupné ve zkušební verzi zdarma a v tarifech Starter, Pro nebo Business.",
       includeLabel: "Použít u tohoto inzerátu",
       skipped: "Poznámka je pro tento inzerát vypnutá.",
       saved: "Poznámka uložena.",
@@ -644,7 +644,7 @@
       title: "Gemt note",
       label: "Note til beskrivelse",
       bullets: ["Vises på alle fremtidige annoncer", "Tilføjes før hashtags", "Ingen links eller kontaktoplysninger"],
-      locked: "Tilgængelig i gratis prøveperiode og på Pro eller Business.",
+      locked: "Tilgængelig i gratis prøveperiode og på Starter, Pro eller Business.",
       includeLabel: "Brug på denne annonce",
       skipped: "Noten er slået fra for denne annonce.",
       saved: "Note gemt.",
@@ -657,7 +657,7 @@
       title: "Opgeslagen notitie",
       label: "Notitie voor beschrijving",
       bullets: ["Verschijnt bij elke toekomstige advertentie", "Komt voor de hashtags", "Geen links of contactgegevens"],
-      locked: "Beschikbaar tijdens de gratis proefperiode en met Pro of Business.",
+      locked: "Beschikbaar tijdens de gratis proefperiode en met Starter, Pro of Business.",
       includeLabel: "Gebruiken voor deze advertentie",
       skipped: "Notitie staat uit voor deze advertentie.",
       saved: "Notitie opgeslagen.",
@@ -670,7 +670,7 @@
       title: "Gespeicherte Notiz",
       label: "Notiz für Beschreibung",
       bullets: ["Erscheint bei jedem künftigen Angebot", "Wird vor Hashtags eingefügt", "Keine Links oder Kontaktdaten"],
-      locked: "Verfügbar im kostenlosen Test und mit Pro oder Business.",
+      locked: "Verfügbar im kostenlosen Test und mit Starter, Pro oder Business.",
       includeLabel: "Für dieses Angebot verwenden",
       skipped: "Notiz ist für dieses Angebot deaktiviert.",
       saved: "Notiz gespeichert.",
@@ -683,7 +683,7 @@
       title: "Αποθηκευμένη σημείωση",
       label: "Σημείωση περιγραφής",
       bullets: ["Εμφανίζεται σε κάθε μελλοντική αγγελία", "Μπαίνει πριν από τα hashtags", "Χωρίς links ή στοιχεία επικοινωνίας"],
-      locked: "Διαθέσιμο στη δωρεάν δοκιμή και στα Pro ή Business.",
+      locked: "Διαθέσιμο στη δωρεάν δοκιμή και στα Starter, Pro ή Business.",
       includeLabel: "Χρήση σε αυτή την αγγελία",
       skipped: "Η σημείωση είναι απενεργοποιημένη για αυτή την αγγελία.",
       saved: "Η σημείωση αποθηκεύτηκε.",
@@ -696,7 +696,7 @@
       title: "Spremljena napomena",
       label: "Napomena za opis",
       bullets: ["Pojavljuje se na svakoj budućoj objavi", "Dodaje se prije hashtagova", "Bez linkova ili kontakt podataka"],
-      locked: "Dostupno u besplatnoj probi i na Pro ili Business planu.",
+      locked: "Dostupno u besplatnoj probi i na Starter, Pro ili Business planu.",
       includeLabel: "Koristi na ovoj objavi",
       skipped: "Napomena je isključena za ovu objavu.",
       saved: "Napomena spremljena.",
@@ -709,7 +709,7 @@
       title: "Tallennettu huomautus",
       label: "Kuvaustekstiin lisättävä huomautus",
       bullets: ["Näkyy jokaisessa tulevassa ilmoituksessa", "Lisätään ennen hashtageja", "Ei linkkejä tai yhteystietoja"],
-      locked: "Saatavilla ilmaisessa kokeilussa sekä Pro- tai Business-tilillä.",
+      locked: "Saatavilla ilmaisessa kokeilussa sekä Starter-, Pro- tai Business-tilillä.",
       includeLabel: "Käytä tässä ilmoituksessa",
       skipped: "Huomautus on pois päältä tässä ilmoituksessa.",
       saved: "Huomautus tallennettu.",
@@ -722,7 +722,7 @@
       title: "Mentett megjegyzés",
       label: "Leírás megjegyzése",
       bullets: ["Minden jövőbeli hirdetésben megjelenik", "A hashtagek elé kerül", "Nincsenek linkek vagy elérhetőségek"],
-      locked: "Elérhető az ingyenes próba alatt, valamint Pro vagy Business csomaggal.",
+      locked: "Elérhető az ingyenes próba alatt, valamint Starter, Pro vagy Business csomaggal.",
       includeLabel: "Használat ennél a hirdetésnél",
       skipped: "A megjegyzés ki van kapcsolva ennél a hirdetésnél.",
       saved: "Megjegyzés mentve.",
@@ -735,7 +735,7 @@
       title: "Nota salvata",
       label: "Nota per la descrizione",
       bullets: ["Compare in ogni annuncio futuro", "Viene aggiunta prima degli hashtag", "Niente link o contatti"],
-      locked: "Disponibile nella prova gratuita e con Pro o Business.",
+      locked: "Disponibile nella prova gratuita e con Starter, Pro o Business.",
       includeLabel: "Usa in questo annuncio",
       skipped: "La nota è disattivata per questo annuncio.",
       saved: "Nota salvata.",
@@ -748,7 +748,7 @@
       title: "Išsaugota pastaba",
       label: "Aprašymo pastaba",
       bullets: ["Rodoma kiekviename būsimame skelbime", "Pridedama prieš grotažymes", "Be nuorodų ar kontaktų"],
-      locked: "Pasiekiama nemokamos bandomosios versijos metu ir su Pro arba Business.",
+      locked: "Pasiekiama nemokamos bandomosios versijos metu ir su Starter, Pro arba Business.",
       includeLabel: "Naudoti šiame skelbime",
       skipped: "Pastaba šiame skelbime išjungta.",
       saved: "Pastaba išsaugota.",
@@ -761,7 +761,7 @@
       title: "Zapisana notatka",
       label: "Notatka do opisu",
       bullets: ["Pojawia się w każdej przyszłej ofercie", "Dodawana przed hashtagami", "Bez linków i danych kontaktowych"],
-      locked: "Dostępne w darmowej wersji próbnej oraz w Pro lub Business.",
+      locked: "Dostępne w darmowej wersji próbnej oraz w Starter, Pro lub Business.",
       includeLabel: "Użyj w tej ofercie",
       skipped: "Notatka jest wyłączona dla tej oferty.",
       saved: "Notatka zapisana.",
@@ -774,7 +774,7 @@
       title: "Nota guardada",
       label: "Nota da descrição",
       bullets: ["Aparece em todos os anúncios futuros", "É adicionada antes das hashtags", "Sem links ou contactos"],
-      locked: "Disponível no teste gratuito e nos planos Pro ou Business.",
+      locked: "Disponível no teste gratuito e nos planos Starter, Pro ou Business.",
       includeLabel: "Usar neste anúncio",
       skipped: "A nota está desativada neste anúncio.",
       saved: "Nota guardada.",
@@ -787,7 +787,7 @@
       title: "Notă salvată",
       label: "Notă pentru descriere",
       bullets: ["Apare la fiecare anunț viitor", "Este adăugată înainte de hashtaguri", "Fără linkuri sau date de contact"],
-      locked: "Disponibil în perioada gratuită și pe Pro sau Business.",
+      locked: "Disponibil în perioada gratuită și pe Starter, Pro sau Business.",
       includeLabel: "Folosește la acest anunț",
       skipped: "Nota este dezactivată pentru acest anunț.",
       saved: "Notă salvată.",
@@ -800,7 +800,7 @@
       title: "Nota guardada",
       label: "Nota para la descripción",
       bullets: ["Aparece en todos los anuncios futuros", "Se añade antes de los hashtags", "Sin enlaces ni datos de contacto"],
-      locked: "Disponible en la prueba gratuita y en Pro o Business.",
+      locked: "Disponible en la prueba gratuita y en Starter, Pro o Business.",
       includeLabel: "Usar en este anuncio",
       skipped: "La nota está desactivada para este anuncio.",
       saved: "Nota guardada.",
@@ -813,7 +813,7 @@
       title: "Uložená poznámka",
       label: "Poznámka k popisu",
       bullets: ["Zobrazí sa pri každom budúcom inzeráte", "Pridá sa pred hashtagy", "Bez odkazov a kontaktných údajov"],
-      locked: "Dostupné v bezplatnej skúšobnej verzii a v Pro alebo Business.",
+      locked: "Dostupné v bezplatnej skúšobnej verzii a v Starter, Pro alebo Business.",
       includeLabel: "Použiť v tomto inzeráte",
       skipped: "Poznámka je pre tento inzerát vypnutá.",
       saved: "Poznámka uložená.",
@@ -826,7 +826,7 @@
       title: "Sparad notis",
       label: "Notis till beskrivning",
       bullets: ["Visas på varje framtida annons", "Läggs till före hashtags", "Inga länkar eller kontaktuppgifter"],
-      locked: "Tillgängligt under gratis testperiod och med Pro eller Business.",
+      locked: "Tillgängligt under gratis testperiod och med Starter, Pro eller Business.",
       includeLabel: "Använd i denna annons",
       skipped: "Notisen är avstängd för denna annons.",
       saved: "Notis sparad.",
@@ -2042,7 +2042,7 @@
     if (profile?.subscription_status !== "active" || tier === "free") {
       return true;
     }
-    return tier === "pro" || tier === "business";
+    return tier === "starter" || tier === "pro" || tier === "business";
   }
 
   function canUseDescriptionFooterSetting(profile) {
@@ -2050,7 +2050,7 @@
     if (profile?.subscription_status !== "active" || tier === "free") {
       return true;
     }
-    return tier === "pro" || tier === "business";
+    return tier === "starter" || tier === "pro" || tier === "business";
   }
 
   function validateDescriptionFooterText(value) {
@@ -13067,7 +13067,7 @@
           ? "Saved note will be added before hashtags"
           : copy?.skipped || "Saved note is off for this listing."
         : "Add a saved note before hashtags"
-      : "Saved notes are available during the free trial and on Pro or Business.";
+      : "Saved notes are available during the free trial and on Starter, Pro or Business.";
     setDescriptionFooterEditButtonState({ enabled });
     globalThis.AutoListerListingTools?.refreshControlText(descriptionFooterBtn);
   }
@@ -13077,7 +13077,7 @@
     descriptionFooterEditBtn.disabled = false;
     descriptionFooterEditBtn.title = enabled
       ? "Edit saved note"
-      : "Saved notes are available during the free trial and on Pro or Business.";
+      : "Saved notes are available during the free trial and on Starter, Pro or Business.";
     descriptionFooterEditBtn.setAttribute("aria-label", "Edit saved note");
     globalThis.AutoListerListingTools?.refreshControlText(descriptionFooterEditBtn);
   }
@@ -13220,7 +13220,7 @@
         ? useEmojis !== false
           ? "Emojis are on for generated descriptions"
           : "Emojis are off for generated descriptions"
-        : "Emoji support is available during the free trial and on Pro or Business.";
+        : "Emoji support is available during the free trial and on Starter, Pro or Business.";
       globalThis.AutoListerListingTools?.refreshControlText(emojiToggleBtn);
     } catch (error) {
       if (handleExtensionContextInvalidated(error)) return;

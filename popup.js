@@ -66,7 +66,7 @@ document.addEventListener("DOMContentLoaded", () => {
       title: "Saved note",
       placeholder: "Smoke-free home. Happy to bundle items.",
       bullets: ["Appears on every future listing", "Added before hashtags", "No links or contact details"],
-      locked: "Available during the free trial and on Pro or Business.",
+      locked: "Available during the free trial and on Starter, Pro or Business.",
       saved: "Saved.",
       cleared: "Cleared.",
       clear: "Clear",
@@ -75,7 +75,7 @@ document.addEventListener("DOMContentLoaded", () => {
       title: "Note enregistrée",
       placeholder: "Maison non-fumeur. Regroupement possible.",
       bullets: ["Ajoutée à chaque future annonce", "Placée avant les hashtags", "Pas de liens ni coordonnées"],
-      locked: "Disponible avec l'essai gratuit et les offres Pro ou Business.",
+      locked: "Disponible avec l'essai gratuit et les offres Starter, Pro ou Business.",
       saved: "Enregistrée.",
       cleared: "Effacée.",
       clear: "Effacer",
@@ -84,7 +84,7 @@ document.addEventListener("DOMContentLoaded", () => {
       title: "Uložená poznámka",
       placeholder: "Nekuřácká domácnost. Ráda sloučím více věcí.",
       bullets: ["Zobrazí se u každého dalšího inzerátu", "Přidá se před hashtagy", "Bez odkazů a kontaktních údajů"],
-      locked: "Dostupné ve zkušební verzi zdarma a v tarifech Pro nebo Business.",
+      locked: "Dostupné ve zkušební verzi zdarma a v tarifech Starter, Pro nebo Business.",
       saved: "Uloženo.",
       cleared: "Vymazáno.",
       clear: "Vymazat",
@@ -93,7 +93,7 @@ document.addEventListener("DOMContentLoaded", () => {
       title: "Gemt note",
       placeholder: "Røgfrit hjem. Samler gerne varer.",
       bullets: ["Vises på alle fremtidige annoncer", "Tilføjes før hashtags", "Ingen links eller kontaktoplysninger"],
-      locked: "Tilgængelig i gratis prøveperiode og på Pro eller Business.",
+      locked: "Tilgængelig i gratis prøveperiode og på Starter, Pro eller Business.",
       saved: "Gemt.",
       cleared: "Ryddet.",
       clear: "Ryd",
@@ -102,7 +102,7 @@ document.addEventListener("DOMContentLoaded", () => {
       title: "Opgeslagen notitie",
       placeholder: "Rookvrij huis. Bundelen is mogelijk.",
       bullets: ["Verschijnt bij elke toekomstige advertentie", "Komt voor de hashtags", "Geen links of contactgegevens"],
-      locked: "Beschikbaar tijdens de gratis proefperiode en met Pro of Business.",
+      locked: "Beschikbaar tijdens de gratis proefperiode en met Starter, Pro of Business.",
       saved: "Opgeslagen.",
       cleared: "Gewist.",
       clear: "Wissen",
@@ -111,7 +111,7 @@ document.addEventListener("DOMContentLoaded", () => {
       title: "Gespeicherte Notiz",
       placeholder: "Rauchfreier Haushalt. Kombiversand möglich.",
       bullets: ["Erscheint bei jedem künftigen Angebot", "Wird vor Hashtags eingefügt", "Keine Links oder Kontaktdaten"],
-      locked: "Verfügbar im kostenlosen Test und mit Pro oder Business.",
+      locked: "Verfügbar im kostenlosen Test und mit Starter, Pro oder Business.",
       saved: "Gespeichert.",
       cleared: "Gelöscht.",
       clear: "Löschen",
@@ -120,7 +120,7 @@ document.addEventListener("DOMContentLoaded", () => {
       title: "Αποθηκευμένη σημείωση",
       placeholder: "Σπίτι χωρίς καπνό. Μπορώ να συνδυάσω προϊόντα.",
       bullets: ["Εμφανίζεται σε κάθε μελλοντική αγγελία", "Μπαίνει πριν από τα hashtags", "Χωρίς links ή στοιχεία επικοινωνίας"],
-      locked: "Διαθέσιμο στη δωρεάν δοκιμή και στα Pro ή Business.",
+      locked: "Διαθέσιμο στη δωρεάν δοκιμή και στα Starter, Pro ή Business.",
       saved: "Αποθηκεύτηκε.",
       cleared: "Διαγράφηκε.",
       clear: "Διαγραφή",
@@ -129,7 +129,7 @@ document.addEventListener("DOMContentLoaded", () => {
       title: "Spremljena napomena",
       placeholder: "Dom bez dima. Mogu spojiti više artikala.",
       bullets: ["Pojavljuje se na svakoj budućoj objavi", "Dodaje se prije hashtagova", "Bez linkova ili kontakt podataka"],
-      locked: "Dostupno u besplatnoj probi i na Pro ili Business planu.",
+      locked: "Dostupno u besplatnoj probi i na Starter, Pro ili Business planu.",
       saved: "Spremljeno.",
       cleared: "Obrisano.",
       clear: "Obriši",
@@ -138,7 +138,7 @@ document.addEventListener("DOMContentLoaded", () => {
       title: "Tallennettu huomautus",
       placeholder: "Savuton koti. Yhdistelen mielelläni tuotteita.",
       bullets: ["Näkyy jokaisessa tulevassa ilmoituksessa", "Lisätään ennen hashtageja", "Ei linkkejä tai yhteystietoja"],
-      locked: "Saatavilla ilmaisessa kokeilussa sekä Pro- tai Business-tilillä.",
+      locked: "Saatavilla ilmaisessa kokeilussa sekä Starter-, Pro- tai Business-tilillä.",
       saved: "Tallennettu.",
       cleared: "Tyhjennetty.",
       clear: "Tyhjennä",
@@ -147,7 +147,7 @@ document.addEventListener("DOMContentLoaded", () => {
       title: "Mentett megjegyzés",
       placeholder: "Dohányfüstmentes otthon. Több terméket is össze tudok vonni.",
       bullets: ["Minden jövőbeli hirdetésben megjelenik", "A hashtagek elé kerül", "Nincsenek linkek vagy elérhetőségek"],
-      locked: "Elérhető az ingyenes próba alatt, valamint Pro vagy Business csomaggal.",
+      locked: "Elérhető az ingyenes próba alatt, valamint Starter, Pro vagy Business csomaggal.",
       saved: "Mentve.",
       cleared: "Törölve.",
       clear: "Törlés",
@@ -156,7 +156,7 @@ document.addEventListener("DOMContentLoaded", () => {
       title: "Nota salvata",
       placeholder: "Casa senza fumo. Posso unire più articoli.",
       bullets: ["Compare in ogni annuncio futuro", "Viene aggiunta prima degli hashtag", "Niente link o contatti"],
-      locked: "Disponibile nella prova gratuita e con Pro o Business.",
+      locked: "Disponibile nella prova gratuita e con Starter, Pro o Business.",
       saved: "Salvata.",
       cleared: "Eliminata.",
       clear: "Cancella",
@@ -165,7 +165,7 @@ document.addEventListener("DOMContentLoaded", () => {
       title: "Išsaugota pastaba",
       placeholder: "Namai be dūmų. Galiu sujungti kelias prekes.",
       bullets: ["Rodoma kiekviename būsimame skelbime", "Pridedama prieš grotažymes", "Be nuorodų ar kontaktų"],
-      locked: "Pasiekiama nemokamos bandomosios versijos metu ir su Pro arba Business.",
+      locked: "Pasiekiama nemokamos bandomosios versijos metu ir su Starter, Pro arba Business.",
       saved: "Išsaugota.",
       cleared: "Išvalyta.",
       clear: "Išvalyti",
@@ -174,7 +174,7 @@ document.addEventListener("DOMContentLoaded", () => {
       title: "Zapisana notatka",
       placeholder: "Dom bez dymu. Chętnie połączę kilka rzeczy.",
       bullets: ["Pojawia się w każdej przyszłej ofercie", "Dodawana przed hashtagami", "Bez linków i danych kontaktowych"],
-      locked: "Dostępne w darmowej wersji próbnej oraz w Pro lub Business.",
+      locked: "Dostępne w darmowej wersji próbnej oraz w Starter, Pro lub Business.",
       saved: "Zapisano.",
       cleared: "Wyczyszczono.",
       clear: "Wyczyść",
@@ -183,7 +183,7 @@ document.addEventListener("DOMContentLoaded", () => {
       title: "Nota guardada",
       placeholder: "Casa sem fumo. Posso juntar artigos.",
       bullets: ["Aparece em todos os anúncios futuros", "É adicionada antes das hashtags", "Sem links ou contactos"],
-      locked: "Disponível no teste gratuito e nos planos Pro ou Business.",
+      locked: "Disponível no teste gratuito e nos planos Starter, Pro ou Business.",
       saved: "Guardada.",
       cleared: "Apagada.",
       clear: "Limpar",
@@ -192,7 +192,7 @@ document.addEventListener("DOMContentLoaded", () => {
       title: "Notă salvată",
       placeholder: "Casă fără fum. Pot grupa articole.",
       bullets: ["Apare la fiecare anunț viitor", "Este adăugată înainte de hashtaguri", "Fără linkuri sau date de contact"],
-      locked: "Disponibil în perioada gratuită și pe Pro sau Business.",
+      locked: "Disponibil în perioada gratuită și pe Starter, Pro sau Business.",
       saved: "Salvată.",
       cleared: "Ștearsă.",
       clear: "Șterge",
@@ -201,7 +201,7 @@ document.addEventListener("DOMContentLoaded", () => {
       title: "Nota guardada",
       placeholder: "Casa sin humo. Puedo agrupar artículos.",
       bullets: ["Aparece en todos los anuncios futuros", "Se añade antes de los hashtags", "Sin enlaces ni datos de contacto"],
-      locked: "Disponible en la prueba gratuita y en Pro o Business.",
+      locked: "Disponible en la prueba gratuita y en Starter, Pro o Business.",
       saved: "Guardada.",
       cleared: "Eliminada.",
       clear: "Borrar",
@@ -210,7 +210,7 @@ document.addEventListener("DOMContentLoaded", () => {
       title: "Uložená poznámka",
       placeholder: "Nefajčiarska domácnosť. Rada spojím viac vecí.",
       bullets: ["Zobrazí sa pri každom budúcom inzeráte", "Pridá sa pred hashtagy", "Bez odkazov a kontaktných údajov"],
-      locked: "Dostupné v bezplatnej skúšobnej verzii a v Pro alebo Business.",
+      locked: "Dostupné v bezplatnej skúšobnej verzii a v Starter, Pro alebo Business.",
       saved: "Uložené.",
       cleared: "Vymazané.",
       clear: "Vymazať",
@@ -219,7 +219,7 @@ document.addEventListener("DOMContentLoaded", () => {
       title: "Sparad notis",
       placeholder: "Rökfritt hem. Samfraktar gärna.",
       bullets: ["Visas på varje framtida annons", "Läggs till före hashtags", "Inga länkar eller kontaktuppgifter"],
-      locked: "Tillgängligt under gratis testperiod och med Pro eller Business.",
+      locked: "Tillgängligt under gratis testperiod och med Starter, Pro eller Business.",
       saved: "Sparad.",
       cleared: "Rensad.",
       clear: "Rensa",
@@ -395,7 +395,7 @@ document.addEventListener("DOMContentLoaded", () => {
     if (profile?.subscription_status !== "active" || tier === "free") {
       return true;
     }
-    return tier === "pro" || tier === "business";
+    return tier === "starter" || tier === "pro" || tier === "business";
   }
 
   function canUseDescriptionFooterSetting(profile) {
@@ -403,7 +403,7 @@ document.addEventListener("DOMContentLoaded", () => {
     if (profile?.subscription_status !== "active" || tier === "free") {
       return true;
     }
-    return tier === "pro" || tier === "business";
+    return tier === "starter" || tier === "pro" || tier === "business";
   }
 
   function getDescriptionFooterCopy(languageCode) {
