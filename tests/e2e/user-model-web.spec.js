@@ -2,6 +2,7 @@ const { test, expect } = require("@playwright/test");
 const fs = require("node:fs"),
   path = require("node:path");
 const url = process.env.MODEL_WEB_TEST_URL;
+const authProject = process.env.MODEL_WEB_SUPABASE_PROJECT_REF || "model-test";
 test.skip(
   !url,
   "Set MODEL_WEB_TEST_URL to a local Astro instance with model flags enabled.",
@@ -66,7 +67,7 @@ async function mocks(page, state) {
 }
 async function signIn(page, pending) {
   await page.addInitScript(
-    ({ owner, pending }) => {
+    ({ owner, pending, authProject }) => {
       const token =
         btoa(JSON.stringify({ alg: "HS256", typ: "JWT" })) +
         "." +
@@ -78,7 +79,7 @@ async function signIn(page, pending) {
         ) +
         ".signature";
       localStorage.setItem(
-        "sb-model-test-auth-token",
+        `sb-${authProject}-auth-token`,
         JSON.stringify({
           access_token: token,
           refresh_token: "fixture-refresh",
@@ -99,7 +100,7 @@ async function signIn(page, pending) {
           JSON.stringify({ preferences: pending }),
         );
     },
-    { owner, pending },
+    { owner, pending, authProject },
   );
 }
 async function shot(page, name) {
@@ -312,7 +313,7 @@ test("signed-in users explicitly review retained preferences before creation", a
     page.getByRole("radio", { name: "Brown", exact: true }),
   ).toBeChecked();
   expect(creates).toBe(0);
-  await page.getByRole("button", { name: "Create model", exact: true }).click();
+  await page.getByRole("button", { name: "Create and enable", exact: true }).click();
   await expect(page.getByAltText("Your saved full-length model")).toBeVisible();
   expect(creates).toBe(1);
 });
@@ -338,7 +339,7 @@ test("model onboarding follows browser language and keeps red as an API enum", a
         )
         .check();
   }
-  await page.getByRole("button", { name: "Continuer", exact: true }).click();
+  await page.getByRole("button", { name: "Créer et activer", exact: true }).click();
   expect(
     await page.evaluate(
       () =>
