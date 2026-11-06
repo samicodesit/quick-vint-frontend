@@ -7,6 +7,14 @@ export async function checkLiveModelPhotos({ context, openRealCreatePage, extens
  const folder=dirname(outputFile);
  const optionsFile=join(folder,'live-photo-options.json');
  const testOptions=existsSync(optionsFile)?JSON.parse(readFileSync(optionsFile,'utf8')):{};
+ if(testOptions.task==='inspect'){
+  const page=await openRealCreatePage();
+  await page.setViewportSize({width:1440,height:1000});
+  await page.screenshot({path:join(folder,'progressive-before-desktop.png'),fullPage:true});
+  const fields=await page.locator('input,textarea,button').evaluateAll(elements=>elements.map(el=>({tag:el.tagName,type:el.type,testId:el.dataset.testid,placeholder:el.getAttribute('placeholder'),label:el.getAttribute('aria-label'),text:el.tagName==='BUTTON'?el.textContent.trim().slice(0,80):undefined})));
+  writeFileSync(join(folder,'progressive-fields.json'),JSON.stringify(fields,null,2));
+  return {realVinted:true,providerCalls:0,saveOrPublishClicks:0,fields:fields.length};
+ }
  if(testOptions.task==='listing-tour'){
   const {previewListingTour}=await import(`./preview-listing-tour.mjs?run=${Date.now()}`);
   return previewListingTour({context,folder,extensionId});
@@ -45,6 +53,11 @@ export async function checkLiveModelPhotos({ context, openRealCreatePage, extens
   return checkExistingListing({context,folder,extensionId,options:testOptions});
  }
  const originalCount=Math.min(5,Math.max(1,testOptions.originals||1));
+ if(testOptions.files){
+  for(const [key,name] of [['original','ORIGINAL'],['primary','PRIMARY'],['secondary','SECONDARY']]){
+   if(testOptions.files[key])process.env['AUTOLISTER_MODEL_PHOTO_'+name]=testOptions.files[key];
+  }
+ }
  const primary=readFileSync(process.env.AUTOLISTER_MODEL_PHOTO_PRIMARY);
  const secondary=readFileSync(process.env.AUTOLISTER_MODEL_PHOTO_SECONDARY);
  const inspection=await context.newPage();
@@ -91,12 +104,70 @@ export async function checkLiveModelPhotos({ context, openRealCreatePage, extens
   const originals=await images();assert.equal(originals.length,originalCount);
   await page.screenshot({path:join(folder,'model-photos-before.png'),fullPage:true});
   const photos=[['primary',primary],['secondary',secondary]].map(([slot,bytes])=>({slot,url:'data:image/jpeg;base64,'+bytes.toString('base64')}));
+  if(testOptions.progressive){
+   const title=page.locator('input[data-testid="title--input"]');
+   const description=page.locator('textarea[data-testid="description--input"]');
+   await title.fill('Black dress with blue print');
+   await description.fill('Long sleeves and a plain black back.');
+   await evaluate(`(()=>{const send=chrome.runtime.sendMessage.bind(chrome.runtime);globalThis.__progressiveState={jobId:'11111111-2222-4333-8444-555555555555',status:'generating',eligible:true,photos:${JSON.stringify(photos.slice(0,1))}};globalThis.__progressiveActions=[];const model={enabled:true,listingPhotosAvailable:true,invitationState:'dismissed',model:{state:'ready',imageUrl:chrome.runtime.getURL('images/user-model-female.webp')}};chrome.runtime.sendMessage=(message,...rest)=>{if(message.type==='LISTING_PHOTO_REQUEST'){__progressiveActions.push(message.action||'get');if(message.action==='retry'){__progressiveState.status='generating';__progressiveState.canRetry=false;}return Promise.resolve({ok:true,data:__progressiveState});}if(message.type==='USER_MODEL_REQUEST')return Promise.resolve({ok:true,data:model});return send(message,...rest);};AutoListerModels.startContent();return true;})()`);
+   await page.locator('#quickvint-model-toggle').waitFor();
+   await title.focus();
+   await evaluate(`(async()=>{const owner=(await chrome.storage.local.get('supabaseSession')).supabaseSession.user.id;const c=globalThis.__autolisterLivePhotoController();globalThis.__livePhotoController=c;void c.start({jobId:'11111111-2222-4333-8444-555555555555',status:'queued'},owner);return true;})()`);
+   const panel=page.locator('.mp-preview-panel');
+   await panel.locator('img').waitFor({timeout:15000});
+   assert.equal(await panel.locator('img').count(),1);
+   assert(await title.evaluate(el=>document.activeElement===el),'Arrival must not move focus');
+   assert.equal(await page.locator('dialog[open]').count(),0);
+   await title.press('End');await title.pressSequentially(' - edited');
+   const savedTitle=await title.inputValue();
+   const capture=async stage=>{
+    for(const [device,width,height] of [['desktop',1440,1000],['mobile',390,844]]){
+     await page.setViewportSize({width,height});await panel.scrollIntoViewIfNeeded();
+     await page.screenshot({path:join(folder,`progressive-${stage}-${device}.png`),fullPage:true});
+     await page.locator(grid).first().locator('..').screenshot({path:join(folder,`progressive-${stage}-${device}-detail.png`)});
+    }
+   };
+   await capture('first');
+   await panel.locator('.mp-preview-actions button').click();
+   await page.waitForFunction(({selector,count})=>Array.from(document.querySelectorAll(selector)).filter(i=>i.complete&&i.naturalWidth&&i.src.startsWith('https:')).length===count,{selector:imageSelector,count:originalCount+1},{timeout:60000});
+   const firstOrder=await images();
+   const firstGenerated=firstOrder.find(key=>!originals.includes(key));
+   assert(firstGenerated,'First photo must upload through Vinted');
+   await evaluate(`__progressiveState.status='failed';__progressiveState.canRetry=true;true`);
+   await panel.locator('.mp-retry').waitFor({timeout:10000});
+   await capture('partial-failure');
+   await panel.locator('.mp-retry').click();
+   await evaluate(`__progressiveState.status='ready';__progressiveState.canRetry=false;__progressiveState.photos=${JSON.stringify(photos)};true`);
+   await page.waitForFunction(()=>document.querySelectorAll('.mp-preview-panel img').length===2);
+   await capture('ready');
+   await page.setViewportSize({width:1440,height:1000});
+   await panel.locator('.mp-preview-actions button').click();
+   await page.waitForFunction(({selector,count})=>Array.from(document.querySelectorAll(selector)).filter(i=>i.complete&&i.naturalWidth&&i.src.startsWith('https:')).length===count,{selector:imageSelector,count:originalCount+2},{timeout:60000});
+   await page.waitForFunction(()=>!document.querySelector('.mp-preview-panel:not([hidden])'));
+   const order=await images();
+   assert.equal(order.filter(key=>key===firstGenerated).length,1,'Retry must not duplicate the good photo');
+   assert.deepEqual(order.filter(key=>originals.includes(key)),originals);
+   assert.equal(await title.inputValue(),savedTitle);
+   assert.equal(await description.inputValue(),'Long sleeves and a plain black back.');
+   assert.equal((await evaluate('__progressiveActions')).filter(action=>action==='retry').length,1);
+   for(const [device,width,height] of [['desktop',1440,1000],['mobile',390,844]]){
+    await page.setViewportSize({width,height});await page.locator(grid).first().scrollIntoViewIfNeeded();
+    await page.screenshot({path:join(folder,`progressive-complete-${device}.png`),fullPage:true});
+   }
+   await page.locator('input[data-testid="add-photos-input"]').first().setInputFiles(process.env.AUTOLISTER_MODEL_PHOTO_ORIGINAL);
+   await page.waitForFunction(({selector,count})=>document.querySelectorAll(selector).length===count,{selector:imageSelector,count:originalCount+3},{timeout:60000});
+   await page.waitForTimeout(800);
+   assert.deepEqual((await images()).slice(0,originalCount+2),order);
+   Object.assign(summary,{progressive:true,firstPhotoUsableBeforeSecond:true,partialFailureRecovered:true,retainedFirstPhoto:true,formEditsPreserved:true,noAutomaticModal:true,arrivalPreservedFocus:true,rerenderVerified:true,placedFirst:order.slice(0,2).every(key=>!originals.includes(key)),order});
+   return summary;
+  }
   await evaluate(`(()=>{const send=chrome.runtime.sendMessage.bind(chrome.runtime);const state={jobId:'11111111-2222-4333-8444-555555555555',status:'ready',eligible:true,photos:${JSON.stringify(photos)}};const model={enabled:true,listingPhotosAvailable:true,invitationState:'dismissed',model:{state:'ready',imageUrl:chrome.runtime.getURL('images/user-model-female.webp')}};chrome.runtime.sendMessage=(message,...rest)=>{if(message.type==='LISTING_PHOTO_REQUEST')return Promise.resolve({ok:true,data:state});if(message.type==='USER_MODEL_REQUEST'){if(message.method==='PATCH')model.enabled=message.body.enabled;return Promise.resolve({ok:true,data:model});}return send(message,...rest);};AutoListerModels.startContent();return true;})()`);
   summary.cachedModelSettings=true;
   await page.locator('#quickvint-model-toggle').waitFor({timeout:10000});
   const start=Date.now();
   await evaluate(`(async()=>{const owner=(await chrome.storage.local.get('supabaseSession')).supabaseSession.user.id;const controller=globalThis.__autolisterLivePhotoController();globalThis.__livePhotoController=controller;void controller.start({jobId:'11111111-2222-4333-8444-555555555555',status:'ready'},owner);return true;})()`);
   let status;
+  await page.locator('.mp-preview-panel .mp-preview-actions button').click({timeout:15000});
   while(Date.now()-start<90000){
    status=await evaluate('globalThis.__livePhotoController.status');
    if(['attached','order_failed','attachment_failed','cancelled','capacity'].includes(status))break;
@@ -106,7 +177,7 @@ export async function checkLiveModelPhotos({ context, openRealCreatePage, extens
   await page.screenshot({path:join(folder,'model-photos-result.png'),fullPage:true});
   summary.photoDom=await page.locator(grid).first().evaluate(e=>e.outerHTML);
   writeFileSync(join(folder,'model-photos-diagnostic.json'),JSON.stringify(summary,null,2));
-  assert.equal(status,'attached','Automatic upload and native ordering must both succeed.');
+  assert.equal(status,'attached','Requested upload must succeed.');
   assert.equal(summary.order.length,originalCount+2);
   assert.deepEqual(summary.order.slice(2),originals);
   await page.setViewportSize({width:1440,height:1100});

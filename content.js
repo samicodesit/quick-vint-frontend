@@ -15476,7 +15476,13 @@
     const dataTransfer = new DataTransfer();
     files.forEach((file) => dataTransfer.items.add(file));
 
-    fileInput.files = dataTransfer.files;
+    try {
+      fileInput.files = dataTransfer.files;
+    } catch (error) {
+      // No host event was dispatched, so a model-photo retry can safely try again.
+      if (uploadSource === 'model_generated') return false;
+      throw error;
+    }
     suppressNextFileInputCapture = true;
     fileInput.dispatchEvent(new Event("change", { bubbles: true }));
     setTimeout(() => {

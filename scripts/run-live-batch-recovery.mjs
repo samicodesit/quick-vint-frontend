@@ -432,6 +432,7 @@ try {
           const {checkLiveModelPhotos}=await import(`./live-model-photo-check.mjs?run=${Date.now()}`);
           diagnostics.modelPhotos=await checkLiveModelPhotos({context,openRealCreatePage,extensionId,outputFile});diagnostics.ok=true;delete diagnostics.error;
         }catch(error){diagnostics.ok=false;diagnostics.error=error.message;}
+        diagnostics.finishedAt=new Date().toISOString();
         writeFileSync(outputFile,JSON.stringify(diagnostics,null,2));
         console.log('Repeated photo check:',diagnostics.ok?'passed':diagnostics.error);
       }
