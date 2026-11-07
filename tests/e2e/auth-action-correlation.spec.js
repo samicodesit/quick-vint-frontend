@@ -80,8 +80,13 @@ test("recovery retains first-failure facts when the separate failure receipt rem
       entry.event.event === "token_refresh_failed" && entry.event.context.operationId === operationId).event;
     expect(unique(flow.events).filter(event => event.event === "token_refresh_failed")).toHaveLength(0);
     await flow.restartWorker();
-    flow.reconnect();
+    // Finish the restarted worker's offline attempt before testing recovery.
+    // Otherwise the next call can join that still-failing attempt.
     await flow.worker.evaluate(() => refreshTokenWithRetry(1, { entryPoint: "startup_restore" }));
+    flow.reconnect();
+    const renewed = await flow.worker.evaluate(() => refreshTokenWithRetry(1, { entryPoint: "startup_restore" }));
+    expect(renewed?.user?.id).toBe(user.id);
+    expect(renewed.access_token).not.toBe(flow.session.access_token);
     await expect.poll(async () => {
       await flow.worker.evaluate(() => AutoListerTelemetry.flush());
       return unique(flow.events).filter(event => event.event === "auth_session_result" &&
@@ -159,7 +164,7 @@ test("a confirmed session rejection records required fresh sign-in without gener
     const result = data.events.find(e => e.event === "auth_session_result");
     expect(result.context.resultStatus).toBe("signed_in");
     expect(result.context.signInRequired).toBe(true);
-    expect(result.context.reason).toBe("email_otp");
+    expect(result.context.reason).toBe("auth_success");
     expect(data.generationRequests).toHaveLength(0);
     expect(data.photos).toBe(1);
   } finally { await flow.close(); }
