@@ -307,6 +307,7 @@ for (const outcome of ["silent_renewed", "signed_in", "sdk_renewed", "handoff_si
       const result = data.events.find(e => e.event === "auth_session_result");
       expect(result.context.operationId).toBe(failure.context.operationId);
       expect(result.context.resultStatus).toBe(outcome.includes("signed_in") ? "signed_in" : "silent_renewed");
+      expect(result.context.reason).toBe(outcome.includes("signed_in") ? "auth_success" : "token_refresh_success");
       expect(result.context.signInRequired).toBe(false);
       expect(result.context.analyticsClientId).toBe(failure.context.analyticsClientId);
       expect(result.context.firstFailureClientId).toBe(failure.context.analyticsClientId);

@@ -35,7 +35,7 @@ test("only explicit fresh sign-in establishes sign-in, and only rejection establ
   await observer.observe(f.event("token_refresh_expired", "rejected"), "owner");
   await observer.observe(f.event("auth_success", "signin", { reason: "email_otp" }), "owner");
   assert.equal(f.results[0].context.resultStatus, "signed_in");
-  assert.equal(f.results[0].context.reason, "email_otp");
+  assert.equal(f.results[0].context.reason, "auth_success");
   assert.equal(f.results[0].context.signInRequired, true);
 });
 
