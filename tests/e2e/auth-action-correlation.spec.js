@@ -246,6 +246,7 @@ test("extension callback records a fresh sign-in against the pending session rej
     }).toBe(1);
     const result = unique(flow.events).find(e => e.event === "auth_session_result");
     expect(result.context.resultStatus).toBe("signed_in");
+    expect(result.context.reason).toBe("auth_success");
     expect(result.context.operationId).toBe(pending.operationId);
     expect(result.context.signInRequired).toBe(true);
     expect(result.context.firstFailureErrorCode).toBe(pending.firstFailure.firstFailureErrorCode);

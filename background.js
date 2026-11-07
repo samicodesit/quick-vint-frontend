@@ -2898,7 +2898,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
           try {
             const callbackSession = await getStoredSession();
             if (callbackSession?.access_token && callbackSession.user?.id) {
-              observeAuthSession({ event: "auth_success", context: { reason: "extension_callback" } }, callbackSession.user.id);
+              observeAuthSession({ event: "auth_success", context: { reason: "auth_success" } }, callbackSession.user.id);
             }
           } catch { /* Observation cannot fail authentication or profile loading. */ }
         }
