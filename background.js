@@ -2890,8 +2890,18 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         sendResponse(usageCount);
         break;
 
-      // THIS IS THE FIX: Restore the handler for the signal from the callback page.
       case "AUTH_UPDATED":
+        // The extension callback stores its session directly, outside the
+        // background OTP/HTTPS handoff paths that already record fresh sign-in.
+        if (sender.id === chrome.runtime.id &&
+            sender.url?.split(/[?#]/, 1)[0] === chrome.runtime.getURL("callback.html")) {
+          try {
+            const callbackSession = await getStoredSession();
+            if (callbackSession?.access_token && callbackSession.user?.id) {
+              observeAuthSession({ event: "auth_success", context: { reason: "extension_callback" } }, callbackSession.user.id);
+            }
+          } catch { /* Observation cannot fail authentication or profile loading. */ }
+        }
         await updateAndStoreUserProfile();
         sendResponse({ ok: true });
         break;

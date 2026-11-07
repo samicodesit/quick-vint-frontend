@@ -212,6 +212,48 @@ test("a real scheduled refresh failure identifies its background trigger without
   } finally { await flow.close(); }
 });
 
+test("extension callback records a fresh sign-in against the pending session rejection", async () => {
+  test.setTimeout(90000);
+  const flow = await authJourney();
+  try {
+    await flow.worker.evaluate(session => chrome.storage.local.set({ supabaseSession: session }), flow.session);
+    flow.rejectRefresh();
+    await flow.worker.evaluate(() => refreshTokenWithRetry(1, { entryPoint: "startup_restore" }));
+    await flow.worker.evaluate(() => authSessionObserver.drain());
+    const pending = await flow.worker.evaluate(async () =>
+      (await chrome.storage.local.get("autolisterAuthSessionObservation")).autolisterAuthSessionObservation);
+    expect(pending.signInRequired).toBe(true);
+    await flow.restartWorker();
+    await sendFromExtensionContent(flow.context, flow.controller, { type: "AUTH_UPDATED" });
+    await flow.worker.evaluate(() => authSessionObserver.drain());
+    expect(await flow.worker.evaluate(async () =>
+      (await chrome.storage.local.get("autolisterAuthSessionObservation")).autolisterAuthSessionObservation?.outcome)).toBeUndefined();
+    // Real callback document, SDK user validation, storage and runtime message.
+    // Only the auth provider/collector are controlled fixtures.
+    const callback = await flow.context.newPage();
+    const extensionId = new URL(flow.worker.url()).hostname;
+    const access = jwt(Math.floor(Date.now() / 1000) + 3600);
+    await callback.goto(`chrome-extension://${extensionId}/callback.html#access_token=${access}&refresh_token=callback-local-refresh&expires_in=3600&token_type=bearer`);
+    await expect.poll(() => flow.worker.evaluate(async () =>
+      (await chrome.storage.local.get("supabaseSession")).supabaseSession?.refresh_token)).toBe("callback-local-refresh");
+    await expect.poll(async () => {
+      await flow.worker.evaluate(() => AutoListerTelemetry.flush());
+      return unique(flow.events).some(e => e.event === "auth_success" && e.source === "extension_callback");
+    }).toBe(true);
+    await expect.poll(async () => {
+      await flow.worker.evaluate(() => AutoListerTelemetry.flush());
+      return unique(flow.events).filter(e => e.event === "auth_session_result").length;
+    }).toBe(1);
+    const result = unique(flow.events).find(e => e.event === "auth_session_result");
+    expect(result.context.resultStatus).toBe("signed_in");
+    expect(result.context.operationId).toBe(pending.operationId);
+    expect(result.context.signInRequired).toBe(true);
+    expect(result.context.firstFailureErrorCode).toBe(pending.firstFailure.firstFailureErrorCode);
+    expect(flow.requests).toHaveLength(0);
+    await expect(flow.controller.locator('[data-testid="media-upload-grid"] img')).toHaveCount(1);
+  } finally { await flow.close(); }
+});
+
 for (const outcome of ["silent_renewed", "signed_in", "sdk_renewed", "handoff_signed_in"]) {
   test(`background failure survives a worker restart and records ${outcome} without generating`, async ({}, testInfo) => {
     test.setTimeout(90000);
