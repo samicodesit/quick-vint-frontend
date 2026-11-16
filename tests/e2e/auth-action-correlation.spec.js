@@ -111,6 +111,56 @@ test("recovery retains first-failure facts when the separate failure receipt rem
   } finally { await flow.close(); }
 });
 
+test("first auth failure is delivered after offline duplicate pressure and a real worker restart", async () => {
+  test.setTimeout(120000);
+  const options = { withholdRefreshFailures: true };
+  const flow = await authJourney(options);
+  try {
+    await flow.worker.evaluate(session => chrome.storage.local.set({ supabaseSession: session }), flow.session);
+    await flow.worker.evaluate(() => refreshTokenWithRetry(1, { entryPoint: "startup_restore" }));
+    await flow.worker.evaluate(() => authSessionObserver.drain());
+    await flow.worker.evaluate(() => AutoListerTelemetry.flush());
+    const original = await flow.worker.evaluate(async () => {
+      const saved = await chrome.storage.local.get(["autolisterAuthSessionObservation", "autolisterTelemetryV2"]);
+      const op = saved.autolisterAuthSessionObservation.operationId;
+      return saved.autolisterTelemetryV2.events.find(entry => entry.event.event === "token_refresh_failed" && entry.event.context.operationId === op).event;
+    });
+    // Controlled pressure through the loaded worker's real serialized queue.
+    // This demonstrates an eviction mechanism, not the historical clients' trigger.
+    await flow.worker.evaluate(async original => {
+      for (let i = 0; i < 225; i++) {
+        const repeated = structuredClone(original);
+        repeated.id = crypto.randomUUID(); repeated.context.operationId = crypto.randomUUID();
+        await AutoListerBackgroundTelemetry.accept(repeated, "00000000-0000-4000-8000-000000000001", true, false);
+      }
+    }, original);
+    const pressure = await flow.worker.evaluate(async id => {
+      const state = (await chrome.storage.local.get("autolisterTelemetryV2")).autolisterTelemetryV2;
+      return { retained: state.events.some(entry => entry.event.id === id), bytes: JSON.stringify(state).length,
+        drops: state.dropped + state.events.reduce((n, entry) => n + (entry.event.context.queueDropped || 0), 0) };
+    }, original.id);
+    expect(pressure.retained).toBe(false); expect(pressure.drops).toBeGreaterThan(0);
+    expect(pressure.bytes).toBeLessThanOrEqual(524288);
+    await flow.restartWorker();
+    await flow.worker.evaluate(() => refreshTokenWithRetry(1, { entryPoint: "startup_restore" }));
+    options.withholdRefreshFailures = false; flow.reconnect();
+    const renewed = await flow.worker.evaluate(() => refreshTokenWithRetry(1, { entryPoint: "startup_restore" }));
+    expect(renewed?.user?.id).toBe(user.id);
+    await expect.poll(async () => {
+      await flow.worker.evaluate(() => authSessionObserver.drain());
+      await flow.worker.evaluate(() => AutoListerTelemetry.flush());
+      return unique(flow.events).filter(event => event.id === original.id).length;
+    }).toBe(1);
+    const replay = unique(flow.events).find(event => event.id === original.id);
+    expect(replay.occurredAt).toBe(original.occurredAt);
+    expect(replay.context.operationId).toBe(original.context.operationId);
+    const outcome = unique(flow.events).find(event => event.event === "auth_session_result" && event.context.operationId === original.context.operationId);
+    expect(outcome.context.resultStatus).toBe("silent_renewed");
+    expect(flow.requests).toHaveLength(0);
+    await expect(flow.controller.locator('[data-testid="media-upload-grid"] img')).toHaveCount(1);
+  } finally { await flow.close(); }
+});
+
 test("a throwing diagnostic sanitizer cannot change a successful credential renewal", async () => {
   const flow = await authJourney();
   try {

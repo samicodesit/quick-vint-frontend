@@ -127,3 +127,56 @@ test("an older pending observation never invents first-failure facts at upgrade"
   assert.equal(f.results[0].context.firstFailureObservedAt, undefined);
   assert.equal(f.results[0].context.firstFailureClientId, undefined);
 });
+
+
+test("a bounded original journal survives admission, restart and retry until actual acknowledgment", async () => {
+  const f = fixture(); const originals = []; let accepted = false;
+  f.options.emitOriginal = async event => { originals.push(structuredClone(event)); return { queued: true, accepted }; };
+  const original = f.event("token_refresh_failed", "00000000-0000-4000-8000-000000000001", {
+    errorCode: "REFRESH_RETRIES_EXHAUSTED", errorName: "AuthRetryableFetchError", statusCode: 0,
+    phase: "restore_session", navigatorOnline: false, access_token: "never-save", message: "never-save", photos: ["never-save"],
+  });
+  original.extensionVersion = "1.4.39";
+  let observer = f.restart(); await observer.observe(original, "owner");
+  assert.equal(f.saved().original.id, original.id);
+  assert.equal(JSON.stringify(f.saved()).includes("never-save"), false);
+  assert.ok(JSON.stringify(f.saved()).length < 2500);
+  await observer.observe(f.event("token_refresh_success", "renewal"), "owner");
+  const outcomeId = f.saved().outcome.id;
+  observer = f.restart(); await observer.resume("another-owner");
+  assert.equal(originals.length, 1);
+  accepted = true; await observer.resume("owner");
+  assert.equal(f.saved(), null); assert.equal(originals.length, 2);
+  assert.deepEqual(originals[0], originals[1]);
+  assert.equal(originals[0].occurredAt, original.occurredAt);
+  assert.equal(f.results[1].id, outcomeId);
+});
+
+test("failed original replay still queues the outcome, expires without replay and never invents a legacy event", async () => {
+  const f = fixture(); let calls = 0;
+  f.options.emitOriginal = async () => { calls++; throw Error("controlled transport failure"); };
+  const original = f.event("token_refresh_failed", "00000000-0000-4000-8000-000000000002");
+  let observer = f.restart(); await observer.observe(original, "owner");
+  await observer.observe(f.event("token_refresh_success", "renewal"), "owner");
+  assert.equal(f.results.length, 1); assert.ok(f.saved().original); assert.equal(calls, 1);
+  f.advance(86400001); observer = f.restart(); await observer.resume("owner");
+  assert.equal(f.saved(), null); assert.equal(calls, 1);
+  await observer.observe(f.event("token_refresh_failed", "legacy-operation-not-transport-id"), "owner");
+  await observer.observe(f.event("token_refresh_success", "renewal"), "owner");
+  assert.equal(f.saved(), null); assert.equal(calls, 1);
+});
+
+
+test("acknowledging an older journal cannot consume the next failure observation", async () => {
+  const f = fixture(); let accepted = false;
+  f.options.emitOriginal = async () => ({ queued: true, accepted });
+  const observer = f.restart();
+  const first = f.event("token_refresh_failed", "00000000-0000-4000-8000-000000000001");
+  await observer.observe(first, "owner");
+  await observer.observe(f.event("token_refresh_success", "renewal"), "owner");
+  assert.ok(f.saved().outcome); accepted = true;
+  const next = f.event("token_refresh_failed", "00000000-0000-4000-8000-000000000002");
+  await observer.observe(next, "owner");
+  assert.equal(f.saved()?.operationId, next.context.operationId);
+  assert.equal(f.saved()?.original.id, next.id); assert.equal(f.saved()?.outcome, undefined);
+});

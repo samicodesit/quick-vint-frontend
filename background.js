@@ -11,6 +11,8 @@ const authSessionObserver = AutoListerAuthSessions.createObserver({
       extensionVersion: chrome.runtime.getManifest().version }) || {};
     return { clientId: safe.analyticsClientId, version: safe.extensionVersion };
   },
+  emitOriginal: async (original, owner) =>
+    AutoListerBackgroundTelemetry.accept(structuredClone(original), owner, true, false),
   emit: async (outcome, owner) => {
     AutoListerTelemetry.setAccount(owner);
     const prepared = AutoListerTelemetry.prepare("auth_session_result", outcome.context, "extension_background");
@@ -378,6 +380,22 @@ async function refreshTokenWithRetry(maxRetries = 3, diagnostic = {}) {
   tokenRefreshDiagnostic = { operationId: telemetryOperation };
   diagnostic.authRefreshOperationId = telemetryOperation;
   const trackRefresh = (event, context = {}) => {
+    // Prepare a failure once so its bounded journal and normal queue refer to
+    // the same real event. Auth work never awaits diagnostic storage or I/O.
+    if (tokenRefreshDiagnostic?.ownerId && ["token_refresh_failed", "token_refresh_expired"].includes(event)) {
+      try {
+        const owner = tokenRefreshDiagnostic?.ownerId;
+        AutoListerTelemetry.setAccount(owner);
+        const prepared = AutoListerTelemetry.prepare(event, {
+          operationId: telemetryOperation, entryPoint: diagnostic.entryPoint || "unspecified",
+          parentOperationId: diagnostic.parentOperationId, target: diagnostic.target,
+          navigatorOnline: globalThis.navigator?.onLine, ...context,
+        }, "extension_background");
+        observeAuthSession(prepared.event, owner);
+        void AutoListerBackgroundTelemetry.accept(prepared.event, owner, prepared.critical, false).catch(() => {});
+        return;
+      } catch { /* Fall through to the existing fail-open telemetry path. */ }
+    }
     observeAuthSession({ event, id: `${telemetryOperation}:${event}`, context: {
       operationId: telemetryOperation, entryPoint: diagnostic.entryPoint || "unspecified",
       navigatorOnline: globalThis.navigator?.onLine,
