@@ -334,3 +334,45 @@ test("overlapping critical delivery preserves the failed event's backoff", async
   assert.equal(state.events[0].nextAt, 61000);
   assert.equal(state.events[0].attempts, 1);
 });
+
+
+test("first auth originals remain protected through duplicate pressure until ACK without changing backoff or transport payloads", async () => {
+  const f = fixture(); const q = f.make();
+  const event = i => ({ id: `auth-${i}`, event: "token_refresh_failed", source: "extension_background",
+    context: { operationId: `op-${i}`, errorCode: "NETWORK", phase: "restore_session" } });
+  await q.enqueue(event(0), "a", true); await q.flush();
+  const nextAt = f.state().events[0].nextAt;
+  await q.enqueue(event(0), "a", true, true);
+  assert.equal(f.state().events.length, 1);
+  assert.equal(f.state().events[0].nextAt, nextAt);
+  await q.enqueue({ id: "report", event: "listing_report_submitted" }, "a", true);
+  await q.enqueue({ id: "distinct", event: "generate_error", context: { operationId: "generate" } }, "a", true);
+  for (let i = 1; i <= 225; i++) await q.enqueue(event(i), "a", true);
+  assert.ok(f.state().events.some(e => e.event.id === "auth-0"));
+  assert.ok(f.state().events.some(e => e.event.id === "report"));
+  assert.ok(f.state().events.some(e => e.event.id === "distinct"));
+  assert.ok(f.state().events.length <= 200); assert.ok(Buffer.byteLength(JSON.stringify(f.state())) <= 524288);
+  f.time(nextAt); f.respond({ status: 200, json: async () => ({ acknowledgedIds: f.requests.at(-1).body.events.map(e => e.id) }) });
+  await q.flush(); assert.equal(f.state().events.length, 0);
+  assert.ok(f.requests.every(r => r.body.events.every(e => !Object.hasOwn(e, "authOriginal"))));
+});
+
+test("protected auth originals obey the same finite age and capacity caps while customer reports retain priority", async () => {
+  const f = fixture(); const q = f.make();
+  await q.enqueue({ id: "report", event: "listing_report_submitted" }, "a", true);
+  for (let i = 0; i < 225; i++) await q.enqueue({ id: `first-${i}`, event: "token_refresh_failed", source: "extension_background" }, "a", true, true);
+  assert.ok(f.state().events.length <= 200); assert.ok(f.state().events.some(e => e.event.id === "report"));
+  assert.ok(f.state().dropped > 0);
+  f.time(86401001); await q.flush();
+  assert.equal(f.state().events.length, 0);
+});
+
+test("a protected confirmed-expiry original is not evicted as routine telemetry", async () => {
+  const f = fixture(); const q = f.make();
+  const expired = { id: "expired-session", event: "token_refresh_expired", source: "extension_background" };
+  await q.enqueue(expired, "a", false);
+  await q.enqueue(expired, "a", true, true);
+  for (let i = 0; i < 225; i++) await q.enqueue({ id: `routine-${i}`, event: "upload_progress" }, "a");
+  assert.ok(f.state().events.some(entry => entry.event.id === expired.id));
+  assert.ok(f.state().events.length <= 200);
+});

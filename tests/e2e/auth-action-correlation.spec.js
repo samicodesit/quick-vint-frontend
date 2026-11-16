@@ -58,7 +58,7 @@ async function authJourney(options = {}) {
   await expect(flow.controller.locator('[data-testid="media-upload-grid"] img')).toHaveCount(1);
   await expect(flow.controller.locator('[data-testid="media-upload-grid"] img')).toHaveAttribute("src", /images1.vinted.net/);
   return { ...flow, get worker() { return flow.worker; }, events, authRequests, session,
-    releaseAuth: () => releaseAuth?.(), reconnect: () => { disconnected = false; },
+    releaseAuth: () => releaseAuth?.(), disconnect: () => { disconnected = true; }, reconnect: () => { disconnected = false; },
     holdAuth: () => { authGate = new Promise(resolve => { releaseAuth = resolve; }); },
     rejectRefresh: () => { disconnected = false; rejectRefresh = true; },
     async verifyCode() { return sendFromExtensionContent(flow.context, flow.controller, { type: "VERIFY_EMAIL_OTP", email: user.email, token: "123456" }); } };
@@ -156,6 +156,44 @@ test("first auth failure is delivered after offline duplicate pressure and a rea
     expect(replay.context.operationId).toBe(original.context.operationId);
     const outcome = unique(flow.events).find(event => event.event === "auth_session_result" && event.context.operationId === original.context.operationId);
     expect(outcome.context.resultStatus).toBe("silent_renewed");
+    expect(flow.requests).toHaveLength(0);
+    await expect(flow.controller.locator('[data-testid="media-upload-grid"] img')).toHaveCount(1);
+  } finally { await flow.close(); }
+});
+
+test("later auth renewals remain observable while older first-error originals await collector acknowledgment", async () => {
+  test.setTimeout(120000);
+  const flow = await authJourney({ withholdRefreshFailures: true });
+  try {
+    const operations = [];
+    for (let round = 0; round < 2; round++) {
+      flow.disconnect();
+      await flow.worker.evaluate(session => chrome.storage.local.set({ supabaseSession: session }), flow.session);
+      await flow.worker.evaluate(() => refreshTokenWithRetry(1, { entryPoint: "startup_restore" }));
+      await flow.worker.evaluate(() => authSessionObserver.drain());
+      const pending = await flow.worker.evaluate(async () => (await chrome.storage.local.get("autolisterAuthSessionObservation")).autolisterAuthSessionObservation);
+      expect(pending?.operationId).toBeTruthy(); operations.push(pending.operationId);
+      flow.reconnect();
+      await flow.worker.evaluate(() => refreshTokenWithRetry(1, { entryPoint: "startup_restore" }));
+      await flow.worker.evaluate(() => authSessionObserver.drain());
+      await expect.poll(async () => {
+        await flow.worker.evaluate(() => AutoListerTelemetry.flush());
+        return unique(flow.events).filter(e => e.event === "auth_session_result").length;
+      }).toBe(round + 1);
+      expect(await flow.worker.evaluate(async () => (await chrome.storage.local.get("autolisterAuthSessionObservation")).autolisterAuthSessionObservation)).toBeNull();
+    }
+    expect(new Set(operations).size).toBe(2);
+    const originals = await flow.worker.evaluate(async operations => {
+      const state = (await chrome.storage.local.get("autolisterTelemetryV2")).autolisterTelemetryV2;
+      return state.events.filter(e => e.authOriginal && operations.includes(e.event.context.operationId)).map(e => e.event.id);
+    }, operations);
+    expect(originals).toHaveLength(2);
+    await flow.restartWorker();
+    expect(await flow.worker.evaluate(async ids => {
+      const state = (await chrome.storage.local.get("autolisterTelemetryV2")).autolisterTelemetryV2;
+      return ids.every(id => state.events.some(e => e.event.id === id && e.authOriginal));
+    }, originals)).toBe(true);
+    expect(unique(flow.events).filter(e => e.event === "token_refresh_failed")).toHaveLength(0);
     expect(flow.requests).toHaveLength(0);
     await expect(flow.controller.locator('[data-testid="media-upload-grid"] img')).toHaveCount(1);
   } finally { await flow.close(); }

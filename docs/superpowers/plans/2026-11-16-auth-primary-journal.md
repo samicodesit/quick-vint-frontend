@@ -25,8 +25,18 @@ images or listing contents are copied into this journal.
 
 After attributable same-owner renewal, replay that original through the existing
 authenticated queue using the same ID. Collector deduplication handles an already
-accepted original. Keep the journal until the original is acknowledged and the
-outcome is durably queued. Failure to replay must not prevent queuing the outcome.
+accepted original. Admission protects that original inside the existing bounded
+queue until acknowledgment. Duplicate/routine pressure cannot evict it; the
+original still obeys the same age and capacity caps, and customer reports retain
+priority. The protection flag is local queue metadata, never a request field.
+No retry deadline or backoff is reset by protecting an existing entry.
+
+Clear the observation marker after protected admission and durable outcome
+admission. Holding this marker until acknowledgment was reproduced as hiding a
+later auth episode, so that candidate was corrected before release. The queue
+retains the older original independently while later failures and renewals are
+observed normally. Failed original admission still keeps the bounded journal;
+failure to replay must not prevent queuing the outcome.
 Worker startup resumes the journal; expiry and owner checks still apply. Old
 markers without a transport UUID cannot manufacture historical originals.
 Authentication, refresh retries, generation, photos and credits stay independent
@@ -39,6 +49,10 @@ of this asynchronous diagnostic work. No new permissions or database migration.
   Generate request. Controlled external services only.
 - Unit coverage for acknowledgment versus admission, retry identity, restart,
   owner isolation, expiry, legacy markers, storage/transport failures and bounds.
+- Repeated real-worker browser coverage for two auth episodes while older
+  originals remain unacknowledged. Protected entries survive worker restart.
+- The extension transport alone uses the optional protection flag. Website
+  producers and their deployed queue stay unchanged; no server update is needed.
 - Relevant auth and telemetry browser journeys, full unit/E2E and production build.
 - Inline combined-diff review because the owner prohibits delegated reviewers.
 - Actual Store state first, standard production push and upload/submit pipeline.
