@@ -999,7 +999,6 @@ test("a stalled SDK restoration produces a terminal refresh diagnostic without e
   try {
     const result = await serviceWorker.evaluate(async () => {
       const originalFetch = globalThis.fetch;
-      const originalTrack = AutoListerTelemetry.track;
       const events = [];
       let authCalls = 0;
       let refreshCalls = 0;
@@ -1011,6 +1010,7 @@ test("a stalled SDK restoration produces a terminal refresh diagnostic without e
         const url = String(input);
         if (url.includes("/api/events/track")) {
           const body = JSON.parse(options.body);
+          events.push(...body.events);
           return new Response(JSON.stringify({ acknowledgedIds: body.events.map(event => event.id), duplicateIds: [], rejections: [] }), {
             status: 200, headers: { "content-type": "application/json" },
           });
@@ -1022,10 +1022,10 @@ test("a stalled SDK restoration produces a terminal refresh diagnostic without e
         }
         throw new Error("Unexpected local-test request");
       };
-      AutoListerTelemetry.track = (...args) => { events.push({ event: args[0], context: args[1] }); return originalTrack(...args); };
       try {
         await chrome.storage.local.set({ supabaseSession: saved });
         const result = await refreshTokenWithRetry();
+        await authSessionObserver.drain();
         await AutoListerTelemetry.flush();
         const after = await chrome.storage.local.get("supabaseSession");
         return { returnedNull: result === null, authCalls, refreshCalls, events,
@@ -1034,7 +1034,6 @@ test("a stalled SDK restoration produces a terminal refresh diagnostic without e
             after.supabaseSession?.expires_at === saved.expires_at &&
             after.supabaseSession?.user?.id === saved.user.id };
       } finally {
-        AutoListerTelemetry.track = originalTrack;
         await chrome.storage.local.remove("supabaseSession");
         globalThis.fetch = originalFetch;
       }
