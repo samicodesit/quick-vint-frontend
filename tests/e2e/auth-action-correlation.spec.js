@@ -10,6 +10,115 @@ const jwt = exp => [
 ].join(".");
 const unique = events => [...new Map(events.map(event => [event.id, event])).values()];
 
+test("retained auth originals resume automatically after reconnect and native worker interruption", async () => {
+  test.setTimeout(180000);
+  const options = { withholdRefreshFailures: true };
+  const flow = await authJourney(options);
+  try {
+    await flow.worker.evaluate(session => chrome.storage.local.set({ supabaseSession: session }), flow.session);
+    await flow.worker.evaluate(() => refreshTokenWithRetry(1, { entryPoint: "startup_restore" }));
+    await flow.worker.evaluate(() => authSessionObserver.drain());
+    await flow.worker.evaluate(() => AutoListerTelemetry.flush());
+    const original = await flow.worker.evaluate(async () => {
+      const saved = await chrome.storage.local.get(["autolisterAuthSessionObservation", "autolisterTelemetryV2"]);
+      const operation = saved.autolisterAuthSessionObservation.operationId;
+      return structuredClone(saved.autolisterTelemetryV2.events.find(entry =>
+        entry.event.event === "token_refresh_failed" && entry.event.context.operationId === operation));
+    });
+    options.withholdRefreshFailures = false;
+    flow.reconnect();
+    await flow.worker.evaluate(() => refreshTokenWithRetry(1, { entryPoint: "startup_restore" }));
+    await flow.worker.evaluate(() => authSessionObserver.drain());
+    const renewedAt = Date.now();
+    const pending = await flow.worker.evaluate(async id => {
+      const state = (await chrome.storage.local.get("autolisterTelemetryV2")).autolisterTelemetryV2;
+      return { version: chrome.runtime.getManifest().version, alarm: await chrome.alarms.get("autolister-telemetry-retry"),
+        original: state.events.find(entry => entry.event.id === id), now: Date.now() };
+    }, original.event.id);
+    expect(pending.alarm.periodInMinutes).toBe(1);
+    expect(pending.original.nextAt).toBe(original.nextAt);
+    expect(pending.original.nextAt).toBeGreaterThan(pending.now);
+    expect(unique(flow.events).some(event => event.event === "auth_session_result" &&
+      event.context.operationId === original.event.context.operationId)).toBe(true);
+    expect(unique(flow.events).some(event => event.id === original.event.id)).toBe(false);
+
+    // Stop the actual MV3 target. Do not wake it with a message, flush the queue,
+    // clear an alarm, edit a deadline or accelerate its clock after this point.
+    const cdp = await flow.context.newCDPSession(flow.controller);
+    const { targetInfos } = await cdp.send("Target.getTargets");
+    const target = targetInfos.find(target => target.type === "service_worker" && target.url === flow.worker.url());
+    expect(target).toBeTruthy();
+    await cdp.send("Target.closeTarget", { targetId: target.targetId });
+    await cdp.detach();
+    await expect.poll(() => unique(flow.events).filter(event => event.id === original.event.id).length,
+      { timeout: 135000, intervals: [500, 1000] }).toBe(1);
+    const deliveredAt = Date.now();
+    const delivered = unique(flow.events).find(event => event.id === original.event.id);
+    expect(delivered.occurredAt).toBe(original.event.occurredAt);
+    expect(delivered.context.analyticsClientId).toBe(original.event.context.analyticsClientId);
+    expect(deliveredAt).toBeGreaterThanOrEqual(original.nextAt);
+    expect(deliveredAt).toBeLessThan(original.nextAt + 90000);
+    expect(flow.requests).toHaveLength(0);
+    await expect(flow.controller.locator('[data-testid="media-upload-grid"] img')).toHaveCount(1);
+    console.log(JSON.stringify({ check: "automatic-original-retry", version: pending.version,
+      firstEventId: original.event.id, remainingCooldownAtRenewalMs: original.nextAt - renewedAt,
+      automaticDeliveryAfterRenewalMs: deliveredAt - renewedAt, attemptsBeforeRenewal: original.attempts,
+      originalTimestampPreserved: true, nativeWorkerStopped: true, deadlinesEdited: false,
+      generatedRequests: flow.requests.length, retainedPhotos: 1 }));
+  } finally { await flow.close(); }
+});
+
+for (const overlap of [false, true]) test(`same-owner recovery delivers its network-blocked original during the available connection window (in-flight: ${overlap})`, async () => {
+  test.setTimeout(90000);
+  let releaseTransport;
+  let transportEntered = false;
+  const options = { telemetryDisconnected: true,
+    ...(overlap ? { telemetryGate: new Promise(resolve => { releaseTransport = resolve; }),
+      onHeldFailure: () => { transportEntered = true; } } : {}) };
+  const flow = await authJourney(options);
+  try {
+    await flow.worker.evaluate(session => chrome.storage.local.set({ supabaseSession: session }), flow.session);
+    await flow.worker.evaluate(() => refreshTokenWithRetry(1, { entryPoint: "startup_restore" }));
+    await flow.worker.evaluate(() => authSessionObserver.drain());
+    if (overlap) await expect.poll(() => transportEntered).toBe(true);
+    else await flow.worker.evaluate(() => AutoListerTelemetry.flush());
+    const original = await flow.worker.evaluate(async () => {
+      const saved = await chrome.storage.local.get(["autolisterAuthSessionObservation", "autolisterTelemetryV2"]);
+      const operation = saved.autolisterAuthSessionObservation.operationId;
+      return structuredClone(saved.autolisterTelemetryV2.events.find(entry =>
+        entry.event.event === "token_refresh_failed" && entry.event.context.operationId === operation));
+    });
+    expect(original.nextAt).toBeGreaterThan(Date.now());
+    options.telemetryDisconnected = false; flow.reconnect();
+    await flow.worker.evaluate(() => refreshTokenWithRetry(1, { entryPoint: "startup_restore" }));
+    if (overlap) {
+      await expect.poll(() => flow.worker.evaluate(async id => {
+        const data = await chrome.storage.local.get("autolisterTelemetryV2");
+        return data.autolisterTelemetryV2.events.some(entry => entry.event.id === id && entry.authResumePending);
+      }, original.event.id)).toBe(true);
+      releaseTransport();
+    }
+    await flow.worker.evaluate(() => authSessionObserver.drain());
+    await expect.poll(() => unique(flow.events).filter(event => event.id === original.event.id).length,
+      { timeout: 5000, intervals: [100, 200] }).toBe(1);
+    const delivered = unique(flow.events).find(event => event.id === original.event.id);
+    expect(Date.now()).toBeLessThan(original.nextAt);
+    expect(delivered.occurredAt).toBe(original.event.occurredAt);
+    expect(delivered.context.analyticsClientId).toBe(original.event.context.analyticsClientId);
+    expect(delivered.context.queueLastFailure).toBe("network");
+    expect(delivered.context.queueLastStatus).toBe(0);
+    expect(delivered.context.queueSendAttempts).toBeGreaterThan(1);
+    expect(delivered.context.queueAgeMs).toBeGreaterThanOrEqual(0);
+    console.log(JSON.stringify({ check: "recovery-window-original", eventId: original.event.id,
+      queueAgeMs: delivered.context.queueAgeMs, queueSendAttempts: delivered.context.queueSendAttempts,
+      queueLastStatus: delivered.context.queueLastStatus, queueLastFailure: delivered.context.queueLastFailure,
+      originalTimestampPreserved: delivered.occurredAt === original.event.occurredAt,
+      retriedBeforeOldDeadline: true, inFlightRecovery: overlap, generatedRequests: flow.requests.length, retainedPhotos: 1 }));
+    expect(flow.requests).toHaveLength(0);
+    await expect(flow.controller.locator('[data-testid="media-upload-grid"] img')).toHaveCount(1);
+  } finally { releaseTransport?.(); await flow.close(); }
+});
+
 async function authJourney(options = {}) {
   const events = [];
   const authRequests = [];
@@ -28,8 +137,13 @@ async function authJourney(options = {}) {
       return route.fulfill({ status: rejected ? 401 : 200,
         json: rejected ? { error: "Local expired access" } : commits.get(request.id) });
     } });
-  await flow.context.route("https://autolister.app/api/events/track", route => {
+  await flow.context.route("https://autolister.app/api/events/track", async route => {
     const body = route.request().postDataJSON();
+    const disconnected = options.telemetryDisconnected;
+    if (disconnected && options.telemetryGate && body.events.some(event => event.event === "token_refresh_failed")) {
+      options.onHeldFailure(); await options.telemetryGate;
+    }
+    if (disconnected) return route.abort("internetdisconnected");
     const accepted = body.events.filter(event => !options.withholdRefreshFailures || event.event !== "token_refresh_failed");
     events.push(...accepted);
     return route.fulfill({ status: accepted.length === body.events.length ? 200 : 503,

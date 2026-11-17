@@ -11,8 +11,8 @@ const authSessionObserver = AutoListerAuthSessions.createObserver({
       extensionVersion: chrome.runtime.getManifest().version }) || {};
     return { clientId: safe.analyticsClientId, version: safe.extensionVersion };
   },
-  emitOriginal: async (original, owner) =>
-    AutoListerBackgroundTelemetry.accept(structuredClone(original), owner, true, false, true),
+  emitOriginal: async (original, owner, authResumeId) =>
+    AutoListerBackgroundTelemetry.accept(structuredClone(original), owner, true, false, true, authResumeId),
   emit: async (outcome, owner) => {
     AutoListerTelemetry.setAccount(owner);
     const prepared = AutoListerTelemetry.prepare("auth_session_result", outcome.context, "extension_background");

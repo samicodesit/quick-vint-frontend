@@ -10,7 +10,7 @@ function fixture() {
   const requests = [];
   let response = { status: 503, headers: { get: () => null }, json: async () => ({}) };
   const storage = { transact: async (fn) => fn(state) };
-  const make = () => createQueue({ storage, now: () => now, identity: async () => account, send: async (body, token) => { requests.push({ body, token }); return response; } });
+  const make = () => createQueue({ storage, now: () => now, identity: async () => account, send: async (body, token) => { requests.push({ body, token }); return typeof response === "function" ? response() : response; } });
   return { make, requests, storage, state: () => state, account: (value) => { account = value; }, time: (value) => { now = value; }, respond: (value) => { response = value; } };
 }
 test("anonymous phone evidence is removed after durable acceptance without waiting for identity", async () => {
@@ -20,6 +20,112 @@ test("anonymous phone evidence is removed after durable acceptance without waiti
   await q.flush();
   assert.equal(f.state().events.length, 0);
   assert.equal(f.requests[0].token, null);
+});
+
+test("same-owner auth recovery retries its network-blocked original once without waiting through an old cooldown", async () => {
+  const f = fixture(); const q = f.make();
+  const original = { id: "original", event: "token_refresh_failed", source: "extension_background",
+    occurredAt: new Date(1000).toISOString(), context: { operationId: "refresh-original", statusCode: 0 } };
+  f.respond(() => { throw new TypeError("Controlled disconnected collector"); });
+  await q.enqueue(original, "a", true); await q.flush();
+  f.time(2000); f.account({ id: "a", token: "renewed-token-a" });
+  f.respond({ status: 200, json: async () => ({ acknowledgedIds: ["original"] }) });
+  await q.enqueue(original, "a", true, true, "00000000-0000-4000-8000-000000000010");
+  const result = await q.flush();
+  assert.deepEqual(result.acknowledgedIds, ["original"]);
+  const delivered = f.requests.at(-1);
+  assert.equal(delivered.token, "renewed-token-a");
+  assert.equal(delivered.body.events[0].occurredAt, original.occurredAt);
+  assert.equal(delivered.body.events[0].context.statusCode, 0);
+  assert.equal(delivered.body.events[0].context.queueAgeMs, 1000);
+  assert.equal(delivered.body.events[0].context.queueSendAttempts, 2);
+  assert.equal(delivered.body.events[0].context.queueLastStatus, 0);
+  assert.equal(delivered.body.events[0].context.queueLastFailure, "network");
+  assert.equal(delivered.body.events[0].context.queueLastAttemptAgeMs, 1000);
+  assert.doesNotMatch(JSON.stringify(delivered.body), /authResumeId|retryCause|renewed-token-a/);
+});
+
+test("the same auth outcome cannot repeatedly reset a failed original's retry deadline", async () => {
+  const f = fixture(); const q = f.make();
+  const original = { id: "original", event: "token_refresh_failed", source: "extension_background" };
+  f.respond(() => { throw new TypeError("Controlled disconnected collector"); });
+  await q.enqueue(original, "a", true); await q.flush();
+  f.time(2000);
+  const outcome = "00000000-0000-4000-8000-000000000010";
+  await q.enqueue(original, "a", true, true, outcome); await q.flush();
+  assert.equal(f.requests.length, 2);
+  const deadline = f.state().events[0].nextAt;
+  f.time(3000); await q.enqueue(original, "a", true, true, outcome); await q.flush();
+  assert.equal(f.requests.length, 2);
+  assert.equal(f.state().events[0].nextAt, deadline);
+  const restarted = f.make();
+  await restarted.enqueue(original, "a", true, true, outcome); await restarted.flush();
+  assert.equal(f.requests.length, 2);
+  assert.equal(f.state().events[0].nextAt, deadline);
+});
+
+test("auth recovery during an in-flight old request retries once after its network failure settles", async () => {
+  const f = fixture(); const q = f.make();
+  let started, release;
+  const entered = new Promise(resolve => { started = resolve; });
+  const gate = new Promise(resolve => { release = resolve; });
+  let count = 0;
+  f.respond(async () => {
+    if (++count === 1) { started(); await gate; throw new TypeError("Old disconnected request"); }
+    return { status: 200, json: async () => ({ acknowledgedIds: ["original"] }) };
+  });
+  const original = { id: "original", event: "token_refresh_failed", source: "extension_background" };
+  await q.enqueue(original, "a", true);
+  const oldRequest = q.flush(); await entered;
+  f.time(2000); f.account({ id: "a", token: "renewed-token-a" });
+  await q.enqueue(original, "a", true, true, "00000000-0000-4000-8000-000000000010");
+  const resumed = q.flush(); release(); await Promise.all([oldRequest, resumed]);
+  assert.equal(f.requests.length, 2);
+  assert.equal(f.requests[1].token, "renewed-token-a");
+  assert.equal(f.state().events.length, 0);
+});
+
+test("credential-blocked originals resume only with their own account and actual outcome", async () => {
+  const f = fixture(); const q = f.make();
+  const original = { id: "original", event: "token_refresh_failed", source: "extension_background" };
+  f.respond({ status: 200, json: async () => ({ rejections: [{ id: "original", reason: "identity_mismatch" }] }) });
+  await q.enqueue(original, "a", true); await q.flush();
+  f.time(2000); f.account({ id: "b", token: "token-b" });
+  await q.enqueue(original, "a", true, true, "00000000-0000-4000-8000-000000000010");
+  await q.flush(); assert.equal(f.requests.length, 1);
+  f.account({ id: "a", token: "renewed-token-a" });
+  f.respond({ status: 200, json: async () => ({ acknowledgedIds: ["original"] }) });
+  await q.flush(); assert.equal(f.requests.length, 2);
+  assert.equal(f.requests.at(-1).token, "renewed-token-a");
+  assert.equal(f.requests.at(-1).body.events[0].context.queueLastFailure, "credentials");
+});
+
+test("partial server acceptance and capacity pressure retain their own backoff after renewal", async () => {
+  for (const reason of ["receipt_capacity", "report_capacity", undefined]) {
+    const f = fixture(); const q = f.make();
+    const original = { id: "original", event: "token_refresh_failed", source: "extension_background" };
+    f.respond({ status: 200, json: async () => ({ rejections: reason ? [{ id: "original", reason }] : [] }) });
+    await q.enqueue(original, "a", true); await q.flush();
+    f.time(2000); await q.enqueue(original, "a", true, true, "00000000-0000-4000-8000-000000000010");
+    await q.flush(); assert.equal(f.requests.length, 1); assert.equal(f.state().events[0].nextAt, 61000);
+  }
+});
+
+test("auth recovery respects explicit Retry-After and ordinary server failure cooldowns", async () => {
+  for (const status of [401, 503]) {
+    const f = fixture(); const q = f.make();
+    const original = { id: "original", event: "token_refresh_failed", source: "extension_background" };
+    f.respond({ status, headers: { get: () => "120" }, json: async () => ({}) });
+    await q.enqueue(original, "a", true); await q.flush();
+    f.time(2000); await q.enqueue(original, "a", true, true, "00000000-0000-4000-8000-000000000010");
+    await q.flush(); assert.equal(f.requests.length, 1); assert.equal(f.state().events[0].nextAt, 121000);
+  }
+  const f = fixture(); const q = f.make();
+  const original = { id: "original", event: "token_refresh_failed", source: "extension_background" };
+  f.respond({ status: 503, json: async () => { throw new SyntaxError("Controlled unreadable server reply"); } });
+  await q.enqueue(original, "a", true); await q.flush();
+  f.time(2000); await q.enqueue(original, "a", true, true, "00000000-0000-4000-8000-000000000010");
+  await q.flush(); assert.equal(f.requests.length, 1); assert.equal(f.state().events[0].nextAt, 61000);
 });
 test("survives queue recreation and retains events until a server acknowledgement", async () => {
   const f = fixture();
