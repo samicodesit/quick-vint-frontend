@@ -39,6 +39,28 @@ test("only explicit fresh sign-in establishes sign-in, and only rejection establ
   assert.equal(f.results[0].context.signInRequired, true);
 });
 
+test("ordinary real renewals revisit older originals without inventing a new outcome", async () => {
+  const f = fixture(); const resumed = [];
+  f.options.resumeOriginals = async (...args) => { resumed.push(args); };
+  const observer = f.restart();
+  await observer.resume("owner");
+  assert.equal(resumed.length, 0);
+  await observer.observe(f.event("token_refresh_success", "renewal"), "owner");
+  assert.deepEqual(resumed, [["owner", "renewal"]]);
+  assert.equal(f.results.length, 0);
+  f.options.resumeOriginals = async () => { throw Error("diagnostic unavailable"); };
+  await assert.doesNotReject(f.restart().observe(f.event("auth_success", "signin"), "owner"));
+});
+
+test("a later failure episode revisits older originals using its stable outcome reference", async () => {
+  const f = fixture(); const resumed = [];
+  f.options.resumeOriginals = async (...args) => { resumed.push(args); };
+  const observer = f.restart();
+  await observer.observe(f.event("token_refresh_failed", "failure"), "owner");
+  await observer.observe(f.event("token_refresh_success", "renewal"), "owner");
+  assert.deepEqual(resumed, [["owner", f.results[0].id]]);
+});
+
 test("ordinary success emits no extra record, and expired episodes do not invent recovery", async () => {
   const f = fixture(); const observer = f.restart();
   await observer.observe(f.event("token_refresh_success", "normal"), "owner");

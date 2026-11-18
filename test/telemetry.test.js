@@ -13,6 +13,73 @@ function fixture() {
   const make = () => createQueue({ storage, now: () => now, identity: async () => account, send: async (body, token) => { requests.push({ body, token }); return typeof response === "function" ? response() : response; } });
   return { make, requests, storage, state: () => state, account: (value) => { account = value; }, time: (value) => { now = value; }, respond: (value) => { response = value; } };
 }
+test("later actual renewals resume older protected originals once across queue recreation", async () => {
+  for (const credentials of [false, true]) {
+    const f = fixture(); const q = f.make();
+    const ref = "00000000-0000-4000-8000-000000000011";
+    const original = { id: "older", event: "token_refresh_failed", source: "extension_background" };
+    await q.enqueue(original, "a", true, true);
+    f.respond(credentials ? { status: 401, json: async () => ({}) } : () => { throw new TypeError("offline"); });
+    await q.flush();
+    f.time(2000);
+    const restarted = f.make();
+    assert.equal((await restarted.resumeAuthOriginals("b", ref)).resumed, false);
+    await restarted.flush(); assert.equal(f.requests.length, 1);
+    assert.equal((await restarted.resumeAuthOriginals("a", ref)).resumed, true);
+    await restarted.flush(); assert.equal(f.requests.length, 2);
+    const deadline = f.state().events[0].nextAt;
+    f.time(3000);
+    await f.make().resumeAuthOriginals("a", ref);
+    await f.make().flush(); assert.equal(f.requests.length, 2);
+    assert.equal(f.state().events[0].nextAt, deadline);
+    f.respond({ status: 200, json: async () => ({ acknowledgedIds: ["older"] }) });
+    await restarted.resumeAuthOriginals("a", "00000000-0000-4000-8000-000000000012");
+    await restarted.flush(); assert.equal(f.state().events.length, 0);
+  }
+});
+
+test("later renewals preserve backpressure, legacy deadlines and unrelated entries", async () => {
+  const f = fixture(); const q = f.make();
+  const kinds = ["network", "credentials", "server", "capacity", "unacknowledged", undefined];
+  for (const [index, retryCause] of kinds.entries()) {
+    await q.enqueue({ id: String(index), event: "token_refresh_expired", source: "extension_background" }, "a", true, true);
+    Object.assign(f.state().events.at(-1), { retryCause, nextAt: 61000 });
+  }
+  await q.enqueue({ id: "report", event: "listing_report_submitted" }, "a", true);
+  await q.enqueue({ id: "routine", event: "token_refresh_failed", source: "extension_background" }, "a");
+  for (const entry of f.state().events.slice(-2)) Object.assign(entry, { retryCause: "network", nextAt: 61000 });
+  f.state().events[1].retryNotBefore = 121000;
+  f.time(2000);
+  await q.resumeAuthOriginals("a", "invalid");
+  assert.ok(f.state().events.every(entry => entry.nextAt === 61000));
+  await q.resumeAuthOriginals("a", "00000000-0000-4000-8000-000000000011");
+  assert.deepEqual(f.state().events.map(entry => entry.nextAt), [2000, 121000, 61000, 61000, 61000, 61000, 61000, 61000]);
+});
+
+test("a later renewal overlapping an old request respects the actual response", async () => {
+  for (const status of [0, 401, 429, 503, 200]) {
+    const f = fixture(); const q = f.make();
+    let entered, finish;
+    const started = new Promise(resolve => { entered = resolve; });
+    const held = new Promise(resolve => { finish = resolve; });
+    f.respond(async () => {
+      entered(); await held;
+      if (!status) throw new TypeError("offline");
+      return { status, headers: { get: () => status === 401 ? "120" : null }, json: async () => ({}) };
+    });
+    await q.enqueue({ id: "older", event: "token_refresh_failed", source: "extension_background" }, "a", true, true);
+    const sending = q.flush(); await started;
+    f.time(2000);
+    await q.resumeAuthOriginals("a", "00000000-0000-4000-8000-000000000011");
+    const requested = q.flush();
+    f.respond({ status: 200, json: async () => ({ acknowledgedIds: ["older"] }) });
+    finish(); await Promise.all([sending, requested]);
+    assert.equal(f.requests.length, status === 0 ? 2 : 1);
+    if (status === 0) assert.equal(f.state().events.length, 0);
+    else assert.equal(f.state().events[0].nextAt, status === 401 ? 122000 : 62000);
+  }
+});
+
 test("anonymous phone evidence is removed after durable acceptance without waiting for identity", async () => {
   const f = fixture(); const q = f.make();
   await q.enqueue({ id: "phone-event", event: "phone_upload_transfer_error" }, null);

@@ -144,10 +144,13 @@ async function authJourney(options = {}) {
       options.onHeldFailure(); await options.telemetryGate;
     }
     if (disconnected) return route.abort("internetdisconnected");
-    const accepted = body.events.filter(event => !options.withholdRefreshFailures || event.event !== "token_refresh_failed");
+    if (options.originalNetworkFailure && body.events.some(event => event.event === "token_refresh_failed")) return route.abort("internetdisconnected");
+    const credentialRejected = body.events.filter(event => options.originalCredentialsFailure && event.event === "token_refresh_failed");
+    const accepted = body.events.filter(event => (!options.withholdRefreshFailures || event.event !== "token_refresh_failed") && !credentialRejected.includes(event));
     events.push(...accepted);
-    return route.fulfill({ status: accepted.length === body.events.length ? 200 : 503,
-      json: { acknowledgedIds: accepted.map(event => event.id), duplicateIds: [], rejections: [] } });
+    return route.fulfill({ status: accepted.length + credentialRejected.length === body.events.length ? 200 : 503,
+      json: { acknowledgedIds: accepted.map(event => event.id), duplicateIds: [],
+        rejections: credentialRejected.map(event => ({ id: event.id, reason: "identity_mismatch" })) } });
   });
   // Match the real upload contract: separate upload sessions have distinct URLs.
   await flow.context.route("https://autolister.app/api/phone-upload**", route => {
@@ -272,6 +275,61 @@ test("first auth failure is delivered after offline duplicate pressure and a rea
     expect(outcome.context.resultStatus).toBe("silent_renewed");
     expect(flow.requests).toHaveLength(0);
     await expect(flow.controller.locator('[data-testid="media-upload-grid"] img')).toHaveCount(1);
+  } finally { await flow.close(); }
+});
+
+for (const failureKind of ["network", "credentials"])
+for (const laterEpisode of [false, true]) test(`a later ${laterEpisode ? "failure episode" : "ordinary renewal"} retries an older ${failureKind}-blocked original`, async () => {
+  test.setTimeout(90000);
+  const options = { originalNetworkFailure: failureKind === "network", originalCredentialsFailure: failureKind === "credentials" };
+  const flow = await authJourney(options);
+  try {
+    await flow.worker.evaluate(session => chrome.storage.local.set({ supabaseSession: session }), flow.session);
+    await flow.worker.evaluate(() => refreshTokenWithRetry(1, { entryPoint: "startup_restore" }));
+    await flow.worker.evaluate(() => authSessionObserver.drain());
+    await flow.worker.evaluate(() => AutoListerTelemetry.flush());
+    const original = await flow.worker.evaluate(async () => (await chrome.storage.local.get("autolisterAuthSessionObservation")).autolisterAuthSessionObservation.original);
+    expect(original?.id).toBeTruthy();
+    flow.reconnect();
+    await flow.worker.evaluate(() => refreshTokenWithRetry(1, { entryPoint: "startup_restore" }));
+    await flow.worker.evaluate(() => authSessionObserver.drain());
+    await expect.poll(() => unique(flow.events).filter(event => event.event === "auth_session_result").length).toBe(1);
+    expect(await flow.worker.evaluate(async () => (await chrome.storage.local.get("autolisterAuthSessionObservation")).autolisterAuthSessionObservation)).toBeNull();
+    const pending = await flow.worker.evaluate(async id => {
+      const state = (await chrome.storage.local.get("autolisterTelemetryV2")).autolisterTelemetryV2;
+      return structuredClone(state.events.find(entry => entry.event.id === id));
+    }, original.id);
+    expect(pending.authOriginal).toBe(true);
+    expect(pending.retryCause).toBe(failureKind);
+    expect(pending.nextAt).toBeGreaterThan(Date.now() + 30000);
+    await flow.restartWorker();
+    await expect.poll(() => flow.worker.evaluate(() => tokenRefreshPromise === null)).toBe(true);
+    options.originalNetworkFailure = false;
+    options.originalCredentialsFailure = false;
+    if (laterEpisode) {
+      flow.disconnect();
+      await flow.worker.evaluate(session => chrome.storage.local.set({ supabaseSession: session }), flow.session);
+      await flow.worker.evaluate(() => refreshTokenWithRetry(1, { entryPoint: "startup_restore" }));
+      await flow.worker.evaluate(() => authSessionObserver.drain());
+      flow.reconnect();
+    }
+    const refreshesBefore = flow.authRequests.filter(url => url.endsWith("/token")).length;
+    const renewedAt = Date.now();
+    const session = await flow.worker.evaluate(() => refreshTokenWithRetry(1, { entryPoint: "scheduled_refresh" }));
+    expect(session?.user?.id).toBe(user.id);
+    await expect.poll(() => flow.authRequests.filter(url => url.endsWith("/token")).length).toBeGreaterThan(refreshesBefore);
+    await flow.worker.evaluate(() => authSessionObserver.drain());
+    await expect.poll(() => unique(flow.events).filter(event => event.id === original.id).length, { timeout: 5000 }).toBe(1);
+    const received = unique(flow.events).find(event => event.id === original.id);
+    expect(received.occurredAt).toBe(original.occurredAt);
+    expect(received.context.operationId).toBe(original.context.operationId);
+    expect(Date.now()).toBeLessThan(pending.nextAt);
+    expect(unique(flow.events).filter(event => event.event === "auth_session_result")).toHaveLength(laterEpisode ? 2 : 1);
+    expect(flow.requests).toHaveLength(0);
+    await expect(flow.controller.locator('[data-testid="media-upload-grid"] img')).toHaveCount(1);
+    console.log(JSON.stringify({ check: "older-original-later-renewal", laterEpisode, failureKind, originalEventId: original.id,
+      originalOperationId: original.context.operationId, automaticRetryMs: Date.now() - renewedAt,
+      retriedBeforeOldDeadline: true, nativeWorkerRestarted: true, deadlinesEdited: false, generatedRequests: 0, retainedPhotos: 1 }));
   } finally { await flow.close(); }
 });
 

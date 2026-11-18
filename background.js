@@ -13,6 +13,7 @@ const authSessionObserver = AutoListerAuthSessions.createObserver({
   },
   emitOriginal: async (original, owner, authResumeId) =>
     AutoListerBackgroundTelemetry.accept(structuredClone(original), owner, true, false, true, authResumeId),
+  resumeOriginals: (owner, reference) => AutoListerBackgroundTelemetry.resumeAuthOriginals(owner, reference),
   emit: async (outcome, owner) => {
     AutoListerTelemetry.setAccount(owner);
     const prepared = AutoListerTelemetry.prepare("auth_session_result", outcome.context, "extension_background");
