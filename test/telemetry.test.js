@@ -56,6 +56,24 @@ test("later renewals preserve backpressure, legacy deadlines and unrelated entri
   assert.deepEqual(f.state().events.map(entry => entry.nextAt), [2000, 121000, 61000, 61000, 61000, 61000, 61000, 61000]);
 });
 
+test("resuming legacy originals still enforces the byte cap and preserves customer reports", async () => {
+  const f = fixture(); const q = f.make();
+  await q.enqueue({ id: "report", event: "listing_report_submitted" }, "a", true);
+  for (let index = 0; index < 16; index++) {
+    await q.enqueue({ id: String(index), event: "token_refresh_failed", source: "extension_background",
+      context: { message: "x".repeat(32000) } }, "a", true, true);
+    Object.assign(f.state().events.at(-1), { retryCause: "network", nextAt: 61000 });
+  }
+  const size = () => new TextEncoder().encode(JSON.stringify(f.state())).length;
+  f.state().events.at(-1).event.context.message += "x".repeat(524280 - size());
+  assert.equal(size(), 524280);
+  await q.resumeAuthOriginals("a", "00000000-0000-4000-8000-000000000011");
+  assert.ok(size() <= 524288);
+  assert.ok(f.state().events.some(entry => entry.event.id === "report"));
+  assert.equal(f.state().dropCounts.capacity, 1);
+  assert.equal(f.state().dropCounts.customerReports || 0, 0);
+});
+
 test("a later renewal overlapping an old request respects the actual response", async () => {
   for (const status of [0, 401, 429, 503, 200]) {
     const f = fixture(); const q = f.make();
