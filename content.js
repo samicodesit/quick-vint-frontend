@@ -16301,6 +16301,7 @@
 
     const qrSessionId = batchUploadSessionId;
     const sessionId = generateSessionId();
+    const uploadAccountId = batchAuthUserId;
     const modal = document.getElementById(BATCH_MODAL_ID);
     const abortController = new AbortController();
     batchComputerUploadAbortController = abortController;
@@ -16406,7 +16407,7 @@
         photoCount: files.length,
         message: error?.message || String(error),
         fileCount: files.length,
-      });
+      }, uploadAccountId);
     } finally {
       if (batchComputerUploadAbortController === abortController) {
         batchComputerUploadAbortController = null;
