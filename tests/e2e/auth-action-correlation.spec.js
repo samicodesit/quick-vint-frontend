@@ -38,7 +38,7 @@ test("retained auth originals resume automatically after reconnect and native wo
     expect(pending.alarm.periodInMinutes).toBe(1);
     expect(pending.original.nextAt).toBe(original.nextAt);
     expect(pending.original.nextAt).toBeGreaterThan(pending.now);
-    expect(unique(flow.events).some(event => event.event === "auth_session_result" &&
+    await expect.poll(() => unique(flow.events).some(event => event.event === "auth_session_result" &&
       event.context.operationId === original.event.context.operationId)).toBe(true);
     expect(unique(flow.events).some(event => event.id === original.event.id)).toBe(false);
 
