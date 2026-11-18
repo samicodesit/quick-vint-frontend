@@ -93,6 +93,13 @@ async function openBatchJourney(options = {}) {
   const isExtensionWorker = worker => worker.url().startsWith("chrome-extension://") && worker.url().endsWith("/background.js");
   let worker = context.serviceWorkers().find(isExtensionWorker) || await context.waitForEvent("serviceworker", isExtensionWorker);
   await expect.poll(() => worker.evaluate(() => Boolean(globalThis.chrome?.storage?.local))).toBe(true);
+  const fixtureExpiry = Math.floor(Date.now() / 1000) + 3600;
+  const fixtureUser = { id: "test-user", email: "seller@example.invalid" };
+  const fixtureSession = options.session || {
+    access_token: [Buffer.from(JSON.stringify({ alg: "HS256", typ: "JWT" })).toString("base64url"),
+      Buffer.from(JSON.stringify({ sub: fixtureUser.id, exp: fixtureExpiry })).toString("base64url"), "local-signature"].join("."),
+    refresh_token: "local-test-refresh", expires_at: fixtureExpiry, user: fixtureUser,
+  };
   const requests = [];
   const commits = new Map();
   const events = [];
@@ -175,6 +182,20 @@ async function openBatchJourney(options = {}) {
     return route.fulfill(photoResponse(route.request().url()));
   });
   await context.route("https://images1.vinted.net/**", route => route.fulfill(photoResponse(route.request().url())));
+  // The general batch fixture represents a usable signed-in session. Keep its
+  // normal SDK reads local too; auth-specific journeys override these routes.
+  await context.route("https://jqloiovdwjaornnfvmyu.supabase.co/**", async route => {
+    const pathname = new URL(route.request().url()).pathname;
+    if (pathname === "/auth/v1/user") {
+      const user = await worker.evaluate(async () => (await chrome.storage.local.get("supabaseSession")).supabaseSession?.user);
+      return route.fulfill({ json: user || fixtureSession.user });
+    }
+    if (pathname === "/rest/v1/profiles") return route.fulfill({ json: {
+      subscription_status: "active", subscription_tier: "pro", api_calls_this_month: 0, pack_credits: 0,
+    } });
+    if (pathname === "/rest/v1/rate_limits") return route.fulfill({ json: { count: 0 } });
+    unexpected.push(pathname); return route.abort();
+  });
   await context.route("https://autolister.app/**", async route => {
     const url = new URL(route.request().url());
     if (url.pathname.startsWith("/welcome")) return route.fulfill({ status: 200, contentType: "text/html", body: "<!doctype html><title>Isolated onboarding</title>" });
@@ -208,10 +229,10 @@ async function openBatchJourney(options = {}) {
     unexpected.push(url.pathname); return route.abort();
   });
   await worker.evaluate(session => chrome.storage.local.set({
-    supabaseSession: session || { access_token: "local-test-access", refresh_token: "local-test-refresh", expires_at: Math.floor(Date.now() / 1000) + 3600, user: { id: "test-user", email: "seller@example.invalid" } },
+    supabaseSession: session,
     userProfile: { subscription_status: "active", subscription_tier: "pro", api_calls_this_month: 0, pack_credits: 0 },
     selectedLanguage: "en", selectedTitleLanguage: "en", selectedDescriptionLanguage: "en", tone: "standard", descriptionLength: "long", useBulletPoints: true,
-  }), options.session);
+  }), fixtureSession);
   await context.setOffline(false);
   const controller = await context.newPage();
   if (options.beforeNavigate) await options.beforeNavigate({ context, worker, controller });

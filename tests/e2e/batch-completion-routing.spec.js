@@ -10,6 +10,17 @@ async function prepare(page, count = 2) {
   await page.locator(".batch-mark-group").click();
 }
 
+test("the local batch fixture supports real SDK session restoration", async () => {
+  const flow = await openBatchJourney();
+  try {
+    const restored = await flow.worker.evaluate(() => refreshTokenWithRetry(1,
+      { entryPoint: "startup_restore", restoreOnly: true }));
+    expect(restored?.user?.id).toBe("test-user");
+    expect(restored.expires_at * 1000).toBeGreaterThan(Date.now() + 300000);
+    expect(flow.requests).toHaveLength(0);
+  } finally { await flow.close(); }
+});
+
 test("a closed completed controller cannot strand a fresh batch setup", async () => {
   let release;
   const held = new Promise(resolve => { release = resolve; });
@@ -84,6 +95,18 @@ for (const deliver of [true, false]) test(`a later batch preserves earlier ${del
     await flow.worker.evaluate(() => AutoListerBackgroundTelemetry.flush());
     expect(flow.events.some(event => event.event === "batch_failed")).toBe(false);
   } finally {
+    if (test.info().status !== test.info().expectedStatus) {
+      const diagnostic = await flow.worker.evaluate(async () => {
+        const session = await getStoredSession();
+        return { sessionPresent: Boolean(session), expiryInMs: session?.expires_at * 1000 - Date.now(),
+          refreshInFlight: Boolean(tokenRefreshPromise), activeJobStatus: activeTabJob?.status };
+      }).catch(error => ({ workerReadError: error.message }));
+      diagnostic.controller = await flow.controller.evaluate(() => ({ visibility: document.visibilityState,
+        button: document.querySelector("#quickvint-phone-btn")?.textContent,
+        choices: document.querySelectorAll(".quickvint-upload-choice-multiple").length })).catch(() => null);
+      diagnostic.unexpected = flow.unexpected;
+      await test.info().attach("batch-routing-state", { body: JSON.stringify(diagnostic), contentType: "application/json" });
+    }
     releaseSecond();
     await flow.worker.evaluate(() => globalThis.__qaReleaseDone?.()).catch(() => {});
     await flow.close();
