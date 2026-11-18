@@ -21,7 +21,10 @@ async function launchJourneyBrowser(profile, extensionPath, options) {
     "--no-sandbox", "--no-first-run", "--no-default-browser-check",
     "--disable-background-networking", "--remote-debugging-port=0",
     `--user-data-dir=${profile}`, ...args, "about:blank",
-  ], { stdio: "ignore" });
+  ], { stdio: ["ignore", "ignore", "pipe"] });
+  const childExited = new Promise(resolve => child.once("exit", resolve));
+  let startupStderr = "";
+  child.stderr.on("data", chunk => { startupStderr = (startupStderr + chunk.toString()).slice(-4096); });
   let browser;
   try {
     const portFile = path.join(profile, "DevToolsActivePort");
@@ -44,7 +47,13 @@ async function launchJourneyBrowser(profile, extensionPath, options) {
       await browser.close().catch(() => {});
     } };
   } catch (error) {
-    await browser?.close(); child.kill("SIGTERM"); throw error;
+    await browser?.close().catch(() => {});
+    const deadline = setTimeout(() => child.kill("SIGKILL"), 3000);
+    try {
+      if (child.exitCode === null && child.signalCode === null) child.kill("SIGTERM");
+      await childExited;
+    } finally { clearTimeout(deadline); }
+    throw new Error(`Journey Chromium startup failed: ${error.message}\nExit: ${child.exitCode}; signal: ${child.signalCode}\n${startupStderr.trim() || "No stderr captured"}`, { cause: error });
   }
 }
 
@@ -262,7 +271,11 @@ async function openBatchJourney(options = {}) {
   } catch (error) {
     await browser?.close();
     await closeHostServer();
-    if (path.dirname(profile) === os.tmpdir() && path.basename(profile).startsWith("autolister-batch-qa-")) fs.rmSync(profile, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+    try {
+      if (path.dirname(profile) === os.tmpdir() && path.basename(profile).startsWith("autolister-batch-qa-")) fs.rmSync(profile, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+    } catch (cleanupError) {
+      throw new AggregateError([error, cleanupError], `${error.message}\nQA profile cleanup also failed: ${cleanupError.message}`);
+    }
     throw error;
   }
 }
