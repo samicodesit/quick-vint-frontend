@@ -16402,6 +16402,8 @@
       );
       startBatchPolling(retrySessionId);
       trackGrowthEvent("batch_computer_upload_error", {
+        sessionId,
+        photoCount: files.length,
         message: error?.message || String(error),
         fileCount: files.length,
       });
