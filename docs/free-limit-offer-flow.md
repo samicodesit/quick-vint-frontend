@@ -18,19 +18,9 @@ Trigger:
 - The extension shows the free-limit paywall.
 - The user closes the paywall without clicking checkout.
 
-Behavior:
-- Wait 10 seconds.
-- Show the LISTFASTER20 offer near the listing tools.
-- This path is local and deterministic. It does not require the follow-up eligibility endpoint.
-- It can show while a listing draft exists because it is a direct response to the user's blocked Generate action.
+After an explicit dismissal, the extension shows one optional question below the listing tools. A response queues the feedback with a stable reason, and Other accepts an optional short comment. Closing the question takes no action. The seller's local account state suppresses the free-limit follow-up on later visits. Successful checkout and Starter daily-limit flows have their own handling.
 
-Cancel conditions:
-- The user clicks any checkout option in the paywall.
-- The offer was previously dismissed locally.
-- The offer was shown recently.
-
-Covered by:
-- `tests/e2e/extension.spec.js` -> `shows the free-limit offer after closing the free-limit paywall`
+Covered by the desktop and mobile-width feedback tests in `tests/e2e/extension.spec.js`.
 
 ### 2. Return-visit offer
 

@@ -1442,6 +1442,102 @@
     maybeShowPendingPrompts({ allowDuringDraft: true, reason });
   }
 
+  const UPGRADE_FEEDBACK_COPY = {
+    en: ["What held you back?", "I only need a few more listings", "Too expensive", "The drafts need too much editing", "Maybe later", "Other", "Send", "Try again", "Close"],
+    fr: ["Qu’est-ce qui vous a fait hésiter ?", "Je n’ai que quelques annonces à ajouter", "Trop cher", "Les brouillons demandent trop de corrections", "Peut-être plus tard", "Autre", "Envoyer", "Réessayer", "Fermer"],
+    cz: ["Co vás odradilo?", "Potřebuji už jen pár inzerátů", "Příliš drahé", "Návrhy vyžadují příliš mnoho úprav", "Možná později", "Jiné", "Odeslat", "Zkusit znovu", "Zavřít"],
+    da: ["Hvad holdt dig tilbage?", "Jeg har kun brug for et par annoncer mere", "For dyrt", "Kladderne kræver for meget redigering", "Måske senere", "Andet", "Send", "Prøv igen", "Luk"],
+    nl: ["Waarom twijfel je?", "Ik heb nog maar een paar advertenties nodig", "Te duur", "Ik moet de concepten te veel aanpassen", "Misschien later", "Anders", "Versturen", "Opnieuw proberen", "Sluiten"],
+    de: ["Was hat dich abgehalten?", "Ich brauche nur noch wenige Anzeigen", "Zu teuer", "Die Entwürfe brauchen zu viel Nacharbeit", "Vielleicht später", "Sonstiges", "Senden", "Erneut versuchen", "Schließen"],
+    el: ["Τι σας έκανε να διστάσετε;", "Χρειάζομαι μόνο λίγες ακόμα αγγελίες", "Πολύ ακριβό", "Τα προσχέδια χρειάζονται πολλές διορθώσεις", "Ίσως αργότερα", "Άλλο", "Αποστολή", "Δοκιμάστε ξανά", "Κλείσιμο"],
+    hr: ["Što vas je zaustavilo?", "Treba mi još samo nekoliko oglasa", "Preskupo", "Nacrte moram previše uređivati", "Možda kasnije", "Ostalo", "Pošalji", "Pokušaj ponovno", "Zatvori"],
+    fi: ["Mikä sai sinut epäröimään?", "Tarvitsen enää muutaman ilmoituksen", "Liian kallis", "Luonnoksia pitää muokata liikaa", "Ehkä myöhemmin", "Muu syy", "Lähetä", "Yritä uudelleen", "Sulje"],
+    hu: ["Mi tartott vissza?", "Már csak néhány hirdetésre van szükségem", "Túl drága", "Túl sokat kell javítani a piszkozatokon", "Talán később", "Egyéb", "Küldés", "Újra", "Bezárás"],
+    it: ["Cosa ti ha fatto esitare?", "Mi servono solo pochi altri annunci", "Troppo costoso", "Devo modificare troppo le bozze", "Forse più tardi", "Altro", "Invia", "Riprova", "Chiudi"],
+    lt: ["Kas jus sustabdė?", "Man reikia tik kelių papildomų skelbimų", "Per brangu", "Juodraščius reikia per daug taisyti", "Gal vėliau", "Kita", "Siųsti", "Bandyti dar kartą", "Uždaryti"],
+    pl: ["Co Cię powstrzymało?", "Potrzebuję jeszcze tylko kilku ogłoszeń", "Za drogo", "Szkice wymagają zbyt wielu poprawek", "Może później", "Inny powód", "Wyślij", "Spróbuj ponownie", "Zamknij"],
+    pt: ["O que te fez hesitar?", "Só preciso de mais alguns anúncios", "Demasiado caro", "Tenho de editar demasiado os rascunhos", "Talvez mais tarde", "Outro motivo", "Enviar", "Tentar novamente", "Fechar"],
+    ro: ["Ce te-a făcut să eziți?", "Mai am nevoie doar de câteva anunțuri", "Prea scump", "Ciornele necesită prea multe modificări", "Poate mai târziu", "Alt motiv", "Trimite", "Încearcă din nou", "Închide"],
+    es: ["¿Qué te hizo dudar?", "Solo necesito unos pocos anuncios más", "Demasiado caro", "Tengo que editar demasiado los borradores", "Quizá más adelante", "Otro motivo", "Enviar", "Volver a intentar", "Cerrar"],
+    sk: ["Čo vás odradilo?", "Potrebujem už len pár inzerátov", "Príliš drahé", "Návrhy si vyžadujú priveľa úprav", "Možno neskôr", "Iné", "Odoslať", "Skúsiť znova", "Zavrieť"],
+    sv: ["Vad fick dig att tveka?", "Jag behöver bara några annonser till", "För dyrt", "Utkasten kräver för mycket redigering", "Kanske senare", "Annat", "Skicka", "Försök igen", "Stäng"],
+  };
+
+  async function showUpgradeFeedback() {
+    const tools = generateBtn?.closest(".quickvint-tools");
+    const previousOffer = { campaignKey: getOfferCampaignKey(FREE_LIMIT_OFFER_COPY_KEY) };
+    if (!tools) return;
+    const owner = await getProfileUserId();
+    const dismissedKey = `${OFFER_DISMISSED_KEY_PREFIX}:${owner}:${previousOffer.campaignKey}`;
+    if ((await chrome.storage.local.get(dismissedKey))[dismissedKey]) return;
+    const { languageCode } = await resolvePreferredUiLanguageContext(FREE_LIMIT_OFFER_COPY_KEY);
+    if (!tools.isConnected || owner !== await getProfileUserId() || !isAuthenticated || document.getElementById("quickvint-upgrade-feedback")) return;
+    const [question, few, cost, editing, later, other, send, retry, close] =
+      UPGRADE_FEEDBACK_COPY[languageCode] || UPGRADE_FEEDBACK_COPY.en;
+    const panel = document.createElement("section");
+    panel.id = "quickvint-upgrade-feedback";
+    panel.setAttribute("aria-labelledby", "quickvint-feedback-title");
+    panel.innerHTML = `<header><img src="${escapeHtml(chrome.runtime.getURL("icons/icon48.png"))}" alt="">AutoLister AI<button class="feedback-close" type="button" aria-label="${escapeHtml(close)}">×</button></header>
+      <h2 id="quickvint-feedback-title">${escapeHtml(question)}</h2><div class="feedback-reasons"></div>
+      <p role="status" hidden></p>`;
+    const reasons = panel.querySelector(".feedback-reasons");
+    const status = panel.querySelector('[role="status"]');
+    const dismiss = () => {
+      const focused = panel.contains(document.activeElement);
+      panel.remove();
+      if (focused) generateBtn?.focus({ preventScroll: true });
+    };
+    panel.querySelector(".feedback-close").onclick = dismiss;
+    let sending = false;
+    async function submit(reason, message) {
+      if (sending) return;
+      sending = true;
+      reasons.setAttribute("aria-busy", "true");
+      try {
+        if (!isAuthenticated || owner !== await getProfileUserId()) return dismiss();
+        const result = await globalThis.AutoListerTelemetry?.track(
+          "upgrade_feedback_submitted", { reason, ...(reason === "other" ? { message } : {}) },
+          "extension_content", false, owner,
+        );
+        if (!result?.queued) throw new Error("Feedback could not be saved");
+        dismiss();
+      } catch {
+        status.hidden = false;
+        status.textContent = retry;
+      } finally {
+        sending = false;
+        reasons.removeAttribute("aria-busy");
+      }
+    }
+    for (const [reason, label] of Object.entries({ few_listings: few, price: cost, editing, later, other })) {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.textContent = label;
+      button.onclick = () => {
+        if (sending) return;
+        if (reason !== "other") return void submit(reason, label);
+        const field = document.createElement("input");
+        field.setAttribute("aria-label", other);
+        field.placeholder = other;
+        field.maxLength = 300;
+        const form = document.createElement("form");
+        const sendButton = document.createElement("button");
+        sendButton.type = "submit";
+        sendButton.textContent = send;
+        form.append(field, sendButton);
+        form.onsubmit = event => {
+          event.preventDefault();
+          void submit("other", field.value.trim() || other);
+        };
+        reasons.replaceChildren(form);
+        field.focus();
+      };
+      reasons.append(button);
+    }
+    tools.after(panel);
+    await chrome.storage.local.set({ [dismissedKey]: Date.now() });
+  }
+
   function scheduleLimitFollowupRescueCheck(
     reason,
     copyKey = FREE_LIMIT_OFFER_COPY_KEY,
@@ -1490,6 +1586,7 @@
     limitCode,
     currentTier,
   }) {
+    document.getElementById("quickvint-upgrade-feedback")?.remove();
     if (!PAYWALL_ALLOWED_CODES.has(limitCode)) {
       trackGrowthEvent("paywall_suppressed", {
         title: title || null,
@@ -1680,7 +1777,13 @@
           limitCode: limitCode || null,
         });
         if (rescueOfferCopyKey && !limitOfferPaywallCheckoutStarted) {
-          scheduleLimitFollowupRescueCheck("paywall_closed", rescueOfferCopyKey);
+          if (rescueOfferCopyKey === FREE_LIMIT_OFFER_COPY_KEY) {
+            clearLimitFollowupRescueTimer();
+            if (pendingLimitFollowupOffer?.copyKey === FREE_LIMIT_OFFER_COPY_KEY) pendingLimitFollowupOffer = null;
+            void showUpgradeFeedback().catch(error => console.debug("Upgrade feedback unavailable", error));
+          } else {
+            scheduleLimitFollowupRescueCheck("paywall_closed", rescueOfferCopyKey);
+          }
         }
       };
     }
@@ -4269,6 +4372,7 @@
     if (changes.supabaseSession) {
       const nextUserId = changes.supabaseSession.newValue?.user?.id || null;
       if (nextUserId !== batchAuthUserId) {
+        document.getElementById("quickvint-upgrade-feedback")?.remove();
         listingPhotoController?.stop();
         listingModelEnabled = undefined;
         activeGenerationOutputEditCleanup?.("account_changed");
@@ -5150,6 +5254,17 @@
       }
 
       #${REPORT_MODAL_ID} .quickvint-report-secondary,
+      #quickvint-upgrade-feedback {box-sizing:border-box;width:min(100%,430px);margin:12px 0;padding:16px;color:#222934;background:white;border:1px solid #d8dce1;border-radius:14px;font:14px/1.4 system-ui,sans-serif;}
+      #quickvint-upgrade-feedback header {display:flex;align-items:center;gap:7px;font-size:13px;font-weight:600;color:#495361;}
+      #quickvint-upgrade-feedback header img {width:24px;height:24px;}
+      #quickvint-upgrade-feedback h2 {font:700 20px/1.25 system-ui,sans-serif;margin:10px 0 12px;}
+      #quickvint-upgrade-feedback .feedback-reasons, #quickvint-upgrade-feedback form {display:flex;flex-wrap:wrap;gap:6px;}
+      #quickvint-upgrade-feedback form {width:100%;}
+      #quickvint-upgrade-feedback input {min-width:0;width:auto;flex:1;padding:8px;border:1px solid #a4acb6;border-radius:8px;}
+      #quickvint-upgrade-feedback button {cursor:pointer;text-align:start;white-space:normal;color:#26313f;border:1px solid #cdd3da;border-radius:9px;background:#f8f9fb;padding:9px 11px;font:inherit;}
+      #quickvint-upgrade-feedback button:hover {background:#f0f0ff;border-color:#aaa8f0;}
+      #quickvint-upgrade-feedback button:focus-visible {outline:2px solid #544ad6;outline-offset:2px;}
+      #quickvint-upgrade-feedback .feedback-close {margin-inline-start:auto;background:transparent;border:0;font-size:22px;line-height:1;padding:4px 8px;}
       #${REPORT_MODAL_ID} .quickvint-report-submit {
         height: 38px;
         padding: 0 14px;

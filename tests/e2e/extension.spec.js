@@ -8068,10 +8068,16 @@ test.describe("AutoLister extension smoke flows", () => {
     await expect(offer).toContainText("LISTFASTER20");
   });
 
-  test("shows the free-limit offer after closing the free-limit paywall", async ({
+  for (const width of [1440, 390]) test(`asks once for optional feedback after closing the free-limit paywall at ${width}px`, async ({
     page,
   }) => {
-    await page.setViewportSize({ width: 1800, height: 900 });
+    const answers = [];
+    await page.route("**/api/events/track", async route => {
+      const { events } = route.request().postDataJSON();
+      answers.push(...events.filter(e => e.event === "upgrade_feedback_submitted"));
+      await route.fulfill({json:{acknowledgedIds:events.map(e=>e.id),duplicateIds:[],rejections:[]}});
+    });
+    await page.setViewportSize({ width, height: width === 390 ? 844 : 900 });
     await page.route("https://autolister.app/api/generate", (route) =>
       route.fulfill({
         status: 429,
@@ -8103,18 +8109,31 @@ test.describe("AutoLister extension smoke flows", () => {
       "You’ve used all 5 free listings",
     );
     await expect(page.locator("#quickvint-toast.paywall")).toBeVisible();
-    const paywallBox = await page.locator("#quickvint-toast.paywall").boundingBox();
-    const titleBox = await page.locator('[data-testid="title--input"]').boundingBox();
-    expect(paywallBox.x).toBeGreaterThan(titleBox.x + titleBox.width);
-    expect(Math.abs(paywallBox.y - titleBox.y)).toBeLessThan(80);
-
+    await useActualPaywallIcon(page);
     await page.locator("#quickvint-toast .paywall-close").click();
 
-    const offer = page.locator("#quickvint-limit-followup-modal");
-    await expect(offer).toBeVisible();
-    await expect(offer).toContainText("5 free listings used");
-    await expect(offer).toContainText("Keep listing without waiting");
-    await expect(offer).toContainText("LISTFASTER20");
+    const question = page.getByRole("region", { name: "What held you back?" });
+    await expect(question).toBeVisible();
+    await expect(page.locator("#quickvint-limit-followup-modal")).toHaveCount(0);
+    await expect(page.locator("#quickvint-toast.paywall")).toBeHidden();
+    if (process.env.UPGRADE_PREVIEW_DIR) {
+      await page.screenshot({animations:"disabled",path:path.join(process.env.UPGRADE_PREVIEW_DIR, `feedback-${width}.png`)});
+    }
+    if (width === 390) {
+      await question.getByRole("button", {name:"Other"}).click();
+      await question.getByRole("textbox").fill("I sell once a year");
+      await question.getByRole("textbox").press("Enter");
+    } else {
+      await question.getByRole("button", {name:"Too expensive"}).click();
+    }
+    await page.evaluate(() => globalThis.AutoListerTelemetry.flush());
+    await expect.poll(() => answers.map(e => e.context.reason)).toEqual([width === 390 ? "other" : "price"]);
+    if (width === 390) expect(answers[0].context.message).toBe("I sell once a year");
+    await expect(question).toHaveCount(0);
+    await page.locator("#quickvint-gen-btn").click();
+    await page.locator("#quickvint-toast .paywall-close").click();
+    await page.waitForTimeout(600);
+    await expect(question).toHaveCount(0);
   });
 
   test("shows a soft Pro upsell after Starter users close the daily-limit paywall", async ({
