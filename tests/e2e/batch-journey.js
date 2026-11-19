@@ -1,4 +1,4 @@
-const { chromium, expect } = require("@playwright/test");
+const { chromium, expect, test } = require("@playwright/test");
 const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
@@ -15,11 +15,35 @@ async function launchJourneyBrowser(profile, extensionPath, options) {
     });
     return { context, close: () => context.close() };
   }
-  // Playwright's normal launch enables focus emulation for every tab. Attach
-  // without those overrides so inactive-tab visibility remains Chrome's own.
+  // Starting headed Chrome on a cold runner has its own budget. Keep the
+  // normal application and assertion deadlines once the browser is ready.
+  const info = process.env.TEST_WORKER_INDEX === undefined ? undefined : test.info();
+  const originalTimeout = info?.timeout;
+  const started = Date.now();
+  const startupBudgetMs = 45_000;
+  if (originalTimeout) info.setTimeout(originalTimeout + startupBudgetMs);
+  try {
+    for (let attempt = 1; attempt <= 2; attempt++) {
+      const chromeProfile = fs.mkdtempSync(path.join(profile, "chrome-"));
+      try {
+        return await launchNativeFocusBrowser(chromeProfile, args);
+      } catch (error) {
+        if (attempt === 2) throw error;
+        console.warn("Retrying headed Chrome before the batch fixture starts:", error.cause?.message.split("\n")[0]);
+      }
+    }
+  } finally {
+    if (originalTimeout) info.setTimeout(originalTimeout + Math.min(Date.now() - started, startupBudgetMs));
+  }
+}
+
+// Keep Chrome's native inactive-tab visibility. Playwright's normal launch
+// overrides focus in every tab and would invalidate background-tab assertions.
+async function launchNativeFocusBrowser(profile, args) {
   const child = spawn(chromium.executablePath(), [
     "--no-sandbox", "--no-first-run", "--no-default-browser-check",
-    "--disable-background-networking", "--remote-debugging-port=0",
+    "--disable-background-networking", "--disable-dev-shm-usage", "--password-store=basic",
+    "--remote-debugging-port=0",
     `--user-data-dir=${profile}`, ...args, "about:blank",
   ], { stdio: ["ignore", "ignore", "pipe"] });
   const childExited = new Promise(resolve => child.once("exit", resolve));
@@ -28,9 +52,12 @@ async function launchJourneyBrowser(profile, extensionPath, options) {
   let browser;
   try {
     const portFile = path.join(profile, "DevToolsActivePort");
-    await expect.poll(() => fs.existsSync(portFile)).toBe(true);
+    const deadline = Date.now() + 19_000;
+    await expect.poll(() => fs.existsSync(portFile), { timeout: 12_000 }).toBe(true);
     const [port, endpoint] = fs.readFileSync(portFile, "utf8").trim().split("\n");
-    browser = await chromium.connectOverCDP(`ws://127.0.0.1:${port}${endpoint}`, { noDefaults: true });
+    browser = await chromium.connectOverCDP(`ws://127.0.0.1:${port}${endpoint}`, {
+      noDefaults: true, timeout: Math.max(1, deadline - Date.now()),
+    });
     const context = browser.contexts()[0];
     return { context, async close() {
       if (child.exitCode === null && child.signalCode === null) {

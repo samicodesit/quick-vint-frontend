@@ -9,6 +9,7 @@ const { spawn } = require("node:child_process");
 test("failed journey startup waits for its owned browser to exit before profile cleanup", { timeout: 10000 }, async () => {
   const profile = fs.mkdtempSync(path.join(os.tmpdir(), "autolister-startup-qa-"));
   const launchFailure = new Error("Controlled missing debugging port");
+  const launches = [];
   let child;
   let ready;
   const childScript = `
@@ -34,8 +35,11 @@ test("failed journey startup waits for its owned browser to exit before profile 
         expect: { poll: () => ({ async toBe() { await ready; throw launchFailure; } }) },
       };
       if (name === "node:child_process") return {
-        spawn() {
-          child = spawn(process.execPath, ["-e", childScript, profile], { stdio: ["ignore", "ignore", "pipe", "ipc"] });
+        spawn(_executable, args) {
+          if (child) assert.ok(child.exitCode !== null || child.signalCode !== null, "retry must wait for the first Chrome to exit");
+          const ownedProfile = args.find(arg => arg.startsWith("--user-data-dir=")).slice("--user-data-dir=".length);
+          launches.push(ownedProfile);
+          child = spawn(process.execPath, ["-e", childScript, ownedProfile], { stdio: ["ignore", "ignore", "pipe", "ipc"] });
           ready = new Promise((resolve, reject) => { child.once("message", resolve); child.once("error", reject); });
           return child;
         },
@@ -50,7 +54,12 @@ test("failed journey startup waits for its owned browser to exit before profile 
     catch (error) { rejection = error; }
     assert.ok(child.exitCode !== null || child.signalCode !== null, "startup must not return while the owned profile writer is alive");
     assert.equal(rejection.cause, launchFailure);
-    assert.equal(fs.readFileSync(path.join(profile, "Default", "final-write"), "utf8"), "finished");
+    assert.equal(launches.length, 2);
+    assert.equal(new Set(launches).size, 2, "each launch needs a fresh debugging port file");
+    for (const ownedProfile of launches) {
+      assert.equal(path.dirname(ownedProfile), profile);
+      assert.equal(fs.readFileSync(path.join(ownedProfile, "Default", "final-write"), "utf8"), "finished");
+    }
     assert.match(rejection.message, /Controlled missing debugging port/);
     assert.match(rejection.message, /isolated-startup-diagnostic/);
     assert.ok(rejection.message.length < 5000, "startup diagnostics must remain bounded");
