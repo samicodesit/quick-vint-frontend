@@ -1723,7 +1723,7 @@
         </div>
       `
       : "";
-    const trustHtml = trustNote
+    const trustHtml = !combined && trustNote
       ? `<div class="paywall-trust">${escapeHtml(trustNote)}</div>`
       : "";
 
@@ -1736,13 +1736,15 @@
             <div class="paywall-title">${escapeHtml(title)}</div>
           </div>
         </div>
+        ${combined ? "" : `
         <div class="paywall-message">${escapeHtml(message)}</div>
         <div class="paywall-billing-toggle" role="tablist" aria-label="${escapeHtml(billingCopy.title)}">
           <button type="button" role="tab" aria-selected="true" data-paywall-mode="monthly">${escapeHtml(billingCopy.monthly)}</button>
           <button type="button" role="tab" aria-selected="false" tabindex="-1" data-paywall-mode="once">${escapeHtml(billingCopy.oneTime)}</button>
         </div>
+        `}
         ${optionsHtml}
-        <p class="paywall-unit-note">${escapeHtml(billingCopy.qualifier)}</p>
+        ${combined ? "" : `<p class="paywall-unit-note">${escapeHtml(billingCopy.qualifier)}</p>`}
         ${
           !options.length && actionText
             ? `<button class="paywall-action" type="button">
@@ -1763,13 +1765,6 @@
 
     toast.className = combined ? "paywall combined-pricing" : "paywall";
     if (combined) {
-      for (const selector of [
-        ".paywall-message",
-        ".paywall-trust",
-        ".paywall-unit-note",
-        ".paywall-billing-toggle",
-      ])
-        toast.querySelector(selector)?.remove();
       const list = toast.querySelector(".paywall-options");
       for (const [mode, heading, terms] of [
         ["monthly", billingCopy.monthlyPlans, billingCopy.monthlyTerms],
@@ -1915,7 +1910,6 @@
           );
           const renewal = document.createElement("small");
           renewal.className = "paywall-renewal";
-          renewal.hidden = false;
           renewal.textContent = billingCopy.renewalPrice.replace(
             "{price}",
             billing.formatPrice(quote.monthlyCents / 100, billingLocale),
@@ -10063,12 +10057,15 @@
       }
       #quickvint-toast.combined-pricing .paywall-group h3 {
         margin: 0;
-        font: 700 16px/1.3 system-ui;
+        font: 650 16px/1.25 var(--autolister-font-ui, system-ui, sans-serif);
         color: #182034;
       }
       #quickvint-toast.combined-pricing .paywall-group p {
         margin: 3px 0 9px;
-        font: 400 13px/1.35 system-ui;
+        font-family: inherit;
+        font-size: 13px;
+        font-weight: 400;
+        line-height: 1.35;
         color: #526079;
       }
       #quickvint-toast.combined-pricing .paywall-group-items {
@@ -10107,6 +10104,15 @@
         display: flex;
         align-items: center;
         justify-content: center;
+        box-sizing: border-box;
+        border-top: 1px solid #e2e5ed;
+        padding-top: 8px;
+        margin-top: 4px;
+        color: #4046a6;
+        font-size: 13px;
+        font-weight: 550;
+        text-decoration: underline;
+        text-underline-offset: 3px;
       }
       #quickvint-toast.paywall.combined-pricing .paywall-option-name,
       #quickvint-toast.paywall.combined-pricing .paywall-option-price {
@@ -10116,9 +10122,6 @@
         display: block;
         color: #526079;
         font: 400 12px/1.35 system-ui;
-      }
-      #quickvint-toast .paywall-renewal[hidden] {
-        display: none;
       }
       @media (max-width: 799px) {
         #quickvint-toast.combined-pricing .paywall-options {
@@ -10147,12 +10150,6 @@
         line-height: 1.2;
         letter-spacing: -0.3px;
       }
-      #quickvint-toast.paywall.combined-pricing .paywall-group h3 {
-        font: 650 16px/1.25 var(--autolister-font-ui, system-ui, sans-serif);
-      }
-      #quickvint-toast.paywall.combined-pricing .paywall-group p {
-        font-family: inherit;
-      }
       #quickvint-toast.paywall.combined-pricing .paywall-header {
         margin: 1px 28px 14px 0;
       }
@@ -10174,17 +10171,6 @@
       }
       #quickvint-toast.paywall.combined-pricing .once .paywall-option:hover:not(:disabled) {
         background: #f0f1fc;
-      }
-      #quickvint-toast.paywall.combined-pricing .paywall-secondary-action {
-        box-sizing: border-box;
-        border-top: 1px solid #e2e5ed;
-        padding-top: 8px;
-        margin-top: 4px;
-        color: #4046a6;
-        font-size: 13px;
-        font-weight: 550;
-        text-decoration: underline;
-        text-underline-offset: 3px;
       }
       @media (min-width: 800px) {
         #quickvint-toast.paywall.combined-pricing .paywall-options {
