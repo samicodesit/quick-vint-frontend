@@ -827,6 +827,9 @@ async function getStoredCheckoutEmail(session) {
 
 async function createCheckout(message = {}) {
   const session = await ensureValidToken({ entryPoint: "checkout" });
+  if (message.expectedAccountId && session?.user?.id !== message.expectedAccountId) {
+    return {ok:false,reason:"account_changed",error:"Account changed. Reopen pricing."};
+  }
   const email = await getStoredCheckoutEmail(session);
   if (!email) {
     return {
@@ -856,6 +859,7 @@ async function createCheckout(message = {}) {
   };
   if (!isCreditPack) {
     body.tier = tier;
+    if (tier === "pro" && message.source === "extension_paywall" && message.offerToken) body.offerToken = message.offerToken;
   } else if (message.packId !== undefined) {
     body.packId = message.packId;
   }
@@ -2942,6 +2946,23 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         sendResponse(await openAuthTab());
         break;
 
+      case "GET_FREE_LIMIT_PRO_PRICE": {
+        const session = await ensureValidToken({ entryPoint: "free_limit_price" });
+        if (!session?.access_token || session.user?.id !== message.expectedAccountId) {
+          sendResponse({ ok: false });
+          break;
+        }
+        const response = await fetch(
+          `${API_BASE}/api/user/limit-followup-offer?surface=extension_paywall`,
+          {
+            headers: { Authorization: `Bearer ${session.access_token}` },
+            signal: AbortSignal.timeout(10000),
+          },
+        );
+        const quote = response.ok ? await response.json() : {};
+        sendResponse({ ...quote, ok: response.ok && typeof quote.eligible === "boolean" });
+        break;
+      }
       case "CREATE_CHECKOUT": {
         const checkout = await createCheckout(message);
         sendResponse(checkout);

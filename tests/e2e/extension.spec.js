@@ -12,6 +12,202 @@ const billingCatalogPath = path.join(extensionPath, "lib/billing-catalog.js");
 const qrCodePath = path.join(extensionPath, "lib/qrcode.min.js");
 const contentScriptPath = path.join(extensionPath, "content.js");
 
+for (const locale of Object.keys(
+  require(path.join(extensionPath, "lib/shared-ui-copy.js")).billing,
+)) {
+  test("free-limit pricing experiment in " + locale, async ({ page }) => {
+    const copy = require(path.join(extensionPath, "lib/shared-ui-copy.js")).billing[locale];
+    const accountId = "123e4567-e89b-42d3-a456-426614174008";
+    await page.setViewportSize({ width: 320, height: 844 });
+    await page.route("https://autolister.app/api/generate", (route) =>
+      route.fulfill({
+        status: 429,
+        json: { code: "free_lifetime_limit", currentTier: "free", nextTier: "starter" },
+      }),
+    );
+    await openContentHarness(page, null, {
+      paywallAssets: true,
+      initialStorage: {
+        selectedLanguage: locale,
+        selectedTitleLanguage: locale,
+        selectedDescriptionLanguage: locale,
+        quickvintLanguagePreferenceTouched: true,
+        supabaseSession: {
+          access_token: "fixture",
+          expires_at: Date.now() / 1000 + 3600,
+          user: { id: accountId, email: "fixture@example.test" },
+        },
+        __freeLimitQuote: {
+          ok: true,
+          eligible: true,
+          firstMonthCents: 799,
+          monthlyCents: 999,
+          offerToken: "fixture-offer",
+          expiresAt: new Date(Date.now() + 3600000).toISOString(),
+        },
+      },
+    });
+    await page.locator("#quickvint-gen-btn").click();
+    const wall = page.locator("#quickvint-toast.combined-pricing");
+    await expect(wall.locator("h3")).toHaveText([
+      copy.monthlyPlans,
+      copy.oneTimeListingCredits,
+    ]);
+    await expect(wall.locator(".paywall-option:visible")).toHaveCount(6);
+    await expect(wall.locator(".paywall-renewal")).toBeVisible();
+    await expect(wall.locator(".paywall-option:disabled")).toHaveCount(0);
+    expect(
+      await wall.evaluate((el) =>
+        [el, ...el.querySelectorAll("button")]
+          .filter((node) => node.scrollWidth > node.clientWidth + 1)
+          .map((node) => [node.className, node.scrollWidth, node.clientWidth]),
+      ),
+    ).toEqual([]);
+    expect(
+      await wall
+        .locator(".once button")
+        .evaluateAll((buttons) =>
+          buttons.every(
+            (b) =>
+              b.querySelector(".paywall-option-main").getBoundingClientRect().bottom <=
+              b.querySelector(".paywall-option-side").getBoundingClientRect().top + 1,
+          ),
+        ),
+    ).toBe(true);
+    for (const [width, height] of [
+      [320, 568],
+      [390, 844],
+      [667, 375],
+      [768, 1024],
+      [1280, 860],
+    ]) {
+      await page.setViewportSize({ width, height });
+      await page.evaluate(
+        () =>
+          new Promise((resolve) =>
+            requestAnimationFrame(() => requestAnimationFrame(resolve)),
+          ),
+      );
+      expect(
+        await wall.evaluate((el) => {
+          const box = el.getBoundingClientRect();
+          if (box.left < 0 || box.right > innerWidth + 1 || box.height > innerHeight + 1)
+            return { outer: box.toJSON(), viewport: [innerWidth, innerHeight] };
+          const collisions = [...el.querySelectorAll(".paywall-option")].filter((button) => {
+            const title = button.querySelector(".paywall-option-name"),
+              side = button.querySelector(".paywall-option-side");
+            const range = document.createRange();
+            range.selectNodeContents(title);
+            return ![...range.getClientRects()].every((rect) => {
+              const price = side.getBoundingClientRect();
+              return (
+                rect.right <= price.left + 1 ||
+                rect.bottom <= price.top + 1 ||
+                rect.top >= price.bottom - 1
+              );
+            });
+          });
+          return collisions.length
+            ? collisions.map((button) => button.textContent.trim())
+            : true;
+        }),
+        locale + " names or prices overlap at " + width + "x" + height,
+      ).toBe(true);
+    }
+    const output = process.env.PAYWALL_QA_OUTPUT;
+    if (output && ["en", "nl"].includes(locale)) {
+      for (const width of [390, 1280]) {
+        await page.setViewportSize({ width, height: width === 390 ? 844 : 860 });
+        await wall.scrollIntoViewIfNeeded();
+        await page.mouse.move(0, 0);
+        await page.screenshot({
+          path: path.join(output, "extension-combined-" + locale + "-" + width + ".png"),
+          animations: "disabled",
+        });
+      }
+    }
+    await wall.locator('[data-paywall-option-index="1"]').press("Enter");
+    await expect
+      .poll(() =>
+        page.evaluate(() =>
+          window.__extensionHarness.runtimeMessages.filter(
+            (m) => m.type === "CREATE_CHECKOUT",
+          ),
+        ),
+      )
+      .toEqual([
+        {
+          type: "CREATE_CHECKOUT",
+          checkoutType: "subscription",
+          tier: "pro",
+          source: "extension_paywall",
+          offerToken: "fixture-offer",
+          expectedAccountId: accountId,
+        },
+      ]);
+  });
+}
+test("free-limit pricing experiment control and price retry", async ({ page }) => {
+  const id = "123e4567-e89b-42d3-a456-426614174000";
+  await page.route("https://autolister.app/api/generate", (route) =>
+    route.fulfill({
+      status: 429,
+      json: { code: "free_lifetime_limit", currentTier: "free", nextTier: "starter" },
+    }),
+  );
+  await openContentHarness(page, null, {
+    paywallAssets: true,
+    initialStorage: {
+      supabaseSession: {
+        access_token: "fixture",
+        expires_at: Date.now() / 1000 + 3600,
+        user: { id, email: "fixture@example.test" },
+      },
+      __freeLimitQuote: { ok: false },
+    },
+  });
+  await page.locator("#quickvint-gen-btn").click();
+  const wall = page.locator("#quickvint-toast.paywall");
+  const pro = wall.locator('[data-paywall-option-index="1"]');
+  await expect(pro).toContainText("Retry price");
+  await page.evaluate(() =>
+    chrome.storage.local.set({ __freeLimitQuote: { ok: true, eligible: false } }),
+  );
+  await pro.click();
+  await expect(pro).toContainText("9.99");
+  expect(
+    await page.evaluate(() =>
+      window.__extensionHarness.runtimeMessages.filter((m) => m.type === "CREATE_CHECKOUT"),
+    ),
+  ).toEqual([]);
+  for (const width of [390, 1280]) {
+    await page.setViewportSize({ width, height: width === 390 ? 844 : 860 });
+    await page.mouse.move(0, 0);
+    if (process.env.PAYWALL_QA_OUTPUT)
+      await page.screenshot({
+        path: path.join(process.env.PAYWALL_QA_OUTPUT, "extension-tabs-en-" + width + ".png"),
+        animations: "disabled",
+      });
+  }
+  await wall.getByRole("tab").nth(1).click();
+  await wall.locator('[data-paywall-option-index="5"]').click();
+  await expect
+    .poll(() =>
+      page.evaluate(() =>
+        window.__extensionHarness.runtimeMessages.filter((m) => m.type === "CREATE_CHECKOUT"),
+      ),
+    )
+    .toEqual([
+      {
+        type: "CREATE_CHECKOUT",
+        checkoutType: "credit_pack",
+        tier: "credit_pack",
+        packId: "credits_100",
+        source: "extension_paywall",
+        expectedAccountId: id,
+      },
+    ]);
+});
 for (const locale of Object.keys(require(path.join(extensionPath, "lib/shared-ui-copy.js")).billing)) {
   test(`shared pause copy renders in ${locale} without changing listing fields`, async ({ page }) => {
     const shared = require(path.join(extensionPath, "lib/shared-ui-copy.js"));
@@ -1213,6 +1409,8 @@ function installChromeHarness(page, capacityResponse = null, initialStorage = {}
               freeLifetimeLimit: 5,
               packCredits: Number(storage.userProfile?.pack_credits || 0),
             };
+          } else if (message?.type === "GET_FREE_LIMIT_PRO_PRICE") {
+            response = storage.__freeLimitQuote || { ok: true, eligible: false };
           } else if (message?.type === "CREATE_CHECKOUT") {
             response = storage.__checkoutResponse || {
               ok: true,
@@ -1342,6 +1540,24 @@ async function openContentHarness(page, capacityResponse = null, options = {}) {
     });
   }
   await installChromeHarness(page, capacityResponse, options.initialStorage || {});
+  if (options.paywallAssets) {
+    const typography = fs
+      .readFileSync(path.join(extensionPath, "lib/typography.css"), "utf8")
+      .replace(
+        /chrome-extension:\/\/__MSG_@@extension_id__\/(lib\/fonts\/[\w.-]+\.woff2)/g,
+        (_, file) =>
+          "data:font/woff2;base64," + fs.readFileSync(path.join(extensionPath, file), "base64"),
+      );
+    await page.addStyleTag({ content: typography });
+    const logo =
+      "data:image/png;base64," +
+      fs.readFileSync(path.join(extensionPath, "icons/icon48.png"), "base64");
+    await page.evaluate((logo) => {
+      const getURL = chrome.runtime.getURL;
+      chrome.runtime.getURL = (asset) => (asset === "icons/icon48.png" ? logo : getURL(asset));
+    }, logo);
+    await page.evaluate(() => document.fonts.ready);
+  }
   if (options.domCanaryConfig) {
     await page.evaluate((config) => {
       globalThis.QUICKVINT_DOM_CANARY = config;
@@ -4220,6 +4436,26 @@ test.describe("AutoLister extension smoke flows", () => {
       await expect(work.locator('[data-testid="title--input"]')).toHaveValue("Item 1");
       expect(flow.commits.size).toBe(1);
     } finally { await flow.close(); }
+  });
+
+  test("free-limit Pro checkout keeps the quoted account and signed offer", async () => {
+    const {context,serviceWorker}=await loadExtension();
+    const requests=[];
+    const account="123e4567-e89b-42d3-a456-426614174008";
+    try {
+      await context.route("https://autolister.app/api/stripe/create-checkout",route=>{
+        requests.push(route.request().postDataJSON());
+        return route.fulfill({json:{url:"https://checkout.stripe.com/c/pay/fixture"}});
+      });
+      await serviceWorker.evaluate(async id=>{
+        await chrome.storage.local.set({supabaseSession:{access_token:"fixture",refresh_token:"fixture",expires_at:Math.floor(Date.now()/1000)+86400,user:{id,email:"fixture@example.test"}}});
+      },account);
+      const checkout=id=>serviceWorker.evaluate(expectedAccountId=>createCheckout({tier:"pro",checkoutType:"subscription",source:"extension_paywall",offerToken:"signed-fixture",expectedAccountId}),id);
+      expect((await checkout("123e4567-e89b-42d3-a456-426614174000")).ok).toBe(false);
+      expect(requests).toEqual([]);
+      expect((await checkout(account)).ok).toBe(true);
+      expect(requests).toEqual([{tier:"pro",source:"extension_paywall",email:"fixture@example.test",offerToken:"signed-fixture"}]);
+    } finally {await context.close();}
   });
 
   test("background checkout uses the stored account email when the session is missing", async () => {

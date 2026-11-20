@@ -1600,12 +1600,25 @@
     }
 
     let billingLocale = "en";
+    let pricingOwner;
     try {
-      const storage = await chrome.storage.local.get(["selectedLanguage", "selectedTitleLanguage", "selectedDescriptionLanguage", "quickvintLanguagePreferenceTouched"]);
+      const storage = await chrome.storage.local.get([
+        "selectedLanguage",
+        "selectedTitleLanguage",
+        "selectedDescriptionLanguage",
+        "quickvintLanguagePreferenceTouched",
+        "supabaseSession",
+      ]);
+      pricingOwner = storage.supabaseSession?.user?.id;
       billingLocale = resolveLanguageProfile(storage).uiLanguageCode;
     } catch (_) {}
     const billing = window.AutoListerBilling;
     const billingCopy = billing.getCopy(billingLocale);
+    // Match the web assignment; anonymous and legacy clients stay out of the experiment.
+    const enrolled =
+      limitCode === "free_lifetime_limit" &&
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(pricingOwner || "");
+    const combined = enrolled && /[89a-f]$/i.test(pricingOwner);
     if (limitCode === "account_paused") {
       const common = globalThis.AutoListerSharedUiCopy;
       title = common.get("paywall.pausedTitle", billingLocale);
@@ -1617,13 +1630,18 @@
       title = billingCopy.freeLimitTitle.replace("{limit}", String(FREE_LIFETIME_LIMIT));
       message = billingCopy.freeLimitMessage;
       trustNote = billingCopy.subscriptionTrust;
-      secondaryActionText = billingCopy.comparePlans;
+      secondaryActionText = combined ? billingCopy.compareFeatures : billingCopy.comparePlans;
+      if (combined && secondaryActionUrl) {
+        const url = new URL(secondaryActionUrl);
+        if (["fr","de","nl","pl","es","it","pt"].includes(billingLocale)) url.pathname = "/" + billingLocale + "/pricing";
+        secondaryActionUrl = url.href;
+      }
     }
     options = [
       ...options.filter((option) => option.checkoutType !== "credit_pack"),
       ...billing.packs.map((pack) => ({
         tier: "credit_pack", checkoutType: "credit_pack", packId: pack.id,
-        name: billingCopy.pack.replace("{credits}", String(pack.credits)),
+        name: (combined ? billingCopy.creditCount : billingCopy.pack).replace("{credits}", String(pack.credits)),
         price: billing.formatPrice(pack.priceEur, billingLocale), limits: "",
         unitPrice: billing.formatUnitPrice(pack.priceEur, pack.credits, billingLocale),
       })),
@@ -1632,7 +1650,7 @@
       return option.checkoutType === "subscription" && plan
         ? {
             ...option,
-            price: `${billing.formatPrice(Number(plan.price.match(/[\d.]+/)[0]), billingLocale)} ${billingCopy.perMonth}`,
+            price: `${billing.formatPrice(Number(plan.price.match(/[\d.]+/)[0]), billingLocale)}${combined ? "" : " "}${billingCopy.perMonth}`,
             limits: billingCopy.limits.replace("{daily}", String(plan.daily)).replace("{monthly}", String(plan.monthly)),
             badge: option.tier === "pro" ? billingCopy.popular : option.badge,
             unitPrice: billing.formatUnitPrice(Number(plan.price.match(/[\d.]+/)[0]), plan.monthly, billingLocale),
@@ -1682,13 +1700,13 @@
                   type="button"
                   data-paywall-option-index="${index}"
                   data-paywall-billing="${option.checkoutType === "credit_pack" ? "once" : "monthly"}"
-                  ${option.checkoutType === "credit_pack" ? "hidden" : ""}
+                  ${!combined && option.checkoutType === "credit_pack" ? "hidden" : ""}
                   ${isSelectable ? "" : "disabled"}
                 >
                   <div class="paywall-option-main">
                     <span class="paywall-option-name">${escapeHtml(option.name)}</span>
                     ${
-                      option.badge
+                      option.badge && !combined
                         ? `<span class="paywall-option-badge${option.badge.toLowerCase() === "most popular" ? " most-popular" : ""}">${escapeHtml(option.badge)}</span>`
                         : ""
                     }
@@ -1696,7 +1714,7 @@
                   </div>
                   <div class="paywall-option-side">
                     <span class="paywall-option-price">${escapeHtml(option.price)}</span>
-                    ${option.unitPrice ? `<span class="paywall-unit-price">≈${escapeHtml(option.unitPrice)} ${escapeHtml(billingCopy.perListing)}</span>` : ""}
+                    ${option.unitPrice && !combined ? `<span class="paywall-unit-price">≈${escapeHtml(option.unitPrice)} ${escapeHtml(billingCopy.perListing)}</span>` : ""}
                   </div>
                 </button>
               `;
@@ -1743,17 +1761,58 @@
       <button class="toast-close paywall-close" aria-label="${escapeHtml(billingCopy.closePaywall)}">×</button>
     `;
 
-    toast.className = "paywall";
+    toast.className = combined ? "paywall combined-pricing" : "paywall";
+    if (combined) {
+      for (const selector of [
+        ".paywall-message",
+        ".paywall-trust",
+        ".paywall-unit-note",
+        ".paywall-billing-toggle",
+      ])
+        toast.querySelector(selector)?.remove();
+      const list = toast.querySelector(".paywall-options");
+      for (const [mode, heading, terms] of [
+        ["monthly", billingCopy.monthlyPlans, billingCopy.monthlyTerms],
+        ["once", billingCopy.oneTimeListingCredits, billingCopy.creditValidity],
+      ]) {
+        const section = document.createElement("section");
+        section.className = "paywall-group " + mode;
+        const title = document.createElement("h3");
+        title.textContent = heading;
+        const description = document.createElement("p");
+        description.textContent = terms;
+        const items = document.createElement("div");
+        items.className = "paywall-group-items";
+        items.append(...list.querySelectorAll('[data-paywall-billing="' + mode + '"]'));
+        section.append(title, description, items);
+        list.append(section);
+      }
+    }
     toast.style.visibility = "visible";
     activeFloatingPromptType = "paywall";
 
     const anchorInput = getPromptAnchorInput();
-    const onReposition = () => positionAnchoredFloatingCard(toast, anchorInput, 430);
+    const previousFocus = document.activeElement;
+    const heading = toast.querySelector(".paywall-title");
+    heading.tabIndex = -1;
+    const closeWithEscape = (event) => {
+      if (event.key !== "Escape" || !toast.contains(document.activeElement)) return;
+      event.preventDefault();
+      toast.querySelector(".paywall-close")?.click();
+    };
+    toast.addEventListener("keydown", closeWithEscape);
+    const onReposition = () =>
+      positionAnchoredFloatingCard(
+        toast,
+        anchorInput,
+        combined && window.innerWidth >= 800 ? 640 : 430,
+      );
     onReposition();
     toast.scrollTop = 0;
     window.addEventListener("resize", onReposition);
     window.addEventListener("scroll", onReposition, true);
     activePaywallCleanup = () => {
+      toast.removeEventListener("keydown", closeWithEscape);
       window.removeEventListener("resize", onReposition);
       window.removeEventListener("scroll", onReposition, true);
       if (activeFloatingPromptType === "paywall") {
@@ -1765,6 +1824,7 @@
     const closeBtn = toast.querySelector(".toast-close");
     if (closeBtn) {
       closeBtn.onclick = () => {
+        if (previousFocus instanceof HTMLElement && previousFocus.isConnected) previousFocus.focus({preventScroll:true});
         toast.classList.remove("visible");
         toast.style.visibility = "hidden";
         clearPaywallPositioning();
@@ -1816,9 +1876,74 @@
       });
     });
 
+    let proQuote = null;
+    let quoteFailed = false;
+    const proButton = optionButtons.find(
+      (button) => options[Number(button.dataset.paywallOptionIndex)]?.tier === "pro",
+    );
+    const proOption = options.find((option) => option.tier === "pro");
+    async function refreshProQuote() {
+      if (!enrolled || !proButton || !proOption) return;
+      const price = proButton.querySelector(".paywall-option-price");
+      proButton.disabled = true;
+      proButton.dataset.pricePending = "true";
+      price.textContent = "…";
+      proQuote = null;
+      quoteFailed = false;
+      const unit = proButton.querySelector(".paywall-unit-price");
+      proButton.querySelector(".paywall-renewal")?.remove();
+      if (unit) unit.hidden = true;
+      try {
+        const quote = await sendMessage({
+          type: "GET_FREE_LIMIT_PRO_PRICE",
+          expectedAccountId: pricingOwner,
+        });
+        if (!proButton.isConnected) return;
+        if (!quote?.ok) throw Error("price_unavailable");
+        if (quote.eligible) {
+          if (
+            !quote.offerToken ||
+            !Number.isSafeInteger(quote.firstMonthCents) ||
+            !Number.isSafeInteger(quote.monthlyCents) ||
+            !(Date.parse(quote.expiresAt) > Date.now())
+          )
+            throw Error("expired_quote");
+          proQuote = quote;
+          price.textContent = billingCopy.firstMonthPrice.replace(
+            "{price}",
+            billing.formatPrice(quote.firstMonthCents / 100, billingLocale),
+          );
+          const renewal = document.createElement("small");
+          renewal.className = "paywall-renewal";
+          renewal.hidden = false;
+          renewal.textContent = billingCopy.renewalPrice.replace(
+            "{price}",
+            billing.formatPrice(quote.monthlyCents / 100, billingLocale),
+          );
+          price.after(renewal);
+        } else {
+          price.textContent = proOption.price;
+          if (unit) unit.hidden = false;
+        }
+      } catch {
+        quoteFailed = true;
+        price.textContent = billingCopy.retryPrice;
+      } finally {
+        delete proButton.dataset.pricePending;
+        proButton.disabled = optionButtons.some(
+          (button) => button.dataset.checkoutPending === "true",
+        );
+        if (proButton.isConnected) onReposition();
+      }
+    }
+    if (enrolled) void refreshProQuote();
     async function openPaywallOption(option, triggerButton) {
       if (!option || triggerButton?.dataset.checkoutPending === "true") return;
 
+      if (option.tier === "pro" && enrolled && (quoteFailed || (proQuote && Date.parse(proQuote.expiresAt) <= Date.now()))) {
+        await refreshProQuote();
+        return;
+      }
       if (!option.checkoutType) {
         trackGrowthEvent("paywall_action_click", {
           action: "external_link",
@@ -1848,7 +1973,8 @@
       });
 
       try {
-        const checkoutUrl = await createCheckoutForPaywall(option);
+        const checkoutUrl = await createCheckoutForPaywall(option, "extension_paywall",
+          option.tier === "pro" ? proQuote?.offerToken : null, enrolled ? pricingOwner : null);
         if (rescueOfferCopyKey) {
           limitOfferPaywallCheckoutStarted = true;
           clearLimitFollowupRescueTimer();
@@ -1890,7 +2016,7 @@
         optionButtons.forEach((button) => {
           const optionIndex = Number(button.dataset.paywallOptionIndex);
           const buttonOption = options[optionIndex];
-          button.disabled = buttonOption?.selectable === false;
+          button.disabled = buttonOption?.selectable === false || button.dataset.pricePending === "true";
         });
         if (actionBtn) actionBtn.disabled = false;
         if (optionNameEl) optionNameEl.textContent = previousOptionName;
@@ -1931,6 +2057,8 @@
 
     toast.offsetHeight;
     toast.classList.add("visible");
+    if (enrolled) heading.focus({preventScroll:true});
+    if (enrolled) trackGrowthEvent(combined ? "free_limit_view_combined_v1" : "free_limit_view_tabs_v1", {}, pricingOwner);
 
     if (window.quickvintToastTimeout)
       clearTimeout(window.quickvintToastTimeout);
@@ -2437,13 +2565,15 @@
     });
   }
 
-  async function createCheckoutForPaywall(option, source = "extension_paywall") {
+  async function createCheckoutForPaywall(option, source = "extension_paywall", offerToken, expectedAccountId) {
     const response = await sendMessage({
       type: "CREATE_CHECKOUT",
       checkoutType: option.checkoutType,
       tier: option.tier,
       source,
       ...(option.packId ? { packId: option.packId } : {}),
+      ...(offerToken ? {offerToken} : {}),
+      ...(expectedAccountId ? {expectedAccountId} : {}),
     });
     if (!response?.ok || !response.url) {
       const error = new Error(
@@ -9914,9 +10044,170 @@
         gap: 10px;
         box-shadow: 0 26px 80px rgba(17, 24, 39, 0.2), 0 10px 26px rgba(79, 70, 229, 0.14);
         max-height: calc(100dvh - 32px);
+        transition-property: opacity, transform;
         overflow-y: auto;
       }
 
+      #quickvint-toast.paywall.combined-pricing {
+        max-width: 640px;
+        background: white;
+        min-width: 0;
+      }
+      #quickvint-toast.combined-pricing .paywall-options {
+        display: grid;
+        grid-template-columns: 1.15fr 1fr;
+        gap: 16px;
+      }
+      #quickvint-toast.combined-pricing .paywall-group {
+        min-width: 0;
+      }
+      #quickvint-toast.combined-pricing .paywall-group h3 {
+        margin: 0;
+        font: 700 16px/1.3 system-ui;
+        color: #182034;
+      }
+      #quickvint-toast.combined-pricing .paywall-group p {
+        margin: 3px 0 9px;
+        font: 400 13px/1.35 system-ui;
+        color: #526079;
+      }
+      #quickvint-toast.combined-pricing .paywall-group-items {
+        display: grid;
+        gap: 6px;
+      }
+      #quickvint-toast.combined-pricing .paywall-option {
+        margin: 0;
+        min-height: 53px;
+        border: 1px solid #d9ddea;
+        background: white;
+        padding: 9px;
+        gap: 6px;
+      }
+      #quickvint-toast.combined-pricing .paywall-option-name {
+        overflow-wrap: anywhere;
+      }
+      #quickvint-toast.paywall .paywall-option-side:has(.paywall-renewal) {
+        min-width: 0;
+        white-space: normal;
+        overflow-wrap: break-word;
+      }
+      #quickvint-toast.paywall.combined-pricing .paywall-option-side {
+        min-width: 0;
+        max-width: 100%;
+        white-space: normal;
+      }
+      #quickvint-toast.paywall.combined-pricing .monthly .paywall-option {
+        grid-template-columns: minmax(0, 0.85fr) minmax(0, 1.15fr);
+      }
+      #quickvint-toast.paywall.combined-pricing .paywall-group-items {
+        grid-auto-rows: minmax(58px, auto);
+      }
+      #quickvint-toast.paywall.combined-pricing .paywall-secondary-action {
+        min-height: 32px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+      #quickvint-toast.paywall.combined-pricing .paywall-option-name,
+      #quickvint-toast.paywall.combined-pricing .paywall-option-price {
+        font-weight: 700;
+      }
+      #quickvint-toast .paywall-renewal {
+        display: block;
+        color: #526079;
+        font: 400 12px/1.35 system-ui;
+      }
+      #quickvint-toast .paywall-renewal[hidden] {
+        display: none;
+      }
+      @media (max-width: 799px) {
+        #quickvint-toast.combined-pricing .paywall-options {
+          grid-template-columns: minmax(0, 1fr);
+        }
+        #quickvint-toast.combined-pricing .once .paywall-group-items {
+          grid-template-columns: repeat(3, minmax(0, 1fr));
+        }
+        #quickvint-toast.combined-pricing .once .paywall-option {
+          display: grid;
+          grid-template-columns: minmax(0, 1fr);
+          grid-template-rows: 1fr auto;
+          align-items: start;
+          align-content: center;
+          justify-items: start;
+          padding: 9px 8px;
+          gap: 4px;
+        }
+        #quickvint-toast.combined-pricing .once .paywall-option-side {
+          text-align: start;
+        }
+      }
+      #quickvint-toast.paywall.combined-pricing .paywall-title {
+        font-size: 20px;
+        font-weight: 680;
+        line-height: 1.2;
+        letter-spacing: -0.3px;
+      }
+      #quickvint-toast.paywall.combined-pricing .paywall-group h3 {
+        font: 650 16px/1.25 var(--autolister-font-ui, system-ui, sans-serif);
+      }
+      #quickvint-toast.paywall.combined-pricing .paywall-group p {
+        font-family: inherit;
+      }
+      #quickvint-toast.paywall.combined-pricing .paywall-header {
+        margin: 1px 28px 14px 0;
+      }
+      #quickvint-toast.paywall.combined-pricing .toast-close {
+        width: 40px;
+        height: 40px;
+        top: 2px;
+        right: 2px;
+        margin: 0;
+      }
+      #quickvint-toast.paywall.combined-pricing .paywall-option-limits {
+        color: #586378;
+        font-size: 12px;
+        font-weight: 500;
+        line-height: 1.3;
+      }
+      #quickvint-toast.paywall.combined-pricing .once .paywall-option {
+        background: #f8f9fc;
+      }
+      #quickvint-toast.paywall.combined-pricing .once .paywall-option:hover:not(:disabled) {
+        background: #f0f1fc;
+      }
+      #quickvint-toast.paywall.combined-pricing .paywall-secondary-action {
+        box-sizing: border-box;
+        border-top: 1px solid #e2e5ed;
+        padding-top: 8px;
+        margin-top: 4px;
+        color: #4046a6;
+        font-size: 13px;
+        font-weight: 550;
+        text-decoration: underline;
+        text-underline-offset: 3px;
+      }
+      @media (min-width: 800px) {
+        #quickvint-toast.paywall.combined-pricing .paywall-options {
+          row-gap: 0;
+          column-gap: 20px;
+        }
+        #quickvint-toast.combined-pricing .paywall-group {
+          display: grid;
+          grid-row: span 3;
+          grid-template-rows: subgrid;
+        }
+        #quickvint-toast.combined-pricing .paywall-group-items {
+          grid-auto-rows: minmax(58px, 1fr);
+        }
+        #quickvint-toast.paywall.combined-pricing .paywall-secondary-action {
+          justify-content: flex-end;
+        }
+      }
+      @media (max-width: 520px) {
+        #quickvint-toast.paywall {
+          min-width: 0;
+        }
+      }
       #quickvint-toast.paywall::before {
         content: "";
         position: absolute;
