@@ -8,7 +8,7 @@ Design: reuse the existing idempotency key and payload, wait only for the finite
 
 Alternatives: requiring another seller click preserves identity but causes the demonstrated error; changing server idempotency is unnecessary. Bounded client continuation follows the existing batch pending-response contract.
 
-Files: content.js; tests/e2e/manual-generation-pending.spec.js; existing uncertain request tests only where their setup depends on pending being terminal.
+Files: content.js; tests/e2e/manual-generation-pending.spec.js; existing uncertain request and oversized prepared-byte tests only where their setup depends on pending being terminal.
 
 - [x] Reproduce on the actual public1.4.44 loaded extension with one existing DOM image, a lost first reply, pending idempotency response and cached completion. Capture a failing regression three times.
 - [x] Implement the smallest bounded manual pending-response continuation. Add coverage for account/photo/settings changes, repeated pending timeout, ordinary409conflict, worker recovery, and manual network retry budget.
@@ -18,3 +18,5 @@ Files: content.js; tests/e2e/manual-generation-pending.spec.js; existing uncerta
 Historical boundary: production proves an exact in-progress response was shown as an error and the same request was retrieved later. Controlled lost-response tests do not establish why the customer's first response was unavailable.
 
 Verification before the production gate: 196 unit tests passed. Native targeted runs passed42checks including3real two-minute deadlines, then45checks including3rounds of automatic401renewal with unchanged and changed listing scope. Actual public44red and corrected edit-form renders are saved in the workspace incident evidence. No paid model, production collector test or live marketplace action was used. Full production and Store gates remain separate required steps.
+
+The first full gate was deliberately stopped before push after finding another existing manual-click expectation in the oversized prepared-byte test. Its updated automatic pending replay passed3times with17retained photos, matching request/body and unchanged uploads, using the actual backend image helper against isolated HTTP hosts. The complete gate must run again on this final test contract.

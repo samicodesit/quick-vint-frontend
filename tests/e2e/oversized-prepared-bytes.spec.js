@@ -421,9 +421,9 @@ for (const mode of [
       }
       await expect.poll(() => requests.length).toBe(1);
       if (mode === "retry") {
-        await expect(page.locator("#quickvint-gen-btn")).toBeEnabled();
         const uploadCount = uploads.length;
-        await page.locator("#quickvint-gen-btn").click();
+        // A finite pending response replays automatically with the prepared
+        // bytes. It must not require another click or upload the photos again.
         await expect.poll(() => requests.length).toBe(2);
         expect(requests[1].body).toEqual(requests[0].body);
         expect(requests[1].requestId).toBe(requests[0].requestId);
