@@ -156,3 +156,28 @@ for (const changeListing of [false, true]) {
     } finally { release(); await flow.close(); }
   });
 }
+
+test('manual pending deadline also ends a stalled in-flight retry', async () => {
+  test.setTimeout(150000);
+  const flow = await openEdit(async ({ route, requests }) => {
+    if (requests.length === 1) return route.fulfill({ status: 409, json: pending });
+    if (requests.length >= 3) return route.fulfill({ json: result });
+    // A real browser request remains open without response headers. It is not
+    // a forced AbortError or a simulated expired application clock.
+  });
+  try {
+    await flow.controller.locator('#quickvint-gen-btn').click();
+    await expect.poll(() => flow.requests.length).toBe(2);
+    await expect(flow.controller.locator('#quickvint-gen-btn')).toBeEnabled({ timeout: 128000 });
+    expect(flow.requests).toHaveLength(2);
+    expect(flow.requests[1].id).toBe(flow.requests[0].id);
+    expect(flow.requests[1].rawBody).toBe(flow.requests[0].rawBody);
+    await expect(flow.controller.locator('[data-testid="title--input"]')).toHaveValue('');
+    await expect(flow.controller.locator('[data-testid="media-upload-grid"] img')).toHaveCount(1);
+    await flow.controller.locator('#quickvint-gen-btn').click();
+    await expect(flow.controller.locator('[data-testid="title--input"]')).toHaveValue(result.title);
+    expect(flow.requests).toHaveLength(3);
+    expect(new Set(flow.requests.map(request => request.id)).size).toBe(1);
+    expect(new Set(flow.requests.map(request => request.rawBody)).size).toBe(1);
+  } finally { await flow.close(); }
+});

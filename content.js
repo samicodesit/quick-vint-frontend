@@ -20150,6 +20150,11 @@
               throw new Error(current?.error || "The batch changed. Your photos are saved.");
             }
           }
+          // Bound both transport and response-body reads after a pending result.
+          const pendingRequestAbort = manualPending ? new AbortController() : null;
+          const pendingRequestTimer = pendingRequestAbort
+            ? setTimeout(() => pendingRequestAbort.abort(), Math.max(1, 120000 - (Date.now() - fetchStartedAt)))
+            : null;
           try {
             generateResponse = await fetch(`${API_BASE}/api/generate`, {
               method: "POST",
@@ -20162,7 +20167,7 @@
                 "X-Autolister-Request-Id": generationRequest.requestId,
               },
               body: requestBodyJson,
-              signal: batchSignal || undefined,
+              signal: pendingRequestAbort?.signal || batchSignal || undefined,
             });
             // Only these finite idempotency wait codes can replay the same
             // manual request automatically. Other conflicts remain terminal.
@@ -20181,6 +20186,7 @@
             break;
           } catch (error) {
             generationRequest.uncertain = true;
+            if (pendingRequestAbort?.signal.aborted) throw new Error("Your generation is still finishing.");
             if (!batchContext && !error.generationPending) manualNetworkFailures += 1;
             if (batchSignal?.aborted || (!batchContext && manualNetworkFailures >= 2) ||
                 ((batchContext || manualPending) && Date.now() - fetchStartedAt >= 120000)) throw error;
@@ -20205,6 +20211,8 @@
                 if (batchSignal?.aborted) abort();
               });
             }
+          } finally {
+            if (pendingRequestTimer !== null) clearTimeout(pendingRequestTimer);
           }
         }
         if (waitingReported) trackGenerationEvent("batch_worker_progress", { phase: "connection_recovered", itemIndex: batchContext.itemIndex });
