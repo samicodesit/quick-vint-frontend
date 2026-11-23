@@ -839,7 +839,7 @@ for (const change of ["account", "settings"]) {
     const requests = [];
     await page.route("https://autolister.app/api/generate", (route) => {
       requests.push({ headers: route.request().headers(), body: route.request().postDataJSON() });
-      return route.fulfill({ status: requests.length === 1 ? 503 : 200, contentType: "application/json", body: JSON.stringify(requests.length === 1 ? { error: "Still finalizing", code: "generation_commit_pending" } : { title: "Fresh operation", description: "New account or settings" }) });
+      return route.fulfill({ status: requests.length === 1 ? 500 : 200, contentType: "application/json", body: JSON.stringify(requests.length === 1 ? { error: "Outcome unavailable" } : { title: "Fresh operation", description: "New account or settings" }) });
     });
     await openContentHarness(page);
     await page.locator("#quickvint-gen-btn").click();

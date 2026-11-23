@@ -19914,6 +19914,12 @@
       let renewalBlocked = false;
       const settingsKeys = generationPreferenceKeys;
       const settingsSnapshot = JSON.stringify(settingsKeys.map(key => storage[key]));
+      const generationPathname = window.location.pathname;
+      const checkPendingGenerationScope = async () => {
+        if (generationOwnerId && batchAuthUserId !== generationOwnerId) throw new Error("Your account changed. This generation has not been applied.");
+        if (window.location.pathname !== generationPathname) throw new Error("This listing changed while suggestions were being prepared.");
+        await checkRenewalInputs();
+      };
       const checkRenewalInputs = async () => {
         if (JSON.stringify(getUploadedImageEntries().map(entry => entry.url)) !== JSON.stringify(imageUrls)) {
           throw new Error("Photos changed. Click Generate to use the current photos.");
@@ -20094,6 +20100,7 @@
       }
 
       let generationResponseData;
+      let manualPending = false;
       const sendGenerateRequest = async (retryReason = null, previousRequestId = null) => {
         // Observe the preserved payload ID without changing its replay identity.
         authRequestGenerationAttemptId = preparedGeneratePayload.requestBody.generationAttemptId || generationAttemptId;
@@ -20130,8 +20137,13 @@
         // Ordinary interruptions stay in this item and replay its exact saved
         // request. A prolonged outage still leaves an explicit recovery path.
         let waitingReported = false;
+        let manualNetworkFailures = 0;
         for (let attempt = 0; ; attempt += 1) {
           if (batchSignal?.aborted) throw new Error("Batch stopped. Your photos are saved.");
+          if (manualPending) {
+            await checkPendingGenerationScope();
+            if (Date.now() - fetchStartedAt >= 120000) throw new Error("Your generation is still finishing.");
+          }
           if (batchContext && attempt > 0) {
             const current = await sendMessage({ type: "GET_BATCH_GENERATION_REQUEST", ...batchContext, userId });
             if (!current?.ok || current.request?.requestId !== generationRequest.requestId) {
@@ -20152,21 +20164,31 @@
               body: requestBodyJson,
               signal: batchSignal || undefined,
             });
-            if (batchContext && [409, 503].includes(generateResponse.status)) {
+            // Only these finite idempotency wait codes can replay the same
+            // manual request automatically. Other conflicts remain terminal.
+            if ([409, 503].includes(generateResponse.status)) {
               const pending = await generateResponse.clone().json().catch(() => null);
               if (["generation_in_progress", "generation_commit_pending"].includes(pending?.code)) {
                 const retryAfter = Number(generateResponse.headers.get("Retry-After"));
-                throw Object.assign(new Error("Your generation is still finishing."), { retryDelayMs: Number.isFinite(retryAfter) && retryAfter > 0 ? retryAfter * 1000 : 1500 });
+                if (!batchContext) manualPending = true;
+                throw Object.assign(new Error("Your generation is still finishing."), { generationPending: true, retryDelayMs: Number.isFinite(retryAfter) && retryAfter > 0 ? retryAfter * 1000 : 1500 });
               }
             }
             if (generateResponse.ok) {
               generationResponseData = await generateResponse.json();
             }
+            if (manualPending) await checkPendingGenerationScope();
             break;
           } catch (error) {
             generationRequest.uncertain = true;
-            if (batchSignal?.aborted || (!batchContext && attempt >= 1) ||
-                (batchContext && Date.now() - fetchStartedAt >= 120000)) throw error;
+            if (!batchContext && !error.generationPending) manualNetworkFailures += 1;
+            if (batchSignal?.aborted || (!batchContext && manualNetworkFailures >= 2) ||
+                ((batchContext || manualPending) && Date.now() - fetchStartedAt >= 120000)) throw error;
+            if (manualPending) await checkPendingGenerationScope();
+            if (!batchContext && error.generationPending) {
+              const delay = Math.max([700, 1500, 3000, 5000][Math.min(Math.max(attempt - 1, 0), 3)], error.retryDelayMs);
+              await new Promise(resolve => setTimeout(resolve, Math.max(0, Math.min(delay, 120000 - (Date.now() - fetchStartedAt)))));
+            }
             if (batchContext && attempt >= 1) {
               const waitingMessage = "Waiting for your connection. Your photos are saved.";
               showBatchTabStatus(error.retryDelayMs ? "Your generation is still finishing. Your photos are saved." : waitingMessage);
