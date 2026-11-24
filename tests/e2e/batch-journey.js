@@ -308,6 +308,9 @@ async function openBatchJourney(options = {}) {
     },
     async close() {
       for (const route of heldResources) await route.abort().catch(() => {});
+      // Stop fixture routing before closing the worker a handler may read.
+      // Errors from requests cancelled by teardown are not product failures.
+      await context.unrouteAll({ behavior: "ignoreErrors" });
       await browser.close();
       await closeHostServer();
       const resolved = fs.realpathSync(profile);

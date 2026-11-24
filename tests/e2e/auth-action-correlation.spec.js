@@ -675,7 +675,7 @@ test("success with changed photos cannot recover the earlier blocked action", as
   } finally { await flow.close(); }
 });
 
-test("a failed refresh is not a blocked action when the retained access still completes Generate", async ({}, testInfo) => {
+for (const joinUsageRefresh of [false, true]) test(`a failed refresh is not a blocked action when the retained access still completes Generate (held usage refresh: ${joinUsageRefresh})`, async ({}, testInfo) => {
   test.setTimeout(90000);
   const flow = await authJourney({ acceptOld: true });
   try {
@@ -683,8 +683,22 @@ test("a failed refresh is not a blocked action when the retained access still co
     await flow.worker.evaluate(session => chrome.storage.local.set({ supabaseSession: session }), flow.session);
     await flow.worker.evaluate(() => refreshTokenWithRetry(1, { entryPoint: "scheduled_refresh" }));
     await flow.worker.evaluate(() => AutoListerTelemetry.flush());
+    const authRequestsBeforeJoin = flow.authRequests.length;
+    if (joinUsageRefresh) flow.holdAuth();
     await flow.worker.evaluate(session => chrome.storage.local.set({ supabaseSession: session }), flow.session);
+    if (joinUsageRefresh) {
+      await flow.worker.evaluate(() => { void refreshTokenWithRetry(1, { entryPoint: "usage_count" }); });
+      await expect.poll(() => flow.authRequests.length).toBeGreaterThan(authRequestsBeforeJoin);
+    }
     await flow.controller.locator("#quickvint-gen-btn").click();
+    if (joinUsageRefresh) {
+      await expect.poll(async () => {
+        await flow.worker.evaluate(() => AutoListerTelemetry.flush());
+        return unique(flow.events).some(event => event.event === "auth_action_result" &&
+          event.context.resultStatus === "refresh_joined");
+      }).toBe(true);
+      flow.releaseAuth();
+    }
     await expect(flow.controller.locator('[data-testid="title--input"]')).toHaveValue("Item 1", { timeout: 35000 });
     await expect.poll(async () => {
       await flow.worker.evaluate(() => AutoListerTelemetry.flush());
@@ -694,16 +708,26 @@ test("a failed refresh is not a blocked action when the retained access still co
     const result = data.events.find(event => event.event === "auth_action_result" && event.context.resultStatus === "succeeded");
     expect(result).toBeTruthy();
     const failure = data.events.find(event => event.event === "token_refresh_failed" &&
-      event.context.parentOperationId === result.context.operationId);
+      event.context.operationId === result.context.authRefreshOperationId);
     expect(failure, "match the Generate action, not an unrelated background failure").toBeTruthy();
     expect(result.context.authRefreshOperationId).toBe(failure.context.operationId);
+    if (failure.context.parentOperationId) {
+      expect(failure.context.parentOperationId).toBe(result.context.operationId);
+    } else {
+      // A usage refresh can start before Generate reaches the worker. Its
+      // failure belongs to the action only through an explicit joined record.
+      expect(data.events.some(event => event.event === "auth_action_result" &&
+        event.context.operationId === result.context.operationId &&
+        event.context.resultStatus === "refresh_joined" &&
+        event.context.authRefreshOperationId === failure.context.operationId)).toBe(true);
+    }
     expect(data.events.some(event => event.event === "token_refresh_failed" &&
       event.context.entryPoint === "scheduled_refresh" && event.context.operationId !== failure.context.operationId)).toBe(true);
     expect(result.context.generationAttemptId).toBe(flow.requests[0].body.generationAttemptId);
     expect(data.events.some(event => ["blocked", "recovered"].includes(event.context.resultStatus))).toBe(false);
     expect(data.generationRequests).toHaveLength(1);
     expect(data.photos).toBe(1);
-  } finally { await flow.close(); }
+  } finally { flow.releaseAuth(); await flow.close(); }
 });
 
 test("unavailable telemetry cannot change auth, Generate output or retained photos", async () => {
